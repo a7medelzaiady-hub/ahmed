@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لعبة بيوت الأرقام والحيوانات</title>
+    <title>لعبة خط الأعداد والحيوانات</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * {
@@ -24,13 +24,14 @@
         }
         .card {
             background: white;
-            padding: 20px 15px;
-            border-radius: 30px;
+            padding: 20px 12px;
+            border-radius: 25px;
             box-shadow: 0 15px 35px rgba(0,0,0,0.15);
             text-align: center;
-            max-width: 450px;
+            max-width: 480px;
             width: 100%;
             border-bottom: 8px solid #4caf50;
+            overflow: hidden;
         }
         h1 {
             color: #2e7d32;
@@ -42,7 +43,7 @@
             font-size: 1.2rem;
             color: #ff8f00;
             font-weight: 900;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             background: #fff8e1;
             padding: 4px 18px;
             border-radius: 50px;
@@ -55,21 +56,22 @@
             padding: 12px;
             border-radius: 18px;
             font-weight: 900;
-            font-size: 1.2rem;
-            margin-bottom: 20px;
+            font-size: 1.15rem;
+            margin-bottom: 15px;
             border: 2px dashed #81c784;
             line-height: 1.4;
         }
 
-        /* ==================== بيوت الأرقام الثلاثة ==================== */
-        .houses-container {
+        /* ==================== عرض الكروت الثلاثة المتتالية ==================== */
+        .cards-container {
             display: flex;
-            justify-content: space-around;
-            align-items: flex-end;
-            margin: 15px 0 25px 0;
+            justify-content: center;
+            align-items: stretch;
             gap: 8px;
+            margin: 15px 0 20px 0;
+            direction: rtl; /* ضمان الاتجاه من اليمين للشمال */
         }
-        .house {
+        .num-card {
             flex: 1;
             background: #f1f8e9;
             border: 4px dashed #81c784;
@@ -78,45 +80,46 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             position: relative;
             transition: all 0.3s;
         }
-        .house.center {
+        .num-card.center {
             background: #fff3e0;
             border: 4px solid #ff9800;
             transform: scale(1.05);
-            box-shadow: 0 8px 15px rgba(255,152,0,0.2);
+            box-shadow: 0 6px 15px rgba(255,152,0,0.25);
         }
-        .house-roof {
+        .card-label {
             font-size: 0.85rem;
             font-weight: 900;
-            color: #555;
+            color: #444;
             background: #fff;
             padding: 2px 8px;
             border-radius: 10px;
-            border: 1px solid #ccc;
-            margin-bottom: 5px;
+            border: 1px solid #ddd;
+            margin-bottom: 8px;
             white-space: nowrap;
         }
         .animal {
-            font-size: 2.8rem;
-            height: 50px;
-            line-height: 50px;
+            font-size: 3rem;
+            height: 55px;
+            line-height: 55px;
             transition: transform 0.3s;
         }
-        .house-num {
-            font-size: 2.2rem;
+        .number-val {
+            font-size: 2.5rem;
             font-weight: 900;
             color: #2e7d32;
             margin-top: 5px;
         }
-        .house.center .house-num {
+        .num-card.center .number-val {
             color: #e65100;
-            font-size: 2.6rem;
+            font-size: 2.8rem;
         }
 
-        /* النشاط البصري للبيت المستهدف */
-        .target-house {
+        /* الكارت المطلوب الإجابة عليه */
+        .target-card {
             border-color: #e91e63 !important;
             background: #fce4ec !important;
             animation: pulse 1.5s infinite;
@@ -127,30 +130,21 @@
             100% { box-shadow: 0 0 0 0 rgba(233, 30, 99, 0); }
         }
 
-        /* أنيميشن الإجابة */
-        .run-away {
-            animation: runAndHide 0.8s forwards ease-in;
+        /* أنيميشن عند الخطأ */
+        .shake-anim {
+            animation: shake 0.5s ease-in-out;
         }
-        @keyframes runAndHide {
-            0% { transform: translateY(0) scale(1); opacity: 1; }
-            50% { transform: translateY(-30px) scale(1.3); }
-            100% { transform: translateY(-80px) scale(0); opacity: 0; }
-        }
-
-        .yell-anim {
-            animation: yellShake 0.5s ease-in-out;
-        }
-        @keyframes yellShake {
+        @keyframes shake {
             0%, 100% { transform: scale(1) rotate(0deg); }
-            20%, 60% { transform: scale(1.3) rotate(-15deg); }
-            40%, 80% { transform: scale(1.3) rotate(15deg); }
+            20%, 60% { transform: scale(1.2) rotate(-12deg); }
+            40%, 80% { transform: scale(1.2) rotate(12deg); }
         }
 
-        /* ==================== أزرار الخيارات ==================== */
+        /* ==================== خيارات الأرقام والحيوانات ==================== */
         .options-container {
             display: flex;
             justify-content: center;
-            gap: 12px;
+            gap: 10px;
             flex-wrap: wrap;
             margin-top: 10px;
         }
@@ -159,16 +153,21 @@
             color: white;
             border: none;
             width: 75px;
-            height: 75px;
-            border-radius: 22px;
-            font-size: 2.3rem;
+            height: 80px;
+            border-radius: 20px;
+            font-size: 1.8rem;
             font-weight: 900;
             cursor: pointer;
             box-shadow: 0 6px 0 #e65100;
             transition: transform 0.1s;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            gap: 2px;
+        }
+        .option-btn .opt-animal {
+            font-size: 1.5rem;
         }
         .option-btn:active {
             transform: translateY(4px);
@@ -178,7 +177,7 @@
         .message {
             font-size: 1.2rem;
             font-weight: 900;
-            margin-top: 15px;
+            margin-top: 12px;
             min-height: 35px;
         }
         .success { color: #2e7d32; }
@@ -201,36 +200,36 @@
 <body>
 
 <div class="card">
-    <h1>🏡 بيوت الأرقام والحيوانات 🐱</h1>
+    <h1>🦁 لعبة الأرقام والحيوانات 🐰</h1>
     <div class="score-board">⭐ النجوم: <span id="score">٠</span></div>
 
     <div class="instruction-box" id="instruction">جاري التحميل...</div>
 
-    <!-- البيوت الثلاثة -->
-    <div class="houses-container">
-        <!-- بيت السابق -->
-        <div class="house" id="house-prev">
-            <span class="house-roof">اللي قَبْله ⬅️</span>
+    <!-- الكروت الثلاثة المترابطة مع خط الأعداد -->
+    <div class="cards-container">
+        <!-- السابق (يمين) -->
+        <div class="num-card" id="card-prev">
+            <span class="card-label">اللي قَبْله ⬅️</span>
             <div class="animal" id="animal-prev">❓</div>
-            <div class="house-num" id="num-prev">؟</div>
+            <div class="number-val" id="num-prev">؟</div>
         </div>
 
-        <!-- البيت الحالي -->
-        <div class="house center">
-            <span class="house-roof">الرقم الأساسي</span>
-            <div class="animal" id="animal-curr">🦁</div>
-            <div class="house-num" id="num-curr">٥</div>
+        <!-- الأساسي (وسط) -->
+        <div class="num-card center">
+            <span class="card-label">الرقم الأساسي</span>
+            <div class="animal" id="animal-curr">🐼</div>
+            <div class="number-val" id="num-curr">٧</div>
         </div>
 
-        <!-- بيت اللاحق -->
-        <div class="house" id="house-next">
-            <span class="house-roof">➡️ اللي بَعْده</span>
+        <!-- اللاحق (شمال) -->
+        <div class="num-card" id="card-next">
+            <span class="card-label">➡️ اللي بَعْده</span>
             <div class="animal" id="animal-next">❓</div>
-            <div class="house-num" id="num-next">؟</div>
+            <div class="number-val" id="num-next">؟</div>
         </div>
     </div>
 
-    <!-- الخيارات -->
+    <!-- أزرار الخيارات (رقم + حيوان) -->
     <div class="options-container" id="options"></div>
 
     <div class="message" id="message"></div>
@@ -240,14 +239,17 @@
 
 <script>
     const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
-    const animalIcons = ['🐱', '🐰', '🦊', '🐼', '🐘', '🐶', '🐵', '🐸', '🐻', '🐯'];
+    // ربط ثابت لكل رقم بحيوان معين لتسريع الحفظ البصري للطفل
+    const numberAnimalMap = {
+        0: '🐱', 1: '🐰', 2: '🦊', 3: '🐸', 4: '🐵', 
+        5: '🐶', 6: '🐘', 7: '🐼', 8: '🐻', 9: '🦁', 10: '🐯'
+    };
 
-    let currentNum = 5;
+    let currentNum = 7;
     let score = 0;
-    let activeSlot = 'prev'; // 'prev' أو 'next'
-    let currentAnimal = '🐱';
+    let activeSlot = 'prev';
 
-    // ==================== نظام الصوتيات Web Audio API ====================
+    // ==================== الصوتيات Web Audio API ====================
     let audioCtx = null;
 
     function initAudio() {
@@ -271,9 +273,9 @@
 
             if (type === 'correct') {
                 osc.type = 'triangle';
-                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // Do
-                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // Mi
-                osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // Sol
+                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
+                osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); 
                 gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
                 osc.start();
@@ -294,14 +296,12 @@
 
     // ==================== منطق اللعبة ====================
     function generateNewQuestion() {
-        // نختار رقم بسيط بين 2 و 8 يناسب سن 5 سنوات
-        currentNum = Math.floor(Math.random() * 7) + 2;
-        currentAnimal = animalIcons[Math.floor(Math.random() * animalIcons.length)];
+        // اختيارات عشوائية بسيطة بين 1 و 9
+        currentNum = Math.floor(Math.random() * 9) + 1;
         activeSlot = 'prev';
 
-        // ضبط الواجهة
         document.getElementById('num-curr').innerText = arabicNumbers[currentNum];
-        document.getElementById('animal-curr').innerText = currentAnimal;
+        document.getElementById('animal-curr').innerText = numberAnimalMap[currentNum];
 
         document.getElementById('num-prev').innerText = '؟';
         document.getElementById('animal-prev').innerText = '❓';
@@ -311,28 +311,29 @@
 
         document.getElementById('message').innerText = '';
 
-        updateActiveHouse();
+        updateActiveCard();
         updateInstruction();
         generateOptions();
     }
 
-    function updateActiveHouse() {
-        document.getElementById('house-prev').classList.remove('target-house');
-        document.getElementById('house-next').classList.remove('target-house');
+    function updateActiveCard() {
+        document.getElementById('card-prev').classList.remove('target-card');
+        document.getElementById('card-next').classList.remove('target-card');
 
         if (activeSlot === 'prev') {
-            document.getElementById('house-prev').classList.add('target-house');
+            document.getElementById('card-prev').classList.add('target-card');
         } else {
-            document.getElementById('house-next').classList.add('target-house');
+            document.getElementById('card-next').classList.add('target-card');
         }
     }
 
     function updateInstruction() {
         const inst = document.getElementById('instruction');
+        const currentAnimal = numberAnimalMap[currentNum];
         if (activeSlot === 'prev') {
-            inst.innerHTML = `مين الرقم اللي ساكن في البيت <b>اللي قَبْل</b> الرقم (${arabicNumbers[currentNum]})؟ ⬅️`;
+            inst.innerHTML = `مين الصديق والرقم اللي بيجي <b>قَبْل</b> الـ ${currentAnimal} (${arabicNumbers[currentNum]})؟ ⬅️`;
         } else {
-            inst.innerHTML = `بطل! ومين الرقم اللي ساكن في البيت <b>اللي بَعْد</b> الرقم (${arabicNumbers[currentNum]})؟ ➡️`;
+            inst.innerHTML = `بطل! ومين الصديق والرقم اللي بيجي <b>بَعْد</b> الـ ${currentAnimal} (${arabicNumbers[currentNum]})؟ ➡️`;
         }
     }
 
@@ -343,8 +344,8 @@
         const targetNum = activeSlot === 'prev' ? currentNum - 1 : currentNum + 1;
 
         let numbers = new Set([targetNum]);
-        while(numbers.size < 3) { // 3 خيارات فقط لتسهيل الإجابة وعدم التشتيت
-            let rand = Math.floor(Math.random() * 9) + 1;
+        while(numbers.size < 3) {
+            let rand = Math.floor(Math.random() * 10);
             if(rand !== currentNum) {
                 numbers.add(rand);
             }
@@ -355,7 +356,7 @@
         shuffled.forEach(num => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
-            btn.innerText = arabicNumbers[num];
+            btn.innerHTML = `<span class="opt-animal">${numberAnimalMap[num]}</span><span>${arabicNumbers[num]}</span>`;
             btn.onclick = () => {
                 initAudio();
                 checkAnswer(num);
@@ -373,22 +374,22 @@
 
             if (activeSlot === 'prev') {
                 document.getElementById('num-prev').innerText = arabicNumbers[chosenNum];
-                document.getElementById('animal-prev').innerText = '🎉';
+                document.getElementById('animal-prev').innerText = numberAnimalMap[chosenNum];
                 msgDiv.className = 'message success';
-                msgDiv.innerText = 'شاطر جداً! اخترت الرقم اللي قبله صح 👏';
+                msgDiv.innerText = 'شاطر جداً! اخترت الرقم والحيوان الصحيح 👏';
 
                 setTimeout(() => {
                     activeSlot = 'next';
-                    updateActiveHouse();
+                    updateActiveCard();
                     updateInstruction();
                     generateOptions();
                     msgDiv.innerText = '';
                 }, 1200);
             } else {
                 document.getElementById('num-next').innerText = arabicNumbers[chosenNum];
-                document.getElementById('animal-next').innerText = '🎉';
+                document.getElementById('animal-next').innerText = numberAnimalMap[chosenNum];
                 msgDiv.className = 'message success';
-                msgDiv.innerText = 'ممتاز! أكملت البيوت بنجاح 🥳🎉';
+                msgDiv.innerText = 'ممتاز! أكملت الأصدقاء بنجاح 🥳🎉';
 
                 score++;
                 document.getElementById('score').innerText = arabicNumbers[score] || score;
@@ -400,11 +401,11 @@
 
         } else {
             playSound('wrong');
-            const targetHouse = activeSlot === 'prev' ? document.getElementById('house-prev') : document.getElementById('house-next');
+            const targetCard = activeSlot === 'prev' ? document.getElementById('card-prev') : document.getElementById('card-next');
             
-            targetHouse.classList.remove('yell-anim');
-            void targetHouse.offsetWidth;
-            targetHouse.classList.add('yell-anim');
+            targetCard.classList.remove('shake-anim');
+            void targetCard.offsetWidth;
+            targetCard.classList.add('shake-anim');
 
             msgDiv.className = 'message error';
             msgDiv.innerText = `فكر تاني يا بطل! ❌`;
