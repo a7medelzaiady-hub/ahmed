@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لعبة خط الأعداد والحيوانات</title>
+    <title>قطار الأرقام المتحركة المضحك</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * {
@@ -21,6 +21,7 @@
             min-height: 100vh;
             margin: 0;
             padding: 10px;
+            overflow: hidden;
         }
         .card {
             background: white;
@@ -31,7 +32,6 @@
             max-width: 480px;
             width: 100%;
             border-bottom: 8px solid #4caf50;
-            overflow: hidden;
         }
         h1 {
             color: #2e7d32;
@@ -62,89 +62,103 @@
             line-height: 1.4;
         }
 
-        /* ==================== عرض الكروت الثلاثة المتتالية ==================== */
-        .cards-container {
-            display: flex;
-            justify-content: center;
-            align-items: stretch;
-            gap: 8px;
-            margin: 15px 0 20px 0;
-            direction: rtl; /* ضمان الاتجاه من اليمين للشمال */
-        }
-        .num-card {
-            flex: 1;
+        /* ==================== منطقة القطار المتحرك ==================== */
+        .track-container {
+            position: relative;
             background: #f1f8e9;
-            border: 4px dashed #81c784;
+            border: 3px solid #81c784;
             border-radius: 20px;
-            padding: 10px 5px;
+            height: 140px;
+            margin: 15px 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+        
+        .moving-train {
+            display: flex;
+            gap: 12px;
+            position: absolute;
+            white-space: nowrap;
+            animation: walkTrain 12s linear infinite;
+        }
+
+        /* أنيميشن حركة مشي الأرقام */
+        @keyframes walkTrain {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        .wagon {
+            background: #ffffff;
+            border: 4px solid #4caf50;
+            border-radius: 18px;
+            width: 80px;
+            height: 95px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            position: relative;
-            transition: all 0.3s;
-        }
-        .num-card.center {
-            background: #fff3e0;
-            border: 4px solid #ff9800;
-            transform: scale(1.05);
-            box-shadow: 0 6px 15px rgba(255,152,0,0.25);
-        }
-        .card-label {
-            font-size: 0.85rem;
-            font-weight: 900;
-            color: #444;
-            background: #fff;
-            padding: 2px 8px;
-            border-radius: 10px;
-            border: 1px solid #ddd;
-            margin-bottom: 8px;
-            white-space: nowrap;
-        }
-        .animal {
-            font-size: 3rem;
-            height: 55px;
-            line-height: 55px;
-            transition: transform 0.3s;
-        }
-        .number-val {
-            font-size: 2.5rem;
-            font-weight: 900;
-            color: #2e7d32;
-            margin-top: 5px;
-        }
-        .num-card.center .number-val {
-            color: #e65100;
-            font-size: 2.8rem;
+            box-shadow: 0 6px 0 #2e7d32;
+            cursor: pointer;
+            transition: transform 0.2s;
+            animation: bounceWagon 0.6s infinite alternate ease-in-out;
         }
 
-        /* الكارت المطلوب الإجابة عليه */
-        .target-card {
-            border-color: #e91e63 !important;
-            background: #fce4ec !important;
-            animation: pulse 1.5s infinite;
+        /* أنيميشن الاهتزاز الكرتوني والمشي */
+        @keyframes bounceWagon {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-8px); }
         }
-        @keyframes pulse {
+
+        .wagon.center-wagon {
+            border-color: #ff9800;
+            background: #fff3e0;
+            box-shadow: 0 6px 0 #e65100;
+        }
+
+        .wagon.target-wagon {
+            border-color: #e91e63;
+            background: #fce4ec;
+            box-shadow: 0 6px 0 #c2185b;
+            animation: bounceWagon 0.3s infinite alternate ease-in-out, pulseGlow 1s infinite;
+        }
+
+        @keyframes pulseGlow {
             0% { box-shadow: 0 0 0 0 rgba(233, 30, 99, 0.4); }
-            70% { box-shadow: 0 0 0 12px rgba(233, 30, 99, 0); }
+            70% { box-shadow: 0 0 0 10px rgba(233, 30, 99, 0); }
             100% { box-shadow: 0 0 0 0 rgba(233, 30, 99, 0); }
         }
 
-        /* أنيميشن عند الخطأ */
-        .shake-anim {
-            animation: shake 0.5s ease-in-out;
+        .wagon-animal { font-size: 2rem; line-height: 1; }
+        .wagon-num { font-size: 2.2rem; font-weight: 900; color: #2e7d32; }
+        .center-wagon .wagon-num { color: #e65100; }
+
+        /* تأثير مضحك عند الضغط الصحيح */
+        .jump-funny {
+            animation: funnyJump 0.6s ease forwards !important;
         }
-        @keyframes shake {
-            0%, 100% { transform: scale(1) rotate(0deg); }
-            20%, 60% { transform: scale(1.2) rotate(-12deg); }
-            40%, 80% { transform: scale(1.2) rotate(12deg); }
+        @keyframes funnyJump {
+            0% { transform: scale(1) translateY(0); }
+            50% { transform: scale(1.5) translateY(-40px) rotate(20deg); }
+            100% { transform: scale(0) translateY(-80px) rotate(180deg); opacity: 0; }
         }
 
-        /* ==================== خيارات الأرقام والحيوانات ==================== */
+        /* تأثير مضحك عند الضغط الخطأ */
+        .wiggle-funny {
+            animation: funnyWiggle 0.5s ease-in-out !important;
+        }
+        @keyframes funnyWiggle {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.3) rotate(-20deg); }
+            75% { transform: scale(1.3) rotate(20deg); }
+        }
+
+        /* ==================== أزرار الخيارات بالأرقام المتحركة ==================== */
         .options-container {
             display: flex;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
             flex-wrap: wrap;
             margin-top: 10px;
         }
@@ -152,9 +166,9 @@
             background-color: #ff9800;
             color: white;
             border: none;
-            width: 75px;
-            height: 80px;
-            border-radius: 20px;
+            width: 80px;
+            height: 85px;
+            border-radius: 22px;
             font-size: 1.8rem;
             font-weight: 900;
             cursor: pointer;
@@ -164,11 +178,9 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 2px;
+            animation: bounceWagon 0.8s infinite alternate ease-in-out;
         }
-        .option-btn .opt-animal {
-            font-size: 1.5rem;
-        }
+        .option-btn .opt-animal { font-size: 1.6rem; }
         .option-btn:active {
             transform: translateY(4px);
             box-shadow: 0 2px 0 #e65100;
@@ -200,36 +212,17 @@
 <body>
 
 <div class="card">
-    <h1>🦁 لعبة الأرقام والحيوانات 🐰</h1>
+    <h1>🚂 قطار الأرقام المضحك 🤪</h1>
     <div class="score-board">⭐ النجوم: <span id="score">٠</span></div>
 
-    <div class="instruction-box" id="instruction">جاري التحميل...</div>
+    <div class="instruction-box" id="instruction">جاري تحميل القطار...</div>
 
-    <!-- الكروت الثلاثة المترابطة مع خط الأعداد -->
-    <div class="cards-container">
-        <!-- السابق (يمين) -->
-        <div class="num-card" id="card-prev">
-            <span class="card-label">اللي قَبْله ⬅️</span>
-            <div class="animal" id="animal-prev">❓</div>
-            <div class="number-val" id="num-prev">؟</div>
-        </div>
-
-        <!-- الأساسي (وسط) -->
-        <div class="num-card center">
-            <span class="card-label">الرقم الأساسي</span>
-            <div class="animal" id="animal-curr">🐼</div>
-            <div class="number-val" id="num-curr">٧</div>
-        </div>
-
-        <!-- اللاحق (شمال) -->
-        <div class="num-card" id="card-next">
-            <span class="card-label">➡️ اللي بَعْده</span>
-            <div class="animal" id="animal-next">❓</div>
-            <div class="number-val" id="num-next">؟</div>
-        </div>
+    <!-- السكة والقطار المتحرك -->
+    <div class="track-container">
+        <div class="moving-train" id="moving-train"></div>
     </div>
 
-    <!-- أزرار الخيارات (رقم + حيوان) -->
+    <!-- الخيارات اضغط عليها وسوف تصدر أصوات مضحكة -->
     <div class="options-container" id="options"></div>
 
     <div class="message" id="message"></div>
@@ -239,17 +232,16 @@
 
 <script>
     const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
-    // ربط ثابت لكل رقم بحيوان معين لتسريع الحفظ البصري للطفل
     const numberAnimalMap = {
         0: '🐱', 1: '🐰', 2: '🦊', 3: '🐸', 4: '🐵', 
         5: '🐶', 6: '🐘', 7: '🐼', 8: '🐻', 9: '🦁', 10: '🐯'
     };
 
-    let currentNum = 7;
+    let currentNum = 5;
     let score = 0;
     let activeSlot = 'prev';
 
-    // ==================== الصوتيات Web Audio API ====================
+    // ==================== أصوات مضحكة كرتونية Web Audio API ====================
     let audioCtx = null;
 
     function initAudio() {
@@ -261,7 +253,7 @@
         }
     }
 
-    function playSound(type) {
+    function playFunnySound(type) {
         try {
             initAudio();
             if (!audioCtx) return;
@@ -271,69 +263,87 @@
             osc.connect(gain);
             gain.connect(audioCtx.destination);
 
-            if (type === 'correct') {
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
-                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
-                osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); 
+            if (type === 'funny-correct') {
+                // صوت نطاط مضحك (Boing/Spring Effect)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.35);
+            } else if (type === 'funny-wrong') {
+                // صوت زمارة كرتونية مضحكة (Plunger / Honk)
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.4);
                 gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.4);
-            } else if (type === 'wrong') {
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(180, audioCtx.currentTime);
-                osc.frequency.linearRampToValueAtTime(110, audioCtx.currentTime + 0.3);
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.35);
             }
         } catch (e) {
-            console.log("Audio error:", e);
+            console.log("Audio Error", e);
         }
     }
 
-    // ==================== منطق اللعبة ====================
+    // ==================== تشغيل وتمرير القطار ====================
     function generateNewQuestion() {
-        // اختيارات عشوائية بسيطة بين 1 و 9
         currentNum = Math.floor(Math.random() * 9) + 1;
         activeSlot = 'prev';
 
-        document.getElementById('num-curr').innerText = arabicNumbers[currentNum];
-        document.getElementById('animal-curr').innerText = numberAnimalMap[currentNum];
-
-        document.getElementById('num-prev').innerText = '؟';
-        document.getElementById('animal-prev').innerText = '❓';
-        
-        document.getElementById('num-next').innerText = '؟';
-        document.getElementById('animal-next').innerText = '❓';
-
-        document.getElementById('message').innerText = '';
-
-        updateActiveCard();
+        renderTrain();
         updateInstruction();
         generateOptions();
+        document.getElementById('message').innerText = '';
     }
 
-    function updateActiveCard() {
-        document.getElementById('card-prev').classList.remove('target-card');
-        document.getElementById('card-next').classList.remove('target-card');
+    function renderTrain() {
+        const trainBox = document.getElementById('moving-train');
+        trainBox.innerHTML = '';
 
-        if (activeSlot === 'prev') {
-            document.getElementById('card-prev').classList.add('target-card');
-        } else {
-            document.getElementById('card-next').classList.add('target-card');
-        }
+        const prevNum = currentNum - 1;
+        const nextNum = currentNum + 1;
+
+        // عربة السابق
+        const prevWagon = document.createElement('div');
+        prevWagon.className = `wagon ${activeSlot === 'prev' ? 'target-wagon' : ''}`;
+        prevWagon.id = 'wagon-prev';
+        prevWagon.innerHTML = `
+            <span class="wagon-animal">${activeSlot === 'prev' ? '❓' : numberAnimalMap[prevNum]}</span>
+            <span class="wagon-num">${activeSlot === 'prev' ? '؟' : arabicNumbers[prevNum]}</span>
+        `;
+
+        // عربة الرقم الأساسي
+        const centerWagon = document.createElement('div');
+        centerWagon.className = 'wagon center-wagon';
+        centerWagon.innerHTML = `
+            <span class="wagon-animal">${numberAnimalMap[currentNum]}</span>
+            <span class="wagon-num">${arabicNumbers[currentNum]}</span>
+        `;
+
+        // عربة اللاحق
+        const nextWagon = document.createElement('div');
+        nextWagon.className = `wagon ${activeSlot === 'next' ? 'target-wagon' : ''}`;
+        nextWagon.id = 'wagon-next';
+        nextWagon.innerHTML = `
+            <span class="wagon-animal">${activeSlot === 'next' ? '❓' : numberAnimalMap[nextNum]}</span>
+            <span class="wagon-num">${activeSlot === 'next' ? '؟' : arabicNumbers[nextNum]}</span>
+        `;
+
+        // إضافة العربات للقطار
+        trainBox.appendChild(prevWagon);
+        trainBox.appendChild(centerWagon);
+        trainBox.appendChild(nextWagon);
     }
 
     function updateInstruction() {
         const inst = document.getElementById('instruction');
         const currentAnimal = numberAnimalMap[currentNum];
         if (activeSlot === 'prev') {
-            inst.innerHTML = `مين الصديق والرقم اللي بيجي <b>قَبْل</b> الـ ${currentAnimal} (${arabicNumbers[currentNum]})؟ ⬅️`;
+            inst.innerHTML = `مين الرقم اللي ماشي <b>قَبْل</b> الـ ${currentAnimal} (${arabicNumbers[currentNum]})؟ ⬅️`;
         } else {
-            inst.innerHTML = `بطل! ومين الصديق والرقم اللي بيجي <b>بَعْد</b> الـ ${currentAnimal} (${arabicNumbers[currentNum]})؟ ➡️`;
+            inst.innerHTML = `بطل! ومين الرقم اللي ماشي <b>بَعْد</b> الـ ${currentAnimal} (${arabicNumbers[currentNum]})؟ ➡️`;
         }
     }
 
@@ -357,39 +367,36 @@
             const btn = document.createElement('button');
             btn.className = 'option-btn';
             btn.innerHTML = `<span class="opt-animal">${numberAnimalMap[num]}</span><span>${arabicNumbers[num]}</span>`;
-            btn.onclick = () => {
+            btn.onclick = (e) => {
                 initAudio();
-                checkAnswer(num);
+                checkAnswer(num, btn);
             };
             optionsDiv.appendChild(btn);
         });
     }
 
-    function checkAnswer(chosenNum) {
+    function checkAnswer(chosenNum, btnEl) {
         const targetNum = activeSlot === 'prev' ? currentNum - 1 : currentNum + 1;
         const msgDiv = document.getElementById('message');
 
         if (chosenNum === targetNum) {
-            playSound('correct');
+            playFunnySound('funny-correct');
+            btnEl.classList.add('jump-funny');
 
             if (activeSlot === 'prev') {
-                document.getElementById('num-prev').innerText = arabicNumbers[chosenNum];
-                document.getElementById('animal-prev').innerText = numberAnimalMap[chosenNum];
                 msgDiv.className = 'message success';
-                msgDiv.innerText = 'شاطر جداً! اخترت الرقم والحيوان الصحيح 👏';
+                msgDiv.innerText = 'هههه صح! قفزة مضحكة بطل! 🤪👏';
 
                 setTimeout(() => {
                     activeSlot = 'next';
-                    updateActiveCard();
+                    renderTrain();
                     updateInstruction();
                     generateOptions();
                     msgDiv.innerText = '';
                 }, 1200);
             } else {
-                document.getElementById('num-next').innerText = arabicNumbers[chosenNum];
-                document.getElementById('animal-next').innerText = numberAnimalMap[chosenNum];
                 msgDiv.className = 'message success';
-                msgDiv.innerText = 'ممتاز! أكملت الأصدقاء بنجاح 🥳🎉';
+                msgDiv.innerText = 'ممتاز! ركبت القطار كله بنجاح 🥳🎉';
 
                 score++;
                 document.getElementById('score').innerText = arabicNumbers[score] || score;
@@ -400,15 +407,13 @@
             }
 
         } else {
-            playSound('wrong');
-            const targetCard = activeSlot === 'prev' ? document.getElementById('card-prev') : document.getElementById('card-next');
-            
-            targetCard.classList.remove('shake-anim');
-            void targetCard.offsetWidth;
-            targetCard.classList.add('shake-anim');
+            playFunnySound('funny-wrong');
+            btnEl.classList.remove('wiggle-funny');
+            void btnEl.offsetWidth;
+            btnEl.classList.add('wiggle-funny');
 
             msgDiv.className = 'message error';
-            msgDiv.innerText = `فكر تاني يا بطل! ❌`;
+            msgDiv.innerText = `يا لهوي لا! اخترت غلط حاول تاني 🤪❌`;
         }
     }
 
