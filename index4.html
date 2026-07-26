@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لعبة قطار الأرقام العجيب</title>
+    <title>لعبة خط الأعداد والحيوانات</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
             font-family: 'Cairo', sans-serif;
+            user-select: none;
         }
         body {
-            background: linear-gradient(135deg, #80deea 0%, #b2ebf2 100%);
+            background: linear-gradient(135deg, #a8e6cf 0%, #dbede3 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -19,103 +20,156 @@
             min-height: 100vh;
             margin: 0;
             padding: 15px;
+            overflow-x: hidden;
         }
         .card {
             background: white;
-            padding: 25px 20px;
+            padding: 25px 15px;
             border-radius: 25px;
             box-shadow: 0 15px 35px rgba(0,0,0,0.15);
             text-align: center;
-            max-width: 550px;
+            max-width: 750px;
             width: 100%;
-            border-bottom: 8px solid #00acc1;
+            border-bottom: 8px solid #4caf50;
         }
         h1 {
-            color: #00838f;
-            margin-bottom: 5px;
-            font-size: 2rem;
-        }
-        .subtitle {
-            color: #555;
-            font-size: 1rem;
-            margin-bottom: 15px;
+            color: #2e7d32;
+            margin: 0 0 5px 0;
+            font-size: 1.8rem;
         }
         .score-board {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             color: #ff8f00;
             font-weight: 900;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             background: #fff8e1;
-            padding: 8px 15px;
+            padding: 6px 15px;
             border-radius: 50px;
             display: inline-block;
         }
-        .train-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin: 25px 0;
-        }
-        .wagon {
-            width: 95px;
-            height: 110px;
-            border: 4px dashed #00838f;
-            border-radius: 18px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.5rem;
+        .instruction-box {
+            background: #e8f5e9;
+            color: #1b5e20;
+            padding: 12px;
+            border-radius: 15px;
             font-weight: 900;
-            background-color: #f1f8e9;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            border: 2px dashed #81c784;
+        }
+
+        /* ==================== خط الأعداد والحيوانات ==================== */
+        .number-line-container {
+            position: relative;
+            margin: 60px 10px 40px 10px;
+            padding-top: 40px;
+        }
+        .animals-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            position: absolute;
+            top: -45px;
+            left: 0;
+            right: 0;
+            padding: 0 5px;
+        }
+        .animal-spot {
+            width: 35px;
+            font-size: 2rem;
+            text-align: center;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            cursor: pointer;
+        }
+        /* أنيميشن الجري والإختفاء */
+        .run-away {
+            animation: runAndHide 0.8s forwards ease-in;
+        }
+        @keyframes runAndHide {
+            0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: translateY(-30px) scale(1.3) rotate(20deg); }
+            100% { transform: translateX(200px) scale(0) rotate(45deg); opacity: 0; }
+        }
+        /* أنيميشن الزعيق / الاهتزاز عند الخطأ */
+        .yell-anim {
+            animation: yellShake 0.5s ease-in-out;
+        }
+        @keyframes yellShake {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            20% { transform: scale(1.4) rotate(-15deg); }
+            40% { transform: scale(1.4) rotate(15deg); }
+            60% { transform: scale(1.4) rotate(-15deg); }
+            80% { transform: scale(1.4) rotate(15deg); }
+        }
+
+        .line-bar {
+            height: 8px;
+            background: #4caf50;
+            border-radius: 4px;
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .line-bar::before, .line-bar::after {
+            content: '';
+            position: absolute;
+            top: -6px;
+            border-top: 10px solid transparent;
+            border-bottom: 10px solid transparent;
+        }
+        .line-bar::before { right: -8px; border-left: 12px solid #4caf50; }
+        .line-bar::after { left: -8px; border-right: 12px solid #4caf50; }
+
+        .tick-mark {
+            width: 4px;
+            height: 20px;
+            background: #2e7d32;
             position: relative;
         }
-        .wagon.center {
-            border: 4px solid #ff9800;
-            background-color: #ffe0b2;
-            color: #e65100;
-        }
-        .wagon-label {
+        .number-label {
             position: absolute;
-            top: -28px;
-            font-size: 0.85rem;
-            color: #333;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.2rem;
             font-weight: 900;
-            background: #fff;
-            padding: 2px 8px;
-            border-radius: 10px;
-            border: 2px solid #ccc;
-            white-space: nowrap;
+            color: #1b5e20;
         }
+        .highlight-num {
+            color: #e91e63;
+            font-size: 1.5rem;
+        }
+
+        /* ==================== خيارات الأرقام ==================== */
         .options-container {
             display: flex;
             justify-content: center;
-            gap: 12px;
+            gap: 15px;
             flex-wrap: wrap;
-            margin-top: 20px;
+            margin-top: 25px;
         }
         .option-btn {
-            background-color: #4caf50;
+            background-color: #ff9800;
             color: white;
             border: none;
-            width: 65px;
-            height: 65px;
-            border-radius: 50%;
-            font-size: 1.8rem;
+            width: 70px;
+            height: 70px;
+            border-radius: 20px;
+            font-size: 2rem;
             font-weight: 900;
             cursor: pointer;
-            transition: transform 0.2s, background-color 0.2s;
-            box-shadow: 0 5px 10px rgba(0,0,0,0.15);
+            box-shadow: 0 6px 0 #e65100;
+            transition: transform 0.1s, background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .option-btn:active {
-            transform: scale(0.9);
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #e65100;
         }
-        .active-slot {
-            border-color: #e91e63;
-            background-color: #fce4ec;
-            box-shadow: 0 0 15px rgba(233, 30, 99, 0.4);
-        }
+
         .message {
             font-size: 1.3rem;
             font-weight: 900;
@@ -124,19 +178,11 @@
         }
         .success { color: #2e7d32; }
         .error { color: #c62828; }
-        .instruction-box {
-            background: #e0f7fa;
-            color: #006064;
-            padding: 10px;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-bottom: 15px;
-        }
-        .reset-btn {
-            margin-top: 20px;
+
+        .next-btn {
+            margin-top: 15px;
             padding: 10px 25px;
-            background-color: #00838f;
+            background-color: #2e7d32;
             color: white;
             border: none;
             border-radius: 12px;
@@ -150,78 +196,84 @@
 <body>
 
 <div class="card">
-    <h1>🚂 قطار الأرقام العجيب</h1>
-    <div class="subtitle">تعلم "القَبْل" و"البَعْد" باللعب للابطال الصغار</div>
-    
+    <h1>🦁 لعبة خط الأعداد والحيوانات 🐰</h1>
     <div class="score-board">⭐ النجوم: <span id="score">٠</span></div>
 
-    <div class="instruction-box" id="instruction">يلا نساعد القطار ونختار العدد اللي بيجي الأول!</div>
+    <div class="instruction-box" id="instruction">جاري التحميل...</div>
 
-    <div class="train-container">
-        <!-- عربة السابق -->
-        <div class="wagon active-slot" id="prev-wagon" onclick="selectSlot('prev')">
-            <span class="wagon-label">اللي قبله ⬅️</span>
-            <span id="prev-val">؟</span>
-        </div>
-
-        <!-- العربة الوسطى -->
-        <div class="wagon center">
-            <span class="wagon-label">مكان الوقوف</span>
-            <span id="current-val">٥</span>
-        </div>
-
-        <!-- عربة اللاحق -->
-        <div class="wagon" id="next-wagon" onclick="selectSlot('next')">
-            <span class="wagon-label">➡️ اللي بعده</span>
-            <span id="next-val">؟</span>
-        </div>
+    <!-- خط الأعداد والتفاعل -->
+    <div class="number-line-container">
+        <!-- صف الحيوانات فوق الخط -->
+        <div class="animals-row" id="animals-row"></div>
+        <!-- الخط المستقيم والتشريرات -->
+        <div class="line-bar" id="line-ticks"></div>
     </div>
 
-    <!-- خيارات الأرقام -->
+    <!-- زر الخيارات -->
     <div class="options-container" id="options"></div>
 
     <div class="message" id="message"></div>
 
-    <button class="reset-btn" onclick="generateNewQuestion()">سؤال تاني 🔄</button>
+    <button class="next-btn" onclick="generateNewQuestion()">سؤال جديد 🔄</button>
 </div>
 
 <script>
-    // الأرقام العربية المشرقية
-    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠', '١١', '١٢', '١٣', '١٤', '١٥'];
-
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
+    const animalIcons = ['🦁', '🐰', '🦊', '🐼', '🐘', '🐱', '🐶', '🐵', '🐸', '🐻', '🐯'];
+    
     let currentNum = 5;
     let score = 0;
-    let activeSlot = 'prev'; 
-    let selectedPrev = null;
-    let selectedNext = null;
+    let activeSlot = 'prev'; // 'prev' أو 'next'
+    let currentAnimals = [...animalIcons];
+
+    function buildNumberLine() {
+        const ticksContainer = document.getElementById('line-ticks');
+        const animalsRow = document.getElementById('animals-row');
+        ticksContainer.innerHTML = '';
+        animalsRow.innerHTML = '';
+
+        for (let i = 0; i <= 10; i++) {
+            // إضافة العلامات والأرقام على الخط
+            const tick = document.createElement('div');
+            tick.className = 'tick-mark';
+            
+            const label = document.createElement('div');
+            label.className = 'number-label';
+            label.id = `label-${i}`;
+            label.innerText = arabicNumbers[i];
+            tick.appendChild(label);
+            
+            ticksContainer.appendChild(tick);
+
+            // إضافة الحيوان فوق الرقم
+            const animalSpot = document.createElement('div');
+            animalSpot.className = 'animal-spot';
+            animalSpot.id = `animal-${i}`;
+            animalSpot.innerText = currentAnimals[i];
+            animalsRow.appendChild(animalSpot);
+        }
+    }
 
     function generateNewQuestion() {
-        // نختار رقم عشوائي بين 2 و 9 عشان يناسب سن 5 سنوات ويسهل العد
-        currentNum = Math.floor(Math.random() * 8) + 2;
+        // اختيارات عشوائية للحيوانات وتمرير الأرقام
+        currentNum = Math.floor(Math.random() * 8) + 1; // من 1 إلى 8 لضمان وجود سابق ولاحق
+        activeSlot = 'prev';
         
-        document.getElementById('current-val').innerText = arabicNumbers[currentNum];
-        document.getElementById('prev-val').innerText = '؟';
-        document.getElementById('next-val').innerText = '؟';
+        buildNumberLine();
+        
+        document.getElementById(`label-${currentNum}`).classList.add('highlight-num');
         document.getElementById('message').innerText = '';
         
-        selectedPrev = null;
-        selectedNext = null;
-        
-        selectSlot('prev');
+        updateInstruction();
         generateOptions();
     }
 
-    function selectSlot(slot) {
-        activeSlot = slot;
-        document.getElementById('prev-wagon').classList.remove('active-slot');
-        document.getElementById('next-wagon').classList.remove('active-slot');
-
-        if (slot === 'prev') {
-            document.getElementById('prev-wagon').classList.add('active-slot');
-            document.getElementById('instruction').innerHTML = `🔍 مين الرقم اللي بيجي <b>قَبْل</b> (${arabicNumbers[currentNum]}) مباشرة؟`;
+    function updateInstruction() {
+        const inst = document.getElementById('instruction');
+        if (activeSlot === 'prev') {
+            inst.innerHTML = `مين الحيوان اللي وافق على الرقم <b>اللي قَبْل</b> (${arabicNumbers[currentNum]})؟ ⬅️`;
         } else {
-            document.getElementById('next-wagon').classList.add('active-slot');
-            document.getElementById('instruction').innerHTML = `🔍 مين الرقم اللي بيجي <b>بَعْد</b> (${arabicNumbers[currentNum]}) مباشرة؟`;
+            inst.innerHTML = `ممتاز! طب مين الحيوان اللي على الرقم <b>اللي بَعْد</b> (${arabicNumbers[currentNum]})؟ ➡️`;
         }
     }
 
@@ -229,14 +281,13 @@
         const optionsDiv = document.getElementById('options');
         optionsDiv.innerHTML = '';
 
-        const correctPrev = currentNum - 1;
-        const correctNext = currentNum + 1;
+        const targetNum = activeSlot === 'prev' ? currentNum - 1 : currentNum + 1;
         
-        let numbers = new Set([correctPrev, correctNext]);
+        let numbers = new Set([targetNum]);
         while(numbers.size < 4) {
-            let randomNum = Math.floor(Math.random() * 11) + 1;
-            if(randomNum !== currentNum) {
-                numbers.add(randomNum);
+            let rand = Math.floor(Math.random() * 11);
+            if(rand !== currentNum) {
+                numbers.add(rand);
             }
         }
 
@@ -251,43 +302,47 @@
         });
     }
 
-    function checkAnswer(num) {
+    function checkAnswer(chosenNum) {
+        const targetNum = activeSlot === 'prev' ? currentNum - 1 : currentNum + 1;
+        const animalEl = document.getElementById(`animal-${chosenNum}`);
         const msgDiv = document.getElementById('message');
 
-        if (activeSlot === 'prev') {
-            if (num === currentNum - 1) {
-                selectedPrev = num;
-                document.getElementById('prev-val').innerText = arabicNumbers[num];
-                msgDiv.className = 'message success';
-                msgDiv.innerText = 'بطل ممتاز! جبنا اللي قبله صح 👏';
+        if (chosenNum === targetNum) {
+            // إجابة صحيحة: الحيوان يجري ويختفي!
+            animalEl.classList.remove('yell-anim');
+            animalEl.classList.add('run-away');
+            
+            msgDiv.className = 'message success';
+            msgDiv.innerText = 'صح! الحيوان جرى وفرح بيك! 🏃‍♂️💨';
+
+            if (activeSlot === 'prev') {
                 setTimeout(() => {
-                    selectSlot('next');
+                    activeSlot = 'next';
+                    updateInstruction();
+                    generateOptions();
                     msgDiv.innerText = '';
                 }, 1200);
             } else {
-                msgDiv.className = 'message error';
-                msgDiv.innerText = 'فكر تاني يا بطل! ❌';
-            }
-        } else if (activeSlot === 'next') {
-            if (num === currentNum + 1) {
-                selectedNext = num;
-                document.getElementById('next-val').innerText = arabicNumbers[num];
-                msgDiv.className = 'message success';
-                msgDiv.innerText = 'رائع! أكملت القطار بنجاح 🥳🎉';
-                
-                score += 1;
+                score++;
                 document.getElementById('score').innerText = arabicNumbers[score] || score;
-
                 setTimeout(() => {
                     generateNewQuestion();
-                }, 1800);
-            } else {
-                msgDiv.className = 'message error';
-                msgDiv.innerText = 'فكر تاني يا بطل! ❌';
+                }, 1500);
             }
+
+        } else {
+            // إجابة خاطئة: الحيوان يزعق ويهتز!
+            animalEl.classList.remove('yell-anim');
+            // إجبار إعادة الأنيميشن
+            void animalEl.offsetWidth; 
+            animalEl.classList.add('yell-anim');
+            
+            msgDiv.className = 'message error';
+            msgDiv.innerText = `😡 الحيوان بيزعق وبيقولك: لا أنا مش الرقم الصحيح!`;
         }
     }
 
+    // تشغيل اللعبة لأول مرة
     generateNewQuestion();
 </script>
 
