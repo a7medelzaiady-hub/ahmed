@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مطاردة الأرقام المتحركة المضحكة</title>
+    <title>مطاردة الأرقام الذكية والمضحكة</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * {
@@ -62,7 +62,7 @@
             line-height: 1.4;
         }
 
-        /* ==================== منطقة المطاردة السريعة البطيئة ==================== */
+        /* ==================== مضمار الحركة الذكية ==================== */
         .track-container {
             position: relative;
             background: #f1f8e9;
@@ -73,6 +73,7 @@
             overflow: hidden;
             display: flex;
             align-items: center;
+            justify-content: center;
         }
         
         .moving-train {
@@ -81,20 +82,29 @@
             gap: 12px;
             position: absolute;
             white-space: nowrap;
-            /* تبطيء حركة المشي إلى 45 ثانية لراحة الطفل */
-            animation: walkTrain 45s linear infinite;
         }
 
-        /* أنيميشن حركة المشي الهادئة */
-        @keyframes walkTrain {
-            0% { transform: translateX(120%); }
-            100% { transform: translateX(-120%); }
+        /* الحركة الذكية للقطار */
+        .smart-walk-prev {
+            animation: walkSlowPrev 50s linear infinite;
+        }
+        .smart-walk-next {
+            animation: walkSlowNext 50s linear infinite;
         }
 
-        /* الحيوان اللي بيجري وراهم */
+        @keyframes walkSlowPrev {
+            0% { transform: translateX(80%); }
+            100% { transform: translateX(-100%); }
+        }
+        @keyframes walkSlowNext {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-80%); }
+        }
+
+        /* الحيوان المطارد */
         .chaser-animal {
             font-size: 3rem;
-            margin-left: 15px;
+            margin-left: 10px;
             animation: runChaser 0.8s infinite alternate ease-in-out;
             transform: scaleX(-1);
         }
@@ -115,11 +125,19 @@
             justify-content: center;
             box-shadow: 0 6px 0 #2e7d32;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: transform 0.3s;
             animation: bounceWagon 1.5s infinite alternate ease-in-out;
         }
 
-        /* اهتزاز مشي بطيء جداً ومريح للعين */
+        /* تسريع ظهور الرقمين وتثبيتهما بوضوح */
+        .wagon.fast-appear {
+            animation: popFast 0.4s ease-out, bounceWagon 1.5s infinite alternate ease-in-out;
+        }
+        @keyframes popFast {
+            0% { transform: scale(0.3); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
         @keyframes bounceWagon {
             0% { transform: translateY(0); }
             100% { transform: translateY(-5px); }
@@ -131,6 +149,7 @@
             box-shadow: 0 6px 0 #e65100;
         }
 
+        /* إبراز وتثبيت حركة الرقم المطلوب ببطء وتركيز */
         .wagon.target-wagon {
             border-color: #e91e63;
             background: #fce4ec;
@@ -148,7 +167,6 @@
         .wagon-num { font-size: 2.2rem; font-weight: 900; color: #2e7d32; }
         .center-wagon .wagon-num { color: #e65100; }
 
-        /* تأثيرات كرتونية مضحكة عند الضغط */
         .jump-funny {
             animation: funnyJump 0.6s ease forwards !important;
         }
@@ -228,14 +246,14 @@
     <h1>🦖 مطاردة الأرقام المضحكة 🏃‍♂️</h1>
     <div class="score-board">⭐ النجوم: <span id="score">٠</span></div>
 
-    <div class="instruction-box" id="instruction">جاري تجهيز المطاردة...</div>
+    <div class="instruction-box" id="instruction">جاري تجهيز الحركة...</div>
 
     <!-- السكة والقطار والحيوان المطارد -->
     <div class="track-container">
         <div class="moving-train" id="moving-train"></div>
     </div>
 
-    <!-- الخيارات بالأرقام والحيوانات -->
+    <!-- الخيارات -->
     <div class="options-container" id="options"></div>
 
     <div class="message" id="message"></div>
@@ -254,16 +272,45 @@
     let score = 0;
     let activeSlot = 'prev';
 
-    // ==================== أصوات مضحكة كرتونية ====================
+    // ==================== الموسيقى والأصوات المضحكة Web Audio API ====================
     let audioCtx = null;
+    let bgMusicInterval = null;
 
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            startFunnyBgMusic(); // تشغيل الموسيقى الخلفية التحفيزية والمضحكة
         }
         if (audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
+    }
+
+    // موسيقى تحفيزية مضحكة وخفيفة في الخلفية
+    function startFunnyBgMusic() {
+        if (bgMusicInterval) return;
+        const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63];
+        let noteIdx = 0;
+
+        bgMusicInterval = setInterval(() => {
+            if (!audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.type = 'sine';
+                osc.frequency.value = notes[noteIdx];
+                gain.gain.setValueAtTime(0.03, audioCtx.currentTime); // صوت هادئ ممتع
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+
+                noteIdx = (noteIdx + 1) % notes.length;
+            } catch (e) {}
+        }, 400);
     }
 
     function playFunnySound(type) {
@@ -278,16 +325,16 @@
 
             if (type === 'funny-correct') {
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.3);
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.35);
                 gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
                 osc.start();
-                osc.stop(audioCtx.currentTime + 0.35);
+                osc.stop(audioCtx.currentTime + 0.4);
             } else if (type === 'funny-wrong') {
                 osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
-                osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.4);
+                osc.frequency.setValueAtTime(320, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(90, audioCtx.currentTime + 0.4);
                 gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
                 osc.start();
@@ -298,7 +345,7 @@
         }
     }
 
-    // ==================== بناء واجهة المطاردة ====================
+    // ==================== بناء واجهة الحركة الذكية ====================
     function generateNewQuestion() {
         currentNum = Math.floor(Math.random() * 9) + 1;
         activeSlot = 'prev';
@@ -313,27 +360,34 @@
         const trainBox = document.getElementById('moving-train');
         trainBox.innerHTML = '';
 
+        // تطبيق الحركة الذكية حسب الحالة (السابق أم اللاحق)
+        if (activeSlot === 'prev') {
+            trainBox.className = 'moving-train smart-walk-prev';
+        } else {
+            trainBox.className = 'moving-train smart-walk-next';
+        }
+
         const prevNum = currentNum - 1;
         const nextNum = currentNum + 1;
 
-        // 1. إضافة الحيوان المطارد أولاً
+        // 1. الديناصور المطارد 🦖
         const chaser = document.createElement('div');
         chaser.className = 'chaser-animal';
         chaser.innerText = '🦖';
         trainBox.appendChild(chaser);
 
-        // 2. عربة السابق
+        // 2. عربة السابق (تتحرك ببطء وتركيز عند طلبها)
         const prevWagon = document.createElement('div');
-        prevWagon.className = `wagon ${activeSlot === 'prev' ? 'target-wagon' : ''}`;
+        prevWagon.className = `wagon ${activeSlot === 'prev' ? 'target-wagon' : 'fast-appear'}`;
         prevWagon.id = 'wagon-prev';
         prevWagon.innerHTML = `
             <span class="wagon-animal">${activeSlot === 'prev' ? '❓' : numberAnimalMap[prevNum]}</span>
             <span class="wagon-num">${activeSlot === 'prev' ? '؟' : arabicNumbers[prevNum]}</span>
         `;
 
-        // 3. عربة الرقم الأساسي
+        // 3. عربة الرقم الأساسي (تظهر بسرعة لتمركز العرض)
         const centerWagon = document.createElement('div');
-        centerWagon.className = 'wagon center-wagon';
+        centerWagon.className = 'wagon center-wagon fast-appear';
         centerWagon.innerHTML = `
             <span class="wagon-animal">${numberAnimalMap[currentNum]}</span>
             <span class="wagon-num">${arabicNumbers[currentNum]}</span>
@@ -341,7 +395,7 @@
 
         // 4. عربة اللاحق
         const nextWagon = document.createElement('div');
-        nextWagon.className = `wagon ${activeSlot === 'next' ? 'target-wagon' : ''}`;
+        nextWagon.className = `wagon ${activeSlot === 'next' ? 'target-wagon' : 'fast-appear'}`;
         nextWagon.id = 'wagon-next';
         nextWagon.innerHTML = `
             <span class="wagon-animal">${activeSlot === 'next' ? '❓' : numberAnimalMap[nextNum]}</span>
