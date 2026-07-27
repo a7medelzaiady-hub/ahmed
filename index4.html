@@ -3,376 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مغامرة الأرقام والحيوانات السحرية</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;800;900&display=swap" rel="stylesheet">
+    <title>لعبة الأرقام الذكية - السابق واللاحق</title>
+    <!-- مكتبة الألعاب النارية احتفالاً بالطفل -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap');
+
         * {
             box-sizing: border-box;
-            font-family: 'Cairo', sans-serif;
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
         }
 
         body {
-            background: radial-gradient(circle, #ffe082 0%, #ffb300 40%, #ff8f00 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
             margin: 0;
-            padding: 10px;
-            overflow: hidden;
-        }
-
-        .game-card {
-            background: rgba(255, 255, 255, 0.98);
-            padding: 20px 15px;
-            border-radius: 35px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3), inset 0 4px 0 rgba(255, 255, 255, 0.9);
-            text-align: center;
-            max-width: 480px;
-            width: 100%;
-            border: 6px solid #4caf50;
-            position: relative;
-        }
-
-        h1 {
-            color: #2e7d32;
-            margin: 0 0 5px 0;
-            font-size: 1.8rem;
-            font-weight: 900;
-            text-shadow: 2px 2px 0px #c8e6c9;
-        }
-
-        .score-board {
-            font-size: 1.4rem;
-            color: #d84315;
-            font-weight: 900;
-            margin-bottom: 12px;
-            background: #fff3e0;
-            padding: 6px 22px;
-            border-radius: 50px;
-            display: inline-block;
-            border: 3px solid #ffab91;
-            box-shadow: 0 6px 15px rgba(216, 67, 21, 0.2);
-        }
-
-        .instruction-box {
-            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-            color: #1b5e20;
-            padding: 12px;
-            border-radius: 22px;
-            font-weight: 900;
-            font-size: 1.25rem;
-            margin-bottom: 15px;
-            border: 3px solid #81c784;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-            line-height: 1.4;
-        }
-
-        /* ==================== مضمار الحركة ==================== */
-        .track-container {
-            position: relative;
-            background: linear-gradient(to bottom, #e1f5fe, #b3e5fc);
-            border: 4px solid #29b6f6;
-            border-radius: 25px;
-            height: 155px;
-            margin: 15px 0;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: inset 0 6px 12px rgba(0,0,0,0.15);
-        }
-
-        .moving-train {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            position: absolute;
-            white-space: nowrap;
-        }
-
-        .smart-walk-prev {
-            animation: walkSlowPrev 40s linear infinite;
-        }
-        .smart-walk-next {
-            animation: walkSlowNext 40s linear infinite;
-        }
-
-        @keyframes walkSlowPrev {
-            0% { transform: translateX(80%); }
-            100% { transform: translateX(-100%); }
-        }
-        @keyframes walkSlowNext {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-80%); }
-        }
-
-        /* الشخصية المطاردة الفائقة الواقعية */
-        .chaser-animal {
-            width: 80px;
-            height: 80px;
-            margin-left: 10px;
-            animation: runChaser 0.6s infinite alternate ease-in-out;
-            filter: drop-shadow(0 8px 10px rgba(0,0,0,0.3));
-        }
-        @keyframes runChaser {
-            0% { transform: translateY(0) rotate(-6deg) scale(1); }
-            100% { transform: translateY(-10px) rotate(6deg) scale(1.08); }
-        }
-
-        /* عربات اللعبة */
-        .wagon {
-            background: linear-gradient(145deg, #ffffff, #f0f0f0);
-            border: 4px solid #4caf50;
-            border-radius: 25px;
-            width: 88px;
-            height: 108px;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%);
+            font-family: 'Cairo', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2), inset 0 3px 6px rgba(255,255,255,1);
+            justify-content: space-between;
+            overflow: hidden;
+            perspective: 1000px;
+        }
+
+        /* الهيدر والنتيجة */
+        header {
+            width: 100%;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        .score-box {
+            background: #FFD700;
+            color: #d84315;
+            padding: 10px 25px;
+            border-radius: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 6px 0 #c7a700, 0 10px 20px rgba(0,0,0,0.15);
+            transform-style: preserve-3d;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        /* زر الصوت */
+        .sound-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 18px;
             cursor: pointer;
-            transition: transform 0.2s;
-            animation: bounceWagon 1.2s infinite alternate ease-in-out;
+            box-shadow: 0 5px 0 #2e7d32;
+            font-family: 'Cairo', sans-serif;
         }
 
-        @keyframes bounceWagon {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-7px); }
+        /* حاوية السؤال والكروت */
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
         }
 
-        .wagon.center-wagon {
-            border-color: #ff9800;
-            background: linear-gradient(145deg, #fff8e1, #ffe082);
-            box-shadow: 0 10px 22px rgba(255,152,0,0.35);
+        .question-card {
+            background: linear-gradient(145deg, #ffffff, #e6e6e6);
+            border-radius: 30px;
+            padding: 20px 40px;
+            text-align: center;
+            box-shadow: 20px 20px 60px #bebebe, -20px -20px 60px #ffffff;
+            margin-bottom: 40px;
+            transform: rotateX(10deg);
+            animation: float 3s ease-in-out infinite;
         }
 
-        .wagon.target-wagon {
-            border-color: #e91e63;
-            background: linear-gradient(145deg, #fce4ec, #f8bbd0);
-            animation: bounceWagon 0.6s infinite alternate ease-in-out, pulseGlow 1.2s infinite;
+        .question-title {
+            font-size: 32px;
+            color: #6a1b9a;
+            margin: 0 0 10px 0;
         }
 
-        @keyframes pulseGlow {
-            0% { box-shadow: 0 0 0 0 rgba(233, 30, 99, 0.6); }
-            70% { box-shadow: 0 0 0 14px rgba(233, 30, 99, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(233, 30, 99, 0); }
+        .target-number {
+            font-size: 80px;
+            color: #ff3d00;
+            text-shadow: 3px 3px 0px #ff9e80;
+            margin: 0;
+            line-height: 1;
         }
 
-        .wagon-img {
-            width: 48px;
-            height: 48px;
-            object-fit: contain;
-            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.25));
-        }
-
-        .wagon-num {
-            font-size: 2.3rem;
-            font-weight: 900;
-            color: #2e7d32;
-            text-shadow: 1px 1px 0px #a5d6a7;
-        }
-        .center-wagon .wagon-num {
-            color: #e65100;
-            text-shadow: 1px 1px 0px #ffe082;
-        }
-
-        /* ==================== الخيارات الأزرار الضخمة ==================== */
+        /* خيارات الكروت الثلاثية الأبعاد */
         .options-container {
             display: flex;
             justify-content: center;
-            gap: 15px;
+            gap: 25px;
+            width: 100%;
             flex-wrap: wrap;
-            margin-top: 15px;
         }
 
-        .option-btn {
-            background: linear-gradient(145deg, #ffb74d, #f57c00);
-            color: white;
-            border: none;
-            width: 90px;
-            height: 98px;
-            border-radius: 25px;
-            font-size: 2.2rem;
-            font-weight: 900;
-            cursor: pointer;
-            box-shadow: 0 8px 0 #e65100, 0 12px 20px rgba(0,0,0,0.25);
-            transition: all 0.1s;
+        .3d-card {
+            width: 120px;
+            height: 160px;
+            background: linear-gradient(135deg, #00c6ff, #0072ff);
+            border-radius: 20px;
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            animation: floatBtn 1.5s infinite alternate ease-in-out;
-        }
-
-        @keyframes floatBtn {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-6px); }
-        }
-
-        .option-btn .opt-img {
-            width: 42px;
-            height: 42px;
-            object-fit: contain;
-            filter: drop-shadow(0 3px 4px rgba(0,0,0,0.3));
-        }
-
-        .option-btn:active {
-            transform: translateY(6px);
-            box-shadow: 0 2px 0 #e65100;
-        }
-
-        .jump-funny {
-            animation: funnyJump 0.6s ease forwards !important;
-        }
-        @keyframes funnyJump {
-            0% { transform: scale(1) translateY(0); }
-            50% { transform: scale(1.6) translateY(-40px) rotate(20deg); }
-            100% { transform: scale(0) translateY(-80px) rotate(180deg); opacity: 0; }
-        }
-
-        .wiggle-funny {
-            animation: funnyWiggle 0.5s ease-in-out !important;
-        }
-        @keyframes funnyWiggle {
-            0%, 100% { transform: scale(1) rotate(0deg); }
-            25% { transform: scale(1.3) rotate(-20deg); }
-            75% { transform: scale(1.3) rotate(20deg); }
-        }
-
-        .message {
-            font-size: 1.3rem;
-            font-weight: 900;
-            margin-top: 12px;
-            min-height: 38px;
-        }
-        .success { color: #2e7d32; text-shadow: 0 1px 0 #c8e6c9; }
-        .error { color: #d32f2f; text-shadow: 0 1px 0 #ffcdd2; }
-
-        .next-btn {
-            margin-top: 10px;
-            padding: 12px 30px;
-            background: linear-gradient(145deg, #66bb6a, #2e7d32);
+            align-items: center;
+            font-size: 60px;
             color: white;
-            border: none;
-            border-radius: 18px;
-            font-size: 1.2rem;
-            font-weight: 900;
+            font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 6px 0 #1b5e20, 0 8px 15px rgba(0,0,0,0.2);
-            transition: all 0.1s;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2), inset 0 0 15px rgba(255,255,255,0.5);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform-style: preserve-3d;
+            animation: float 3.5s ease-in-out infinite;
+            border: 4px solid #fff;
         }
-        .next-btn:active {
-            transform: translateY(4px);
-            box-shadow: 0 2px 0 #1b5e20;
+
+        /* كروت بألوان مختلفة عشان تتألق */
+        .3d-card:nth-child(1) { background: linear-gradient(135deg, #FF512F, #DD2476); animation-delay: 0s; }
+        .3d-card:nth-child(2) { background: linear-gradient(135deg, #11998e, #38ef7d); animation-delay: 0.5s; }
+        .3d-card:nth-child(3) { background: linear-gradient(135deg, #FFB75E, #ED8F03); animation-delay: 1s; }
+
+        .3d-card:hover {
+            transform: translateY(-15px) scale(1.08) rotateY(10deg);
+            box-shadow: 0 25px 45px rgba(0,0,0,0.3);
+        }
+
+        .3d-card:active {
+            transform: translateY(-5px) scale(0.98);
+        }
+
+        /* رسائل التشجيع */
+        .feedback {
+            font-size: 35px;
+            font-weight: 900;
+            height: 50px;
+            margin-top: 20px;
+            color: #2e7d32;
+            text-shadow: 2px 2px 0px #fff;
+        }
+
+        /* أنيميشن الطوفان العايم */
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-12px) rotate(2deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
+        /* شريط سفلي تحفيزي */
+        footer {
+            margin-bottom: 20px;
+            font-size: 20px;
+            color: #424242;
+            font-weight: bold;
         }
     </style>
 </head>
+<body>
 
-<body onclick="startAudioExperience()">
+    <header>
+        <div class="score-box">النجوم: <span id="score">0</span> ⭐</div>
+        <button class="sound-btn" onclick="toggleMusic()">🔊 الموسيقى</button>
+    </header>
 
-<div class="game-card">
-    <h1>🎈 مغامرة الأرقام السحرية 🚗</h1>
-    <div class="score-board">⭐ النجوم: <span id="score">٠</span></div>
+    <div class="game-container">
+        <div class="question-card">
+            <h2 class="question-title" id="question-text">إيه الرقم اللي بيجي أبل؟</h2>
+            <div class="target-number" id="target-num">٥</div>
+        </div>
 
-    <div class="instruction-box" id="instruction">جاري تحضير اللعبة الممتعة...</div>
+        <div class="options-container" id="options-box">
+            <!-- الكروت هتتنزل هنا بالـ JavaScript -->
+        </div>
 
-    <!-- السكة والحركة -->
-    <div class="track-container">
-        <div class="moving-train" id="moving-train"></div>
+        <div class="feedback" id="feedback-text"></div>
     </div>
 
-    <!-- الأزرار -->
-    <div class="options-container" id="options"></div>
+    <footer>شاطر يا بطل! كمل لعب وسلّي وقتك 🎉</footer>
 
-    <div class="message" id="message"></div>
+    <script>
+        // الأرقام بالعربي
+        const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
+        const praises = ["الله عليك يا بطل! 🌟", "ممتاز يا عبقري! 🎈", "شاطر أوي! 👏", "فنان يا وحش! 🦁", "إجابة صح! 🎯"];
 
-    <button class="next-btn" onclick="generateNewQuestion()">سؤال جديد 🔄</button>
-</div>
+        let score = 0;
+        let currentTarget = 0;
+        let isBefore = true; // نركز أكتر على "السابق"
+        let audioCtx = null;
+        let isSoundOn = true;
 
-<script>
-    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
-    
-    // صور واقعية ثلاثية الأبعاد (3D High Quality Render SVG Icons)
-    const real3DImages = {
-        0: 'https://cdn-icons-png.flaticon.com/512/616/616408.png', // قطة 3D
-        1: 'https://cdn-icons-png.flaticon.com/512/616/616430.png', // أرنب 3D
-        2: 'https://cdn-icons-png.flaticon.com/512/616/616412.png', // ثعلب 3D
-        3: 'https://cdn-icons-png.flaticon.com/512/616/616448.png', // ضفدع 3D
-        4: 'https://cdn-icons-png.flaticon.com/512/616/616417.png', // قرد 3D
-        5: 'https://cdn-icons-png.flaticon.com/512/616/616408.png', // كلب 3D
-        6: 'https://cdn-icons-png.flaticon.com/512/616/616402.png', // فيل 3D
-        7: 'https://cdn-icons-png.flaticon.com/512/616/616432.png', // باندا 3D
-        8: 'https://cdn-icons-png.flaticon.com/512/616/616414.png', // دب 3D
-        9: 'https://cdn-icons-png.flaticon.com/512/616/616418.png', // أسد 3D
-        10: 'https://cdn-icons-png.flaticon.com/512/616/616428.png' // نمر 3D
-    };
-
-    // شخصيات مطاردة ثلاثية الأبعاد خفيفة ومرحة
-    const chasers3D = [
-        'https://cdn-icons-png.flaticon.com/512/3097/3097180.png', // سيارة سباق 3D
-        'https://cdn-icons-png.flaticon.com/512/2316/2316050.png', // ديناصور لطيف 3D
-        'https://cdn-icons-png.flaticon.com/512/4712/4712109.png', // روبوت ممتع 3D
-        'https://cdn-icons-png.flaticon.com/512/1358/1358822.png'  // طائرة 3D
-    ];
-
-    let currentNum = 5;
-    let score = 0;
-    let activeSlot = 'prev';
-    let currentChaser = chasers3D[0];
-
-    // ==================== الموسيقى والصوت المرتفع والواضح ====================
-    let audioCtx = null;
-    let bgMusicTimer = null;
-
-    function startAudioExperience() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            startHighEnergyMusic(); 
-        }
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-    }
-
-    // موسيقى تحفيزية عالية الصوت وإيقاعية حماسية
-    function startHighEnergyMusic() {
-        if (bgMusicTimer) return;
-        
-        const melody = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25, 587.33];
-        let step = 0;
-
-        bgMusicTimer = setInterval(() => {
-            if (!audioCtx) return;
-            try {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(melody[step], audioCtx.currentTime);
-                
-                // صوت مرتفع ومحفز (0.12)
-                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
-
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.22);
-
-                step = (step + 1) % melody.length;
-            } catch (e) {}
-        }, 250);
-    }
-
-    function playSound(type) {
-        try {
-            startAudioExperience();
-            if (!audioCtx) return;
+        // تهيئة الأصوات بسيطة بدعم المتصفحات
+        function playSound(type) {
+            if (!isSoundOn) return;
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -380,161 +213,117 @@
             gain.connect(audioCtx.destination);
 
             if (type === 'correct') {
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.35);
-                gain.gain.setValueAtTime(0.5, audioCtx.currentTime); // صوت قوي
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.4);
-            } else if (type === 'wrong') {
-                osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-                osc.frequency.linearRampToValueAtTime(120, audioCtx.currentTime + 0.4);
-                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
                 osc.start();
-                osc.stop(audioCtx.currentTime + 0.4);
-            }
-        } catch (e) {}
-    }
-
-    // ==================== منطق اللعبة والتنفيذ ====================
-    function generateNewQuestion() {
-        currentNum = Math.floor(Math.random() * 9) + 1;
-        activeSlot = 'prev';
-        currentChaser = chasers3D[Math.floor(Math.random() * chasers3D.length)];
-
-        renderTrain();
-        updateInstruction();
-        generateOptions();
-        document.getElementById('message').innerText = '';
-    }
-
-    function renderTrain() {
-        const trainBox = document.getElementById('moving-train');
-        trainBox.innerHTML = '';
-
-        if (activeSlot === 'prev') {
-            trainBox.className = 'moving-train smart-walk-prev';
-        } else {
-            trainBox.className = 'moving-train smart-walk-next';
-        }
-
-        const prevNum = currentNum - 1;
-        const nextNum = currentNum + 1;
-
-        // الشخصية المطاردة الـ 3D
-        const chaser = document.createElement('img');
-        chaser.className = 'chaser-animal';
-        chaser.src = currentChaser;
-        trainBox.appendChild(chaser);
-
-        // عربة السابق
-        const prevWagon = document.createElement('div');
-        prevWagon.className = `wagon ${activeSlot === 'prev' ? 'target-wagon' : ''}`;
-        prevWagon.innerHTML = activeSlot === 'prev' 
-            ? `<span style="font-size:2.5rem;">❓</span><span class="wagon-num">؟</span>`
-            : `<img class="wagon-img" src="${real3DImages[prevNum]}"><span class="wagon-num">${arabicNumbers[prevNum]}</span>`;
-
-        // عربة الأساسي
-        const centerWagon = document.createElement('div');
-        centerWagon.className = 'wagon center-wagon';
-        centerWagon.innerHTML = `<img class="wagon-img" src="${real3DImages[currentNum]}"><span class="wagon-num">${arabicNumbers[currentNum]}</span>`;
-
-        // عربة اللاحق
-        const nextWagon = document.createElement('div');
-        nextWagon.className = `wagon ${activeSlot === 'next' ? 'target-wagon' : ''}`;
-        nextWagon.innerHTML = activeSlot === 'next' 
-            ? `<span style="font-size:2.5rem;">❓</span><span class="wagon-num">؟</span>`
-            : `<img class="wagon-img" src="${real3DImages[nextNum]}"><span class="wagon-num">${arabicNumbers[nextNum]}</span>`;
-
-        trainBox.appendChild(prevWagon);
-        trainBox.appendChild(centerWagon);
-        trainBox.appendChild(nextWagon);
-    }
-
-    function updateInstruction() {
-        const inst = document.getElementById('instruction');
-        if (activeSlot === 'prev') {
-            inst.innerHTML = `اختار الرقم السحري اللي بيجي <b>قَبْل</b> الرقم (${arabicNumbers[currentNum]}) ⬅️`;
-        } else {
-            inst.innerHTML = `بطل! ومين الرقم السحري اللي بيجي <b>بَعْد</b> الرقم (${arabicNumbers[currentNum]})؟ ➡️`;
-        }
-    }
-
-    function generateOptions() {
-        const optionsDiv = document.getElementById('options');
-        optionsDiv.innerHTML = '';
-
-        const targetNum = activeSlot === 'prev' ? currentNum - 1 : currentNum + 1;
-
-        let numbers = new Set([targetNum]);
-        while(numbers.size < 3) {
-            let rand = Math.floor(Math.random() * 10);
-            if(rand !== currentNum) {
-                numbers.add(rand);
+                osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'wrong') {
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'click') {
+                osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
             }
         }
 
-        let shuffled = Array.from(numbers).sort(() => Math.random() - 0.5);
+        function generateQuestion() {
+            document.getElementById('feedback-text').innerText = "";
+            
+            // 70% تركيز على الرقم "السابق" (اللي قبل) و 30% على "اللاحق" (اللي بعد)
+            isBefore = Math.random() < 0.7;
 
-        shuffled.forEach(num => {
-            const btn = document.createElement('button');
-            btn.className = 'option-btn';
-            btn.innerHTML = `<img class="opt-img" src="${real3DImages[num]}"><span>${arabicNumbers[num]}</span>`;
-            btn.onclick = () => {
-                startAudioExperience();
-                checkAnswer(num, btn);
-            };
-            optionsDiv.appendChild(btn);
-        });
-    }
-
-    function checkAnswer(chosenNum, btnEl) {
-        const targetNum = activeSlot === 'prev' ? currentNum - 1 : currentNum + 1;
-        const msgDiv = document.getElementById('message');
-
-        if (chosenNum === targetNum) {
-            playSound('correct');
-            btnEl.classList.add('jump-funny');
-
-            if (activeSlot === 'prev') {
-                msgDiv.className = 'message success';
-                msgDiv.innerText = 'ممتاز جداً! جبت الرقم اللي قبله صح 🥳👏';
-
-                setTimeout(() => {
-                    activeSlot = 'next';
-                    renderTrain();
-                    updateInstruction();
-                    generateOptions();
-                    msgDiv.innerText = '';
-                }, 1200);
+            if (isBefore) {
+                // نختار رقم من 1 لـ 10 عشان ينفع نجيب اللي قبله
+                currentTarget = Math.floor(Math.random() * 10) + 1;
+                document.getElementById('question-text').innerText = "إيه الرقم اللي بيجي أبل (السابق)؟ 👈";
             } else {
-                msgDiv.className = 'message success';
-                msgDiv.innerText = 'بطل أسطوري! فزت بالمرحلة كلها 🥳🎉';
+                // نختار رقم من 0 لـ 9 عشان ينفع نجيب اللي بعده
+                currentTarget = Math.floor(Math.random() * 10);
+                document.getElementById('question-text').innerText = "إيه الرقم اللي بيجي بعد (اللاحق)؟ 👉";
+            }
 
-                score++;
+            document.getElementById('target-num').innerText = arabicNumbers[currentTarget];
+
+            // الإجابة الصحيحة
+            const correctAnswer = isBefore ? currentTarget - 1 : currentTarget + 1;
+
+            // خيارات خادعة (غلط)
+            let options = [correctAnswer];
+            while (options.length < 3) {
+                let randomOption = Math.floor(Math.random() * 11);
+                if (!options.includes(randomOption)) {
+                    options.push(randomOption);
+                }
+            }
+
+            // لغبطة ترتيب الخيارات
+            options.sort(() => Math.random() - 0.5);
+
+            // رسم الكروت
+            const optionsBox = document.getElementById('options-box');
+            optionsBox.innerHTML = '';
+
+            options.forEach(num => {
+                const card = document.createElement('div');
+                card.className = '3d-card';
+                card.innerText = arabicNumbers[num];
+                
+                // إضافة حركة للمس على الموبايل والماوس
+                card.onclick = () => checkAnswer(num, correctAnswer, card);
+                card.onpointerdown = () => playSound('click');
+
+                optionsBox.appendChild(card);
+            });
+        }
+
+        function checkAnswer(selected, correct, cardElement) {
+            if (selected === correct) {
+                playSound('correct');
+                score += 10;
                 document.getElementById('score').innerText = arabicNumbers[score] || score;
 
+                // إطلاق الألعاب النارية والبلونات
+                confetti({
+                    particleCount: 70,
+                    spread: 60,
+                    origin: { y: 0.7 }
+                });
+
+                const randomPraise = praises[Math.floor(Math.random() * praises.length)];
+                document.getElementById('feedback-text').innerText = randomPraise;
+
+                // الانتقال للسؤال التالي بعد ثانية ونصف
+                setTimeout(generateQuestion, 1500);
+            } else {
+                playSound('wrong');
+                document.getElementById('feedback-text').innerText = "فكر تاني كده يا بطل! 🤔";
+                
+                // اهتزاز الكارت الخاطئ
+                cardElement.style.animation = "none";
+                cardElement.style.transform = "shake 0.5s";
                 setTimeout(() => {
-                    generateNewQuestion();
-                }, 1600);
+                    cardElement.style.animation = "float 3.5s ease-in-out infinite";
+                }, 500);
             }
-
-        } else {
-            playSound('wrong');
-            btnEl.classList.remove('wiggle-funny');
-            void btnEl.offsetWidth;
-            btnEl.classList.add('wiggle-funny');
-
-            msgDiv.className = 'message error';
-            msgDiv.innerText = `حاول تاني يا بطل! 🤪❌`;
         }
-    }
 
-    generateNewQuestion();
-</script>
+        function toggleMusic() {
+            isSoundOn = !isSoundOn;
+            const btn = document.querySelector('.sound-btn');
+            btn.innerText = isSoundOn ? "🔊 الصوت شغال" : "🔇 الصوت مقفول";
+        }
 
+        // تشغيل اللعبة فوراً
+        generateQuestion();
+    </script>
 </body>
 </html>
