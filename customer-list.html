@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>كشف حساب العملاء — الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+<!-- Google Fonts: Cairo & Montserrat -->
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Font Awesome 6 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  :root{
+    /* الهوية اللونية الفخمة المدمجة: ألوان علم المانيا وإيطاليا المحاسبية */
+    --germany-black: #000000;       /* الأسود الفخم والأساسي للهيدر */
+    --germany-gold: #FFCC00;        /* الذهبي الألماني اللامع للتنبيهات وعناصر التمييز */
+    --italy-green: #178a4a;         /* الأخضر الإيطالي الزمردي لـ "له" */
+    --germany-red: #FF0000;         /* الأحمر الصريح لـ "عليه" والنواقص */
+    
+    --ink: #000000;
+    --paper: #f4f6f8;
+    --panel: #ffffff;
+    --line: #e5e9f0;
+    --mute: #5a677d;
+    
+    --owed: var(--germany-red);
+    --owed-bg: #fff1f1;
+    --credit: var(--italy-green);
+    --credit-bg: #eefaf2;
+    
+    --card-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    --hover-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    --radius-sm: 12px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+  }
+  
+  *{
+    box-sizing:border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  body{
+    margin:0; background:#eceef1; color:var(--ink);
+    font-family:'Cairo', sans-serif; -webkit-font-smoothing:antialiased;
+    padding-bottom: 90px;
+    font-size: 0.95rem;
+  }
+
+  .app-container {
+    max-width: 500px;
+    margin: 0 auto;
+    background: var(--paper);
+    min-height: 100vh;
+    box-shadow: 0 0 30px rgba(0,0,0,0.15);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .num { 
+    font-family: 'Montserrat', 'Cairo', sans-serif !important; 
+    font-weight: 800; 
+    text-align: center;
+  }
+
+  /* ===== Premium Black & Gold Glass Header ===== */
+  header{
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    color:#fff; 
+    padding: 24px 20px 65px; 
+    position:relative; 
+    overflow:hidden;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); 
+    border-bottom: 4px solid var(--germany-red); /* دمج الشريط الأحمر الإيطالي/الألماني أسفل الهيدر */
+  }
+  header::after{
+    content:""; position:absolute; inset:0;
+    background-image: radial-gradient(circle at 80% 10%, rgba(255, 204, 0, 0.15), transparent 60%);
+    pointer-events:none;
+  }
+  .top-row{ display:flex; align-items:center; justify-content:space-between; position:relative; z-index:1; }
+  
+  .icon-link{
+    color:#fff; background:rgba(255,255,255,.15);
+    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    text-decoration:none !important; font-size:.95rem; flex-shrink:0; transition:.2s ease;
+    border: 1px solid rgba(255,255,255,0.1);
+    outline: none;
+  }
+  .icon-link:active{ background:rgba(255,255,255,.3); transform: scale(0.9); }
+  
+  .brand{ text-align:center; }
+  .brand .eyebrow{ font-size:.65rem; letter-spacing:1.5px; text-transform:uppercase; opacity:.9; font-weight:800; color: var(--germany-gold); }
+  .brand h1{ font-size:1.15rem; font-weight:900; margin:3px 0 0; letter-spacing: -0.5px; color: #ffffff; }
+
+  .search-wrap{ position:relative; z-index:1; margin-top:20px; display:flex; gap:10px; align-items:stretch; }
+  .search-box{
+    flex: 1;
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
+    border-radius:16px; padding:12px 16px; display:flex; align-items:center; gap:10px;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+  }
+  .search-box:focus-within {
+    background: rgba(255,255,255,0.2);
+    border-color: var(--germany-gold);
+  }
+  .search-box i{ opacity:.9; font-size:.9rem; color: var(--germany-gold); }
+  .search-box input{ background:transparent; border:none; outline:none; color:#fff; width:100%; font-family:'Cairo'; font-size:.9rem; font-weight: 600; }
+  .search-box input::placeholder{ color:rgba(255,255,255,.65); }
+
+  .danger-btn{
+    width:48px; flex-shrink:0; background:var(--germany-red); border:1px solid rgba(255,0,0,0.2);
+    color:#fff; font-size:1.05rem; border-radius:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:.2s ease;
+    outline: none;
+  }
+  .danger-btn:active{ transform: scale(0.9); opacity:0.8; }
+
+  /* ===== Summary stats grid ===== */
+  .stats{
+    position:relative; z-index:1; margin:-38px 16px 0; display:grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px;
+  }
+  .stat-card{
+    background:var(--panel); border-radius:var(--radius-md); padding:12px 4px;
+    box-shadow: var(--card-shadow); text-align:center;
+    position: relative; min-width:0;
+    border: 1px solid var(--line);
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; right: 0; left: 0; height: 4px; border-radius: 10px 10px 0 0;
+  }
+  .stat-card.owed::before{ background-color: var(--owed); }
+  .stat-card.credit::before{ background-color: var(--credit); }
+  .stat-card.net::before{ background-color: var(--germany-black); }
+  
+  .stat-card .lbl{ font-size:.65rem; color:var(--mute); font-weight:800; display: block; }
+  .stat-card .val{ font-size:.9rem; margin-top:5px; font-weight:900; display: block; }
+  .stat-card.owed .val{ color:var(--owed); }
+  .stat-card.credit .val{ color:var(--credit); }
+  .stat-card.net .val{ color:var(--germany-black); }
+  .stat-card .cur{ font-size:.6rem; font-weight:800; color:var(--mute); margin-top: 2px;}
+
+  /* ===== Toolbar ===== */
+  .toolbar{
+    margin:20px 16px 10px; display:flex; gap:8px; align-items:center; justify-content:space-between;
+  }
+  .filter-pills{ display:flex; gap:6px; }
+  .pill{
+    border: 1px solid var(--line); background:#fff; color:var(--mute); font-size:.78rem; font-weight:800;
+    padding:8px 16px; border-radius:999px; cursor:pointer; transition:.2s ease;
+    outline: none;
+  }
+  .pill.active{ background:var(--germany-black); color:#fff; border-color:var(--germany-black); box-shadow: var(--card-shadow); }
+  .pill:active{ transform: scale(0.95); }
+  .count-tag{ font-size:.78rem; color:var(--germany-black); font-weight:800; }
+
+  /* ===== Customer List ===== */
+  #customersContainer{ padding:6px 16px 0; }
+  .customer-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:16px; margin-bottom:14px; display:flex; flex-direction: column;
+    position: relative; transition:all 0.2s ease; box-shadow:var(--card-shadow);
+  }
+  .customer-card:hover {
+    box-shadow: var(--hover-shadow);
+    transform: translateY(-1px);
+  }
+  .customer-card::before {
+    content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 6px; 
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+  .customer-card.has-debt::before{ background-color:var(--owed); }
+  .customer-card.is-credit::before{ background-color:var(--credit); }
+  .customer-card.is-zero::before{ background-color:var(--mute); }
+
+  .row-main{ display:flex; gap:12px; align-items:center; }
+  
+  .avatar{
+    width:44px; height:44px; border-radius:14px; background:var(--owed-bg); color:var(--germany-black);
+    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:.95rem; flex-shrink:0;
+    border: 1px solid var(--line);
+  }
+  
+  .customer-info-box { flex: 1; min-width: 0; }
+  .customer-name{ font-weight:800; font-size:1rem; margin:0; color: var(--germany-black); }
+  .phone-sub{ font-size:.75rem; color:var(--mute); font-weight:700; display:block; margin-top:4px; }
+  
+  /* صندوق عرض الرصيد */
+  .balance-strip {
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin: 12px 0 14px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .balance-label{ font-size:.78rem; color:var(--mute); font-weight:800; }
+  .balance-value{ font-weight:900; font-size:1.1rem; display: inline-flex; align-items: center; gap: 4px; }
+  
+  .text-debt{ color:var(--owed); }
+  .text-credit{ color:var(--credit); }
+  .text-zero{ color:var(--mute); }
+  
+  .tag{ font-size:.65rem; font-weight:800; padding:4px 10px; border-radius:8px; margin-right:8px; letter-spacing: 0.2px;}
+  .tag.debt{ background:var(--owed-bg); color:var(--owed); }
+  .tag.credit{ background:var(--credit-bg); color:var(--credit); }
+  .tag.zero{ background:#e2e8f0; color:var(--mute); }
+
+  /* شريط أزرار التحكم الفخم بالموبايل */
+  .action-container{ 
+    display:flex; 
+    gap:8px; 
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .action-btn{
+    flex: 1;
+    height: 38px; 
+    border-radius: var(--radius-sm); 
+    display:flex; 
+    align-items:center; 
+    justify-content:center;
+    gap: 6px;
+    text-decoration:none !important; 
+    font-size:.8rem; 
+    font-weight: 800;
+    transition:.15s; 
+    border:1px solid transparent;
+  }
+  .action-btn:active{ transform:scale(0.95); }
+  
+  /* جعل أزرار الإجراءات بالأسود والأخضر المتناسق */
+  .btn-info{ background:var(--germany-black); color:#ffffff; border-color:var(--germany-black); }
+  .btn-pay{ background:var(--credit); color:#ffffff; border-color:var(--credit); }
+  .btn-del{ background:var(--owed-bg); color:var(--owed); border-color:rgba(255, 0, 0, 0.15); }
+
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--mute); }
+  .empty-state i{ font-size:2.5rem; opacity:.4; margin-bottom:12px; display:block; color: var(--germany-gold); }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <header>
+    <div class="top-row">
+      <a href="client_menu.html" class="icon-link" title="رجوع"><i class="fas fa-arrow-right"></i></a>
+      <div class="brand">
+        <span class="eyebrow">شركة الزيادي</span>
+        <h1>كشف حساب العملاء</h1>
+      </div>
+      <a href="index.html" class="icon-link" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
+    </div>
+    <div class="search-wrap">
+      <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="ابحث بالإسم أو رقم الهاتف..." oninput="filterCustomers()">
+      </div>
+      <button class="danger-btn" id="deleteAllBtn" title="مسح كل العملاء"><i class="fas fa-trash-alt"></i></button>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat-card owed">
+      <span class="lbl">إجمالي عليه</span>
+      <span class="val num" id="totalOwed">0.00</span>
+      <span class="cur">ج.م</span>
+    </div>
+    <div class="stat-card credit">
+      <span class="lbl">إجمالي له</span>
+      <span class="val num" id="totalCredit">0.00</span>
+      <span class="cur">ج.م</span>
+    </div>
+    <div class="stat-card net">
+      <span class="lbl">الصافي</span>
+      <span class="val num" id="netBalance">0.00</span>
+      <span class="cur">ج.م</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="filter-pills">
+      <button class="pill active" data-filter="all" onclick="setFilter('all')">الكل</button>
+      <button class="pill" data-filter="debt" onclick="setFilter('debt')">عليه</button>
+      <button class="pill" data-filter="credit" onclick="setFilter('credit')">له</button>
+    </div>
+    <span class="count-tag" id="countTag"></span>
+  </div>
+
+  <div id="customersContainer">
+    <div class="text-center py-5" id="initialLoader" style="text-align:center;padding:50px 0;">
+      <i class="fas fa-circle-notch fa-spin" style="font-size:1.8rem;color:#000000;"></i>
+      <p style="margin-top:10px;font-size:.85rem;font-weight:800;color:#7c8b82;">جاري تحميل كشف الحساب...</p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+    authDomain: "ahmedelzaiady.firebaseapp.com",
+    projectId: "ahmedelzaiady",
+    storageBucket: "ahmedelzaiady.firebasestorage.app",
+    messagingSenderId: "300306825071",
+    appId: "1:300306825071:web:0426ddde56280fa090329a",
+    measurementId: "G-WE04GK5XZZ"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+  let allCustomers = [];
+  let currentFilter = 'all';
+
+  const fmt = (n) => Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function parseSignedNumber(val) {
+    if (val === null || val === undefined || val === '') return 0;
+    if (typeof val === 'number') return val;
+    let s = String(val).trim().replace(/,/g, '');
+    let negative = false;
+    if (s.startsWith('(') && s.endsWith(')')) { negative = true; s = s.slice(1, -1); }
+    if (s.endsWith('-')) { negative = true; s = s.slice(0, -1); }
+    if (s.startsWith('-')) { negative = true; s = s.slice(1); }
+    const n = parseFloat(s);
+    if (isNaN(n)) return 0;
+    return negative ? -n : n;
+  }
+
+  async function loadAllLedgerData() {
+    const debtMap = {}; 
+
+    const [invoicesSnap, transSnap] = await Promise.all([
+      getDocs(collection(db, "invoices")),
+      getDocs(collection(db, "transactions"))
+    ]);
+
+    invoicesSnap.forEach(d => {
+      const data = d.data();
+      const cid = data.customerId;
+      if (!cid) return;
+      debtMap[cid] = (debtMap[cid] || 0) + parseSignedNumber(data.remaining);
+    });
+
+    transSnap.forEach(d => {
+      const tr = d.data();
+      const pid = tr.partyId;
+      if (!pid) return;
+      let effect = 0;
+      const amt = parseSignedNumber(tr.amount);
+      if (tr.type === 'قبض') effect = -Math.abs(amt);
+      else if (tr.type === 'صرف') effect = Math.abs(amt);
+      debtMap[pid] = (debtMap[pid] || 0) + effect;
+    });
+
+    return debtMap;
+  }
+
+  async function loadCustomers() {
+    const container = document.getElementById('customersContainer');
+    try {
+      const q = query(collection(db, "customers"), orderBy("name"));
+      const [custSnap, debtMap] = await Promise.all([getDocs(q), loadAllLedgerData()]);
+
+      allCustomers = custSnap.docs.map(d => {
+        const data = d.data();
+        const initial = parseSignedNumber(data.initialBalance);
+        const ledgerEffect = debtMap[d.id] || 0;
+        return {
+          id: d.id,
+          ...data,
+          realBalance: initial + ledgerEffect
+        };
+      });
+
+      allCustomers.sort((a, b) => b.realBalance - a.realBalance);
+
+      renderCustomers(allCustomers);
+      updateStats(allCustomers);
+
+    } catch (e) {
+      container.innerHTML = `<div style="color:#ff0000;text-align:center;padding:20px;font-weight:700;">خطأ: ${e.message}</div>`;
+    }
+  }
+
+  function updateStats(list) {
+    let totalOwed = 0, totalCredit = 0;
+    list.forEach(c => {
+      if (c.realBalance > 0) totalOwed += c.realBalance;
+      else if (c.realBalance < 0) totalCredit += Math.abs(c.realBalance);
+    });
+    document.getElementById('totalOwed').textContent = fmt(totalOwed);
+    document.getElementById('totalCredit').textContent = fmt(totalCredit);
+    const net = totalOwed - totalCredit;
+    const netEl = document.getElementById('netBalance');
+    netEl.textContent = (net < 0 ? '-' : '') + fmt(net);
+  }
+
+  function balanceMeta(balance) {
+    if (balance > 0) return { cls: 'has-debt', txtCls: 'text-debt', tagCls: 'debt', tagTxt: 'عليه' };
+    if (balance < 0) return { cls: 'is-credit', txtCls: 'text-credit', tagCls: 'credit', tagTxt: 'له' };
+    return { cls: 'is-zero', txtCls: 'text-zero', tagCls: 'zero', tagTxt: 'خالص' };
+  }
+
+  function initials(name) {
+    if (!name) return '؟';
+    const parts = name.trim().split(' ');
+    return parts.length > 1 ? (parts[0][0] + parts[1][0]) : parts[0].slice(0, 2);
+  }
+
+  window.renderCustomers = (list) => {
+    const container = document.getElementById('customersContainer');
+    document.getElementById('countTag').textContent = `${list.length} عميل`;
+
+    if (list.length === 0) {
+      container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد نتائج مطابقة</div>`;
+      return;
+    }
+
+    container.innerHTML = list.map(cust => {
+      const balance = cust.realBalance;
+      const meta = balanceMeta(balance);
+      return `
+        <div id="card-${cust.id}" class="customer-card ${meta.cls}">
+          <div class="row-main">
+            <div class="avatar">${initials(cust.name)}</div>
+            <div class="customer-info-box">
+              <h6 class="customer-name">${cust.name}</h6>
+              <small class="phone-sub"><i class="fas fa-phone-alt me-1"></i> ${cust.phone || 'بدون هاتف'}</small>
+            </div>
+          </div>
+          
+          <div class="balance-strip">
+            <span class="balance-label">صافي الرصيد الحالي</span>
+            <span class="balance-value ${meta.txtCls}">
+              <span class="num">${fmt(balance)}</span>
+              <small style="font-size:.7rem; font-weight: 800; margin-right: 2px;">ج.م</small>
+              <span class="tag ${meta.tagCls}">${meta.tagTxt}</span>
+            </span>
+          </div>
+          
+          <div class="action-container">
+            <a href="customer-details.html?id=${cust.id}" class="action-btn btn-info"><i class="fas fa-user-tag"></i> كشف الحساب</a>
+            <a href="customer-payment.html?id=${cust.id}" class="action-btn btn-pay"><i class="fas fa-hand-holding-dollar"></i> دفعة</a>
+            <button class="action-btn btn-del" onclick="deleteCustomer('${cust.id}', '${(cust.name || '').replace(/'/g, "\\'")}')"><i class="fas fa-trash-alt"></i> حذف</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  function applyFilters() {
+    const term = document.getElementById('searchInput').value.toLowerCase();
+    let filtered = allCustomers.filter(c =>
+      (c.name && c.name.toLowerCase().includes(term)) ||
+      (c.phone && c.phone.includes(term))
+    );
+    if (currentFilter === 'debt') filtered = filtered.filter(c => c.realBalance > 0);
+    if (currentFilter === 'credit') filtered = filtered.filter(c => c.realBalance < 0);
+    filtered.sort((a, b) => b.realBalance - a.realBalance);
+    renderCustomers(filtered);
+    updateStats(filtered);
+  }
+
+  window.filterCustomers = applyFilters;
+
+  window.setFilter = (f) => {
+    currentFilter = f;
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.filter === f));
+    applyFilters();
+  };
+
+  window.deleteCustomer = async (id, name) => {
+    if (!confirm(`هل أنت متأكد من مسح العميل "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    try {
+      await deleteDoc(doc(db, 'customers', id));
+      allCustomers = allCustomers.filter(c => c.id !== id);
+      applyFilters();
+    } catch (err) {
+      alert('خطأ أثناء المسح: ' + err.message);
+    }
+  };
+
+  document.getElementById('deleteAllBtn').addEventListener('click', async () => {
+    if (allCustomers.length === 0) return;
+    const sure1 = confirm(`سيتم مسح ${allCustomers.length} عميل نهائياً من قاعدة البيانات. هل أنت متأكد؟`);
+    if (!sure1) return;
+    const sure2 = confirm('تأكيد أخير: هذا الإجراء لا يمكن التراجع عنه. متابعة؟');
+    if (!sure2) return;
+
+    try {
+      await Promise.all(allCustomers.map(c => deleteDoc(doc(db, 'customers', c.id))));
+      allCustomers = [];
+      applyFilters();
+    } catch (err) {
+      alert('خطأ أثناء مسح العملاء: ' + err.message);
+    }
+  });
+
+  loadCustomers();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

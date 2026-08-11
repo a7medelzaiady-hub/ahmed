@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أرشيف السندات المالية - الزيادي لزيوت السيارات</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- مكتبات توليد الصور وملفات الـ Excel محلياً -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root { --accent: #0b5e3d; --bg-light: #f4f7f6; --white: #ffffff; --danger: #dc3545; }
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; padding-bottom: 5px; }
+        
+        .header-section { 
+            padding: 15px 20px; background: var(--accent); color: white;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100;
+        }
+
+        .receipt-card {
+            background: var(--white); border-radius: 15px; padding: 15px; margin-top: 12px;
+            border: 1px solid #ddd; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+
+        .badge-receipt { font-size: 0.75rem; padding: 4px 10px; border-radius: 8px; font-weight: 700; color: white; }
+        .bg-gabz { background: #28a745; }
+        .bg-sarf { background: #dc3545; }
+
+        .btn-delete {
+            background: transparent; border: none; color: var(--danger); font-size: 1.1rem;
+            cursor: pointer; padding: 5px 10px; border-radius: 8px; transition: 0.2s;
+        }
+        .btn-delete:hover { background: rgba(220, 53, 69, 0.1); }
+
+        /* قالب التصوير السري والمخفي */
+        #receiptCaptureTemplate {
+            width: 450px; position: absolute; left: -9999px; top: -9999px;
+            background: #ffffff; padding: 30px; border: 2px solid #0b5e3d; border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <a href="index.html" class="text-white"><i class="fas fa-home"></i></a>
+    <h5 class="m-0 fw-bold">أرشيف السندات المالية</h5>
+    <button class="btn btn-sm btn-light fw-bold text-dark" onclick="exportToExcel()">
+        <i class="fas fa-file-excel text-success me-1"></i> تصدير Excel
+    </button>
+</div>
+
+<div class="container mt-3">
+    <!-- حقل فلترة سريع -->
+    <div class="mb-3">
+        <input type="text" id="searchBar" class="form-control" placeholder="ابحث باسم العميل في السندات..." oninput="filterReceipts()">
+    </div>
+    
+    <div id="receiptsListContainer">
+        <div class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i> جاري قراءة أرشيف السندات والتحقق من الأسماء...</div>
+    </div>
+</div>
+
+<!-- ================= قالب البنية للتصوير اللحظي والمشاركة المعدل بالكامل ================= -->
+<div id="receiptCaptureTemplate">
+    <div style="text-align: center; border-bottom: 2px dashed #0b5e3d; padding-bottom: 15px; margin-bottom: 20px;">
+        <h3 style="color: #0b5e3d; margin: 0; font-weight: 700;">الزيادي لزيوت السيارات</h3>
+        <p style="font-size: 0.85rem; color: #555; margin: 5px 0 0 0;">للتجارة والتوزيع المعتمد</p>
+    </div>
+    <div style="text-align: center; margin-bottom: 25px;">
+        <span id="img_Type" style="font-size: 1.3rem; font-weight: 700; padding: 5px 30px; border-radius: 8px; color: #fff;"></span>
+    </div>
+    <table style="width: 100%; font-size: 1.05rem; border-collapse: collapse;" dir="rtl">
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 10px 0; color: #666;">اسم العميل:</td><td style="padding: 10px 0; font-weight: 700; text-align: left;" id="img_CustName"></td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 10px 0; color: #666;">التاريخ:</td><td style="padding: 10px 0; font-weight: 700; text-align: left;" id="img_Date"></td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 10px 0; color: #666;">المبلغ المدفوع:</td><td style="padding: 10px 0; font-size: 1.2rem; font-weight: 700; text-align: left; color: #0b5e3d;" id="img_Amount"></td></tr>
+        
+        <!-- البنود الجديدة المضافة بطلبك وضبط حساباتها -->
+        <tr style="border-bottom: 1px solid #eee; background: #fafafa;"><td style="padding: 10px 8px; color: #555;">الحساب السابق:</td><td style="padding: 10px 8px; font-weight: 700; text-align: left; color: #444;" id="img_PrevBalance">0 ج.م</td></tr>
+        <tr style="border-bottom: 1px solid #eee; background: #f1f9f5;"><td style="padding: 10px 8px; color: #0b5e3d; font-weight: bold;">الرصيد المتبقي:</td><td style="padding: 10px 8px; font-size: 1.15rem; font-weight: 800; text-align: left; color: #0b5e3d;" id="img_RemBalance">0 ج.م</td></tr>
+        
+        <tr><td style="padding: 10px 0; color: #666; vertical-align: top;">البيان:</td><td style="padding: 10px 0; font-weight: 600; text-align: left; color: #444;" id="img_Notes"></td></tr>
+    </table>
+    
+    <div style="margin-top: 40px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 15px;">
+        <span style="font-size: 0.75rem; color: #999;">توقيع المستلم المعتمَد</span>
+        <span style="font-size: 0.75rem; color: #0b5e3d; font-weight: bold;">سند مالي إلكتروني مُوثق</span>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, getDocs, doc, getDoc, deleteDoc, orderBy, query, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+
+    let localReceiptsArray = [];
+    let globalCustomersCache = {}; // كاش لحفظ بيانات العملاء وأرصدتهم الحالية
+
+    async function loadAllReceipts() {
+        const container = document.getElementById('receiptsListContainer');
+        try {
+            const q = query(collection(db, "transactions"), orderBy("date", "desc"), limit(120));
+            const snap = await getDocs(q);
+            
+            if(snap.empty) {
+                container.innerHTML = `<div class="text-center text-muted py-5">لا توجد حركات أو سندات مسجلة حالياً.</div>`;
+                return;
+            }
+
+            localReceiptsArray = [];
+            globalCustomersCache = {};
+
+            // جلب خريطة العملاء مع الاحتفاظ بالرصيد الحالي (balance) الخاص بكل عميل
+            try {
+                const custSnap = await getDocs(collection(db, "customers"));
+                custSnap.forEach(cDoc => {
+                    const cData = cDoc.data();
+                    globalCustomersCache[cDoc.id] = {
+                        name: cData.name,
+                        balance: cData.balance || 0
+                    };
+                });
+            } catch(ce) { console.error("خطأ في جلب بيانات العملاء:", ce); }
+
+            snap.forEach(doc => {
+                const data = doc.data();
+                
+                let resolvedName = data.customerName || data.partyName;
+                let partyId = data.partyId || "";
+
+                if (!resolvedName || resolvedName === "عميل غير مدرج الاسم") {
+                    if (partyId && globalCustomersCache[partyId]) {
+                        resolvedName = globalCustomersCache[partyId].name;
+                    } else {
+                        resolvedName = "عميل نقدي / غير معرف";
+                    }
+                }
+
+                localReceiptsArray.push({
+                    id: doc.id,
+                    partyId: partyId,
+                    customerName: resolvedName,
+                    amount: Number(data.amount) || 0,
+                    date: data.date || "---",
+                    notes: data.notes || "لا يوجد ملاحظات",
+                    type: data.type || "قبض"
+                });
+            });
+
+            renderList(localReceiptsArray);
+        } catch(e) {
+            console.error(e);
+            container.innerHTML = `<div class="text-center text-danger py-5">حدث خطأ أثناء جلب السندات المالية.</div>`;
+        }
+    }
+
+    function renderList(array) {
+        const container = document.getElementById('receiptsListContainer');
+        container.innerHTML = "";
+        
+        array.forEach(item => {
+            const isGabz = item.type === 'قبض';
+            const card = document.createElement('div');
+            card.className = "receipt-card";
+            card.style.borderRight = isGabz ? "5px solid #28a745" : "5px solid #dc3545";
+
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge-receipt ${isGabz ? 'bg-gabz' : 'bg-sarf'}">سند ${item.type}</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-bold text-muted small"><i class="far fa-calendar-alt me-1"></i> ${item.date}</span>
+                        <button class="btn-delete" onclick="deleteReceiptById('${item.id}')" title="حذف السند">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <h6 class="fw-bold text-dark mb-1"><i class="fas fa-user text-muted small me-1"></i> ${item.customerName}</h6>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <span class="fw-bold text-success">${item.amount.toLocaleString()} ج.م</span>
+                    <button class="btn btn-sm btn-outline-dark fw-bold" onclick="reShareImage('${item.id}')">
+                        <i class="fas fa-share-alt me-1"></i> شير الصورة 🔗
+                    </button>
+                </div>
+                <div class="text-muted small mt-2 border-top pt-1 text-truncate"><b>البيان:</b> ${item.notes}</div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    window.filterReceipts = () => {
+        const queryText = document.getElementById('searchBar').value.toLowerCase();
+        const filtered = localReceiptsArray.filter(item => item.customerName.toLowerCase().includes(queryText));
+        renderList(filtered);
+    };
+
+    window.deleteReceiptById = async (id) => {
+        if (!confirm("هل أنت متأكد من رغبتك في حذف هذا السند نهائياً؟")) return;
+        try {
+            await deleteDoc(doc(db, "transactions", id));
+            alert("تم حذف السند بنجاح");
+            localReceiptsArray = localReceiptsArray.filter(item => item.id !== id);
+            renderList(localReceiptsArray);
+        } catch (err) { alert("فشل الحذف من السيرفر."); }
+    };
+
+    // الدالة المطورة لإنتاج الصورة مع الحساب السابق والمتبقي بدقة متناهية
+    window.reShareImage = async (receiptId) => {
+        const item = localReceiptsArray.find(r => r.id === receiptId);
+        if(!item) return alert("تعذر العثور على بيانات السند");
+
+        const template = document.getElementById('receiptCaptureTemplate');
+        const badge = document.getElementById('img_Type');
+        
+        if(item.type === 'قبض') {
+            badge.innerText = "سند قبض مالي";
+            badge.style.background = "#28a745";
+        } else {
+            badge.innerText = "سند صرف مالي";
+            badge.style.background = "#dc3545";
+        }
+
+        // حساب الرصيد السابق والمتبقي بناءً على البيانات المسترجعة
+        let currentCustomerBalance = 0;
+        if (item.partyId && globalCustomersCache[item.partyId]) {
+            currentCustomerBalance = globalCustomersCache[item.partyId].balance;
+        }
+
+        let prevBalance = 0;
+        let remBalance = currentCustomerBalance;
+
+        // ضبط وتعديل المتبقي: السند مخزن ومحسوب بالفعل في الرصيد الحالي للـ Firebase
+        // إذن: الرصيد المتبقي (الآن) هو الرصيد الحالي للعميل. والحساب السابق يتم استنتاجه عكسياً.
+        if(item.type === 'قبض') {
+            prevBalance = remBalance + item.amount; // الرصيد قبل الخصم
+        } else {
+            prevBalance = remBalance - item.amount; // الرصيد قبل الإضافة (إذا كان صرف)
+        }
+
+        // تعبئة حقول الصورة
+        document.getElementById('img_CustName').innerText = item.customerName;
+        document.getElementById('img_Date').innerText = item.date;
+        document.getElementById('img_Amount').innerText = item.amount.toLocaleString('ar-EG') + " ج.م";
+        document.getElementById('img_PrevBalance').innerText = prevBalance.toLocaleString('ar-EG') + " ج.م";
+        document.getElementById('img_RemBalance').innerText = remBalance.toLocaleString('ar-EG') + " ج.م";
+        document.getElementById('img_Notes').innerText = item.notes && item.notes !== "undefined" ? item.notes : "لا يوجد ملاحظات إضافية";
+
+        await new Promise(r => setTimeout(r, 250)); // مهلة بسيطة لضمان كتابة النصوص بداخل الصورة
+
+        try {
+            const canvas = await html2canvas(template, { scale: 2 });
+            canvas.toBlob(async (blob) => {
+                const file = new File([blob], `سند_${item.type}_${item.customerName}.png`, { type: 'image/png' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], title: `سند مالي` });
+                } else {
+                    const link = document.createElement('a');
+                    link.download = `سند_${item.type}_${item.customerName}.png`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                }
+            }, 'image/png');
+        } catch(e) { alert("فشل إعادة إنتاج الصورة"); }
+    };
+
+    window.exportToExcel = () => {
+    if (localReceiptsArray.length === 0) return alert("لا توجد بيانات لتصديرها");
+
+    // إعادة هيكلة البيانات بالترتيب والشروط المطلوبة تماماً
+    const cleanData = localReceiptsArray.map(item => {
+        const isGabz = item.type === 'قبض';
+        
+        return {
+            "التاريخ": item.date,
+            "الحركه": isGabz ? "سداد منه نقدى" : ("سند " + item.type),
+            "اسم العميل": item.customerName,
+            "اسم الصنف": isGabz ? "سداد منه" : (item.notes || "---"),
+            "عدد كرتونه": isGabz ? 1 : 0,
+            "عدد جركن": 0,
+            "سعر جركن": 0,
+            "سعر كرتونه": isGabz ? item.amount : 0
+        };
+    });
+
+    // تحويل البيانات إلى شيت إكسيل
+    const worksheet = XLSX.utils.json_to_sheet(cleanData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "السندات المالية");
+
+    // تحميل الملف للمستخدم
+    XLSX.writeFile(workbook, `سندات_شركة_الزيادي_${new Date().toISOString().split('T')[0]}.xlsx`);
+};
+
+
+    loadAllReceipts();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

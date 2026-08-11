@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>استيراد وتصدير الموردين - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --white: #ffffff;
+            --border: #dce3de;
+            --text-primary: #1b2e26;
+            --orange-gradient: linear-gradient(90deg, #f0883e, #ffab70);
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 50px; }
+
+        .header { 
+            background: var(--header-bg); padding: 15px; color: white;
+            position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        /* تنسيق التبويبات Tabs */
+        .nav-pills { background: #e8f0ed; border-radius: 15px; padding: 5px; margin: 20px 0; }
+        .nav-pills .nav-link { 
+            color: var(--accent); font-weight: 700; border-radius: 12px; transition: 0.3s; 
+            border: none; padding: 10px 0; width: 50%; text-align: center;
+        }
+        .nav-pills .nav-link.active { background: var(--accent) !important; color: white !important; }
+
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 20px; padding: 25px; margin-bottom: 15px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03); text-align: center;
+        }
+
+        /* منطقة رفع الملفات */
+        .upload-area {
+            border: 2px dashed var(--accent); border-radius: 15px; padding: 30px;
+            background: #f9fbf9; cursor: pointer; transition: 0.3s; position: relative;
+        }
+        .upload-area:hover { background: #eef5f1; }
+        .upload-area i { font-size: 3rem; color: var(--accent); margin-bottom: 15px; }
+        #fileInput { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; }
+
+        .btn-custom {
+            border-radius: 12px; padding: 12px 25px; font-weight: 700; transition: 0.3s;
+            border: none; width: 100%; margin-top: 15px;
+        }
+        .btn-download { background: #e8f0ed; color: var(--accent); border: 1px solid var(--accent); }
+        
+        /* زر الحفظ البرتقالي المميز للموردين */
+        .btn-save-orange { 
+            background: var(--orange-gradient); color: white; 
+            box-shadow: 0 4px 15px rgba(240, 136, 62, 0.3);
+        }
+
+        .status-box { 
+            margin-top: 20px; padding: 15px; border-radius: 12px; display: none;
+            font-size: 0.9rem; font-weight: 600;
+        }
+
+        .back-btn { color: white; font-size: 1.2rem; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <a href="supplier-management.html" class="back-btn"><i class="fas fa-chevron-right"></i></a>
+    <h5 class="m-0 fw-bold">نقل بيانات الموردين</h5>
+    <div style="width:20px"></div>
+</div>
+
+<div class="container">
+    <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+        <li class="nav-item" role="presentation" style="width: 50%;">
+            <button class="nav-link active w-100" id="pills-import-tab" data-bs-toggle="pill" data-bs-target="#pills-import" type="button">استيراد (Import)</button>
+        </li>
+        <li class="nav-item" role="presentation" style="width: 50%;">
+            <button class="nav-link w-100" id="pills-export-tab" data-bs-toggle="pill" data-bs-target="#pills-export" type="button">تصدير (Export)</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="pills-tabContent">
+        
+        <div class="tab-pane fade show active" id="pills-import" role="tabpanel">
+            <div class="glass-card">
+                <h6 class="fw-bold mb-3"><i class="fas fa-file-excel text-success me-1"></i> الخطوة الأولى: النموذج</h6>
+                <p class="text-muted small">حمل النموذج الفارغ واملأه ببيانات الموردين لتجنب الأخطاء.</p>
+                <button class="btn-custom btn-download" onclick="downloadSupplierTemplate()">
+                    <i class="fas fa-download me-2"></i> تحميل نموذج الموردين
+                </button>
+            </div>
+
+            <div class="glass-card">
+                <h6 class="fw-bold mb-3"><i class="fas fa-upload text-primary me-1"></i> الخطوة الثانية: الرفع</h6>
+                <div class="upload-area" id="dropZone">
+                    <i class="fas fa-file-import"></i>
+                    <p class="m-0 fw-bold" id="fileName">اسحب ملف الموردين هنا</p>
+                    <input type="file" id="fileInput" accept=".xlsx, .xls">
+                </div>
+                <div id="importStatus" class="status-box"></div>
+                <button class="btn-custom btn-save-orange mt-4" id="btnStartImport" disabled onclick="processSupplierImport()">
+                    <i class="fas fa-cloud-upload-alt me-2"></i> اعتماد الاستيراد وحفظ الموردين
+                </button>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="pills-export" role="tabpanel">
+            <div class="glass-card">
+                <i class="fas fa-address-book fa-4x mb-3" style="color: #f0883e;"></i>
+                <h5 class="fw-bold">تصدير سجل الموردين</h5>
+                <p class="text-muted">سيتم استخراج كافة أرصدة وبيانات الموردين الحالية في ملف Excel واحد.</p>
+                <button class="btn-custom btn-save-orange" onclick="exportSuppliers()">
+                    <i class="fas fa-file-export me-2"></i> تصدير البيانات للكمبيوتر
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let importedData = [];
+
+    // 1. تحميل نموذج الموردين
+    window.downloadSupplierTemplate = () => {
+        const template = [
+            { "اسم المورد": "شركة الأمل للتوريدات", "رقم الهاتف": "012xxxxxxxx", "العنوان": "طنطا", "الرصيد الافتتاحي": 10000, "الحالة (دائن/مدين)": "دائن", "الحد الائتماني": 50000 }
+        ];
+        const ws = XLSX.utils.json_to_sheet(template);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "الموردين");
+        XLSX.writeFile(wb, "نموذج_موردين_الزيادي.xlsx");
+    };
+
+    // 2. قراءة الملف المرفوع
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        document.getElementById('fileName').innerText = file.name;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            importedData = XLSX.utils.sheet_to_json(worksheet);
+            
+            document.getElementById('btnStartImport').disabled = false;
+            showStatus(`جاهز لاستيراد ${importedData.length} مورد.`, 'success');
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // 3. الحفظ في Firebase
+    window.processSupplierImport = async () => {
+        const btn = document.getElementById('btnStartImport');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> جاري الحفظ...';
+
+        let count = 0;
+        try {
+            for (const item of importedData) {
+                const name = item["اسم المورد"] || item["name"];
+                const phone = item["رقم الهاتف"] || item["phone"];
+                const bal = Number(item["الرصيد الافتتاحي"]) || 0;
+                // المورد دائن (له) يعني موجب، مدين (عليه) يعني سالب
+                const type = (item["الحالة (دائن/مدين)"] === "مدين") ? "debit" : "credit";
+                const finalBalance = (type === 'credit') ? Math.abs(bal) : -Math.abs(bal);
+
+                await addDoc(collection(db, "suppliers"), {
+                    name: String(name),
+                    phone: String(phone),
+                    address: item["العنوان"] || "",
+                    openingBalance: finalBalance,
+                    currentBalance: finalBalance,
+                    type: type,
+                    creditLimit: Number(item["الحد الائتماني"]) || 0,
+                    isCustomerToo: false,
+                    createdAt: serverTimestamp()
+                });
+                count++;
+            }
+            alert(`تم إضافة ${count} مورد بنجاح لقاعدة البيانات!`);
+            window.location.href = "supplier-management.html";
+        } catch (e) {
+            console.error(e);
+            showStatus("فشل الاستيراد، تأكد من جودة الإنترنت والملف.", 'danger');
+            btn.disabled = false;
+            btn.innerText = "اعتماد الاستيراد وحفظ الموردين";
+        }
+    };
+
+    // 4. التصدير
+    window.exportSuppliers = async () => {
+        try {
+            const querySnapshot = await getDocs(collection(db, "suppliers"));
+            const data = [];
+            querySnapshot.forEach((doc) => {
+                const d = doc.data();
+                data.push({
+                    "اسم المورد": d.name,
+                    "رقم الهاتف": d.phone,
+                    "العنوان": d.address,
+                    "الرصيد الحالي": d.currentBalance,
+                    "الحالة": d.type === 'credit' ? 'دائن (له)' : 'مدين (عليه)',
+                    "الحد الائتماني": d.creditLimit
+                });
+            });
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "سجل الموردين");
+            XLSX.writeFile(wb, "موردين_شركة_الزيادي.xlsx");
+        } catch (e) {
+            alert("حدث خطأ أثناء استخراج البيانات!");
+        }
+    };
+
+    function showStatus(msg, type) {
+        const box = document.getElementById('importStatus');
+        box.style.display = 'block';
+        box.className = `status-box bg-${type === 'success' ? 'success' : 'danger'} text-white`;
+        box.innerText = msg;
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>معلومات العميل - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d;         /* الأخضر الغامق */
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --neon-blue: #007bff; 
+            --neon-green: #28a745; 
+            --neon-red: #dc3545; 
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 50px; }
+        
+        /* --- Header --- */
+        .header-nav { 
+            padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; 
+            background: var(--header-bg); color: white; position: sticky; top: 0; z-index: 1000; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header-nav i { font-size: 1.1rem; cursor: pointer; }
+
+        /* --- كارت الرصيد المطور --- */
+        .balance-hero {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 25px; padding: 25px; margin: 20px 0; text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative;
+        }
+        .status-badge { 
+            position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.03); 
+            padding: 4px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700;
+        }
+        .main-balance { font-size: 3rem; font-weight: 800; color: var(--accent); margin: 5px 0; letter-spacing: -1px; }
+        .opening-balance { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 10px; color: var(--text-primary); opacity: 0.7; font-size: 0.85rem; }
+
+        /* --- شبكة العمليات --- */
+        .action-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 25px 0; }
+        .action-item { text-align: center; text-decoration: none; color: var(--text-primary); transition: 0.2s; }
+        .icon-circle {
+            width: 52px; height: 52px; background: var(--white); border: 1px solid var(--border);
+            border-radius: 15px; display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 8px; font-size: 1.2rem; transition: 0.3s;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.03);
+        }
+        .action-item:active .icon-circle { transform: scale(0.9); background: #eee; }
+        .action-item span { font-size: 0.7rem; font-weight: 700; display: block; }
+
+        /* --- صفوف المعلومات --- */
+        .info-row {
+            background: var(--white); border-radius: 15px; padding: 12px 18px;
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+            border: 1px solid var(--border);
+        }
+        .info-label { font-size: 0.8rem; font-weight: 600; opacity: 0.6; }
+        .info-value { font-weight: 700; color: var(--text-primary); font-size: 0.85rem; }
+
+        /* الألوان */
+        .c-green { color: var(--neon-green); }
+        .c-blue { color: var(--neon-blue); }
+        .c-purple { color: #6f42c1; }
+        .c-orange { color: #fd7e14; }
+        .c-red { color: var(--neon-red); }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <div>
+        <i class="fas fa-trash-alt text-white me-3" onclick="deleteCustomer()"></i>
+        <a id="editLink" href="#" class="text-white"><i class="fas fa-edit"></i></a>
+    </div>
+    <h5 class="m-0 fw-bold" id="displayName">جاري التحميل...</h5>
+    <a href="customer-list.html" class="text-white"><i class="fas fa-arrow-left"></i></a>
+</div>
+
+<div class="container">
+    <div class="balance-hero">
+        <span class="status-badge" id="balanceStatus">جاري الفحص..</span>
+        <div class="info-label">إجمالي الرصيد الحالي</div>
+        <div class="main-balance" id="displayBalance">0</div>
+        <div class="opening-balance d-flex justify-content-between">
+            <span>جنية مصري</span>
+            <span>الرصيد الافتتاحي: <b id="displayOpening">0.00</b></span>
+        </div>
+    </div>
+
+    <div class="action-grid">
+        <a href="#" id="payBtn" class="action-item">
+            <div class="icon-circle c-green"><i class="fas fa-money-bill-wave"></i></div>
+            <span>تحصيل</span>
+        </a>
+        <div id="remindBtn" class="action-item" style="cursor: pointer;">
+            <div class="icon-circle c-blue"><i class="fas fa-comment-dots"></i></div>
+            <span>تذكير</span>
+        </div>
+        <a href="#" id="callBtn" class="action-item">
+            <div class="icon-circle c-green"><i class="fas fa-phone-alt"></i></div>
+            <span>اتصال</span>
+        </a>
+        <a href="#" id="statementBtn" class="action-item">
+            <div class="icon-circle c-purple"><i class="fas fa-file-invoice"></i></div>
+            <span>كشف حساب</span>
+        </a>
+        <div class="action-item" onclick="window.print()" style="cursor: pointer;">
+            <div class="icon-circle c-blue"><i class="fas fa-camera"></i></div>
+            <span>سكرين</span>
+        </div>
+        <a href="#" id="historyBtn" class="action-item">
+            <div class="icon-circle c-orange"><i class="fas fa-history"></i></div>
+            <span>السجلات</span>
+        </a>
+        <a href="#" id="installmentsBtn" class="action-item">
+            <div class="icon-circle c-purple"><i class="fas fa-calendar-alt"></i></div>
+            <span>أقساط</span>
+        </a>
+        <div class="action-item" onclick="resetAccount()" style="cursor: pointer;">
+            <div class="icon-circle c-red"><i class="fas fa-eraser"></i></div>
+            <span>تصفير</span>
+        </div>
+    </div>
+
+    <div class="info-row">
+        <span class="info-value" id="displayAddress">غير مسجل</span>
+        <span class="info-label">العنوان</span>
+    </div>
+    <div class="info-row">
+        <span class="info-value" id="displayPhone">01xxxxxxxxx</span>
+        <span class="info-label">الهاتف</span>
+    </div>
+    <div class="info-row">
+        <span class="info-value" id="displayDate">--/--/----</span>
+        <span class="info-label">تاريخ التسجيل</span>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, deleteDoc, updateDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    }; 
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const custId = urlParams.get('id');
+
+    async function calculateDetailedBalance(customerId, initialBalance) {
+        try {
+            const qInvoices = query(collection(db, "invoices"), where("customerId", "==", customerId));
+            const snapInvoices = await getDocs(qInvoices);
+            let totalInvoicesRemaining = 0;
+            snapInvoices.forEach(doc => {
+                totalInvoicesRemaining += (Number(doc.data().remaining) || 0);
+            });
+
+            const qTrans = query(collection(db, "transactions"), where("partyId", "==", customerId));
+            const snapTrans = await getDocs(qTrans);
+            let transEffect = 0;
+            snapTrans.forEach(doc => {
+                const tr = doc.data();
+                if(tr.type === 'قبض') transEffect -= (Number(tr.amount) || 0);
+                else if(tr.type === 'صرف') transEffect += (Number(tr.amount) || 0);
+            });
+
+            return Number(initialBalance) + totalInvoicesRemaining + transEffect;
+        } catch (e) {
+            return Number(initialBalance);
+        }
+    }
+
+    async function getDetails() {
+        if(!custId) return;
+
+        document.getElementById('editLink').href = `edit-customer.html?id=${custId}`;
+        document.getElementById('payBtn').href = `customer-payment.html?id=${custId}`;
+        document.getElementById('statementBtn').href = `customer-statement.html?id=${custId}`;
+        document.getElementById('historyBtn').href = `customer-transactions-log.html?id=${custId}`;
+        document.getElementById('installmentsBtn').href = `customer-installments.html?id=${custId}`;
+
+        try {
+            const docRef = doc(db, "customers", custId);
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const startBalance = Number(data.initialBalance || 0);
+                const realBalance = await calculateDetailedBalance(custId, startBalance);
+                
+                // 🌟 تحديث الرصيد الحالي للعميل في السيرفر لكي تراه صفحة العملاء الخارجية فوراً
+                await updateDoc(docRef, { currentBalance: realBalance });
+                
+                document.getElementById('displayName').innerText = data.name;
+                document.getElementById('displayBalance').innerText = Math.abs(realBalance).toLocaleString(undefined, {minimumFractionDigits: 2});
+                document.getElementById('displayOpening').innerText = startBalance.toLocaleString();
+                document.getElementById('displayPhone').innerText = data.phone || 'غير مسجل';
+                document.getElementById('displayAddress').innerText = data.address || 'غير مسجل';
+                
+                const status = document.getElementById('balanceStatus');
+                if(Math.abs(realBalance) < 0.01) {
+                    status.innerText = "الحساب خالص";
+                    status.style.color = "var(--neon-green)";
+                } else if (realBalance > 0) {
+                    status.innerText = "عليه مديونية";
+                    status.style.color = "var(--neon-red)";
+                } else {
+                    status.innerText = "له رصيد دائن";
+                    status.style.color = "var(--neon-blue)";
+                }
+
+                if(data.phone) {
+                    document.getElementById('callBtn').href = `tel:${data.phone}`;
+                    document.getElementById('remindBtn').onclick = () => {
+                        const state = realBalance > 0 ? "مديونية" : "رصيد دائن";
+                        const msg = encodeURIComponent(`عميلنا العزيز ${data.name}، نود تذكيركم بأن ${state} حسابكم الحالي لدى شركة الزيادي هو: ${Math.abs(realBalance).toLocaleString()} ج.م. شكراً لتعاملكم معنا.`);
+                        window.open(`https://wa.me/2${data.phone}?text=${msg}`, '_blank');
+                    };
+                }
+
+                if(data.createdAt) {
+                    const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+                    document.getElementById('displayDate').innerText = date.toLocaleDateString('ar-EG');
+                }
+            }
+        } catch (error) {
+            console.error("Error:", error);
+        }
+    }
+
+    window.resetAccount = async () => {
+        if(confirm("تنبيه: هل تريد تصفير الرصيد الافتتاحي للعميل؟ (هذا لن يحذف الفواتير المسجلة)")) {
+            await updateDoc(doc(db, "customers", custId), { initialBalance: 0, currentBalance: 0 });
+            location.reload();
+        }
+    };
+
+    window.deleteCustomer = async () => {
+        if(confirm("هل أنت متأكد من حذف العميل نهائياً؟")) {
+            await deleteDoc(doc(db, "customers", custId));
+            window.location.href = "customer-list.html";
+        }
+    };
+
+    getDetails();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

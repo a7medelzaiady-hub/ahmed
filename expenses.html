@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>المصروفات - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Bootstrap RTL -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <!-- Google Fonts: Cairo & Montserrat -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- مكتبة تصدير الإكسل SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <style>
+        :root { 
+            --primary: #0b5e3d; 
+            --primary-light: #eefdf6;
+            --primary-gradient: linear-gradient(135deg, #064e3b, #0b5e3d, #14532d);
+            --bg-light: #f4f6f8;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --white: #ffffff;
+            --danger: #ef4444;
+            --danger-light: #fee2e2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            --radius-sm: 12px;
+            --radius-md: 16px;
+            --radius-lg: 24px;
+        }
+
+        * { 
+            box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body { 
+            background: #e2e8f0; 
+            font-family: 'Cairo', sans-serif; 
+            -webkit-font-smoothing: antialiased;
+            padding-bottom: 30px; 
+        }
+
+        .app-container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: var(--bg-light);
+            min-height: 100vh;
+            box-shadow: 0 0 40px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .num { 
+            font-family: 'Montserrat', 'Cairo', sans-serif !important; 
+            font-weight: 800; 
+        }
+
+        .header-nav { 
+            background: var(--primary-gradient); 
+            color: white; 
+            padding: 20px 16px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000; 
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            box-shadow: 0 10px 25px rgba(6, 78, 59, 0.2); 
+        }
+        
+        .back-btn {
+            color: white;
+            background: rgba(255,255,255,0.12);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none !important;
+            transition: 0.2s ease;
+        }
+
+        .header-title { text-align: center; }
+        .header-title span {
+            font-size: 0.65rem;
+            letter-spacing: 1.5px;
+            opacity: 0.85;
+            font-weight: 800;
+            color: #fcd34d;
+            display: block;
+        }
+        .header-title h1 {
+            font-size: 1.15rem;
+            font-weight: 900;
+            margin: 3px 0 0;
+        }
+
+        .nav-tabs { 
+            border: none; 
+            background: white; 
+            margin: 16px; 
+            border-radius: var(--radius-md); 
+            padding: 5px; 
+            display: flex; 
+            box-shadow: var(--card-shadow); 
+        }
+        .nav-item { flex: 1; display: flex; }
+        .nav-link { 
+            flex: 1; 
+            border: none !important; 
+            border-radius: var(--radius-sm) !important; 
+            color: var(--text-muted); 
+            font-weight: 800; 
+            font-size: 0.85rem;
+            text-align: center; 
+            padding: 10px 5px;
+            transition: 0.2s;
+        }
+        .nav-link.active { 
+            background: var(--primary) !important; 
+            color: white !important; 
+            box-shadow: 0 4px 12px rgba(11, 94, 61, 0.2);
+        }
+
+        .card-custom { 
+            background: white; 
+            border-radius: var(--radius-lg); 
+            margin: 16px; 
+            padding: 20px; 
+            box-shadow: var(--card-shadow); 
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+        
+        .input-group-custom { margin-bottom: 16px; }
+        .label-custom { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 800; }
+        
+        .input-field { 
+            width: 100%; 
+            padding: 12px 14px; 
+            border-radius: var(--radius-sm); 
+            border: 1px solid var(--border-color); 
+            background: #f8fafc; 
+            font-weight: 700; 
+            font-size: 0.85rem;
+            color: var(--text-dark);
+            outline: none;
+            transition: 0.2s;
+        }
+        .input-field:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.08);
+            background: white;
+        }
+        
+        .btn-save { 
+            background: var(--primary-gradient); 
+            color: white; 
+            width: 100%; 
+            border: none; 
+            padding: 14px; 
+            border-radius: var(--radius-sm); 
+            font-weight: 800; 
+            font-size: 0.95rem;
+            box-shadow: 0 4px 15px rgba(11, 94, 61, 0.3);
+            transition: 0.2s;
+        }
+        .btn-update {
+            background: var(--warning); 
+            color: white; 
+            width: 100%; 
+            border: none; 
+            padding: 14px; 
+            border-radius: var(--radius-sm); 
+            font-weight: 800; 
+            font-size: 0.95rem;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+            transition: 0.2s;
+        }
+        .btn-cancel {
+            background: var(--bg-light);
+            color: var(--text-dark);
+            width: 100%;
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            font-weight: 800;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .toolbar-box {
+            display: flex;
+            gap: 8px;
+            margin: 0 16px 14px;
+        }
+        .btn-excel { 
+            flex: 1;
+            background: #10b981; 
+            color: white !important; 
+            border: none; 
+            padding: 10px; 
+            border-radius: var(--radius-sm); 
+            font-weight: 800; 
+            font-size: 0.8rem; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 6px; 
+            text-decoration: none !important; 
+            justify-content: center; 
+        }
+        .btn-clear-all {
+            background: var(--danger-light);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            width: 44px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* تنسيقات ملخص البنود */
+        .summary-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 16px 16px;
+        }
+        .summary-card {
+            background: white;
+            flex: 1 1 calc(50% - 5px);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(0,0,0,0.03);
+            box-shadow: var(--card-shadow);
+            border-right: 4px solid var(--primary);
+        }
+        .summary-title { font-size: 0.75rem; color: var(--text-muted); font-weight: 800; margin-bottom: 2px;}
+        .summary-value { font-size: 1rem; color: var(--text-dark); font-weight: 900;}
+
+        .expense-item { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            background: white; 
+            padding: 14px; 
+            border-radius: var(--radius-md); 
+            margin: 0 16px 12px 16px; 
+            border: 1px solid rgba(0,0,0,0.03); 
+            box-shadow: var(--card-shadow); 
+            position: relative;
+        }
+        .expense-item::before {
+            content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 4px; 
+            background-color: var(--danger);
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        }
+        .expense-info { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; padding-right: 6px; }
+        .expense-type { font-weight: 800; color: var(--text-dark); font-size: 0.95rem; }
+        .expense-meta { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; }
+        
+        .expense-actions-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .expense-amount { font-weight: 800; color: var(--danger); font-size: 1rem; text-align: center; margin-left: 5px;}
+        
+        .action-btn {
+            width: 30px; height: 30px; border-radius: 8px; font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center; border: none;
+        }
+        .btn-edit-item { background: var(--warning-light); color: var(--warning); }
+        .btn-delete { background: var(--danger-light); color: var(--danger); }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header-nav">
+        <div style="width: 36px;"></div>
+        <div class="header-title">
+            <span>شركة الزيادي</span>
+            <h1>إدارة المصروفات</h1>
+        </div>
+        <a href="index1.html" class="back-btn"><i class="fas fa-arrow-left"></i></a>
+    </div>
+
+    <ul class="nav nav-tabs" id="expenseTabs" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#addContent" type="button">إضافة مصروف</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#listContent" type="button">المصروفات المسجلة</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- تبويب الإضافة / التعديل -->
+        <div class="tab-pane fade show active" id="addContent">
+            <div class="card-custom">
+                
+                <div class="input-group-custom">
+                    <label class="label-custom">نوع السداد</label>
+                    <select id="paymentMethod" class="input-field">
+                        <option value="نقدى">نقدى</option>
+                        <option value="محفظة">محفظة</option>
+                    </select>
+                </div>
+
+                <div class="input-group-custom">
+                    <label class="label-custom">نوع المصروف</label>
+                    <select id="expType" class="input-field" onchange="toggleOtherField(this.value)">
+                        <option value="جاز">جاز</option>
+                        <option value="البيت">البيت</option>
+                        <option value="إيجار">إيجار</option>
+                        <option value="كهرباء/مياه">كهرباء / مياه</option>
+                        <option value="رواتب">رواتب موظفين</option>
+                        <option value="نثريات">نثريات / بوفيه</option>
+                        <option value="أخرى">نوع آخر (إدخال يدوي)</option>
+                    </select>
+                </div>
+
+                <div id="otherTypeDiv" class="input-group-custom" style="display: none;">
+                    <label class="label-custom">اكتب نوع المصروف الجديد</label>
+                    <input type="text" id="otherTypeInput" class="input-field" placeholder="أدخل اسم المصروف هنا...">
+                </div>
+
+                <div class="row">
+                    <div class="col-6">
+                        <label class="label-custom">القيمة (ج.م)</label>
+                        <input type="number" id="expAmount" class="input-field num" placeholder="0.00" step="0.01">
+                    </div>
+                    <div class="col-6">
+                        <label class="label-custom">التاريخ</label>
+                        <input type="date" id="expDate" class="input-field num">
+                    </div>
+                </div>
+
+                <div class="input-group-custom mt-3">
+                    <label class="label-custom">البيان / ملاحظات</label>
+                    <textarea id="expNote" class="input-field" rows="3" placeholder="أضف أي تفاصيل أو ملاحظات إضافية..."></textarea>
+                </div>
+
+                <button class="btn-save" id="btnSave" onclick="saveExpense()">تأكيد وحفظ الحركة</button>
+                <button class="btn-cancel" id="btnCancelEdit" onclick="cancelEdit()">إلغاء التعديل</button>
+            </div>
+        </div>
+
+        <!-- تبويب العرض والتصدير -->
+        <div class="tab-pane fade" id="listContent">
+            
+            <div class="toolbar-box">
+                <button class="btn-excel" onclick="exportToExcel()">
+                    <i class="fas fa-file-excel"></i> تصدير البيانات Excel
+                </button>
+                <button class="btn-clear-all" onclick="clearAllExpenses()" title="مسح كافة السجلات نهائياً">
+                    <i class="fas fa-trash-can"></i>
+                </button>
+            </div>
+
+            <!-- حاوية ملخص المصروفات -->
+            <div id="summaryContainer" class="summary-container"></div>
+            
+            <div id="expensesList">
+                <div class="text-center text-muted py-5">
+                    <div class="spinner-border text-success" role="status" style="width: 1.5rem; height: 1.5rem;"></div>
+                    <p class="mt-2 fw-bold" style="font-size: 0.8rem;">جاري تحميل المصروفات...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    // إضافة updateDoc للمستوردات
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    document.getElementById('expDate').valueAsDate = new Date();
+    let allExpenses = [];
+    let currentEditId = null; // متغير لحفظ الـ ID عند التعديل
+
+    window.toggleOtherField = (val) => {
+        document.getElementById('otherTypeDiv').style.display = (val === 'أخرى') ? 'block' : 'none';
+    };
+
+    // دالة تفريغ الحقول وإلغاء وضع التعديل
+    window.cancelEdit = () => {
+        currentEditId = null;
+        document.getElementById('btnSave').textContent = "تأكيد وحفظ الحركة";
+        document.getElementById('btnSave').className = "btn-save";
+        document.getElementById('btnCancelEdit').style.display = "none";
+        
+        document.getElementById('expAmount').value = '';
+        document.getElementById('expNote').value = '';
+        document.getElementById('expDate').valueAsDate = new Date();
+        document.getElementById('expType').value = 'جاز';
+        toggleOtherField('جاز');
+    };
+
+    window.saveExpense = async () => {
+        const paymentMethod = document.getElementById('paymentMethod').value;
+        let type = document.getElementById('expType').value;
+        const otherVal = document.getElementById('otherTypeInput').value;
+        
+        if (type === 'أخرى') {
+            if (!otherVal.trim()) return alert("يرجى كتابة نوع المصروف الجديد");
+            type = otherVal.trim();
+        }
+
+        const amt = parseFloat(document.getElementById('expAmount').value);
+        const note = document.getElementById('expNote').value.trim();
+        const date = document.getElementById('expDate').value;
+
+        if(!amt || amt <= 0) return alert("برجاء إدخال مبلغ صحيح ومقبول");
+        if(!date) return alert("يرجى اختيار تاريخ الحركة");
+
+        try {
+            if (currentEditId) {
+                // ---------- تحديث مصروف موجود ----------
+                await updateDoc(doc(db, "expenses", currentEditId), {
+                    type, paymentMethod, amount: amt, note, date
+                });
+
+                // تحديث سجل النقدىة المرتبط (cash_logs)
+                const logsSnap = await getDocs(query(collection(db, "cash_logs")));
+                for (const logDoc of logsSnap.docs) {
+                    if (logDoc.data().expenseId === currentEditId) {
+                        await updateDoc(doc(db, "cash_logs", logDoc.id), {
+                            amount: amt,
+                            note: `مصروف (${paymentMethod}): ${type} ${note ? '(' + note + ')' : ''}`,
+                            date: date
+                        });
+                    }
+                }
+                alert("تم تحديث المصروف بنجاح ✅");
+                cancelEdit();
+                location.reload(); // إعادة التحميل لتحديث القوائم
+
+            } else {
+                // ---------- إضافة مصروف جديد ----------
+                const expenseRef = await addDoc(collection(db, "expenses"), { 
+                    type, paymentMethod, amount: amt, note, date, timestamp: serverTimestamp() 
+                });
+                
+                await addDoc(collection(db, "cash_logs"), { 
+                    amount: amt, 
+                    note: `مصروف (${paymentMethod}): ${type} ${note ? '(' + note + ')' : ''}`, 
+                    type: 'out', 
+                    timestamp: serverTimestamp(), 
+                    date: date,
+                    expenseId: expenseRef.id 
+                });
+
+                alert("تم حفظ المصروف وتسجيل المعاملة بنجاح ✅");
+                location.reload();
+            }
+        } catch (e) { 
+            console.error(e);
+            alert("خطأ أثناء الاتصال بقاعدة البيانات!"); 
+        }
+    };
+
+    // نقل بيانات المصروف لنموذج الإضافة لتعديله
+    window.editExpense = (id) => {
+        const exp = allExpenses.find(e => e.id === id);
+        if(!exp) return;
+
+        // تعبئة البيانات في الحقول
+        document.getElementById('paymentMethod').value = exp.paymentMethod;
+        document.getElementById('expAmount').value = exp.amount;
+        document.getElementById('expDate').value = exp.date;
+        document.getElementById('expNote').value = exp.note;
+
+        // التحقق من نوع المصروف (إذا كان في القائمة أو "أخرى")
+        const typeSelect = document.getElementById('expType');
+        const options = Array.from(typeSelect.options).map(o => o.value);
+        if (options.includes(exp.type)) {
+            typeSelect.value = exp.type;
+            toggleOtherField(exp.type);
+        } else {
+            typeSelect.value = 'أخرى';
+            toggleOtherField('أخرى');
+            document.getElementById('otherTypeInput').value = exp.type;
+        }
+
+        // تغيير حالة الزر إلى "تحديث"
+        currentEditId = id;
+        document.getElementById('btnSave').textContent = "تحديث البيانات";
+        document.getElementById('btnSave').className = "btn-update";
+        document.getElementById('btnCancelEdit').style.display = "block";
+
+        // الانتقال لتبويب الإضافة
+        const addTab = new bootstrap.Tab(document.querySelector('button[data-bs-target="#addContent"]'));
+        addTab.show();
+    };
+
+    async function loadExpenses() {
+        const expensesContainer = document.getElementById('expensesList');
+        const summaryContainer = document.getElementById('summaryContainer');
+        
+        try {
+            const q = query(collection(db, "expenses"), orderBy("date", "desc"));
+            const querySnapshot = await getDocs(q);
+            
+            allExpenses = [];
+            let categoryTotals = {}; // مصفوفة لحساب إجمالي كل بند
+
+            expensesContainer.innerHTML = '';
+            summaryContainer.innerHTML = '';
+
+            if (querySnapshot.empty) {
+                expensesContainer.innerHTML = `<div class="text-center text-muted py-5 fw-bold" style="font-size:0.85rem;">لا توجد مصروفات مسجلة حتى الآن</div>`;
+                return;
+            }
+
+            querySnapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const expItem = {
+                    id: docSnap.id,
+                    type: data.type,
+                    amount: Number(data.amount) || 0,
+                    date: data.date,
+                    note: data.note || '',
+                    paymentMethod: data.paymentMethod || 'نقدى'
+                };
+                allExpenses.push(expItem);
+
+                // تجميع مجاميع البنود
+                categoryTotals[expItem.type] = (categoryTotals[expItem.type] || 0) + expItem.amount;
+
+                const itemHtml = `
+                    <div class="expense-item" id="item-${expItem.id}">
+                        <div class="expense-info">
+                            <span class="expense-type">${expItem.type}</span>
+                            <span class="expense-meta">
+                                <i class="far fa-calendar-alt me-1"></i> <span class="num">${expItem.date}</span> 
+                                | <i class="fas fa-wallet ms-1 me-1"></i> ${expItem.paymentMethod}
+                                ${expItem.note ? ` | <i class="far fa-sticky-note ms-1 me-1"></i> ${expItem.note}` : ''}
+                            </span>
+                        </div>
+                        <div class="expense-actions-wrapper">
+                            <span class="expense-amount num">${expItem.amount.toLocaleString('en-US')}</span>
+                            <button class="action-btn btn-edit-item" onclick="editExpense('${expItem.id}')" title="تعديل">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-btn btn-delete" onclick="deleteExpense('${expItem.id}')" title="حذف">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>`;
+                expensesContainer.insertAdjacentHTML('beforeend', itemHtml);
+            });
+
+            // عرض البطاقات الخاصة بإجمالي كل بند (إخفاء البنود الصفرية)
+            for (const [type, total] of Object.entries(categoryTotals)) {
+                if (total > 0) {
+                    summaryContainer.insertAdjacentHTML('beforeend', `
+                        <div class="summary-card">
+                            <div class="summary-title">إجمالي ${type}</div>
+                            <div class="summary-value num">${total.toLocaleString('en-US')} ج.م</div>
+                        </div>
+                    `);
+                }
+            }
+
+        } catch (e) {
+            console.error(e);
+            expensesContainer.innerHTML = `<div class="alert alert-danger text-center m-3">حدث خطأ أثناء تحميل البيانات!</div>`;
+        }
+    }
+
+    window.deleteExpense = async (id) => {
+        if (!confirm("هل أنت متأكد من رغبتك في حذف هذا المصروف نهائياً؟ سيتم حذفه أيضاً من السجل المالي للدرج.")) return;
+
+        try {
+            await deleteDoc(doc(db, "expenses", id));
+            
+            const logsSnap = await getDocs(query(collection(db, "cash_logs")));
+            for (const logDoc of logsSnap.docs) {
+                const logData = logDoc.data();
+                if(logData.expenseId === id || (logData.note && logData.note.includes(`مصروف`) && logData.amount === allExpenses.find(e => e.id === id)?.amount)) {
+                    await deleteDoc(doc(db, "cash_logs", logDoc.id));
+                }
+            }
+            alert("تم الحذف بنجاح ✅");
+            location.reload(); // إعادة تحميل الصفحة لتحديث المجاميع
+        } catch (e) {
+            console.error(e);
+            alert("فشل حذف المستند!");
+        }
+    };
+
+    window.clearAllExpenses = async () => {
+        if (allExpenses.length === 0) return alert("سجل المصروفات فارغ بالفعل!");
+        
+        const confirm1 = confirm(`🚨 تحذير هام للغاية:\nهل أنت متأكد من مسح كافة المصروفات المسجلة نهائياً (${allExpenses.length} مصروف)؟ لا يمكن التراجع عن هذه الخطوة!`);
+        if(!confirm1) return;
+        
+        try {
+            const expSnap = await getDocs(collection(db, "expenses"));
+            for (const expDoc of expSnap.docs) {
+                await deleteDoc(doc(db, "expenses", expDoc.id));
+            }
+
+            const logsSnap = await getDocs(collection(db, "cash_logs"));
+            for (const logDoc of logsSnap.docs) {
+                const logData = logDoc.data();
+                if (logData.expenseId || (logData.note && logData.note.includes("مصروف"))) {
+                    await deleteDoc(doc(db, "cash_logs", logDoc.id));
+                }
+            }
+
+            alert("تم إفراغ سجل المصروفات بالكامل وتحديث البيانات بنجاح ✅");
+            location.reload();
+        } catch (e) {
+            console.error(e);
+            alert("حدث خطأ أثناء مسح البيانات: " + e.message);
+        }
+    };
+
+    window.exportToExcel = () => {
+        if (allExpenses.length === 0) {
+            return alert("لا توجد بيانات مصروفات لتصديرها حالياً!");
+        }
+
+        // الترتيب الجديد: التاريخ - نوع المصروف - نوع الكاش - البيان - المبلغ
+        const formattedData = allExpenses.map((exp) => ({
+            "التاريخ": exp.date,
+            "نوع المصروف": exp.type,
+            "نوع الكاش": exp.paymentMethod,
+            "البيان": exp.note,
+            "المبلغ": exp.amount
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(formattedData);
+        const workbook = XLSX.utils.book_new();
+        
+        worksheet['!dir'] = "rtl";
+        XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير المصروفات");
+        XLSX.writeFile(workbook, `تقرير_مصروفات_شركة_الزيادي_${new Date().toISOString().slice(0,10)}.xlsx`);
+    };
+
+    const triggerTabList = document.querySelectorAll('#expenseTabs button');
+    triggerTabList.forEach(tabEl => {
+        tabEl.addEventListener('shown.bs.tab', (event) => {
+            if (event.target.innerText.includes("المصروفات المسجلة")) {
+                loadExpenses();
+            }
+        });
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

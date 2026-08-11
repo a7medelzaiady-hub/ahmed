@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>  استعلام عن الأسعار </title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary-dark: #052e16;
+            --brand-green: #0b6641;
+            --neon-green: #10b981;
+            --neon-glow: #00ffaa;
+            --glass-card: rgba(255, 255, 255, 0.95);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at top, #0c5e3d 0%, #062f1e 60%, #020f0a 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            color: #ffffff;
+        }
+
+        /* الهيدر المطور والمضبوط الإتجاهات تماماً */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: rgba(5, 46, 22, 0.5);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-circle-btn {
+            width: 42px;
+            height: 42px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .nav-circle-btn:hover {
+            background: var(--neon-green);
+            color: var(--primary-dark);
+            box-shadow: 0 0 12px var(--neon-glow);
+        }
+
+        .app-title h2 {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .app-title h2 span {
+            color: var(--neon-glow);
+        }
+
+        /* حاوية العرض لضمان التمركز التام ومنع الإزاحة */
+        .app-body {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+            max-width: 100vw;
+        }
+
+        /* كارت الرادار - تم ضبط المقاسات ليتناسب مع الموبايل بالملّي */
+        .radar-card {
+            background: var(--glass-card);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            width: 100%;
+            max-width: 420px;
+            padding: 30px 20px;
+            border-radius: 28px;
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        /* منطقة الأيقونة واللوجو داخل الكارت */
+        .brand-icon-wrapper {
+            width: 65px;
+            height: 65px;
+            background: linear-gradient(135deg, var(--brand-green), var(--neon-green));
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            box-shadow: 0 8px 15px rgba(11, 102, 65, 0.3);
+        }
+
+        .brand-icon-wrapper i {
+            font-size: 28px;
+            color: #ffffff;
+        }
+
+        .radar-card h1 {
+            font-size: 1.4rem;
+            font-weight: 900;
+            color: #0f172a;
+            margin-bottom: 5px;
+        }
+
+        .radar-card h1 span {
+            color: var(--brand-green);
+        }
+
+        .radar-card p.subtitle {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        /* شارة الحالة */
+        .status-badge-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .status-badge {
+            font-size: 11px;
+            font-weight: 700;
+            color: #047857;
+            background: #d1fae5;
+            padding: 6px 16px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* صندوق الإدخال والبحث */
+        .search-field-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .search-field-wrapper input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 15px;
+            font-weight: 700;
+            border: 2px solid #e2e8f0;
+            background: #ffffff;
+            border-radius: 18px;
+            outline: none;
+            color: #0f172a;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+
+        .search-field-wrapper input:focus {
+            border-color: var(--brand-green);
+            box-shadow: 0 0 0 4px rgba(11, 102, 65, 0.1);
+        }
+
+        /* قائمة المقترحات */
+        .suggestions-panel {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0; right: 0;
+            background: #ffffff;
+            border-radius: 16px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+            display: none;
+            padding: 5px;
+            border: 1px solid rgba(0,0,0,0.06);
+        }
+
+        .suggestion-row {
+            padding: 12px 14px;
+            text-align: right;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 13px;
+            color: #334155;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .suggestion-row i {
+            color: var(--brand-green);
+            font-size: 12px;
+        }
+
+        .suggestion-row:hover {
+            background: #f1f5f9;
+            color: var(--brand-green);
+        }
+
+        /* لوحة عرض السعر AMOLED */
+        .amoled-price-dashboard {
+            margin-top: 25px;
+            padding: 20px 15px;
+            border-radius: 20px;
+            background: #090d16;
+            border: 2px solid var(--neon-green);
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.6), 0 10px 20px rgba(11, 102, 65, 0.2);
+            display: none;
+        }
+
+        .amoled-price-dashboard.active {
+            display: block;
+        }
+
+        .dashboard-meta {
+            font-size: 13px;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .dashboard-value {
+            font-size: 36px;
+            font-weight: 900;
+            color: var(--neon-glow);
+            text-shadow: 0 0 15px rgba(0, 255, 170, 0.5);
+        }
+
+        .spin-icon { animation: spin 1s infinite linear; }
+        @keyframes spin { 100% { transform: rotate(-360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- الهيدر الاحترافي المتناسق والمنظم التمركز -->
+    <header class="app-header">
+        <a href="index.html" class="nav-circle-btn" title="الرئيسية">
+            <i class="fas fa-home"></i>
+        </a>
+        
+        <div class="app-title">
+            <h2>الزيادي <span> استعلام عن الأسعار</span></h2>
+        </div>
+
+        <button class="nav-circle-btn" onclick="history.back()" title="رجوع">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+    </header>
+
+    <!-- منطقة العمل - مضمونه التمركز تماماً بدون إزاحة يسار -->
+    <main class="app-body">
+        <div class="radar-card">
+            
+            <div class="brand-icon-wrapper">
+                <i class="fas fa-bolt"></i>
+            </div>
+            
+            <h1>الزيادي <span>لزيوت السيارات</span></h1>
+            
+            <div class="status-badge-container">
+                <div id="syncStatus" class="status-badge">
+                    <i class="fas fa-circle-notch spin-icon"></i> جاري مزامنة المخزن...
+                </div>
+            </div>
+
+            <div class="search-field-wrapper">
+                <input type="text" id="oilSearch" placeholder=" ابحث هنا  ..." autocomplete="off" disabled>
+                <div id="autocompleteList" class="suggestions-panel"></div>
+            </div>
+
+            <div id="priceDisplay" class="amoled-price-dashboard">
+                <div class="dashboard-meta" id="selectedItemName">--</div>
+                <div class="dashboard-value" id="selectedItemPrice">0.00 ج.م</div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ربط محرك الـ Firebase المباشر المتوافق كلياً مع نظامك -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+            authDomain: "ahmedelzaiady.firebaseapp.com",
+            projectId: "ahmedelzaiady",
+            storageBucket: "ahmedelzaiady.firebasestorage.app",
+            messagingSenderId: "300306825071",
+            appId: "1:300306825071:web:0426ddde56280fa090329a",
+            measurementId: "G-WE04GK5XZZ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+        let inventoryData = [];
+
+        const searchInput = document.getElementById('oilSearch');
+        const autocompleteList = document.getElementById('autocompleteList');
+        const priceDisplay = document.getElementById('priceDisplay');
+        const selectedItemName = document.getElementById('selectedItemName');
+        const selectedItemPrice = document.getElementById('selectedItemPrice');
+        const syncStatus = document.getElementById('syncStatus');
+
+        onSnapshot(collection(db, "inventory"), (snap) => {
+            inventoryData = [];
+            snap.forEach(doc => {
+                const data = doc.data();
+                if (!data.isDeleted) inventoryData.push({ id: doc.id, ...data });
+            });
+            searchInput.disabled = false;
+            syncStatus.innerHTML = '<i class="fas fa-check-circle"></i> البحث جاهز للعمل ';
+        });
+
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            autocompleteList.innerHTML = '';
+            if (query === '') {
+                autocompleteList.style.display = 'none';
+                priceDisplay.classList.remove('active');
+                return;
+            }
+            const matches = inventoryData.filter(item => 
+                (item.name && item.name.toLowerCase().includes(query)) || 
+                (item.barcode && item.barcode.includes(query))
+            );
+            if (matches.length > 0) {
+                matches.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'suggestion-row';
+                    div.innerHTML = `<i class="fas fa-gas-pump"></i> <span>${item.name}</span>`;
+                    div.addEventListener('click', function() {
+                        searchInput.value = item.name;
+                        autocompleteList.style.display = 'none';
+                        const rawPrice = Number(item.sell) || 0;
+                        showPrice(item.name, rawPrice.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ج.م');
+                    });
+                    autocompleteList.appendChild(div);
+                });
+                autocompleteList.style.display = 'block';
+            } else {
+                autocompleteList.style.display = 'none';
+                priceDisplay.classList.remove('active');
+            }
+        });
+
+        function showPrice(name, price) {
+            selectedItemName.innerText = name;
+            selectedItemPrice.innerText = price;
+            priceDisplay.classList.add('active');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (e.target !== searchInput) autocompleteList.style.display = 'none';
+        });
+    </script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

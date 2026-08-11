@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المبالغ المتبقية - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #d90429;
+        }
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+        .header { background: var(--header-bg); padding: 15px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: white; }
+        .summary-card {
+            background: var(--accent); border-radius: 20px; padding: 25px; margin-top: 15px;
+            color: white; text-align: center; box-shadow: 0 8px 20px rgba(11, 94, 61, 0.2);
+        }
+        .debt-item {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 18px; padding: 18px; margin-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            cursor: pointer; transition: 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            border-right: 5px solid var(--danger);
+        }
+        /* كلاس مخصص للموظف لتعطيل التفاعل والضغط */
+        body.is-employee .debt-item {
+            cursor: default !important;
+        }
+        body:not(.is-employee) .debt-item:active { transform: scale(0.97); }
+        
+        .debt-value { color: var(--danger); font-weight: 800; font-size: 1.15rem; }
+        .search-bar {
+            background: var(--white) !important; border: 1px solid var(--border) !important;
+            color: var(--text-primary) !important; border-radius: 15px; padding: 12px 18px; font-weight: 600;
+        }
+        @media print { .header, .search-bar, i { display: none !important; } .debt-item { border: 1px solid #ccc !important; break-inside: avoid; } }
+    </style>
+</head>
+<body>
+
+<div class="header d-flex justify-content-between align-items-center">
+    <i class="fas fa-arrow-right text-white" onclick="history.back()" style="cursor: pointer;"></i>
+    <h5 class="m-0 fw-bold">كشف المبالغ المتبقية</h5>
+    <i class="fas fa-print text-white" onclick="window.print()" style="cursor: pointer;"></i>
+</div>
+
+<div class="container">
+    <div class="summary-card">
+        <small class="opacity-75 fw-bold">إجمالي المديونيات المستحقة على العملاء</small>
+        <h2 class="mt-2 fw-bold text-white" id="totalDebts">0.00 <small style="font-size: 1rem;">ج.م</small></h2>
+    </div>
+
+    <div class="mt-4">
+        <input type="text" id="searchDebt" class="form-control search-bar shadow-sm" placeholder="🔍 ابحث عن اسم العميل..." oninput="filterDebts()">
+    </div>
+
+    <div id="debtsList" class="mt-4">
+        <div class="text-center my-5">
+            <div class="spinner-border" style="color: var(--accent);"></div>
+            <p class="mt-2 small text-muted">جاري تحميل البيانات بسرعة الصاروخ...</p>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let debtData = [];
+    
+    // فحص دور المستخدم الحالي (إداري أم موظف)
+    const userRole = sessionStorage.getItem('role') || 'employee';
+    if (userRole !== 'admin') {
+        document.body.classList.add('is-employee');
+    }
+
+    async function loadDebts() {
+        try {
+            const [custSnap, invSnap, transSnap] = await Promise.all([
+                getDocs(collection(db, "customers")),
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "transactions"))
+            ]);
+
+            const invoiceBalances = {};
+            invSnap.forEach(doc => {
+                const data = doc.data();
+                const cid = data.customerId;
+                invoiceBalances[cid] = (invoiceBalances[cid] || 0) + (Number(data.remaining) || 0);
+            });
+
+            const transBalances = {};
+            transSnap.forEach(doc => {
+                const data = doc.data();
+                const cid = data.partyId;
+                let effect = 0;
+                if(data.type === 'قبض') effect = -(Number(data.amount) || 0);
+                else if(data.type === 'صرف') effect = (Number(data.amount) || 0);
+                transBalances[cid] = (transBalances[cid] || 0) + effect;
+            });
+
+            debtData = custSnap.docs.map(docSnap => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+                const opening = Number(data.initialBalance) || 0;
+                const invDebt = invoiceBalances[id] || 0;
+                const transDebt = transBalances[id] || 0;
+                const finalBalance = opening + invDebt + transDebt;
+
+                return finalBalance > 0 ? { id, ...data, realBalance: finalBalance } : null;
+            }).filter(item => item !== null);
+
+            debtData.sort((a, b) => b.realBalance - a.realBalance);
+            
+            let total = debtData.reduce((sum, item) => sum + item.realBalance, 0);
+            document.getElementById('totalDebts').innerText = total.toLocaleString('ar-EG', {minimumFractionDigits: 2});
+            
+            renderDebts(debtData);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('debtsList').innerHTML = '<div class="alert alert-danger">خطأ في تحميل البيانات</div>';
+        }
+    }
+
+    function renderDebts(data) {
+        const list = document.getElementById('debtsList');
+        list.innerHTML = data.length === 0 ? '<div class="text-center opacity-50 my-5">لا يوجد مديونيات حالياً</div>' : '';
+
+        data.forEach(c => {
+            // إعداد دالة الانتقال للرابط بناءً على صلاحية المستخدم
+            const clickAction = (userRole === 'admin') 
+                ? `window.location.href='customer-details.html?id=${c.id}'` 
+                : `void(0)`;
+
+            list.innerHTML += `
+                <div class="debt-item" onclick="${clickAction}">
+                    <div>
+                        <div class="fw-bold" style="color: var(--text-primary);">${c.name}</div>
+                        <small class="text-muted"><i class="fas fa-phone-alt me-1" style="font-size: 0.7rem;"></i> ${c.phone || 'بدون هاتف'}</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="debt-value">${c.realBalance.toLocaleString('ar-EG', {minimumFractionDigits: 2})}</div>
+                        <small class="text-muted fw-bold" style="font-size: 0.7rem;">ج.م</small>
+                    </div>
+                </div>`;
+        });
+    }
+
+    window.filterDebts = () => {
+        const term = document.getElementById('searchDebt').value.toLowerCase();
+        const filtered = debtData.filter(c => c.name.toLowerCase().includes(term));
+        renderDebts(filtered);
+    }
+
+    loadDebts();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

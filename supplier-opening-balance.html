@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أرصدة أول المدة - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --info-blue: #0d6efd;
+        }
+
+        body { 
+            background: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-primary); 
+            padding-bottom: 100px; 
+        }
+        
+        .header-section { 
+            padding: 15px 20px; background: var(--header-bg); 
+            position: sticky; top: 0; z-index: 1000; color: white;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .info-alert {
+            background: #e7f1ff; border: 1px dashed var(--info-blue);
+            border-radius: 12px; padding: 12px; margin: 15px; 
+            font-size: 0.8rem; color: var(--info-blue); font-weight: 700;
+        }
+
+        .sup-row {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 15px; padding: 12px 15px; margin: 0 15px 10px 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+
+        .sup-name { font-weight: 800; font-size: 0.9rem; color: var(--accent); display: block; }
+        .sup-phone { font-size: 0.7rem; color: #6c757d; font-weight: 600; }
+
+        .input-group-custom { width: 120px; }
+        .balance-input {
+            background: var(--bg-light) !important; border: 1px solid var(--border) !important;
+            color: var(--text-primary) !important; text-align: center; 
+            border-radius: 10px !important; font-weight: 800; font-size: 0.9rem;
+        }
+        .balance-input:focus { border-color: var(--accent) !important; background: #fff !important; box-shadow: none; }
+
+        .save-all-btn {
+            position: fixed; bottom: 20px; left: 20px; right: 20px;
+            background: var(--accent);
+            border: none; border-radius: 15px; padding: 15px; font-weight: 800;
+            box-shadow: 0 4px 15px rgba(11, 94, 61, 0.3); z-index: 1001;
+            color: white; transition: 0.3s;
+        }
+        .save-all-btn:active { transform: scale(0.98); }
+
+        .search-box {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 12px; color: var(--text-primary); padding: 12px; 
+            margin: 0 15px 15px 15px; width: calc(100% - 30px);
+            font-weight: 600; font-size: 0.85rem; outline: none;
+        }
+        .search-box:focus { border-color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <a href="supplier-list.html" class="text-white"><i class="fas fa-arrow-right"></i></a>
+    <h6 class="m-0 fw-bold">أرصدة أول المدة (الموردين)</h6>
+    <div style="width: 20px;"></div>
+</div>
+
+<div class="container-fluid p-0">
+    <div class="info-alert text-center">
+        <i class="fas fa-info-circle me-1"></i> يتم هنا ضبط المديونيات المستحقة للموردين قبل بدء استخدام السيستم.
+    </div>
+
+    <input type="text" id="searchInput" class="search-box" placeholder="ابحث عن مورد لضبط رصيده...">
+
+    <div id="suppliersList">
+        <div class="text-center mt-5"><div class="spinner-border text-success"></div></div>
+    </div>
+</div>
+
+<button class="btn save-all-btn" id="saveAllBtn">
+    <i class="fas fa-check-double me-2"></i> اعتماد الأرصدة الافتتاحية
+</button>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+   const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    async function loadSuppliers() {
+        const listDiv = document.getElementById('suppliersList');
+        try {
+            const querySnapshot = await getDocs(collection(db, "suppliers"));
+            let html = '';
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                html += `
+                    <div class="sup-row" data-name="${data.name.toLowerCase()}">
+                        <div>
+                            <span class="sup-name">${data.name}</span>
+                            <span class="sup-phone">${data.phone || 'بدون هاتف'}</span>
+                        </div>
+                        <div class="input-group-custom">
+                            <input type="number" 
+                                   class="form-control balance-input" 
+                                   data-id="${doc.id}" 
+                                   value="${data.openingBalance || 0}" 
+                                   placeholder="0">
+                        </div>
+                    </div>
+                `;
+            });
+
+            listDiv.innerHTML = html;
+
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                document.querySelectorAll('.sup-row').forEach(row => {
+                    row.style.display = row.getAttribute('data-name').includes(term) ? 'flex' : 'none';
+                });
+            });
+
+        } catch (error) {
+            listDiv.innerHTML = '<div class="text-center text-danger py-5 fw-bold">فشل في تحميل البيانات</div>';
+        }
+    }
+
+    document.getElementById('saveAllBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('saveAllBtn');
+        const inputs = document.querySelectorAll('.balance-input');
+        
+        if(!confirm("هل أنت متأكد من تعديل الأرصدة الافتتاحية لجميع الموردين؟")) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-sync fa-spin me-2"></i> جاري الحفظ...';
+
+        try {
+            const batch = writeBatch(db);
+            
+            inputs.forEach(input => {
+                const supId = input.getAttribute('data-id');
+                const newVal = Number(input.value);
+                const docRef = doc(db, "suppliers", supId);
+                
+                batch.update(docRef, { 
+                    openingBalance: newVal
+                });
+            });
+
+            const wasOffline = !navigator.onLine;
+            const commitPromise = batch.commit();
+
+            if (wasOffline) {
+                alert("تم حفظ الأرصدة على الجهاز، وستتم مزامنتها تلقائيًا فور توفر الإنترنت ✅");
+            } else {
+                alert("تم اعتماد الأرصدة بنجاح ✅");
+            }
+            commitPromise.catch((err) => console.error("فشلت مزامنة الأرصدة الافتتاحية:", err));
+            window.location.reload();
+        } catch (error) {
+            alert("حدث خطأ أثناء الاتصال بالسيرفر");
+            btn.disabled = false;
+            btn.innerHTML = 'اعتماد الأرصدة الافتتاحية';
+        }
+    });
+
+    loadSuppliers();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

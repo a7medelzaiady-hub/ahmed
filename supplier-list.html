@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قائمة الموردين - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #d90429;
+            --success: #2d6a4f;
+            --info: #0d6efd;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); }
+        
+        .header-section { 
+            padding: 15px 0; background: var(--header-bg); 
+            color: white; position: sticky; top: 0; z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .search-box { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 12px; padding: 10px 15px; display: flex; 
+            align-items: center; margin: 15px 15px 0; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+        .search-box input { 
+            background: transparent; border: none; color: var(--text-primary); 
+            width: 100%; outline: none; font-size: 0.9rem; font-weight: 600;
+        }
+        .search-box i { color: var(--accent); opacity: 0.7; margin-left: 10px; }
+
+        .supplier-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 18px; padding: 15px; margin-bottom: 12px; 
+            transition: 0.3s; display: flex; justify-content: space-between; 
+            align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+        .supplier-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+        .supplier-name { color: var(--accent); font-weight: 800; font-size: 1rem; margin: 0; }
+        .balance-label { font-size: 0.7rem; color: #6c757d; font-weight: 700; display: block; margin-bottom: 2px; }
+        .balance-value { font-weight: 800; font-size: 0.95rem; }
+        
+        .text-debt { color: var(--danger); }
+        .text-clear { color: var(--success); }
+        .text-credit { color: var(--info); }
+
+        .action-container { display: flex; gap: 8px; }
+        .action-btn { 
+            width: 40px; height: 40px; border-radius: 10px; 
+            display: flex; align-items: center; justify-content: center; 
+            text-decoration: none; transition: 0.2s; font-size: 1rem; 
+            border: 1px solid var(--border);
+        }
+        .btn-pay { background: #e9f5ee; color: var(--success); border-color: #c9e7d5; }
+        .btn-info { background: #f0f4ff; color: var(--info); border-color: #dbe4ff; }
+        
+        .spinner-custom { color: var(--accent); font-weight: 700; font-size: 0.85rem; }
+
+        .btn-delete-all {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+        .btn-delete-all:hover {
+            background: rgba(217, 4, 41, 0.2);
+            border-color: rgba(217, 4, 41, 0.4);
+        }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <div class="container d-flex justify-content-between align-items-center px-3">
+        <div class="d-flex align-items-center gap-3">
+            <a href="index.html" class="text-white text-decoration-none" title="الرئيسية">
+                <i class="fas fa-house fs-5"></i>
+            </a>
+            <a href="supplier-management.html" class="text-white text-decoration-none" title="رجوع">
+                <i class="fas fa-chevron-right fs-5"></i>
+            </a>
+        </div>
+        <h5 class="m-0 fw-bold">قائمة الموردين</h5>
+        <div>
+            <button class="btn-delete-all" onclick="deleteAllSuppliersPermanently()">حذف الكل نهائياً</button>
+        </div>
+    </div>
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="ابحث باسم المورد أو الهاتف..." oninput="filterSuppliers()">
+    </div>
+</div>
+
+<div class="container py-3" id="suppliersContainer">
+    <div class="text-center py-5 spinner-custom">
+        <div class="spinner-border spinner-border-sm me-2"></div>
+        جاري مراجعة حسابات الموردين...
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, where, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let allSuppliers = [];
+
+    // دالة احتساب الرصيد الموحدة والمطابقة لكشف الحساب لمنع الخصم المزدوج
+    async function calculateSupplierBalance(supId, openingBal) {
+        const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
+            getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
+            getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
+            getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
+        ]);
+
+        let totalDebit = Number(openingBal || 0); // المدين (+)
+        let totalCredit = 0;                     // الدائن (-)
+
+        const processedTransIds = new Set();
+
+        // 1. جمع السندات المالية المستقلة فقط (غير المرتبطة بفاتورة)
+        const processTransDoc = (docSnap) => {
+            if (processedTransIds.has(docSnap.id)) return;
+            
+            const d = docSnap.data();
+            if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+
+            processedTransIds.add(docSnap.id);
+            const amt = Number(d.amount) || 0;
+
+            if (d.type === "صرف" || d.type === "سداد") {
+                totalCredit += amt;
+            } else if (d.type === "قبض") {
+                totalDebit += amt;
+            }
+        };
+
+        snapTransParty.forEach(processTransDoc);
+        snapTransSup.forEach(processTransDoc);
+
+        // 2. جمع الفواتير والمدفوع داخل الفاتورة
+        snapItems.forEach(docSnap => {
+            const d = docSnap.data();
+            const totalAmt = Number(d.total) || Number(d.amount) || 0;
+
+            if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                totalDebit += totalAmt; // إجمالي قيمة الفاتورة تزيد المديونية
+
+                // استخراج السداد النقدي المسجل مع الفاتورة فقط
+                const paidAmt = Number(d.paid) || 
+                    (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
+                    (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+
+                if (paidAmt > 0) {
+                    totalCredit += paidAmt; // الخصم يتم مرة واحدة فقط
+                }
+            } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
+                totalCredit += totalAmt;
+            }
+        });
+
+        // الرصيد الصافي النهائي = (الافتتاحي + الشراء) - المسدد
+        return totalDebit - totalCredit;
+    }
+
+    async function loadSuppliers() {
+        const container = document.getElementById('suppliersContainer');
+        try {
+            const q = query(collection(db, "suppliers"), orderBy("name"));
+            const snap = await getDocs(q);
+            
+            const supplierPromises = snap.docs.map(async (d) => {
+                const data = d.data();
+                const balance = await calculateSupplierBalance(d.id, data.openingBalance);
+                return { id: d.id, ...data, calculatedBalance: balance };
+            });
+
+            allSuppliers = await Promise.all(supplierPromises);
+            renderSuppliers(allSuppliers);
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `<div class="text-danger text-center fw-bold">عذراً، فشل الاتصال بالقاعدة</div>`;
+        }
+    }
+
+    window.renderSuppliers = (list) => {
+        const container = document.getElementById('suppliersContainer');
+        if(list.length === 0) {
+            container.innerHTML = '<div class="text-center opacity-50 py-5 fw-bold">لا توجد نتائج بحث..</div>';
+            return;
+        }
+        
+        container.innerHTML = list.map(sup => {
+            const balance = sup.calculatedBalance || 0;
+            const balanceText = Math.abs(balance).toLocaleString('ar-EG') + " ج.م";
+            
+            let balanceClass = 'text-clear';
+            let label = 'الحساب خالص ✅';
+            
+            if (balance > 0.1) {
+                balanceClass = 'text-debt';
+                label = 'مديونية للمورد ⚠️';
+            } else if (balance < -0.1) {
+                balanceClass = 'text-credit';
+                label = 'رصيد لك 💎';
+            }
+
+            return `
+                <div class="supplier-card">
+                    <div>
+                        <h6 class="supplier-name">${sup.name}</h6>
+                        <div class="mt-2">
+                            <span class="balance-label">${label}</span>
+                            <span class="balance-value ${balanceClass}">${Math.abs(balance) < 0.1 ? '' : balanceText}</span>
+                        </div>
+                    </div>
+                    <div class="action-container">
+                        <a href="supplier-details.html?id=${sup.id}" class="action-btn btn-info" title="التفاصيل"><i class="fas fa-user-cog"></i></a>
+                        <a href="supplier-payment.html?id=${sup.id}" class="action-btn btn-pay" title="سداد"><i class="fas fa-wallet"></i></a>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.deleteAllSuppliersPermanently = async () => {
+        if (!confirm("⚠️ هل تريد حذف جميع الموردين نهائياً؟ لا يمكن التراجع عن هذه الخطوة!")) return;
+        
+        try {
+            const snap = await getDocs(collection(db, "suppliers"));
+            if (snap.empty) {
+                alert("لا يوجد موردين في القائمة لحذفهم.");
+                return;
+            }
+
+            const batch = writeBatch(db);
+            snap.forEach((docSnap) => {
+                batch.delete(doc(db, "suppliers", docSnap.id));
+            });
+
+            await batch.commit();
+            alert("تم حذف جميع الموردين بنجاح.");
+            
+            loadSuppliers();
+        } catch (e) {
+            alert("حدث خطأ أثناء الحذف: " + e.message);
+        }
+    };
+
+    window.filterSuppliers = () => {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        renderSuppliers(allSuppliers.filter(s => 
+            s.name.toLowerCase().includes(term) || 
+            (s.phone && s.phone.includes(term))
+        ));
+    }
+
+    loadSuppliers();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

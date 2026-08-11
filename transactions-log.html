@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل السندات - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --white: #ffffff;
+            --border: #dce3de;
+            --danger: #d90429;
+            --success: #2d6a4f;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+
+        .header-section { 
+            padding: 15px; background: var(--header-bg); color: white;
+            position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* كارت التجميع */
+        .summary-card {
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 20px; padding: 20px; margin-bottom: 20px;
+            text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        .summary-val { font-size: 2rem; font-weight: 800; color: var(--accent); display: block; }
+        .summary-label { font-size: 0.85rem; font-weight: 700; opacity: 0.7; color: var(--text-primary); }
+
+        /* أزرار الفلتر */
+        .filter-group { display: flex; gap: 8px; margin-bottom: 20px; }
+        .filter-btn {
+            flex: 1; background: var(--white); border: 1px solid var(--border);
+            color: var(--text-primary); padding: 10px; border-radius: 12px; 
+            font-weight: 700; transition: 0.3s; font-size: 0.9rem;
+        }
+        .filter-btn.active { 
+            background: var(--accent); border-color: var(--accent); color: white;
+            box-shadow: 0 4px 10px rgba(11, 94, 61, 0.2); 
+        }
+
+        /* كارت السند */
+        .receipt-card {
+            background: var(--white); border: 1px solid var(--border); border-radius: 18px;
+            padding: 15px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;
+            transition: 0.2s;
+        }
+        .receipt-card:active { transform: scale(0.98); }
+
+        .icon-box {
+            width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; margin-left: 15px;
+        }
+        .type-icon-قبض { background: #e8f5e9; color: var(--success); }
+        .type-icon-صرف { background: #ffebee; color: var(--danger); }
+
+        .receipt-info h6 { margin: 0; font-weight: 800; font-size: 0.95rem; color: var(--text-primary); }
+        .receipt-info small { color: #7f8c8d; font-size: 0.75rem; font-weight: 600; }
+        
+        .badge-type { 
+            padding: 2px 10px; border-radius: 6px; font-size: 0.65rem; font-weight: 800; 
+            margin-bottom: 5px; display: inline-block; text-transform: uppercase;
+        }
+        .bg-badge-قبض { background: var(--success); color: white; }
+        .bg-badge-صرف { background: var(--danger); color: white; }
+
+        .amount-val { font-size: 1.1rem; font-weight: 800; }
+        .back-btn { 
+            width: 38px; height: 38px; border-radius: 10px; 
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); 
+            color: #fff; display: flex; align-items: center; justify-content: center; text-decoration: none; 
+        }
+        .back-btn:hover { background: white; color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <a href="javascript:history.back()" class="back-btn"><i class="fas fa-arrow-right"></i></a>
+    <h6 class="m-0 fw-bold" id="pageTitle">سجل السندات</h6>
+    <div style="width: 38px;"></div>
+</div>
+
+<div class="container mt-4">
+    <div class="summary-card">
+        <span class="summary-label" id="summaryLabel">إجمالي السندات (الكل)</span>
+        <span class="summary-val" id="totalSummary">0.00</span>
+        <small class="fw-bold opacity-50">جنيه مصري</small>
+    </div>
+
+    <div class="filter-group">
+        <button class="filter-btn active" onclick="filterData('all', this)">الكل</button>
+        <button class="filter-btn" onclick="filterData('قبض', this)">سندات قبض</button>
+        <button class="filter-btn" onclick="filterData('صرف', this)">سندات صرف</button>
+    </div>
+
+    <div id="receiptsContainer">
+        <div class="text-center mt-5"><div class="spinner-border text-success"></div><p class="mt-2 small fw-bold">جاري مراجعة السجلات...</p></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, query, where, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const partyId = urlParams.get('id');
+
+    let allTransactions = [];
+
+    async function loadReceipts() {
+        const container = document.getElementById('receiptsContainer');
+        if (!partyId) return container.innerHTML = '<div class="text-center">خطأ في التعريف</div>';
+
+        try {
+            // جلب اسم الطرف (مورد أو عميل)
+            const partySnap = await getDoc(doc(db, "suppliers", partyId));
+            if(partySnap.exists()) document.getElementById('pageTitle').innerText = `سندات: ${partySnap.data().name}`;
+
+            const q = query(collection(db, "transactions"), where("partyId", "==", partyId));
+            const querySnapshot = await getDocs(q);
+            
+            allTransactions = [];
+            querySnapshot.forEach(doc => allTransactions.push({ id: doc.id, ...doc.data() }));
+            allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            renderUI('all');
+
+        } catch (error) {
+            container.innerHTML = '<div class="text-danger text-center">حدث خطأ في الاتصال بقاعدة البيانات</div>';
+        }
+    }
+
+    window.filterData = (type, btn) => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderUI(type);
+    };
+
+    function renderUI(filterType) {
+        const container = document.getElementById('receiptsContainer');
+        const summaryVal = document.getElementById('totalSummary');
+        const summaryLabel = document.getElementById('summaryLabel');
+        
+        const filtered = filterType === 'all' 
+            ? allTransactions 
+            : allTransactions.filter(t => t.type === filterType);
+
+        const total = filtered.reduce((sum, t) => sum + Number(t.amount), 0);
+        summaryVal.innerText = total.toLocaleString('ar-EG', {minimumFractionDigits: 2});
+        summaryLabel.innerText = filterType === 'all' ? "إجمالي السندات (الكل)" : `إجمالي سندات ${filterType}`;
+
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="text-center opacity-50 mt-5"><i class="fas fa-folder-open fa-3x mb-3"></i><p class="fw-bold">لا توجد سندات مسجلة حالياً</p></div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(data => `
+            <div class="receipt-card">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box type-icon-${data.type}">
+                        <i class="fas ${data.type === 'قبض' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                    </div>
+                    <div class="receipt-info">
+                        <span class="badge-type bg-badge-${data.type}">سند ${data.type}</span>
+                        <h6>${data.notes || 'سند نقدية'}</h6>
+                        <small><i class="far fa-calendar-alt me-1"></i> ${data.date}</small>
+                    </div>
+                </div>
+                <div class="amount-area text-end">
+                    <span class="amount-val" style="color: ${data.type === 'قبض' ? 'var(--success)' : 'var(--danger)'}">
+                        ${Number(data.amount).toLocaleString('ar-EG')}
+                    </span>
+                    <div style="font-size: 0.6rem; font-weight: 800; opacity: 0.6;">ج.م</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    loadReceipts();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

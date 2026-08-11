@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تأسيس النظام المحاسبي - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <style>
+        body { background: #f4f7f6; font-family: 'Cairo', sans-serif; color: #1b2e26; padding-top: 50px; }
+        .setup-card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 4px 15px rgba(11, 94, 61, 0.05); max-width: 600px; margin: auto; text-align: center; }
+        .btn-setup { background: #0b5e3d; color: white; border: none; padding: 15px 30px; font-weight: bold; border-radius: 10px; font-size: 18px; width: 100%; transition: 0.3s; }
+        .btn-setup:hover { background: #198754; color: white; }
+        .status-box { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="setup-card">
+        <i class="fas fa-calculator fa-4x mb-3" style="color: #0b5e3d;"></i>
+        <h2 class="fw-bold mb-3">تأسيس النظام المحاسبي المتكامل</h2>
+        <p class="text-muted mb-4">شركة الزيادي لزيوت السيارات</p>
+        <p class="text-secondary small">اضغط على الزر أدناه لتوليد شجرة الحسابات (الأصول، الالتزامات، رأس المال) وترحيل أرصدة العملاء والموردين الحاليين تلقائياً إلى نظام القيد المزدوج المعتمد.</p>
+        
+        <button class="btn-setup" id="startBtn" onclick="runAccountingSetup()">
+            <i class="fas fa-rocket me-2"></i> ابدأ التأسيس والترحيل الآن
+        </button>
+
+        <div id="statusBox" class="status-box"></div>
+        
+        <a href="index1.html" class="btn btn-outline-secondary mt-4 w-100 fw-bold" style="border-radius: 10px;">
+            <i class="fas fa-arrow-right me-2"></i> العودة للرئيسية (index1.html)
+        </a>
+    </div>
+</div>
+
+<script>
+    // تم إدراج الإعدادات الخاصة بقاعدتك هنا بنجاح يا هندسة 🎯
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+try {
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+        console.warn("تعذر تفعيل التخزين الدائم:", err.code);
+    });
+} catch (e) {
+    console.warn("تعذر تفعيل التخزين الدائم:", e);
+}
+
+    async function runAccountingSetup() {
+        const btn = document.getElementById('startBtn');
+        const statusBox = document.getElementById('statusBox');
+        
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> جاري قراءة البيانات وتأسيس الشجرة...';
+        
+        try {
+            const batch = db.batch();
+            
+            // 1. هيكل شجرة الحسابات الرئيسية
+            const coreAccounts = [
+                { accountId: "1000", accountName: "الأصول", type: "Asset", nature: "Debit", parent: null, isSubAccount: false, currentBalance: 0 },
+                { accountId: "1100", accountName: "الأصول المتداولة", type: "Asset", nature: "Debit", parent: "1000", isSubAccount: false, currentBalance: 0 },
+                { accountId: "1101", accountName: "صندوق النقدية (الخزينة)", type: "Asset", nature: "Debit", parent: "1100", isSubAccount: true, currentBalance: 0 },
+                { accountId: "1102", accountName: "المحافظ الإلكترونية", type: "Asset", nature: "Debit", parent: "1100", isSubAccount: true, currentBalance: 0 },
+                { accountId: "1103", accountName: "ذمم العملاء (حساب إجمالي)", type: "Asset", nature: "Debit", parent: "1100", isSubAccount: false, currentBalance: 0 },
+                { accountId: "1104", accountName: "مخزون بضاعة زيت السيارات", type: "Asset", nature: "Debit", parent: "1100", isSubAccount: true, currentBalance: 0 },
+                { accountId: "2000", accountName: "الالتزامات", type: "Liability", nature: "Credit", parent: null, isSubAccount: false, currentBalance: 0 },
+                { accountId: "2100", accountName: "الالتزامات المتداولة", type: "Liability", nature: "Credit", parent: "2000", isSubAccount: false, currentBalance: 0 },
+                { accountId: "2101", accountName: "ذمم الموردين (حساب إجمالي)", type: "Liability", nature: "Credit", parent: "2100", isSubAccount: false, currentBalance: 0 },
+                { accountId: "3000", accountName: "حقوق الملكية", type: "Equity", nature: "Credit", parent: null, isSubAccount: false, currentBalance: 0 },
+                { accountId: "3101", accountName: "رأس المال الافتتاحي", type: "Equity", nature: "Credit", parent: "3000", isSubAccount: true, currentBalance: 0 },
+                { accountId: "3102", accountName: "الأرباح والخسائر الدورية", type: "Equity", nature: "Credit", parent: "3000", isSubAccount: true, currentBalance: 0 },
+                { accountId: "4000", accountName: "الإيرادات", type: "Revenue", nature: "Credit", parent: null, isSubAccount: false, currentBalance: 0 },
+                { accountId: "4101", accountName: "إيرادات مبيعات الزيوت والكراتين", type: "Revenue", nature: "Credit", parent: "4000", isSubAccount: true, currentBalance: 0 },
+                { accountId: "5000", accountName: "المصروفات", type: "Expense", nature: "Debit", parent: null, isSubAccount: false, currentBalance: 0 },
+                { accountId: "5101", accountName: "تكلفة البضاعة المباعة (COGS)", type: "Expense", nature: "Debit", parent: "5000", isSubAccount: true, currentBalance: 0 },
+                { accountId: "5102", accountName: "المصروفات التشغيلية والعمومية", type: "Expense", nature: "Debit", parent: "5000", isSubAccount: true, currentBalance: 0 }
+            ];
+
+            coreAccounts.forEach(acc => {
+                batch.set(db.collection("accounts").doc(acc.accountId), { ...acc, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+            });
+
+            let totalCustomersBalance = 0;
+            let totalSuppliersBalance = 0;
+            let journalLines = [];
+
+            // 2. سحب العملاء وترحيلهم للحسابات الفرعية
+            const customersSnapshot = await db.collection("customers").get();
+            let customerIndex = 1;
+            customersSnapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.isDeleted) return; // تخطي المحذوفين
+                
+                const customAccId = `1103${String(customerIndex).padStart(4, '0')}`;
+                const balance = parseFloat(data.currentBalance || 0);
+
+                batch.set(db.collection("accounts").doc(customAccId), {
+                    accountId: customAccId,
+                    accountName: `العميل: ${data.name}`,
+                    type: "Asset", nature: "Debit", parent: "1103", isSubAccount: true, currentBalance: balance, originalDocId: doc.id
+                });
+
+                if (balance !== 0) {
+                    totalCustomersBalance += balance;
+                    journalLines.push({ 
+                        accountId: customAccId, 
+                        accountName: `العميل: ${data.name}`, 
+                        debit: balance > 0 ? balance : 0, 
+                        credit: balance < 0 ? Math.abs(balance) : 0 
+                    });
+                }
+                batch.update(doc.ref, { accountId: customAccId });
+                customerIndex++;
+            });
+
+            // 3. سحب الموردين وترحيلهم للحسابات الفرعية
+            const suppliersSnapshot = await db.collection("suppliers").get();
+            let supplierIndex = 1;
+            suppliersSnapshot.forEach(doc => {
+                const data = doc.data();
+                const supplierAccId = `2101${String(supplierIndex).padStart(4, '0')}`;
+                const balance = parseFloat(data.currentBalance || 0);
+
+                batch.set(db.collection("accounts").doc(supplierAccId), {
+                    accountId: supplierAccId,
+                    accountName: `المورد: ${data.name}`,
+                    type: "Liability", nature: "Credit", parent: "2101", isSubAccount: true, currentBalance: balance, originalDocId: doc.id
+                });
+
+                if (balance !== 0) {
+                    totalSuppliersBalance += balance;
+                    journalLines.push({ 
+                        accountId: supplierAccId, 
+                        accountName: `المورد: ${data.name}`, 
+                        debit: balance < 0 ? Math.abs(balance) : 0, 
+                        credit: balance > 0 ? balance : 0 
+                    });
+                }
+                batch.update(doc.ref, { accountId: supplierAccId });
+                supplierIndex++;
+            });
+
+            // 4. توازن القيد الافتتاحي مقابل حساب رأس المال
+            const capitalDifference = totalCustomersBalance - totalSuppliersBalance;
+            if (capitalDifference > 0) {
+                journalLines.push({ accountId: "3101", accountName: "رأس المال الافتتاحي", debit: 0, credit: capitalDifference });
+            } else if (capitalDifference < 0) {
+                journalLines.push({ accountId: "3101", accountName: "رأس المال الافتتاحي", debit: Math.abs(capitalDifference), credit: 0 });
+            }
+
+            batch.update(db.collection("accounts").doc("3101"), { currentBalance: Math.abs(capitalDifference) });
+            batch.update(db.collection("accounts").doc("1103"), { currentBalance: totalCustomersBalance });
+            batch.update(db.collection("accounts").doc("2101"), { currentBalance: totalSuppliersBalance });
+
+            // 5. حفظ أول قيد في النظام المحاسبي
+            const entryRef = db.collection("journalEntries").doc("JE-2026-OPENING");
+            batch.set(entryRef, {
+                entryId: "JE-2026-OPENING",
+                date: new Date().toISOString(),
+                refType: "system_init", refId: "INIT",
+                description: "قيد افتتاحي متزن لترحيل الأرصدة السابقة تلقائياً وبأمان",
+                totalAmount: Math.max(totalCustomersBalance, totalSuppliersBalance),
+                isBalanced: true, lines: journalLines, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // تنفيذ التحديث الشامل دفعة واحدة
+            await batch.commit();
+            
+            statusBox.style.display = "block";
+            statusBox.className = "status-box bg-success text-white";
+            statusBox.innerHTML = "🎯 يا مصمم يا عبقري! تم تأسيس شجرة الحسابات بالكامل وترحيل العملاء والموردين بنجاح دون أي مساس ببياناتك القديمة.";
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> تم التأسيس بنجاح';
+            
+        } catch (error) {
+            console.error(error);
+            statusBox.style.display = "block";
+            statusBox.className = "status-box bg-danger text-white";
+            statusBox.innerHTML = "حدثت مشكلة أثناء الاتصال بقاعدة البيانات، يرجى التأكد من صلاحيات الـ Firestore.";
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-rocket me-2"></i> ابدأ التأسيس والترحيل الآن';
+        }
+    }
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

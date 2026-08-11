@@ -1,0 +1,595 @@
+<!DOCTYPE html>  
+<html lang="ar" dir="rtl">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>التقرير اليومي الشامل - الزيادي لزيوت السيارات</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+  
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">  
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght=400;600;700;800&display=swap" rel="stylesheet">  
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">  
+    
+    <style>  
+        :root {   
+            --accent: #0b5e3d;          
+            --header-bg: #0b5e3d;       
+            --bg-light: #f4f7f6;        
+            --text-primary: #1b2e26;     
+            --text-secondary: #4a5568;   
+            --border: #dce3de;          
+            --white: #ffffff;  
+            --danger: #d90429;  
+            --success: #2d6a4f;  
+            --warning: #ffb703;  
+            --info: #3182ce;
+            --purple: #7209b7;
+            --card-radius: 12px;  
+            --input-radius: 10px;  
+        }  
+        body {   
+            background: var(--bg-light);   
+            font-family: 'Cairo', sans-serif;   
+            color: var(--text-primary);   
+            padding-bottom: 60px;   
+            font-size: 0.85rem;  
+        }  
+        .header-nav {   
+            background: var(--header-bg);   
+            padding: 12px 15px;   
+            display: flex;   
+            align-items: center;   
+            justify-content: space-between;   
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);   
+            color: white;   
+            position: sticky;   
+            top: 0;   
+            z-index: 1000;  
+        }  
+        .back-btn { background: rgba(255,255,255,0.2); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; text-decoration: none; font-size: 0.9rem; border: none; }  
+        .back-btn:hover { background: rgba(255,255,255,0.3); color: white; }  
+        
+        .section-title { font-size: 0.85rem; font-weight: 800; color: var(--accent); margin: 15px 0 8px 0; border-bottom: 2px solid var(--border); padding-bottom: 4px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }  
+        
+        .report-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 10px 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); text-align: center; position: relative; overflow: hidden; cursor: pointer; transition: all 0.2s ease-in-out; }  
+        .report-card .card-bar { position: absolute; top: 0; left: 0; right: 0; height: 4px; }  
+        .report-card .num-val { font-size: 1.05rem; font-weight: 800; margin-top: 4px; display: block; }
+        
+        .report-card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+        .report-card.active-filter { border: 2px solid var(--accent); background: #f0fdf4; transform: scale(1.02); }
+        .report-card.active-filter-danger { border: 2px solid var(--danger); background: #fff5f5; transform: scale(1.02); }
+        .report-card.active-filter-info { border: 2px solid var(--info); background: #f0f9ff; transform: scale(1.02); }
+        .report-card.active-filter-warning { border: 2px solid var(--warning); background: #fffdf5; transform: scale(1.02); }
+        .report-card.active-filter-purple { border: 2px solid var(--purple); background: #faf5ff; transform: scale(1.02); }
+
+        .filter-panel { background: #ffffff; border: 1px solid var(--border); border-radius: var(--card-radius); padding: 12px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        
+        .chic-table-container { background: #ffffff; border: 1px solid var(--border); border-radius: var(--card-radius); overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.02); margin-bottom: 15px; }
+        .chic-table { width: 100%; margin-bottom: 0; font-size: 0.8rem; border-collapse: collapse; }
+        .chic-table th { background: #ebf9eb; padding: 10px 6px; font-weight: 800; color: var(--accent); text-align: center; border-bottom: 2px solid var(--border); }
+        .chic-table td { padding: 10px 6px; text-align: center; font-weight: 600; border-bottom: 1px solid #f0f4f1; }
+        .chic-table tr:last-child td { border-bottom: none; }
+        
+        .badge-type { padding: 4px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; display: inline-block; }
+        .badge-sale { background: #ebf9eb; color: var(--success); border: 1px solid #c7ebd1; }
+        .badge-purchase { background: #fff5f5; color: var(--danger); border: 1px solid #fecaca; }
+        .badge-voucher { background: #fff4e6; color: #d68102; border: 1px solid #ffe8cc; }
+        
+        .btn-clear-filter { font-size: 0.75rem; font-weight: bold; padding: 2px 8px; border-radius: 6px; display: none; }
+    </style>  
+</head>  
+<body>  
+
+<div class="header-nav">  
+    <a href="index.html" class="back-btn"><i class="fas fa-arrow-right"></i></a>  
+    <h6 class="m-0 fw-bold"><i class="fas fa-chart-line me-1"></i> التقرير المالي اليومي وحركة الصناديق</h6>  
+    <button class="back-btn" onclick="window.print()" title="طباعة التقرير"><i class="fas fa-print"></i></button>  
+</div>  
+
+<div class="container px-2 mt-2">  
+    
+    <!-- لوحة التحكم واختيار التاريخ -->
+    <div class="filter-panel mt-2">
+        <div class="row g-2 align-items-center">
+            <div class="col-4">
+                <label class="fw-bold text-muted mb-1" style="font-size: 0.75rem;"><i class="far fa-calendar-alt"></i> تاريخ التقرير:</label>
+            </div>
+            <div class="col-8">
+                <input type="date" id="reportDateInput" class="form-control text-center fw-bold" style="font-size: 0.9rem; border-radius: var(--input-radius); padding: 6px;" onchange="loadDailyReport()">
+            </div>
+        </div>
+    </div>
+
+    <!-- كروت ملخص حركة اليوم الشاملة -->
+    <div class="section-title">
+        <span id="sectionTitleDate"><i class="fas fa-coins"></i> ملخص حركة اليوم</span>
+        <button id="clearFilterBtn" class="btn btn-sm btn-secondary btn-clear-filter" onclick="resetTableFilter()">عرض الكل <i class="fas fa-sync-alt ms-1"></i></button>
+    </div>
+    
+    <div class="row g-2 mb-2">  
+        <div class="col-6">  
+            <div class="report-card" id="card-sales" onclick="filterTableBy('sales', this)">  
+                <div class="card-bar" style="background: var(--success);"></div>  
+                <small class="text-muted fw-bold d-block">إجمالي المبيعات</small>  
+                <span class="text-success num-val" id="totalSalesVal">0.00</span>  
+            </div>  
+        </div>  
+        <div class="col-6">  
+            <div class="report-card" id="card-purchases" onclick="filterTableBy('purchases', this)">  
+                <div class="card-bar" style="background: var(--danger);"></div>  
+                <small class="text-muted fw-bold d-block">إجمالي المشتريات</small>  
+                <span class="text-danger num-val" id="totalPurchasesVal">0.00</span>  
+            </div>  
+        </div>  
+        
+        <!-- تقسيم المقبوضات من العملاء -->
+        <div class="col-6">  
+            <div class="report-card" id="card-client-cash" onclick="filterTableBy('client-cash', this)">  
+                <div class="card-bar" style="background: var(--info);"></div>  
+                <small class="text-muted fw-bold d-block">المحصل عملاء (كاش)</small>  
+                <span class="text-primary num-val" id="totalClientCashVal">0.00</span>  
+            </div>  
+        </div>  
+        <div class="col-6">  
+            <div class="report-card" id="card-client-wallet" onclick="filterTableBy('client-wallet', this)">  
+                <div class="card-bar" style="background: var(--purple);"></div>  
+                <small class="text-muted fw-bold d-block">المحصل عملاء (محفظة)</small>  
+                <span class="text-purple num-val" id="totalClientWalletVal">0.00</span>  
+            </div>  
+        </div>  
+
+        <!-- تقسيم المدفوعات للموردين -->
+        <div class="col-6">  
+            <div class="report-card" id="card-supplier-cash" onclick="filterTableBy('supplier-cash', this)">  
+                <div class="card-bar" style="background: var(--warning);"></div>  
+                <small class="text-muted fw-bold d-block">المدفوع موردين (كاش)</small>  
+                <span class="text-warning num-val" id="totalSupplierCashVal">0.00</span>  
+            </div>  
+        </div>  
+        <div class="col-6">  
+            <div class="report-card" id="card-supplier-wallet" onclick="filterTableBy('supplier-wallet', this)">  
+                <div class="card-bar" style="background: #e63946;"></div>  
+                <small class="text-muted fw-bold d-block">المدفوع موردين (محفظة)</small>  
+                <span class="text-danger num-val" id="totalSupplierWalletVal">0.00</span>  
+            </div>  
+        </div>  
+    </div>  
+
+    <!-- كروت الأرصدة الآجلة المتبقية لليوم -->
+    <div class="row g-2 mb-3">
+        <div class="col-6">  
+            <div class="report-card" id="card-client-debt" style="background: #fffdf5;" onclick="filterTableBy('client-debt', this)">  
+                <div class="card-bar" style="background: var(--warning);"></div>  
+                <small class="text-muted fw-bold d-block">آجل مبيعات جديد (على العملاء)</small>  
+                <span class="text-warning num-val" id="totalClientRemainingVal">0.00</span>  
+            </div>  
+        </div>  
+        <div class="col-6">  
+            <div class="report-card" id="card-supplier-debt" style="background: #fff5f5;" onclick="filterTableBy('supplier-debt', this)">  
+                <div class="card-bar" style="background: var(--danger);"></div>  
+                <small class="text-muted fw-bold d-block">آجل مشتريات جديد (للموردين)</small>  
+                <span class="text-danger num-val" id="totalSupplierRemainingVal">0.00</span>  
+            </div>  
+        </div> 
+    </div>
+
+    <!-- جدول حركة المبيعات والمشتريات التفصيلي المرتب زمنياً -->
+    <div class="section-title"><i class="fas fa-exchange-alt"></i> تفاصيل فواتير وحركة الصناديق اليومية (من الأقدم للأحدث)</div>
+    <div class="chic-table-container">
+        <table class="chic-table" id="reportTable">
+            <thead>
+                <tr>
+                    <th>النوع</th>
+                    <th style="text-align: right;">الاسم (عميل / مورد)</th>
+                    <th>الإجمالي</th>
+                    <th>سداد كاش</th>
+                    <th>سداد محفظة</th>
+                    <th>الأجل</th>
+                </tr>
+            </thead>
+            <tbody id="reportInvoicesTableBody">
+                <tr>
+                    <td colspan="6" class="text-muted py-4"><i class="fas fa-spinner fa-spin"></i> جار تحميل بيانات التقرير ...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>  
+
+<script type="module">  
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";  
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";  
+  
+    const firebaseConfig = {  
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",  
+        authDomain: "ahmedelzaiady.firebaseapp.com",  
+        projectId: "ahmedelzaiady",  
+        storageBucket: "ahmedelzaiady.firebasestorage.app",  
+        messagingSenderId: "300306825071",  
+        appId: "1:300306825071:web:0426ddde56280fa090329a",  
+        measurementId: "G-WE04GK5XZZ"  
+    };  
+  
+    const app = initializeApp(firebaseConfig);  
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }  
+
+    let suppliersNames = {};
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        
+        document.getElementById('reportDateInput').value = `${year}-${month}-${day}`;
+        loadDailyReport();
+    });
+
+    function convertToEnglishNumbers(str) {  
+        if (!str) return "";  
+        const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];  
+        let res = str.toString();  
+        for (let i = 0; i < 10; i++) { res = res.replace(arabicNumbers[i], i); }  
+        return res;  
+    }  
+
+    function parseInvoiceDate(inv) {  
+        let dateStr = "";  
+        if (inv.date) {   
+            dateStr = convertToEnglishNumbers(inv.date);   
+        } else if (inv.timestamp?.seconds) {  
+            const d = new Date(inv.timestamp.seconds * 1000);  
+            return d.toISOString().split('T')[0];  
+        }  
+        let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);  
+        if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;  
+        m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);  
+        if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;  
+        return dateStr;  
+    }  
+
+    async function loadDailyReport() {
+        const targetDate = document.getElementById('reportDateInput').value; 
+        document.getElementById('sectionTitleDate').innerHTML = `<i class="fas fa-coins"></i> ملخص حركة يوم (${targetDate})`;
+        
+        const tableBody = document.getElementById('reportInvoicesTableBody');
+        tableBody.innerHTML = `<tr><td colspan="6" class="text-muted py-4"><i class="fas fa-spinner fa-spin"></i> جار جلب وتحديث التقرير الحسابي...</td></tr>`;
+
+        resetTableFilter();
+
+        let totalSales = 0;
+        let totalPurchases = 0;
+        
+        let totalClientCash = 0;
+        let totalClientWallet = 0;
+        let totalSupplierCash = 0;
+        let totalSupplierWallet = 0;
+
+        let totalClientRemaining = 0;
+        let totalSupplierRemaining = 0;
+        
+        let allInvoices = []; 
+
+        try {
+            // 0. جلب أسماء الموردين أولاً لربط حركات الحسابات المستقلة
+            const supSnap = await getDocs(collection(db, "suppliers"));
+            suppliersNames = {};
+            supSnap.forEach(d => suppliersNames[d.id] = d.data().name);
+
+            // 1. جلب فواتير المبيعات وجدول المشتريات وجدول حركات الموردين والخزنة عامة بالتوازي لسرعة الأداء
+            const [salesSnap, purchaseSnap, supTransSnap, voucherSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "purchases")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(collection(db, "transactions"))
+            ]);
+
+            // 2. معالجة فواتير المبيعات
+            salesSnap.forEach(doc => {
+                const inv = doc.data();
+                const invDate = parseInvoiceDate(inv);
+                
+                if (invDate === targetDate) {
+                    let cashPaid = Number(inv.cashAmount) || 0;
+                    let walletPaid = Number(inv.walletAmount) || 0;
+                    
+                    if (inv.cashAmount === undefined && inv.walletAmount === undefined) {
+                        let p = Number(inv.paid) || 0;
+                        if (inv.paymentMethod?.includes("محفظه") || inv.paymentMethod?.includes("محفظة")) {
+                            walletPaid = p;
+                        } else {
+                            cashPaid = p;
+                        }
+                    }
+                    
+                    const billTotal = Number(inv.total) || 0;
+                    const billRemaining = Number(inv.remaining) || 0;
+
+                    totalSales += billTotal;
+                    totalClientCash += cashPaid;
+                    totalClientWallet += walletPaid;
+                    totalClientRemaining += billRemaining > 0 ? billRemaining : 0;
+
+                    let timeWeight = inv.timestamp?.seconds || 0;
+                    if (!timeWeight && inv.time) {
+                        timeWeight = new Date(`${targetDate} ${convertToEnglishNumbers(inv.time)}`).getTime() || 0;
+                    }
+
+                    allInvoices.push({
+                        type: 'sales',
+                        name: inv.customerName || 'عميل نقدي',
+                        total: billTotal,
+                        cash: cashPaid,
+                        wallet: walletPaid,
+                        debt: billRemaining,
+                        timeWeight: timeWeight
+                    });
+                }
+            });
+
+            // 3. معالجة فواتير المشتريات المباشرة من جدول الـ purchases
+            purchaseSnap.forEach(doc => {
+                const pur = doc.data();
+                const purDate = parseInvoiceDate(pur);
+
+                if (purDate === targetDate) {
+                    let cashPaid = 0;
+                    let walletPaid = 0;
+                    let p = Number(pur.paid) || 0;
+
+                    if (pur.paymentMethod?.includes("محفظه") || pur.paymentMethod?.includes("محفظة")) {
+                        walletPaid = p;
+                    } else {
+                        cashPaid = p;
+                    }
+
+                    const billTotal = Number(pur.total) || 0;
+                    const billRemaining = Number(pur.remaining) || 0;
+
+                    totalPurchases += billTotal;
+                    totalSupplierCash += cashPaid;
+                    totalSupplierWallet += walletPaid;
+                    totalSupplierRemaining += billRemaining > 0 ? billRemaining : 0;
+
+                    let timeWeight = pur.timestamp?.seconds || 0;
+                    if (!timeWeight && pur.time) {
+                        timeWeight = new Date(`${targetDate} ${convertToEnglishNumbers(pur.time)}`).getTime() || 0;
+                    }
+
+                    allInvoices.push({
+                        type: 'purchases',
+                        name: pur.supplierName || pur.customerName || 'مورد نقدي',
+                        total: billTotal,
+                        cash: cashPaid,
+                        wallet: walletPaid,
+                        debt: billRemaining,
+                        timeWeight: timeWeight
+                    });
+                }
+            });
+
+            // 4. معالجة حركات السداد المستقلة المسجلة داخل كائن حركات الموردين (supplier_transactions)
+            supTransSnap.forEach(doc => {
+                const trans = doc.data();
+                const transDate = parseInvoiceDate(trans);
+
+                if (transDate === targetDate) {
+                    // معالجة الحسابات إذا كانت الحركة عبارة عن سداد أو دفع نقدي/محفظة مستقل
+                    if (trans.type === "سداد مورد" || trans.type === "صرف" || trans.type === "سداد") {
+                        const cashP = Number(trans.cashPaid || 0);
+                        const walletP = Number(trans.walletPaid || 0);
+                        const totalPaid = trans.totalPaid ? Number(trans.totalPaid) : (cashP + walletP || Number(trans.paidAmount) || Number(trans.amount) || 0);
+
+                        let finalCash = cashP;
+                        let finalWallet = walletP;
+                        if(cashP === 0 && walletP === 0) {
+                            if(trans.paymentType === 'wallet') finalWallet = totalPaid;
+                            else finalCash = totalPaid;
+                        }
+
+                        totalSupplierCash += finalCash;
+                        totalSupplierWallet += finalWallet;
+
+                        let timeWeight = trans.timestamp?.seconds || 0;
+                        const supName = suppliersNames[trans.supplierId] || trans.supplierName || 'مورد غير معروف';
+
+                        allInvoices.push({
+                            type: 'supplier-voucher',
+                            name: `إيصال سداد: ${supName}`,
+                            total: 0,
+                            cash: finalCash,
+                            wallet: finalWallet,
+                            debt: 0,
+                            timeWeight: timeWeight
+                        });
+                    }
+                }
+            });
+
+            // 5. مراجعة الخزنة العامة وحركات الـ الصرف (transactions) لضمان عدم فقدان أي حركة
+            voucherSnap.forEach(v => {
+                const tData = v.data();
+                const vDate = parseInvoiceDate(tData);
+
+                if (vDate === targetDate) {
+                    if (tData.type === "صرف" || tData.actionType === "سداد مورد" || String(tData.details || '').includes("سداد")) {
+                        // لتجنب التكرار إذا تم التقاط الحركة بالفعل من جدول الموردين
+                        const amt = Number(tData.amount || 0);
+                        let isWallet = tData.paymentMethod?.includes("محفظه") || tData.paymentMethod?.includes("محفظة") || tData.boxType === "wallet";
+                        
+                        // فحص بسيط للتأكد أنها حركة مستقلة تماماً ولم نضفها من الـ supplier_transactions
+                        const alreadyAdded = allInvoices.some(inv => inv.type === 'supplier-voucher' && (inv.cash === amt || inv.wallet === amt) && inv.name.includes(tData.supplierName || ''));
+                        
+                        if(!alreadyAdded) {
+                            let cashP = isWallet ? 0 : amt;
+                            let walletP = isWallet ? amt : 0;
+
+                            totalSupplierCash += cashP;
+                            totalSupplierWallet += walletP;
+
+                            allInvoices.push({
+                                type: 'supplier-voucher',
+                                name: tData.details || `صرف لمورد / جهة خارجية`,
+                                total: 0,
+                                cash: cashP,
+                                wallet: walletP,
+                                debt: 0,
+                                timeWeight: tData.timestamp?.seconds || 0
+                            });
+                        }
+                    }
+                }
+            });
+
+            // 6. الفرز والترتيب الذكي (من الأقدم للأحدث) بناءً على الوقت لجميع الحركات الشاملة
+            allInvoices.sort((a, b) => a.timeWeight - b.timeWeight);
+
+            // 7. بناء السطور للعرض بعد الترتيب والدمج المحاسبي
+            let reportRowsHtml = "";
+            allInvoices.forEach(item => {
+                if (item.type === 'sales') {
+                    reportRowsHtml += `
+                        <tr data-type="sales" data-total="${item.total}" data-cash="${item.cash}" data-wallet="${item.wallet}" data-debt="${item.debt}">
+                            <td><span class="badge-type badge-sale">مبيعات</span></td>
+                            <td style="text-align: right; font-weight: bold;">${item.name}</td>
+                            <td class="text-dark">${item.total.toFixed(2)}</td>
+                            <td class="text-success">${item.cash > 0 ? item.cash.toFixed(2) : '-'}</td>
+                            <td class="text-purple">${item.wallet > 0 ? item.wallet.toFixed(2) : '-'}</td>
+                            <td class="text-danger">${item.debt.toFixed(2)}</td>
+                        </tr>
+                    `;
+                } else if (item.type === 'purchases') {
+                    reportRowsHtml += `
+                        <tr data-type="purchases" data-total="${item.total}" data-cash="${item.cash}" data-wallet="${item.wallet}" data-debt="${item.debt}">
+                            <td><span class="badge-type badge-purchase">مشتريات</span></td>
+                            <td style="text-align: right; font-weight: bold;">${item.name}</td>
+                            <td class="text-dark">${item.total.toFixed(2)}</td>
+                            <td class="text-success">${item.cash > 0 ? item.cash.toFixed(2) : '-'}</td>
+                            <td class="text-purple">${item.wallet > 0 ? item.wallet.toFixed(2) : '-'}</td>
+                            <td class="text-danger">${item.debt.toFixed(2)}</td>
+                        </tr>
+                    `;
+                } else if (item.type === 'supplier-voucher') {
+                    reportRowsHtml += `
+                        <tr data-type="purchases" data-total="0" data-cash="${item.cash}" data-wallet="${item.wallet}" data-debt="0">
+                            <td><span class="badge-type badge-voucher">سداد مورد</span></td>
+                            <td style="text-align: right; font-weight: bold; color: #d68102;">${item.name}</td>
+                            <td class="text-muted">0.00</td>
+                            <td class="text-success fw-bold">${item.cash > 0 ? item.cash.toFixed(2) : '-'}</td>
+                            <td class="text-purple fw-bold">${item.wallet > 0 ? item.wallet.toFixed(2) : '-'}</td>
+                            <td class="text-muted">-</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            // تحديث قيم الكروت العليا بالنتائج التجميعية الصحيحة
+            document.getElementById('totalSalesVal').innerText = totalSales.toFixed(2);
+            document.getElementById('totalPurchasesVal').innerText = totalPurchases.toFixed(2);
+            
+            document.getElementById('totalClientCashVal').innerText = totalClientCash.toFixed(2);
+            document.getElementById('totalClientWalletVal').innerText = totalClientWallet.toFixed(2);
+            document.getElementById('totalSupplierCashVal').innerText = totalSupplierCash.toFixed(2);
+            document.getElementById('totalSupplierWalletVal').innerText = totalSupplierWallet.toFixed(2);
+            
+            document.getElementById('totalClientRemainingVal').innerText = totalClientRemaining.toFixed(2);
+            document.getElementById('totalSupplierRemainingVal').innerText = totalSupplierRemaining.toFixed(2);
+
+            if (reportRowsHtml === "") {
+                tableBody.innerHTML = `<tr id="noDataRow"><td colspan="6" class="text-muted py-4 fw-bold">لا توجد مبيعات أو مشتريات أو سدادات مسجلة في هذا التاريخ.</td></tr>`;
+            } else {
+                tableBody.innerHTML = reportRowsHtml;
+            }
+
+        } catch (error) {
+            console.error("خطأ أثناء إعداد التقرير اليومي الشامل:", error);
+            tableBody.innerHTML = `<tr><td colspan="6" class="alert alert-danger p-2 text-center">حدث خطأ أثناء الاتصال بالخادم الرئيسي لجلب البيانات.</td></tr>`;
+        }
+    }
+
+    function filterTableBy(criteria, cardElement) {
+        const rows = document.querySelectorAll("#reportInvoicesTableBody tr");
+        if (rows.length === 0 || document.getElementById("noDataRow")) return;
+
+        document.querySelectorAll('.report-card').forEach(c => {
+            c.classList.remove('active-filter', 'active-filter-danger', 'active-filter-info', 'active-filter-warning', 'active-filter-purple');
+        });
+
+        if (criteria === 'sales' || criteria === 'client-cash') cardElement.classList.add('active-filter');
+        else if (criteria === 'purchases' || criteria === 'supplier-wallet') cardElement.classList.add('active-filter-danger');
+        else if (criteria === 'client-debt' || criteria === 'supplier-cash') cardElement.classList.add('active-filter-warning');
+        else if (criteria === 'client-wallet') cardElement.classList.add('active-filter-purple');
+
+        document.getElementById("clearFilterBtn").style.display = "inline-block";
+
+        rows.forEach(row => {
+            const type = row.getAttribute("data-type");
+            const cash = parseFloat(row.getAttribute("data-cash")) || 0;
+            const wallet = parseFloat(row.getAttribute("data-wallet")) || 0;
+            const debt = parseFloat(row.getAttribute("data-debt")) || 0;
+
+            switch(criteria) {
+                case 'sales':
+                    row.style.display = (type === 'sales') ? "" : "none";
+                    break;
+                case 'purchases':
+                    // تشمل الفواتير وإيصالات السداد التابعة للموردين
+                    row.style.display = (type === 'purchases') ? "" : "none";
+                    break;
+                case 'client-cash':
+                    row.style.display = (type === 'sales' && cash > 0) ? "" : "none";
+                    break;
+                case 'client-wallet':
+                    row.style.display = (type === 'sales' && wallet > 0) ? "" : "none";
+                    break;
+                case 'supplier-cash':
+                    row.style.display = (type === 'purchases' && cash > 0) ? "" : "none";
+                    break;
+                case 'supplier-wallet':
+                    row.style.display = (type === 'purchases' && wallet > 0) ? "" : "none";
+                    break;
+                case 'client-debt':
+                    row.style.display = (type === 'sales' && debt > 0) ? "" : "none";
+                    break;
+                case 'supplier-debt':
+                    row.style.display = (type === 'purchases' && debt > 0) ? "" : "none";
+                    break;
+                default:
+                    row.style.display = "";
+            }
+        });
+    }
+
+    function resetTableFilter() {
+        document.querySelectorAll("#reportInvoicesTableBody tr").forEach(row => row.style.display = "");
+        document.querySelectorAll('.report-card').forEach(c => {
+            c.classList.remove('active-filter', 'active-filter-danger', 'active-filter-info', 'active-filter-warning', 'active-filter-purple');
+        });
+        document.getElementById("clearFilterBtn").style.display = "none";
+    }
+
+    window.loadDailyReport = loadDailyReport;
+    window.filterTableBy = filterTableBy;
+    window.resetTableFilter = resetTableFilter;
+</script>  
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>  
+</html>

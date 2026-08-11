@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سلة المحذوفات - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --bg-light: #f4f7f6;
+            --white: #ffffff;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --danger: #d90429;
+            --success: #2d6a4f;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 50px; }
+
+        .header-floating {
+            background: var(--accent); padding: 15px 0; position: sticky;
+            top: 0; z-index: 1000; color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .trash-badge {
+            background: rgba(255, 255, 255, 0.2); color: white; padding: 4px 12px;
+            border-radius: 8px; font-size: 0.75rem; font-weight: 700;
+        }
+
+        .trash-card {
+            background: var(--white); border: 1px solid var(--border); border-radius: 20px;
+            padding: 18px; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            position: relative; overflow: hidden; transition: 0.3s;
+        }
+        .trash-card::before {
+            content: ''; position: absolute; top: 0; right: 0; width: 5px; height: 100%;
+            background: var(--danger); opacity: 0.6;
+        }
+
+        .detail-tag {
+            display: inline-flex; align-items: center; background: var(--bg-light);
+            padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; color: #555;
+            font-weight: 700; margin-left: 5px;
+        }
+
+        .action-btns { display: flex; gap: 8px; }
+        .btn-action {
+            width: 42px; height: 42px; border-radius: 12px; display: flex;
+            align-items: center; justify-content: center; border: 1px solid var(--border);
+            cursor: pointer; transition: 0.2s; font-size: 1rem;
+        }
+        .btn-restore-v2 { background: #e8f5e9; color: var(--success); border-color: #c8e6c9; }
+        .btn-delete-v2 { background: #ffebee; color: var(--danger); border-color: #ffcdd2; }
+
+        .empty-state {
+            padding: 60px 20px; text-align: center; background: var(--white);
+            border-radius: 25px; border: 2px dashed var(--border); margin-top: 30px;
+        }
+        
+        .header-btn {
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 6px 12px; border-radius: 10px; text-decoration: none;
+            font-size: 0.8rem; font-weight: 700; transition: 0.3s;
+        }
+        .header-btn:hover { background: rgba(255,255,255,0.3); color: white; }
+        .btn-clear-all { background: var(--danger); border: none; }
+        .btn-clear-all:hover { background: #b00321; }
+    </style>
+</head>
+<body>
+
+<div class="header-floating">
+    <div class="container d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="m-0 fw-bold">سلة المحذوفات</h6>
+            <span class="trash-badge mt-1 d-inline-block">
+                <i class="fas fa-history me-1"></i> أرشيف الجرد
+            </span>
+        </div>
+        <div class="d-flex gap-2">
+            <button id="clearAllBtn" class="header-btn btn-clear-all" style="display: none;" onclick="clearTrashCompletely()">
+                <i class="fas fa-fire me-1"></i> حذف الكل نهائياً
+            </button>
+            <a href="inventory-list.html" class="header-btn">
+                 الرجوع للجرد <i class="fas fa-chevron-left ms-1"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <div id="trashContainer">
+        <div class="text-center py-5">
+            <div class="spinner-border text-success"></div>
+            <p class="mt-2 text-muted">جاري تحميل الأصناف...</p>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let trashItems = [];
+
+    function listenToTrash() {
+        // نستخدم listen على المجموعة كاملة ونفلتر برمجياً لتجنب مشاكل الـ Indexing في البداية
+        onSnapshot(collection(db, "inventory"), (snap) => {
+            const container = document.getElementById('trashContainer');
+            const clearBtn = document.getElementById('clearAllBtn');
+            container.innerHTML = '';
+            trashItems = [];
+
+            // فلترة الأصناف التي تحمل علامة الحذف
+            const deletedDocs = snap.docs.filter(doc => doc.data().isDeleted === true);
+
+            if (deletedDocs.length === 0) {
+                clearBtn.style.display = 'none';
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-box-open"></i>
+                        <h5 class="fw-bold">السلة فارغة</h5>
+                        <p class="text-muted small">لا توجد أصناف محذوفة في الوقت الحالي</p>
+                    </div>`;
+                return;
+            }
+
+            clearBtn.style.display = 'block';
+            deletedDocs.forEach((docSnap) => {
+                const item = docSnap.data();
+                const id = docSnap.id;
+                trashItems.push({id, ...item});
+                const deleteDate = item.deletedAt ? new Date(item.deletedAt.seconds * 1000).toLocaleDateString('ar-EG') : 'تاريخ غير معروف';
+                
+                container.innerHTML += `
+                    <div class="trash-card d-flex justify-content-between align-items-center">
+                        <div class="item-main-info">
+                            <h6 class="fw-bold m-0">${item.name}</h6>
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                <span class="detail-tag"><i class="fas fa-tag me-1"></i> ${item.category}</span>
+                                <span class="detail-tag"><i class="fas fa-cubes me-1"></i> ${item.totalPcs} قطعة</span>
+                                <span class="detail-tag text-danger"><i class="fas fa-clock me-1"></i> ${deleteDate}</span>
+                            </div>
+                        </div>
+                        <div class="action-btns">
+                            <div class="btn-action btn-restore-v2" onclick="restoreItem('${id}', '${item.name}')" title="استعادة">
+                                <i class="fas fa-undo-alt"></i>
+                            </div>
+                            <div class="btn-action btn-delete-v2" onclick="permanentDelete('${id}', '${item.name}')" title="حذف نهائي">
+                                <i class="fas fa-trash-alt"></i>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+    }
+
+    window.clearTrashCompletely = async () => {
+        const count = trashItems.length;
+        const pass = prompt(`تنبيه خطير: سيتم حذف عدد (${count}) صنف نهائياً. اكتب "حذف الكل" للتأكيد:`);
+        
+        if (pass === "حذف الكل") {
+            try {
+                const batch = writeBatch(db);
+                trashItems.forEach(item => {
+                    batch.delete(doc(db, "inventory", item.id));
+                });
+                await batch.commit();
+                alert("تم إفراغ السلة بنجاح.");
+            } catch (e) {
+                alert("حدث خطأ أثناء الحذف: " + e.message);
+            }
+        }
+    }
+
+    window.restoreItem = async (id, name) => {
+        if (confirm(`هل تريد استعادة "${name}" لقائمة الجرد؟`)) {
+            await updateDoc(doc(db, "inventory", id), {
+                isDeleted: false,
+                restoredAt: serverTimestamp()
+            });
+        }
+    }
+
+    window.permanentDelete = async (id, name) => {
+        const pass = prompt(`تنبيه: سيتم حذف "${name}" نهائياً. اكتب "تأكيد" للمتابعة:`);
+        if (pass === "تأكيد") {
+            await deleteDoc(doc(db, "inventory", id));
+        }
+    }
+
+    listenToTrash();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

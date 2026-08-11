@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة النقدية والشيكات | anas POS Pro</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* الهوية البصرية المستوحاة من صورة تطبيق شركة الزيادي */
+        :root {
+            --bg-deep: #f4f7f6;       /* الخلفية الفاتحة المريحة للبرنامج */
+            --bg-card: #ffffff;       /* كروت بيضاء نقية تماماً مثل الصورة */
+            --accent: #0b5e3d;        /* الأخضر الداكن المعتمد للهيدر والأيقونات */
+            --accent-light: #198754;  /* الأخضر الزمردي للتفاعلات */
+            --text-primary: #1b2e26;  /* نصوص داكنة واضحة جداً صريحة */
+            --text-muted: #707b7c;     
+            --shadow: 0 4px 15px rgba(11, 94, 61, 0.05); /* ظلال خفيفة وناعمة للكروت */
+            --border: #dce3de;        /* حدود رمادية خفيفة مائلة للأخضر */
+            --radius-lg: 20px;
+        }
+
+        body { 
+            font-family: 'Cairo', sans-serif; 
+            background-color: var(--bg-deep); 
+            margin: 0; 
+            color: var(--text-primary); 
+            min-height: 100vh;
+        }
+
+        /* الهيدر الأخضر الداكن المتطابق مع التطبيق */
+        .banknote-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: var(--accent);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .back-btn { 
+            font-size: 20px; 
+            color: #ffffff; 
+            cursor: pointer; 
+            transition: transform 0.2s;
+        }
+        .back-btn:hover { transform: scale(1.1); }
+
+        .page-title { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            font-weight: 800; 
+            font-size: 18px; 
+            color: #ffffff;
+        }
+        .page-title i { color: #ffffff; font-size: 22px; }
+
+        /* نظام توزيع الكروت الشبكي (Grid) المتجاوب */
+        .banknote-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 20px;
+            padding: 25px 20px;
+            max-width: 650px;
+            margin: 30px auto;
+        }
+
+        /* كروت الأقسام البيضاء النظيفة المتطابقة مع الصورة */
+        .menu-card {
+            background: var(--bg-card);
+            padding: 30px 15px;
+            border-radius: var(--radius-lg);
+            text-align: center;
+            box-shadow: var(--shadow);
+            text-decoration: none;
+            color: var(--text-primary); 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* تأثير خلفية الكارت المريح عند التمرير */
+        .menu-card::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(11, 94, 61, 0.03) 0%, transparent 70%);
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.5s ease;
+            z-index: 1;
+        }
+
+        .menu-card:hover::before { transform: translate(-50%, -50%) scale(1.5); }
+
+        .menu-card:hover { 
+            border-color: var(--accent); 
+            transform: translateY(-5px); 
+            box-shadow: 0 8px 25px rgba(11, 94, 61, 0.1);
+        }
+        
+        .menu-card:active { transform: translateY(-2px); }
+
+        /* الأيقونة داخل الصندوق الرمادي الخفيف المتطابق مع الصورة */
+        .menu-card i { 
+            font-size: 26px; 
+            color: var(--accent); 
+            background: #f4f7f6;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            margin-bottom: 15px; 
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+        
+        .menu-card:hover i { 
+            transform: scale(1.05); 
+            background: var(--accent);
+            color: #ffffff;
+        }
+
+        .menu-card p { 
+            font-weight: 700; 
+            font-size: 15px;
+            margin: 0; 
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="banknote-header">
+        <i class="fas fa-arrow-right back-btn" onclick="history.back()"></i>
+        <div class="page-title">
+            <span>النقدية والشيكات</span>
+            <i class="fas fa-money-bill-transfer"></i>
+        </div>
+        <div style="width: 20px;"></div> </header>
+
+    <div class="banknote-container">
+        <a href="sandok1.html" class="menu-card">
+            <i class="fas fa-vault"></i>
+            <p>الخزينة</p>
+        </a>
+
+        <a href="expenses.html" class="menu-card">
+            <i class="fas fa-receipt"></i>
+            <p>المصروفات</p>
+        </a>
+
+        <a href="receipts.html" class="menu-card">
+            <i class="fas fa-money-bill-trend-up"></i>
+            <p>المقبوضات</p>
+        </a>
+
+        <a href="payments.html" class="menu-card">
+            <i class="fas fa-money-bill-wave"></i>
+            <p>المدفوعات</p>
+        </a>
+
+        <a href="checks.html" class="menu-card">
+            <i class="fas fa-money-check-dollar"></i>
+            <p>حافظة الشيكات</p>
+        </a>
+
+        <a href="cash-flow.html" class="menu-card">
+            <i class="fas fa-right-left"></i>
+            <p>حركه النقديه </p>
+        </a>
+    </div>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

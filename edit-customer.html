@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تعديل بيانات العميل - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --neon-blue: #007bff; 
+            --neon-orange: #f0883e; 
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 40px; }
+        
+        .header-nav { 
+            padding: 15px 20px; background: var(--header-bg); color: white;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 1000;
+        }
+
+        .edit-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 25px; padding: 25px; margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .form-label { font-size: 0.85rem; margin-bottom: 6px; color: var(--accent); font-weight: 700; }
+        .form-control { 
+            background: #fdfdfd !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px; padding: 12px; margin-bottom: 18px;
+            font-size: 0.9rem;
+        }
+        .form-control:focus { border-color: var(--accent) !important; box-shadow: 0 0 10px rgba(11, 94, 61, 0.1); }
+        .form-control:disabled { background: #f1f3f2 !important; color: #444 !important; font-weight: bold; border-style: dashed !important; }
+
+        .row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        
+        .btn-save { 
+            background: var(--accent); border: none; border-radius: 15px; 
+            padding: 15px; font-weight: 700; width: 100%; margin-top: 10px;
+            color: white; box-shadow: 0 4px 12px rgba(11, 94, 61, 0.2); transition: 0.3s;
+        }
+        .btn-save:active { transform: scale(0.98); }
+
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-light); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        
+        .section-title { 
+            font-size: 0.75rem; color: #707b7c; font-weight: 800; 
+            text-transform: uppercase; margin-bottom: 15px; 
+            border-bottom: 2px solid var(--border); padding-bottom: 5px; 
+            display: flex; align-items: center; gap: 8px;
+        }
+        .calc-info { background: #fff9f0; border: 1px solid #ffeeba; border-radius: 10px; padding: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<div id="loader" class="loading-overlay">
+    <div class="text-center">
+        <div class="spinner-border text-success mb-2"></div>
+        <div class="small fw-bold">جاري مزامنة السجلات المالية لشركة الزيادي...</div>
+    </div>
+</div>
+
+<div class="header-nav">
+    <a href="javascript:history.back()" class="text-white"><i class="fas fa-chevron-right"></i></a>
+    <h6 class="m-0 fw-bold">تعديل ملف العميل</h6>
+    <div style="width: 20px;"></div>
+</div>
+
+<div class="container">
+    <div class="edit-card">
+        <form id="editForm">
+            <div class="section-title"><i class="fas fa-info-circle"></i> البيانات الشخصية</div>
+            
+            <label class="form-label">الاسم بالكامل</label>
+            <input type="text" id="custName" class="form-control" placeholder="اسم العميل الرباعي" required>
+
+            <label class="form-label">رقم التواصل</label>
+            <input type="tel" id="custPhone" class="form-control" placeholder="01xxxxxxxxx">
+
+            <div class="section-title"><i class="fas fa-chart-line"></i> التحليل المالي الحالي</div>
+            
+            <label class="form-label"><i class="fas fa-wallet me-1"></i> صافي المديونية الحالية (تلقائي)</label>
+            <input type="text" id="custBalance" class="form-control" disabled>
+            
+            <div class="calc-info shadow-sm">
+                <div id="calcDetails" class="small fw-bold text-muted" style="font-size: 0.75rem;">
+                    يتم الآن تجميع الفواتير والسندات...
+                </div>
+            </div>
+
+            <div class="row-grid">
+                <div>
+                    <label class="form-label">الرصيد الافتتاحي</label>
+                    <input type="number" id="custOpening" class="form-control" step="0.01">
+                </div>
+                <div>
+                    <label class="form-label">حد الائتمان</label>
+                    <input type="number" id="custLimit" class="form-control" step="0.01">
+                </div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn btn-save">
+                <i class="fas fa-save me-1"></i> حفظ وتحديث البيانات
+            </button>
+        </form>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const custId = urlParams.get('id');
+
+    async function loadAndCalculate() {
+        if(!custId) return;
+
+        try {
+            const docSnap = await getDoc(doc(db, "customers", custId));
+            if (!docSnap.exists()) return;
+            const data = docSnap.data();
+            
+            const qInv = query(collection(db, "invoices"), where("customerId", "==", custId));
+            const invSnap = await getDocs(qInv);
+            let totalRemainingInvoices = 0;
+            invSnap.forEach(d => totalRemainingInvoices += (Number(d.data().remaining) || 0));
+
+            const qTrans = query(collection(db, "transactions"), where("partyId", "==", custId));
+            const transSnap = await getDocs(qTrans);
+            
+            let transEffect = 0;
+            transSnap.forEach(d => {
+                const trans = d.data();
+                const amount = Number(trans.amount) || 0;
+                if (trans.type === "قبض") transEffect -= amount;
+                else if (trans.type === "صرف") transEffect += amount;
+            });
+
+            const startBal = Number(data.initialBalance || 0);
+            const actualBalance = startBal + totalRemainingInvoices + transEffect;
+
+            document.getElementById('custName').value = data.name || '';
+            document.getElementById('custPhone').value = data.phone || '';
+            document.getElementById('custOpening').value = startBal;
+            document.getElementById('custLimit').value = data.creditLimit || 0;
+            
+            document.getElementById('custBalance').value = actualBalance.toLocaleString('ar-EG') + " جنيه";
+            document.getElementById('calcDetails').innerHTML = 
+                `<i class="fas fa-info-circle text-warning me-1"></i> المعادلة: (${startBal.toLocaleString()} بداية) + (${totalRemainingInvoices.toLocaleString()} فواتير) + (${transEffect.toLocaleString()} سندات)`;
+
+            document.getElementById('loader').style.display = 'none';
+        } catch (error) {
+            console.error("خطأ:", error);
+            document.getElementById('loader').innerHTML = `<div class="text-danger p-3 fw-bold">فشل في مزامنة البيانات.. تأكد من الاتصال بالإنترنت</div>`;
+        }
+    }
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> جاري الحفظ...';
+
+        try {
+            await updateDoc(doc(db, "customers", custId), {
+                name: document.getElementById('custName').value.trim(),
+                phone: document.getElementById('custPhone').value.trim(),
+                initialBalance: Number(document.getElementById('custOpening').value),
+                creditLimit: Number(document.getElementById('custLimit').value)
+            });
+            
+            alert("تم تحديث بيانات العميل بنجاح");
+            window.location.href = `customer-details.html?id=${custId}`;
+        } catch (error) {
+            alert("حدث خطأ أثناء حفظ التعديلات");
+            btn.disabled = false;
+            btn.innerHTML = 'حفظ التعديلات';
+        }
+    });
+
+    loadAndCalculate();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>
+

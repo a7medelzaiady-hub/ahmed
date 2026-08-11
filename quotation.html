@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>عرض سعر - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* الهوية البصرية الموحدة لشركة الزيادي */
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #d90429;
+            --success: #2d6a4f;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 100px; }
+        
+        /* Header */
+        .header-nav { 
+            padding: 15px 20px; 
+            background: var(--header-bg); 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            color: white;
+        }
+
+        /* Input Card */
+        .input-card { 
+            background: var(--white); 
+            border: 1px solid var(--border); 
+            border-radius: 25px; 
+            padding: 20px; 
+            margin-top: 20px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .form-control, .form-select { 
+            background: #f8faf9 !important; 
+            border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; 
+            border-radius: 12px; 
+            padding: 10px;
+            font-weight: 600;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 8px rgba(11, 94, 61, 0.1);
+        }
+
+        /* Item Row Design */
+        .item-row { 
+            background: #ffffff; 
+            border-radius: 18px; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            position: relative; 
+            border: 1px solid var(--border); 
+            border-right: 5px solid var(--accent);
+        }
+        .btn-remove { 
+            position: absolute; 
+            left: 12px; 
+            top: 12px; 
+            color: var(--danger); 
+            cursor: pointer; 
+            background: #fff5f5;
+            padding: 8px;
+            border-radius: 50%;
+            font-size: 0.9rem;
+        }
+
+        /* Footer Sticky */
+        .footer-total { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            right: 0; 
+            background: var(--white); 
+            padding: 15px 25px; 
+            border-top: 2px solid var(--accent); 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            z-index: 1000; 
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.05);
+        }
+
+        .btn-add-item {
+            background-color: #e8f5e9;
+            color: var(--accent);
+            border: 1px dashed var(--accent);
+            font-weight: 700;
+        }
+        .btn-add-item:hover { background-color: #dceddd; color: var(--accent); }
+
+        .btn-save-print {
+            background-color: var(--accent);
+            border: none;
+            font-weight: 700;
+            padding: 12px 30px;
+        }
+
+        #printFrame { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="header-nav d-flex justify-content-between align-items-center">
+    <h5 class="m-0 fw-bold"><i class="fas fa-file-invoice-dollar me-2"></i> إنشاء عرض سعر</h5>
+    <button class="btn btn-light btn-sm rounded-pill text-success fw-bold" onclick="window.location.reload()"><i class="fas fa-sync"></i></button>
+</div>
+
+<div class="container mt-3">
+    <div class="input-card">
+        <label class="small mb-2 fw-bold" style="color: var(--accent);">اسم العميل (اختياري)</label>
+        <input type="text" id="custName" class="form-control mb-4" placeholder="مثال: م/ علي عادل">
+        
+        <div id="itemsContainer"></div>
+
+        <button class="btn btn-add-item w-100 rounded-pill mt-2 p-3" onclick="addItem()">
+            <i class="fas fa-plus-circle me-1"></i> إضافة صنف جديد للعرض
+        </button>
+    </div>
+</div>
+
+<div class="footer-total">
+    <div>
+        <small class="d-block text-muted fw-bold">إجمالي العرض التقريبي</small>
+        <h4 class="m-0 fw-bold" style="color: var(--accent);" id="totalDisplay">0.00 ج.م</h4>
+    </div>
+    <button class="btn btn-success btn-save-print px-4 rounded-pill" onclick="saveAndPrintQuotation()" id="saveBtn">
+        <i class="fas fa-print me-2"></i> حفظ وطباعة
+    </button>
+</div>
+
+<iframe id="printFrame"></iframe>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let inventory = [];
+
+    async function init() {
+        try {
+            const snap = await getDocs(collection(db, "inventory"));
+            inventory = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            addItem();
+        } catch (e) {
+            console.error("خطأ في الاتصال بالمخزن:", e);
+        }
+    }
+
+    window.addItem = () => {
+        const id = 'item_' + Date.now();
+        const html = `
+            <div class="item-row" id="${id}">
+                <i class="fas fa-times btn-remove" onclick="document.getElementById('${id}').remove(); calc();"></i>
+                <label class="small text-muted mb-1">اختر الصنف من المخزن</label>
+                <select class="form-select mb-3 item-select" onchange="updatePrice(this)">
+                    <option value="">-- اختر الصنف --</option>
+                    ${inventory.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                </select>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="small text-muted">الكمية</label>
+                        <input type="number" class="form-control item-qty" value="1" min="1" oninput="calc()">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">سعر العرض</label>
+                        <input type="number" class="form-control item-price" placeholder="0.00" oninput="calc()">
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+    };
+
+    window.updatePrice = (sel) => {
+        const p = inventory.find(i => i.id === sel.value);
+        if(p) {
+            sel.closest('.item-row').querySelector('.item-price').value = p.sell || 0;
+            calc();
+        }
+    };
+
+    window.calc = () => {
+        let total = 0;
+        document.querySelectorAll('.item-row').forEach(row => {
+            const q = Number(row.querySelector('.item-qty').value) || 0;
+            const p = Number(row.querySelector('.item-price').value) || 0;
+            total += (q * p);
+        });
+        document.getElementById('totalDisplay').innerText = total.toLocaleString() + " ج.م";
+        return total;
+    };
+
+    window.saveAndPrintQuotation = async () => {
+        const custName = document.getElementById('custName').value || "عميل عام";
+        const totalAmount = calc();
+        const items = [];
+        
+        document.querySelectorAll('.item-row').forEach(row => {
+            const selectEl = row.querySelector('.item-select');
+            const name = selectEl.options[selectEl.selectedIndex].text;
+            const qty = Number(row.querySelector('.item-qty').value);
+            const price = Number(row.querySelector('.item-price').value);
+            if(selectEl.value !== "") items.push({ name, qty, price });
+        });
+
+        if(items.length === 0) return alert("برجاء اختيار أصناف أولاً قبل الحفظ");
+
+        document.getElementById('saveBtn').disabled = true;
+        document.getElementById('saveBtn').innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> جاري الحفظ...';
+
+        try {
+            await addDoc(collection(db, "quotations"), {
+                customerName: custName,
+                total: totalAmount,
+                items: items,
+                date: new Date().toLocaleString('ar-EG'),
+                timestamp: serverTimestamp()
+            });
+            
+            printQuotation(custName, items, totalAmount);
+            alert("تم حفظ عرض السعر بنجاح ✅");
+            location.reload();
+        } catch(e) { 
+            alert("حدث خطأ أثناء الحفظ: " + e.message); 
+            document.getElementById('saveBtn').disabled = false;
+            document.getElementById('saveBtn').innerHTML = '<i class="fas fa-print me-2"></i> حفظ وطباعة';
+        }
+    };
+
+    function printQuotation(custName, items, totalAmount) {
+        let rows = items.map(i => `
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #eee;">${i.name}</td>
+                <td style="text-align:center;">${i.qty}</td>
+                <td style="text-align:left;">${(i.qty * i.price).toLocaleString()}</td>
+            </tr>
+        `).join('');
+
+        const pri = document.getElementById('printFrame').contentWindow;
+        const printContent = `
+            <html dir="rtl"><head><style>
+                body { font-family: 'Arial'; padding: 10px; width: 72mm; margin: 0; }
+                .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                table { width: 100%; font-size: 13px; margin-top: 10px; border-collapse: collapse; }
+                .total { margin-top: 10px; border-top: 2px solid #000; padding-top: 5px; font-weight: bold; display: flex; justify-content: space-between; font-size: 16px; }
+                .footer { text-align: center; font-size: 11px; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px; }
+            </style></head>
+            <body>
+                <div class="header">
+                    <h2 style="margin:0;">عرض سعر</h2>
+                    <p style="margin:5px 0;">شركة الزيادى لقطع الغيار</p>
+                    <small>${new Date().toLocaleString('ar-EG')}</small>
+                </div>
+                <p><b>السيد/</b> ${custName}</p>
+                <table>
+                    <thead><tr style="border-bottom: 1px solid #000;"><th>الصنف</th><th>ك</th><th>ج.م</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div class="total"><span>الإجمالي التقريبي:</span><span>${totalAmount.toLocaleString()} ج.م</span></div>
+                <div class="footer">هذا العرض ساري لمدة 3 أيام من تاريخه<br>شركة الزيادى لقطع الغيار والكماليات</div>
+            </body></html>`;
+
+        pri.document.open();
+        pri.document.write(printContent);
+        pri.document.close();
+        setTimeout(() => { pri.focus(); pri.print(); }, 500);
+    }
+
+    init();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

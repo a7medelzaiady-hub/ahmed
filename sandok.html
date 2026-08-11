@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة الصندوق | شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-deep: #0d1117;
+            --bg-card: #161b22;
+            --accent: #58a6ff;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --success: #3fb950;
+            --danger: #f85149;
+            --border: rgba(48, 54, 61, 0.8);
+        }
+
+        body { font-family: 'Cairo', sans-serif; background-color: var(--bg-deep); color: var(--text-primary); margin: 0; padding-bottom: 50px; }
+        header.top-nav { display: flex; align-items: center; padding: 15px 20px; background: rgba(13, 17, 23, 0.8); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        header i { font-size: 20px; cursor: pointer; margin-left: 15px; color: var(--text-secondary); }
+        .container { padding: 20px; max-width: 600px; margin: auto; }
+
+        .balance-card { background: linear-gradient(135deg, #1c2128, #0d1117); border: 1px solid var(--accent); border-radius: 20px; padding: 25px; text-align: center; margin-bottom: 25px; box-shadow: 0 0 15px rgba(88, 166, 255, 0.1); }
+        .balance-card h2 { margin: 10px 0; font-size: 32px; color: var(--accent); }
+
+        .transaction-type { display: flex; gap: 10px; margin-bottom: 20px; }
+        .type-btn { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; font-weight: 600; text-align: center; transition: 0.3s; }
+        .type-btn.active-deposit { background: rgba(63, 185, 80, 0.1); color: var(--success); border-color: var(--success); }
+        .type-btn.active-withdraw { background: rgba(248, 81, 73, 0.1); color: var(--danger); border-color: var(--danger); }
+
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-secondary); }
+        .input-group input, .input-group textarea { width: 100%; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; color: var(--text-primary); font-family: 'Cairo'; outline: none; }
+
+        .confirm-btn { width: 100%; padding: 15px; border-radius: 12px; border: none; background: var(--success); color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.3s; }
+        
+        .history-section { margin-top: 35px; }
+        .history-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .history-info h4 { margin: 0; font-size: 14px; }
+        .history-info span { font-size: 11px; color: var(--text-secondary); }
+        .amount-tag { font-weight: 700; font-size: 15px; }
+        .amount-tag.plus { color: var(--success); }
+        .amount-tag.minus { color: var(--danger); }
+
+        #loader { text-align: center; color: var(--accent); padding: 20px; display: none; }
+    </style>
+</head>
+<body>
+
+    <header class="top-nav">
+        <i class="fas fa-arrow-right" onclick="history.back()"></i>
+        <div class="app-title">إدارة الصندوق النقدي | شركة الزيادي</div>
+    </header>
+
+    <div class="container">
+        <div class="balance-card">
+            <span>الرصيد الحالي المتوفر</span>
+            <h2 id="totalBalance">0 ج.م</h2>
+            <small id="currentDate"></small>
+        </div>
+
+        <div class="transaction-type">
+            <div class="type-btn active-deposit" id="depositBtn" onclick="setType('deposit')">إيداع (+)</div>
+            <div class="type-btn" id="withdrawBtn" onclick="setType('withdraw')">سحب (-)</div>
+        </div>
+
+        <div class="input-group">
+            <label>المبلغ المطلوب</label>
+            <input type="number" id="amountInput" placeholder="0" inputmode="numeric">
+        </div>
+
+        <div class="input-group">
+            <label>البيان / ملاحظات</label>
+            <textarea id="notesInput" rows="2" placeholder="اكتب تفاصيل الحركة هنا..."></textarea>
+        </div>
+
+        <button class="confirm-btn" id="saveBtn" onclick="saveTransaction()">تأكيد عملية الإيداع</button>
+
+        <div class="history-section">
+            <div id="loader"><i class="fas fa-spinner fa-spin"></i> جاري التحميل...</div>
+            <div id="historyList"></div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script>
+   const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+try {
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+        console.warn("تعذر تفعيل التخزين الدائم:", err.code);
+    });
+} catch (e) {
+    console.warn("تعذر تفعيل التخزين الدائم:", e);
+}
+
+        let currentType = 'deposit';
+        document.getElementById('currentDate').innerText = "تاريخ اليوم: " + new Date().toLocaleDateString('ar-EG');
+
+        function setType(type) {
+            currentType = type;
+            const depBtn = document.getElementById('depositBtn');
+            const witBtn = document.getElementById('withdrawBtn');
+            const saveBtn = document.getElementById('saveBtn');
+
+            if(type === 'deposit') {
+                depBtn.classList.add('active-deposit');
+                witBtn.classList.remove('active-withdraw');
+                saveBtn.style.background = 'var(--success)';
+                saveBtn.innerText = 'تأكيد عملية الإيداع';
+            } else {
+                witBtn.classList.add('active-withdraw');
+                depBtn.classList.remove('active-deposit');
+                saveBtn.style.background = 'var(--danger)';
+                saveBtn.innerText = 'تأكيد عملية السحب';
+            }
+        }
+
+        async function saveTransaction() {
+            const amount = document.getElementById('amountInput').value;
+            const notes = document.getElementById('notesInput').value;
+            
+            if(!amount || amount <= 0) {
+                alert('برجاء إدخال مبلغ صحيح');
+                return;
+            }
+
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true;
+            btn.innerText = "جاري الحفظ...";
+
+            try {
+                await db.collection('transactions').add({
+                    amount: Number(amount),
+                    notes: notes,
+                    type: currentType === 'deposit' ? 'قبض' : 'صرف',
+                    partyType: "box",
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    date: new Date().toISOString().split('T')[0]
+                });
+
+                document.getElementById('amountInput').value = "";
+                document.getElementById('notesInput').value = "";
+                alert('تم تسجيل الحركة بنجاح');
+            } catch (error) {
+                console.error("Error: ", error);
+                alert('حدث خطأ أثناء الحفظ');
+            } finally {
+                btn.disabled = false;
+                setType(currentType);
+            }
+        }
+
+        function listenToTransactions() {
+            document.getElementById('loader').style.display = 'block';
+
+            db.collection('transactions')
+              .orderBy('createdAt', 'desc')
+              .onSnapshot((snapshot) => {
+                let listHtml = '';
+                let balance = 0;
+
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    const amt = Number(data.amount) || 0;
+                    
+                    // تنظيف النص لضمان المقارنة الصحيحة
+                    const typeClean = data.type ? data.type.trim() : "";
+
+                    if (typeClean === 'قبض') {
+                        balance += amt;
+                    } else if (typeClean === 'صرف') {
+                        balance -= amt;
+                    }
+
+                    const isDeposit = typeClean === 'قبض';
+                    listHtml += `
+                        <div class="history-item">
+                            <div class="history-info">
+                                <h4>${data.notes || 'بدون بيان'}</h4>
+                                <span>${data.date || ''}</span>
+                            </div>
+                            <div class="amount-tag ${isDeposit ? 'plus' : 'minus'}">
+                                ${isDeposit ? '+' : '-'} ${amt.toLocaleString()} ج.م
+                            </div>
+                        </div>
+                    `;
+                });
+
+                document.getElementById('totalBalance').innerText = balance.toLocaleString() + " ج.م";
+                document.getElementById('historyList').innerHTML = listHtml;
+                document.getElementById('loader').style.display = 'none';
+            }, (error) => {
+                console.error("Snapshot error: ", error);
+                document.getElementById('loader').innerText = "خطأ في الاتصال";
+            });
+        }
+
+        listenToTransactions();
+    </script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

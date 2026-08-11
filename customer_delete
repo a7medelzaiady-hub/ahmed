@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قائمة الجرد - شركة الزيادي</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --bg-dark: #0d1117; 
+            --glass: rgba(255,255,255,0.05); 
+            --neon-blue: #58a6ff;
+            --neon-red: #f85149;
+            --neon-green: #3fb950;
+        }
+
+        body { background: var(--bg-dark); font-family: 'Cairo', sans-serif; color: #ffffff; padding-bottom: 50px; }
+        .stat-card { background: var(--glass); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; height: 100%; }
+        .stat-value { font-size: 1.4rem; font-weight: 700; display: block; }
+        .customers-container { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; overflow: hidden; }
+        .search-box { background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; color: white !important; border-radius: 12px; }
+        .table { color: #ffffff !important; margin-bottom: 0; background: transparent !important; white-space: nowrap; }
+        .table thead th { background: rgba(255, 255, 255, 0.05) !important; color: var(--neon-blue) !important; border-bottom: 1px solid rgba(255,255,255,0.1) !important; padding: 15px; }
+        .table tbody td { background: transparent !important; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05) !important; color: #ffffff !important; }
+        .low-stock-row { background: rgba(248, 81, 73, 0.1) !important; border-right: 4px solid var(--neon-red); }
+        .action-btn { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; text-decoration: none; }
+        .btn-edit:hover { background: var(--neon-blue); color: #000; }
+        .btn-delete:hover { background: var(--neon-red); color: #fff; }
+        .price-text { color: var(--neon-blue); font-weight: 700; }
+        .total-pcs-text { color: var(--neon-green); font-weight: 700; }
+        .qty-badge { background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; }
+        .load-more-btn { background: var(--neon-blue); color: #000; border: none; font-weight: bold; border-radius: 10px; padding: 10px 25px; transition: 0.3s; }
+        .load-more-btn:hover { transform: scale(1.05); filter: brightness(1.2); }
+    </style>
+</head>
+<body>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold m-0 text-white"><i class="fas fa-boxes me-2"></i> قائمة الجرد </h4>
+        <div class="d-flex gap-2">
+            <button onclick="clearAllcustomers()" class="btn btn-danger btn-sm px-3"><i class="fas fa-exclamation-triangle"></i> تصفير المخزن</button>
+            <a href="trashl.html" class="btn btn-outline-danger btn-sm px-3"><i class="fas fa-trashl-restore"></i> السلة</a>
+            <a href="customers-details.html" class="btn btn-outline-light btn-sm px-3">رجوع</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="stat-card border-bottom border-success border-3">
+                <span class="stat-value text-success" id="totalValue">0</span>
+                <small>إجمالي قيمة بضاعة المخزن (بسعر الشراء)</small>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="stat-card">
+                <span class="stat-value text-white" id="totalItems">0</span>
+                <small>عدد الأصناف</small>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="stat-card">
+                <span class="stat-value text-danger" id="lowStockCount">0</span>
+                <small>أصناف تحت حد الطلب</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-3 d-flex gap-2">
+        <input type="text" id="searchStock" class="form-control search-box" placeholder="بحث سريع بالاسم أو الباركود..." oninput="renderStock()">
+        <button class="btn btn-info px-3" onclick="location.href='add-product.html'"><i class="fas fa-plus"></i></button>
+    </div>
+
+    <div class="customers-container">
+        <div class="table-responsive">
+            <table class="table text-center align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-start">المنتج</th>
+                        <th>الفئة</th>
+                        <th>الكمية (كرتونة وقطع)</th>
+                        <th>إجمالي (قطعة)</th>
+                        <th>سعر البيع</th>
+                        <th>الحالة</th>
+                        <th>إجراء</th>
+                    </tr>
+                </thead>
+                <tbody id="stockTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, updateDoc, doc, onSnapshot, serverTimestamp, writeBatch, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+   const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    let customersData = [];
+    let displayLimit = 50;
+
+    // --- وظيفة المسح الشامل (نقل كل المخزن للسلة) ---
+    window.clearAllcustomers = async () => {
+        const firstConfirm = confirm("⚠️ تحذير: أنت على وشك حذف جميع الأصناف الموجودة في المخزن حالياً ونقلها للسلة. هل أنت متأكد؟");
+        if (!firstConfirm) return;
+
+        const secondConfirm = confirm("استنى! هل أنت متأكد فعلاً؟ سيتم مسح " + customersData.length + " صنف.");
+        if (!secondConfirm) return;
+
+        try {
+            const batch = writeBatch(db);
+            // نأخذ الأصناف الموجودة حالياً فقط (التي لم تُحذف بعد)
+            customersData.forEach(item => {
+                const itemRef = doc(db, "customers", item.id);
+                batch.update(itemRef, { 
+                    isDeleted: true, 
+                    deletedAt: serverTimestamp() 
+                });
+            });
+
+            await batch.commit();
+            alert("تم تصفير المخزن بنجاح ونقل جميع الأصناف للسلة.");
+        } catch (e) {
+            console.error(e);
+            alert("حدث خطأ أثناء محاولة التصفير.");
+        }
+    };
+
+    function listenTocustomers() {
+        onSnapshot(collection(db, "customers"), (snap) => {
+            customersData = [];
+            snap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.isDeleted !== true) {
+                    customersData.push({ id: docSnap.id, ...data });
+                }
+            });
+            updateStats();
+            renderStock();
+        });
+    }
+
+    function updateStats() {
+        document.getElementById('totalItems').innerText = customersData.length;
+        let totalVal = 0;
+        let low = 0;
+
+        customeData.forEach(i => {
+            const factor = Number(i.unitFactor) || 1;
+            const currentTotalPcs = Number(i.totalPcs) || 0;
+            const minTotalPcs = (Number(i.min) || 0) * factor;
+
+            if (currentTotalPcs <= minTotalPcs) low++;
+            totalVal += (currentTotalPcs / factor) * (Number(i.buy) || 0);
+        });
+
+        document.getElementById('lowStockCount').innerText = low;
+        document.getElementById('totalValue').innerText = Math.round(totalVal).toLocaleString() + " EGP";
+    }
+
+    window.renderStock = function(isMore = false) {
+        if (!isMore) displayLimit = 50; 
+        const term = document.getElementById('searchStock').value.toLowerCase();
+        const tbody = document.getElementById('stockTable');
+        
+        const filtered = customersData.filter(i => 
+            i.name.toLowerCase().includes(term) || 
+            (i.barcode && i.barcode.includes(term))
+        );
+
+        const dataToShow = (term === "") ? filtered.slice(0, displayLimit) : filtered;
+
+        let rowsHtml = ''; 
+        dataToShow.forEach(item => {
+            const factor = Number(item.unitFactor) || 1;
+            const totalPcs = Number(item.totalPcs) || 0;
+            const boxes = Math.floor(totalPcs / factor);
+            const pieces = totalPcs % factor;
+            const isLow = totalPcs <= ((Number(item.min) || 0) * factor);
+            
+            let qtyDisplay = `<span class="qty-badge">${boxes} كرتونة</span>`;
+            if(pieces > 0) qtyDisplay += ` <span class="qty-badge text-info">${pieces} قطعة</span>`;
+
+            rowsHtml += `
+                <tr class="${isLow ? 'low-stock-row' : ''}">
+                    <td class="text-start">
+                        <div class="fw-bold text-white">${item.name}</div>
+                        <small class="text-muted" style="font-size:0.7rem">${item.barcode || '---'}</small>
+                    </td>
+                    <td><span class="badge bg-secondary opacity-75">${item.category}</span></td>
+                    <td><div class="d-flex flex-column gap-1">${qtyDisplay}</div></td>
+                    <td><span class="total-pcs-text">${totalPcs}</span> <small style="font-size:0.6rem">ق</small></td>
+                    <td class="price-text">${Number(item.sell).toLocaleString()}</td>
+                    <td><span class="badge ${isLow ? 'bg-danger' : 'bg-success'}">${isLow ? 'ناقص' : 'متوفر'}</span></td>
+                    <td>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a href="add-product.html?edit=${item.id}" class="action-btn btn-edit"><i class="fas fa-edit"></i></a>
+                            <button onclick="softDeleteItem('${item.id}', '${item.name}')" class="action-btn btn-delete"><i class="fas fa-trashl"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = rowsHtml;
+
+        if (filtered.length > displayLimit && term === "") {
+            tbody.innerHTML += `
+                <tr>
+                    <td colspan="7" class="text-center p-4">
+                        <button class="load-more-btn" onclick="loadMore()">عرض المزيد (+)</button>
+                        <p class="text-muted mt-2 small">يتم عرض ${displayLimit} من أصل ${filtered.length} صنف</p>
+                    </td>
+                </tr>
+            `;
+        }
+    };
+
+    window.loadMore = () => {
+        displayLimit += 100;
+        renderStock(true);
+    };
+
+    window.softDeleteItem = async (id, name) => {
+        if(confirm(`هل أنت متأكد من نقل "${name}" إلى سلة المحذوفات؟`)) { 
+            try {
+                await updateDoc(doc(db, "customers", id), { 
+                    isDeleted: true,
+                    deletedAt: serverTimestamp() 
+                });
+            } catch (e) {
+                alert("حدث خطأ أثناء الحذف");
+            }
+        }
+    }
+
+    listenTocustomers();
+</script>
+</body>
+</html>

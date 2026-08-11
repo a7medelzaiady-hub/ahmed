@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة النواقص - شركة الزيادي</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #b58900; /* لون مميز للنواقص (برتقالي/ذهبي) ليختلف عن المشتريات */
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+        
+        .header { 
+            background: var(--header-bg); padding: 15px 20px; display: flex; 
+            align-items: center; justify-content: space-between; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: white;
+            position: sticky; top: 0; z-index: 1000;
+        }
+
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 20px; padding: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; 
+        }
+
+        label { font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; color: var(--header-bg); }
+
+        input, select { 
+            background: var(--white) !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px !important; 
+            margin-bottom: 15px; padding: 12px !important; font-weight: 600;
+        }
+        input:focus, select:focus { border-color: var(--header-bg) !important; box-shadow: 0 0 8px rgba(11, 94, 61, 0.1) !important; }
+
+        .btn-add { 
+            background: var(--header-bg); color: #fff; border: none; 
+            width: 100%; padding: 12px; border-radius: 15px; 
+            font-weight: bold; font-size: 1.1rem; transition: 0.3s;
+        }
+        .btn-add:active { transform: scale(0.98); }
+
+        .table-responsive { border-radius: 15px; overflow: hidden; border: 1px solid var(--border); }
+        .table th { background-color: #f0f6f3; color: var(--header-bg); font-weight: 700; text-align: center; }
+        .table td { text-align: center; vertical-align: middle; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<!-- قائمة الأصناف للبحث التلقائي -->
+<datalist id="inventoryList"></datalist>
+
+<div class="header">
+    <a href="index.html" class="text-white"><i class="fas fa-arrow-right"></i></a>
+    <h6 class="m-0 fw-bold">دفتر تسجيل نواقص الزيوت والبضاعة</h6>
+    <span class="badge bg-warning text-dark fw-bold">نواقص يومية</span>
+</div>
+
+<div class="container mt-4">
+    <!-- كارت إضافة صنف ناقص جديد -->
+    <div class="glass-card">
+        <h5 class="mb-3 fw-bold text-success"><i class="fas fa-plus-circle me-1"></i> تسجيل صنف ناقص جديد</h5>
+        <form id="shortageForm" onsubmit="event.preventDefault(); window.saveShortage();">
+            <div class="row">
+                <div class="col-md-6 col-12">
+                    <label>اسم صنف الزيت / الفلتر</label>
+                    <input type="text" id="itemName" class="form-control" list="inventoryList" placeholder="ابحث أو اكتب اسم الصنف هنا..." required>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label>الكمية المطلوبة</label>
+                    <input type="number" id="itemQty" class="form-control" placeholder="0" min="1" required>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label>ملاحظة (اختياري)</label>
+                    <input type="text" id="itemNote" class="form-control" placeholder="مثال: زبون مستعجل..">
+                </div>
+            </div>
+            <button type="submit" class="btn-add mt-2" id="btnSubmit">
+                <i class="fas fa-save me-1"></i> إضافة لقائمة النواقص
+            </button>
+        </form>
+    </div>
+
+    <!-- كارت عرض النواقص الحالية -->
+    <div class="glass-card">
+        <h5 class="mb-3 fw-bold text-danger"><i class="fas fa-exclamation-triangle me-1"></i> قائمة النواقص الحالية بالمحل</h5>
+        <div class="table-responsive">
+            <table class="table table-hover m-0">
+                <thead>
+                    <tr>
+                        <th>الصنف</th>
+                        <th>العدد المطلـوب</th>
+                        <th>تاريخ التسجيل</th>
+                        <th>ملاحظات</th>
+                        <th>إجراء</th>
+                    </tr>
+                </thead>
+                <tbody id="shortagesTableBody">
+                    <tr>
+                        <td colspan="5" class="text-muted p-4">جاري تحميل النواقص الحالية...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // تحميل الأصناف في الـ Datalist للبحث التلقائي
+    async function loadInventory() {
+        try {
+            const datalist = document.getElementById('inventoryList');
+            const invSnap = await getDocs(collection(db, "inventory"));
+            let options = "";
+            invSnap.forEach(doc => {
+                const data = doc.data();
+                const name = data.name || data.itemName;
+                if(name) options += `<option value="${name}">`;
+            });
+            datalist.innerHTML = options;
+        } catch (e) {
+            console.error("خطأ في جلب المخزون:", e);
+        }
+    }
+
+    // الاستماع المباشر (Realtime) لجدول النواقص
+    function listenToShortages() {
+        const q = query(collection(db, "shortages"), orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+            const tbody = document.getElementById('shortagesTableBody');
+            let html = "";
+            
+            if(snapshot.empty) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-success p-4">كل الأصناف متوفرة ولا توجد نواقص حالياً الحمد لله 👍</td></tr>`;
+                return;
+            }
+
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+                const dateStr = data.date ? data.date : "غير محدد";
+                
+                html += `
+                    <tr id="row_${id}">
+                        <td class="text-end text-danger">${data.name}</td>
+                        <td><span class="badge bg-secondary p-2 fs-6">${data.qty}</span></td>
+                        <td><small class="text-muted">${dateStr}</small></td>
+                        <td><small>${data.note || '-'}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-success" onclick="window.deleteShortage('${id}')" title="تم توفير الصنف وحذفه">
+                                <i class="fas fa-check-circle"></i> تم التوفير
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        });
+    }
+
+    // دالة حفظ النقص الجديد
+    window.saveShortage = async () => {
+        const nameInput = document.getElementById('itemName');
+        const qtyInput = document.getElementById('itemQty');
+        const noteInput = document.getElementById('itemNote');
+        const btn = document.getElementById('btnSubmit');
+
+        if(!nameInput.value || !qtyInput.value) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري الحفظ...';
+
+        try {
+            await addDoc(collection(db, "shortages"), {
+                name: nameInput.value,
+                qty: Number(qtyInput.value),
+                note: noteInput.value,
+                createdAt: serverTimestamp(),
+                date: new Date().toLocaleDateString('ar-EG', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+            });
+
+            // إعادة تعيين الخانات
+            nameInput.value = "";
+            qtyInput.value = "";
+            noteInput.value = "";
+        } catch (e) {
+            console.error(e);
+            alert("حدث خطأ أثناء الحفظ");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> إضافة لقائمة النواقص';
+        }
+    };
+
+    // دالة حذف النقص (عند الضغط على تم التوفير)
+    window.deleteShortage = async (id) => {
+        if(confirm("هل تم شراء وتوفير هذا الصنف بالفعل ليتم إزالته من النواقص؟")) {
+            try {
+                await deleteDoc(doc(db, "shortages", id));
+            } catch (e) {
+                alert("فشل في حذف الصنف");
+            }
+        }
+    };
+
+    // تشغيل الدوال عند تحميل الصفحة
+    loadInventory();
+    listenToShortages();
+</script>
+</body>
+</html>

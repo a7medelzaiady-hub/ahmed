@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سند قبض وصرف عملاء - شركة الزيادي لزيوت السيارات</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --neon-green: #28a745;
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+        
+        .header-section { 
+            padding: 15px 20px; background: var(--header-bg); color: white;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 25px; padding: 25px; margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .transaction-toggle { 
+            display: flex; background: #eee; border-radius: 15px; 
+            padding: 5px; margin-bottom: 25px; border: 1px solid var(--border);
+        }
+        .t-btn { 
+            flex: 1; border: none; background: transparent; color: #707b7c; 
+            padding: 12px; border-radius: 12px; font-weight: 700; transition: 0.3s;
+        }
+        .t-btn.active-income { background: var(--neon-green); color: white; box-shadow: 0 4px 10px rgba(40, 167, 69, 0.2); }
+        .t-btn.active-expense { background: #dc3545; color: white; box-shadow: 0 4px 10px rgba(220, 53, 69, 0.2); }
+
+        .form-label { font-size: 0.8rem; font-weight: 700; margin-bottom: 6px; opacity: 0.8; color: var(--accent); }
+        .form-control { 
+            background: #fdfdfd !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px; padding: 12px; margin-bottom: 18px;
+            font-size: 0.9rem; font-weight: 600;
+        }
+        .form-control:focus { border-color: var(--accent) !important; box-shadow: 0 0 8px rgba(11, 94, 61, 0.1); }
+
+        .btn-confirm { 
+            background: var(--accent); border: none; color: white; font-weight: 700; 
+            width: 100%; padding: 15px; border-radius: 15px; margin-top: 10px;
+            box-shadow: 0 4px 12px rgba(11, 94, 61, 0.2); transition: 0.3s;
+        }
+        .btn-confirm:disabled { opacity: 0.6; }
+
+        .info-tag { background: rgba(11, 94, 61, 0.1); color: var(--accent); padding: 5px 15px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; margin-bottom: 15px; display: inline-block; }
+
+        #receiptCaptureTemplate {
+            width: 450px; position: absolute; left: -9999px; top: -9999px;
+            background: #ffffff; padding: 30px; border: 2px solid #0b5e3d; border-radius: 10px;
+            font-family: 'Cairo', sans-serif; direction: rtl;
+        }
+    </style>
+</head>
+<body>
+
+<datalist id="customersList"></datalist>
+
+<div class="header-section">
+    <a href="javascript:history.back()" class="text-white"><i class="fas fa-chevron-right"></i></a>
+    <h5 class="m-0 fw-bold" id="mainTitle">سند مالي (عملاء)</h5>
+    <a href="all-receipts.html" class="btn btn-sm btn-light fw-bold text-success"><i class="fas fa-list-alt me-1"></i> أرشيف السندات</a>
+</div>
+
+<div class="container">
+    <div class="glass-card">
+        <div class="info-tag" id="statusTag"><i class="fas fa-file-invoice-dollar me-1"></i> قسم التحصيل والحسابات</div>
+
+        <div class="transaction-toggle">
+            <button class="t-btn active-income" id="btnIncome" onclick="setMode('قبض')">سند قبض</button>
+            <button class="t-btn" id="btnExpense" onclick="setMode('صرف')">سند صرف</button>
+        </div>
+
+        <label class="form-label">اسم العميل (ابحث واكتب هنا)</label>
+        <input type="text" id="customerInput" class="form-control" list="customersList" placeholder="اكتب أول 3 أحرف للبحث عن العميل...">
+        <input type="hidden" id="partyName">
+
+        <div class="row">
+            <div class="col-6">
+                <label class="form-label">التاريخ</label>
+                <input type="date" id="docDate" class="form-control">
+            </div>
+            <div class="col-6">
+                <label class="form-label">القيمة (ج.م)</label>
+                <input type="number" id="amount" class="form-control" placeholder="0.00">
+            </div>
+        </div>
+
+        <label class="form-label">البيان / ملاحظات السند</label>
+        <textarea id="notes" class="form-control" rows="3" placeholder="مثلاً: دفعة من الحساب / سداد آجل..."></textarea>
+
+        <button class="btn-confirm" id="saveBtn" onclick="confirmTransaction()">
+            <i class="fas fa-check-circle me-1"></i> حفظ السند وتحديث الحساب
+        </button>
+    </div>
+</div>
+
+<!-- قالب الإيصال المنسق المحدث باسم الشركة الجديد -->
+<div id="receiptCaptureTemplate">
+    <div style="text-align: center; border-bottom: 2px dashed #0b5e3d; padding-bottom: 15px; margin-bottom: 20px;">
+        <h3 style="color: #0b5e3d; margin: 0; font-weight: 700;">الزيادي لزيوت السيارات</h3>
+        <p style="font-size: 0.85rem; color: #555; margin: 5px 0 0 0;">للتجارة والتوزيع المعتمد</p>
+    </div>
+    
+    <div style="text-align: center; margin-bottom: 25px;">
+        <span id="img_Type" style="font-size: 1.3rem; font-weight: 700; padding: 5px 30px; border-radius: 8px; color: #fff;"></span>
+    </div>
+
+    <table style="width: 100%; font-size: 1rem; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px 0; color: #666; font-weight: 600;">اسم العميل:</td>
+            <td style="padding: 10px 0; font-weight: 700; text-align: left; color: #111;" id="img_CustName">---</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px 0; color: #666; font-weight: 600;">التاريخ:</td>
+            <td style="padding: 10px 0; font-weight: 700; text-align: left; color: #111;" id="img_Date">---</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px 0; color: #666; font-weight: 600;">المبلغ الإجمالي:</td>
+            <td style="padding: 10px 0; font-size: 1.2rem; font-weight: 700; text-align: left; color: #0b5e3d;" id="img_Amount">0.00 ج.م</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px 0; color: #666; font-weight: 600; vertical-align: top;">البيان والملاحظات:</td>
+            <td style="padding: 10px 0; font-weight: 600; text-align: left; color: #444; font-size: 0.9rem; line-height: 1.5;" id="img_Notes">---</td>
+        </tr>
+    </table>
+
+    <div style="margin-top: 40px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 15px;">
+        <span style="font-size: 0.75rem; color: #999;">توقيع المستلم المعتمَد</span>
+        <span style="font-size: 0.75rem; color: #0b5e3d; font-weight: bold;">سند مالي إلكتروني مُوثق</span>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, increment, query, where, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+
+    let currentMode = 'قبض'; 
+    const urlParams = new URLSearchParams(window.location.search);
+    const editId = urlParams.get('edit'); 
+    const targetId = urlParams.get('id'); 
+
+    let customersDataMap = {};
+    let searchTimeout;
+
+    document.getElementById('docDate').valueAsDate = new Date();
+
+    window.setMode = (mode) => {
+        currentMode = mode;
+        const btnInc = document.getElementById('btnIncome');
+        const btnExp = document.getElementById('btnExpense');
+        if(mode === 'قبض') {
+            btnInc.className = 't-btn active-income';
+            btnExp.className = 't-btn';
+        } else {
+            btnInc.className = 't-btn';
+            btnExp.className = 't-btn active-expense';
+        }
+    };
+
+    async function initPage() {
+        document.getElementById('customerInput').addEventListener('input', function() {
+            const val = this.value.trim();
+            if(customersDataMap[val]) {
+                document.getElementById('partyName').value = customersDataMap[val];
+                return;
+            }
+            if(val.length >= 3) {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => searchCustomersFirebase(val), 400);
+            }
+        });
+
+        if(targetId) {
+            const custSnap = await getDoc(doc(db, "customers", targetId));
+            if(custSnap.exists()) {
+                const name = custSnap.data().name;
+                document.getElementById('customerInput').value = name;
+                document.getElementById('partyName').value = custSnap.id;
+                customersDataMap[name] = custSnap.id;
+            }
+        }
+        
+        if (editId) {
+            document.getElementById('mainTitle').innerText = "تعديل سند مالي";
+            document.getElementById('saveBtn').innerHTML = '<i class="fas fa-edit me-1"></i> حفظ التعديلات الآن';
+            document.getElementById('statusTag').innerHTML = '<i class="fas fa-edit me-1"></i> وضع تعديل السندات';
+            await loadReceiptData(editId);
+        }
+    }
+
+    async function searchCustomersFirebase(searchText) {
+        try {
+            const q = query(
+                collection(db, "customers"),
+                where("name", ">=", searchText),
+                where("name", "<=", searchText + '\uf8ff'),
+                limit(5)
+            );
+            const snap = await getDocs(q);
+            const datalist = document.getElementById('customersList');
+            let options = '';
+            snap.forEach(doc => {
+                const data = doc.data();
+                if(data.name) {
+                    const name = data.name.trim();
+                    options += `<option value="${name}">`;
+                    customersDataMap[name] = doc.id;
+                }
+            });
+            datalist.innerHTML = options;
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadReceiptData(id) {
+        const docRef = doc(db, "transactions", id);
+        const snap = await getDoc(docRef);
+        
+        if (snap.exists()) {
+            const data = snap.data();
+            document.getElementById('amount').value = data.amount;
+            document.getElementById('docDate').value = data.date;
+            document.getElementById('notes').value = data.notes;
+            document.getElementById('partyName').value = data.partyId;
+            setMode(data.type);
+
+            const custSnap = await getDoc(doc(db, "customers", data.partyId));
+            if(custSnap.exists()) {
+                const name = custSnap.data().name;
+                document.getElementById('customerInput').value = name;
+                customersDataMap[name] = custSnap.id;
+            }
+        }
+    }
+
+    window.confirmTransaction = async () => {
+        const id = document.getElementById('partyName').value;
+        const customerName = document.getElementById('customerInput').value.trim();
+        const amt = parseFloat(document.getElementById('amount').value);
+        const date = document.getElementById('docDate').value;
+        const notes = document.getElementById('notes').value;
+        const saveBtn = document.getElementById('saveBtn');
+
+        if(!id || !amt) return alert("يرجى اختيار العميل وتحديد المبلغ بشكل صحيح");
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري حفظ السند...';
+
+        try {
+            let currentPartyName = customerName;
+            if (editId) {
+                await updateDoc(doc(db, "transactions", editId), {
+                    partyId: id,
+                    customerName: currentPartyName,
+                    amount: amt,
+                    date: date,
+                    notes: notes,
+                    type: currentMode,
+                    lastUpdate: serverTimestamp()
+                });
+            } else {
+                await addDoc(collection(db, "transactions"), {
+                    partyId: id,
+                    customerName: currentPartyName,
+                    partyType: 'customer',
+                    type: currentMode,
+                    amount: amt,
+                    date: date,
+                    notes: notes,
+                    createdAt: serverTimestamp()
+                });
+
+                const adjustment = currentMode === 'قبض' ? -amt : amt;
+                await updateDoc(doc(db, "customers", id), {
+                    currentBalance: increment(adjustment),
+                    lastPaymentDate: serverTimestamp()
+                });
+            }
+
+            await generateAndShareReceiptImage(currentPartyName, amt, date, notes, currentMode, id);
+
+        } catch (e) {
+            console.error(e);
+            alert("فشل في معالجة العملية");
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i> حفظ السند وتحديث الحساب';
+        }
+    };
+
+    async function generateAndShareReceiptImage(custName, amt, date, notes, type, partyId) {
+        const template = document.getElementById('receiptCaptureTemplate');
+        const badge = document.getElementById('img_Type');
+        
+        if(type === 'قبض') {
+            badge.innerText = "سند قبض مالي";
+            badge.style.background = "#28a745";
+        } else {
+            badge.innerText = "سند صرف مالي";
+            badge.style.background = "#dc3545";
+        }
+
+        document.getElementById('img_CustName').innerText = custName;
+        document.getElementById('img_Date').innerText = date;
+        document.getElementById('img_Amount').innerText = amt.toLocaleString('ar-EG') + " ج.م";
+        document.getElementById('img_Notes').innerText = notes ? notes : "لا يوجد ملاحظات إضافية";
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        try {
+            const canvas = await html2canvas(template, { scale: 2, useCORS: true });
+            canvas.toBlob(async (blob) => {
+                if (!blob) return alert("حدث خطأ في معالجة الصورة");
+                const file = new File([blob], `سند_${type}_${custName}.png`, { type: 'image/png' });
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: `سند ${type} - الزيادي لزيوت السيارات`,
+                            text: `مرفق صورة سند ${type} الخاص بالسيد/ة ${custName}`
+                        });
+                        window.location.href = "all-receipts.html";
+                    } catch (shareErr) {
+                        window.location.href = "all-receipts.html";
+                    }
+                } else {
+                    const link = document.createElement('a');
+                    link.download = `سند_${type}_${custName}.png`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                    window.location.href = "all-receipts.html";
+                }
+            }, 'image/png');
+        } catch (imgErr) {
+            console.error(imgErr);
+            window.location.href = "all-receipts.html";
+        }
+    }
+
+    initPage();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

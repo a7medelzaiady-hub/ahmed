@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أقساط العميل - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d;         /* الأخضر الغامق */
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --neon-blue: #007bff; 
+            --neon-green: #28a745; 
+            --neon-red: #dc3545; 
+            --btn-orange: #f0883e;
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 50px; }
+        
+        /* --- Header --- */
+        .header-nav { 
+            padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; 
+            background: var(--header-bg); color: white; position: sticky; top: 0; z-index: 1000; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* --- Cards --- */
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 20px; padding: 20px; margin-bottom: 15px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+        }
+
+        .balance-val { font-size: 2rem; font-weight: 800; color: var(--accent); margin: 5px 0; }
+        
+        /* --- Buttons --- */
+        .btn-add { 
+            background: linear-gradient(90deg, #f0883e, #ffab70); border: none; 
+            color: white; font-weight: 700; width: 100%; padding: 12px; border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(240, 136, 62, 0.2); transition: 0.3s;
+        }
+
+        .btn-pay {
+            background-color: var(--accent); color: white; border: none;
+            font-size: 0.75rem; padding: 6px 15px; border-radius: 8px; font-weight: 700;
+        }
+
+        /* --- Installment Items --- */
+        .installment-item { 
+            background: var(--white); border-radius: 15px; padding: 15px; margin-bottom: 10px; 
+            border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; 
+            transition: 0.3s;
+        }
+        .overdue { border-right: 5px solid var(--neon-red) !important; background: #fff5f5; }
+        .paid-style { border-right: 5px solid var(--neon-green) !important; opacity: 0.7; background: #f8fff9; }
+        
+        .inst-amount { font-weight: 800; color: var(--accent); font-size: 1.1rem; display: block; }
+        .inst-date { font-size: 0.75rem; color: #707b7c; font-weight: 600; }
+        .status-paid { color: var(--neon-green); font-size: 0.75rem; font-weight: 800; background: rgba(40, 167, 69, 0.1); padding: 4px 10px; border-radius: 6px; }
+
+        /* --- Form Styling --- */
+        .form-label { font-size: 0.8rem; font-weight: 700; color: var(--text-primary); opacity: 0.8; margin-bottom: 5px; }
+        .form-control { 
+            background: #fdfdfd !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px !important; padding: 10px;
+        }
+        
+        .back-btn { color: white; text-decoration: none; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <a href="#" id="backBtn" class="back-btn"><i class="fas fa-arrow-right"></i></a>
+    <h6 class="m-0 fw-bold">جدولة أقساط العميل</h6>
+    <div style="width: 25px;"></div>
+</div>
+
+<div class="container mt-3">
+    <div class="glass-card text-center">
+        <p id="custName" class="mb-1 fw-bold" style="color: var(--accent);">جاري التحميل...</p>
+        <div class="balance-val" id="custBalance">0.00</div>
+        <small class="text-muted" style="font-size: 0.7rem; font-weight: 600;">إجمالي المديونية (شاملة الافتتاحي والفواتير)</small>
+    </div>
+
+    <div class="glass-card">
+        <h6 class="mb-3" style="font-size: 0.9rem; font-weight: 700; color: var(--accent);">
+            <i class="fas fa-calendar-plus me-2"></i> إضافة قسط جديد للجدول
+        </h6>
+        <div class="row g-2">
+            <div class="col-6">
+                <label class="form-label">قيمة القسط</label>
+                <input type="number" id="instAmount" class="form-control" placeholder="0.00">
+            </div>
+            <div class="col-6">
+                <label class="form-label">تاريخ الاستحقاق</label>
+                <input type="date" id="instDate" class="form-control">
+            </div>
+            <div class="col-12 mt-3">
+                <button class="btn-add" onclick="addInstallment()">
+                    <i class="fas fa-save me-1"></i> حفظ القسط في الجدولة
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+        <h6 class="m-0 fw-bold" style="font-size: 0.9rem;">الأقساط المجدولة</h6>
+        <span id="instCount" class="badge rounded-pill" style="background: var(--accent); font-size: 0.7rem;">0 متبقي</span>
+    </div>
+    
+    <div id="installmentsList">
+         <div class="text-center py-5"><div class="spinner-border" style="color: var(--accent);" role="status"></div></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, collection, addDoc, getDocs, query, where, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const custId = urlParams.get('id');
+
+    async function getRealDebt(customerId, initialBalance = 0) {
+        try {
+            const qInvoices = query(collection(db, "invoices"), where("customerId", "==", customerId));
+            const snapInvoices = await getDocs(qInvoices);
+            let invoiceDebt = 0;
+            snapInvoices.forEach(doc => {
+                invoiceDebt += (Number(doc.data().remaining) || 0);
+            });
+
+            const qTrans = query(collection(db, "transactions"), where("partyId", "==", customerId));
+            const snapTrans = await getDocs(qTrans);
+            let transEffect = 0;
+            snapTrans.forEach(doc => {
+                const tr = doc.data();
+                if(tr.type === 'قبض') transEffect -= (Number(tr.amount) || 0);
+                else if(tr.type === 'صرف') transEffect += (Number(tr.amount) || 0);
+            });
+
+            return Number(initialBalance) + invoiceDebt + transEffect;
+        } catch (e) {
+            return Number(initialBalance);
+        }
+    }
+
+    async function loadData() {
+        if(!custId) return;
+        document.getElementById('backBtn').href = `customer-details.html?id=${custId}`;
+
+        try {
+            const custDoc = await getDoc(doc(db, "customers", custId));
+            let startBal = 0;
+            if(custDoc.exists()) {
+                const data = custDoc.data();
+                startBal = Number(data.initialBalance || 0);
+                document.getElementById('custName').innerText = data.name;
+            }
+
+            const realBalance = await getRealDebt(custId, startBal);
+            const balEl = document.getElementById('custBalance');
+            balEl.innerText = Math.abs(realBalance).toLocaleString(undefined, {minimumFractionDigits: 2}) + " ج.م";
+            balEl.style.color = realBalance > 0 ? "var(--neon-red)" : "var(--neon-green)";
+
+            const instSnap = await getDocs(query(collection(db, "installments"), where("partyId", "==", custId)));
+            const listDiv = document.getElementById('installmentsList');
+            let installments = [];
+            instSnap.forEach(d => installments.push({ id: d.id, ...d.data() }));
+            installments.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+            document.getElementById('instCount').innerText = installments.filter(i => i.status !== 'paid').length + " متبقي";
+
+            if (installments.length === 0) {
+                listDiv.innerHTML = '<div class="text-center py-5 opacity-50 fw-bold">لا توجد أقساط مجدولة حالياً</div>';
+                return;
+            }
+
+            const today = new Date().toISOString().split('T')[0];
+            listDiv.innerHTML = installments.map(inst => {
+                const isPaid = inst.status === 'paid';
+                const isOverdue = !isPaid && inst.dueDate < today;
+                return `
+                    <div class="installment-item ${isPaid ? 'paid-style' : (isOverdue ? 'overdue' : '')}">
+                        <div>
+                            <span class="inst-amount">${Number(inst.amount).toLocaleString()} <small style="font-size:0.65rem">ج.م</small></span>
+                            <div class="inst-date"><i class="far fa-calendar-alt me-1"></i> استحقاق: ${inst.dueDate}</div>
+                        </div>
+                        <div>
+                            ${isPaid ? '<span class="status-paid">تم التحصيل</span>' : 
+                            `<button class="btn-pay" onclick="payInstallment('${inst.id}', ${inst.amount})">تحصيل</button>`}
+                        </div>
+                    </div>`;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    window.addInstallment = async () => {
+        const amount = document.getElementById('instAmount').value;
+        const dueDate = document.getElementById('instDate').value;
+        if(!amount || !dueDate) return alert("من فضلك أدخل المبلغ والتاريخ");
+
+        try {
+            await addDoc(collection(db, "installments"), {
+                partyId: custId,
+                amount: Number(amount),
+                dueDate: dueDate,
+                status: 'pending',
+                createdAt: serverTimestamp()
+            });
+            document.getElementById('instAmount').value = "";
+            loadData();
+        } catch (e) { alert("خطأ في الحفظ"); }
+    };
+
+    window.payInstallment = async (instId, amount) => {
+        if(confirm(`تأكيد تحصيل مبلغ ${amount} ج.م؟`)) {
+            try {
+                await updateDoc(doc(db, "installments", instId), { status: 'paid' });
+                await addDoc(collection(db, "transactions"), {
+                    partyId: custId,
+                    amount: Number(amount),
+                    type: "قبض",
+                    partyType: "customer",
+                    notes: "تحصيل قسط مجدول",
+                    date: new Date().toISOString().split('T')[0],
+                    createdAt: serverTimestamp()
+                });
+                loadData();
+            } catch (e) { alert("حدث خطأ"); }
+        }
+    };
+
+    loadData();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>لوحة الإدارة</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+body { font-family:Cairo; background:#f4f7f6; margin:0; padding:20px; }
+.container { max-width:900px; margin:auto; }
+.card { background:#fff; padding:20px; border-radius:15px; margin-bottom:15px; box-shadow:0 5px 20px rgba(0,0,0,0.05); }
+input, select { width:100%; padding:10px; margin:5px 0; border:1px solid #ddd; border-radius:10px; }
+button { padding:10px 15px; border:none; border-radius:10px; cursor:pointer; font-weight:bold; }
+.btn { background:#0b5e3d; color:#fff; }
+.user { display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #eee; }
+.badge { padding:3px 10px; border-radius:20px; background:#eee; font-size:12px; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🔥 لوحة التحكم - إدارة المستخدمين</h2>
+
+<div class="card">
+<h3>➕ إضافة موظف</h3>
+
+<input id="email" placeholder="الإيميل">
+<input id="password" placeholder="كلمة المرور" type="password">
+
+<select id="role">
+<option value="employee">موظف</option>
+<option value="admin">مدير</option>
+</select>
+
+<label>الصلاحيات:</label>
+<select id="permissions" multiple>
+<option value="sales">المبيعات</option>
+<option value="purchases">المشتريات</option>
+<option value="clients">العملاء</option>
+<option value="inventory">المخزن</option>
+<option value="banknote">النقدية</option>
+<option value="reports">التقارير</option>
+</select>
+
+<br><br>
+<button class="btn" onclick="createUser()">إنشاء المستخدم</button>
+</div>
+
+<div class="card">
+<h3>👥 المستخدمين</h3>
+<div id="usersList"></div>
+</div>
+
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+try {
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+        console.warn("تعذر تفعيل التخزين الدائم:", err.code);
+    });
+} catch (e) {
+    console.warn("تعذر تفعيل التخزين الدائم:", e);
+}
+
+async function createUser() {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const role = document.getElementById("role").value;
+
+    const permissions = Array.from(document.getElementById("permissions").selectedOptions)
+        .map(o => o.value);
+
+    const userCred = await auth.createUserWithEmailAndPassword(email, password);
+
+    await db.collection("users").doc(userCred.user.uid).set({
+        email,
+        role,
+        permissions,
+        createdAt: Date.now()
+    });
+
+    alert("تم إنشاء المستخدم");
+    loadUsers();
+}
+
+async function loadUsers() {
+    const snap = await db.collection("users").get();
+    const list = document.getElementById("usersList");
+    list.innerHTML = "";
+
+    snap.forEach(doc => {
+        const u = doc.data();
+
+        list.innerHTML += `
+        <div class="user">
+            <div>
+                <b>${u.email}</b><br>
+                <span class="badge">${u.role}</span>
+            </div>
+            <button onclick="deleteUser('${doc.id}')">حذف</button>
+        </div>`;
+    });
+}
+
+async function deleteUser(id) {
+    await db.collection("users").doc(id).delete();
+    loadUsers();
+}
+
+loadUsers();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

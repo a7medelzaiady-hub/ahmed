@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>شركة الزيادى | لوحة التحكم</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --brand-green: #0b5e3d;
+            --brand-green-dark: #07432b;
+            --brand-green-light: #128256;
+            --de-gold: #FFC72C;
+            --de-red: #e11d48;
+
+            --surface: #eef4f1;
+            --card-bg: #FFFFFF;
+            --text-deep: #0f172a;
+            --text-mid: #475569;
+            --text-faint: #94a3b8;
+            --border-subtle: #dcfce7;
+
+            --shadow-sm: 0 4px 14px rgba(11, 94, 61, 0.05);
+            --shadow-md: 0 8px 24px rgba(11, 94, 61, 0.08);
+            --shadow-lg: 0 16px 36px rgba(11, 94, 61, 0.14);
+
+            --radius-lg: 22px;
+            --radius-md: 16px;
+            --radius-sm: 11px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--surface);
+            color: var(--text-deep);
+            min-height: 100vh;
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        .tri-strip { display: flex; height: 4px; width: 100%; }
+        .tri-strip span { flex: 1; }
+        .tri-strip .b { background: var(--brand-green-dark); }
+        .tri-strip .r { background: var(--brand-green); }
+        .tri-strip .g { background: var(--de-gold); }
+
+        .header {
+            position: sticky; top: 0; z-index: 1000;
+            background: linear-gradient(160deg, var(--brand-green-dark) 0%, var(--brand-green) 100%);
+            padding: 0 16px;
+            height: 64px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: var(--shadow-md);
+        }
+        .header-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-mark {
+            width: 38px; height: 38px; background: var(--de-gold); border-radius: 11px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 900; color: var(--brand-green-dark); flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+        .logo-text { display: flex; flex-direction: column; line-height: 1.2; }
+        .logo-text .brand { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: 0.2px; }
+        .logo-text .brand span { color: var(--de-gold); }
+        .logo-text .sub { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.75); }
+
+        .btn-icon {
+            width: 38px; height: 38px; background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25); border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 15px; cursor: pointer;
+        }
+        .btn-logout {
+            background: var(--de-red); border: none;
+            color: #fff; padding: 0 14px; height: 38px; border-radius: var(--radius-sm);
+            display: flex; align-items: center; gap: 7px;
+            font-size: 12px; font-weight: 700; text-decoration: none; font-family: 'Cairo', sans-serif;
+            box-shadow: 0 4px 14px rgba(225, 29, 72, 0.3);
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 9px;
+            padding: 16px 16px 0;
+        }
+        .stat-chip {
+            background: var(--card-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 12px 10px;
+            display: flex; flex-direction: column; gap: 8px;
+            box-shadow: var(--shadow-sm);
+        }
+        .chip-top { display: flex; align-items: center; justify-content: space-between; }
+        .chip-icon {
+            width: 30px; height: 30px; border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; flex-shrink: 0;
+        }
+        .chip-icon.black-bg { background: rgba(11, 94, 61, 0.08); color: var(--brand-green); }
+        .chip-icon.red-bg   { background: #ffe4e6; color: var(--de-red); }
+        .chip-icon.gold-bg  { background: #fef3c7; color: #d97706; }
+
+        .chip-num   { font-size: 17px; font-weight: 800; color: var(--text-deep); }
+        .chip-label { font-size: 10.5px; color: var(--text-mid); font-weight: 600; }
+
+        .section-block { padding: 20px 16px 0; }
+        .section-label {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 2px 10px;
+        }
+        .section-label .heading { display: flex; align-items: center; gap: 8px; }
+        .section-label .mark {
+            width: 20px; height: 20px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: #fff;
+        }
+        .section-label span.title { font-size: 13px; font-weight: 800; color: var(--brand-green-dark); }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        @media (min-width: 480px) { .card-grid { grid-template-columns: repeat(3, 1fr); } }
+
+        .grid-card {
+            background: var(--card-bg); border-radius: var(--radius-md);
+            border: 1px solid var(--border-subtle);
+            padding: 18px 10px 14px;
+            text-align: center; text-decoration: none;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            position: relative; overflow: hidden;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        .grid-card:active { transform: scale(0.96); box-shadow: var(--shadow-sm); }
+        .card-icon-wrap {
+            width: 50px; height: 50px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            position: relative;
+        }
+        .icon-gold  { background: #fef3c7; color: #d97706; }
+        .icon-black { background: rgba(11, 94, 61, 0.08); color: var(--brand-green); }
+        .icon-red   { background: #ffe4e6; color: var(--de-red); }
+
+        .card-label  { font-size: 12.5px; font-weight: 700; color: var(--text-deep); line-height: 1.3; }
+
+        .bottom-spacer { height: 190px; }
+
+        /* FAB STACK (اليمين) */
+        .fab-stack {
+            position: fixed;
+            right: 16px;
+            bottom: 112px;
+            z-index: 2500;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .fab-card { display: flex; align-items: center; gap: 10px; }
+        .fab-btn {
+            width: 52px; height: 52px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; color: #fff; cursor: pointer; border: none;
+            box-shadow: var(--shadow-lg);
+            transition: transform 0.3s ease;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .fab-btn.black-fab { background: linear-gradient(135deg, var(--brand-green-dark), var(--brand-green)); }
+        .fab-btn.gold-fab  { background: linear-gradient(135deg, var(--de-gold), #d97706); color: #fff !important; }
+        .fab-card.open .fab-btn { transform: rotate(45deg); }
+        .fab-tray {
+            display: flex; flex-direction: row; gap: 8px;
+            opacity: 0; pointer-events: none;
+            transform: translateX(10px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+        .fab-card.open .fab-tray { opacity: 1; pointer-events: auto; transform: translateX(0); }
+        .fab-item { display: flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; }
+        .fab-item-icon {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; color: #fff; flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+        }
+        .fab-item-icon.black-icon { background: var(--brand-green-dark); }
+        .fab-item-icon.gold-icon  { background: #d97706; color: #fff; }
+        .fab-item-label {
+            background: #fff; border: 1px solid var(--border-subtle);
+            border-radius: 20px; padding: 6px 12px;
+            font-size: 12px; font-weight: 700; color: var(--text-deep);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* FAB LEFT - زر عائم متطور على اليسار للانتقال المباشر */
+        .fab-left-btn {
+            position: fixed;
+            left: 16px;
+            bottom: 112px;
+            z-index: 9999;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--brand-green-dark), var(--brand-green));
+            color: #ffffff !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: var(--shadow-lg);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            outline: none;
+            transition: transform 0.15s ease, background 0.2s ease;
+        }
+        .fab-left-btn:active {
+            transform: scale(0.9);
+            background: var(--brand-green-dark);
+        }
+
+        .orders-count-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: var(--de-red);
+            color: #ffffff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 11px;
+            font-weight: 900;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 6px rgba(225, 29, 72, 0.4);
+        }
+
+        .bottom-nav-wrap {
+            position: fixed; bottom: 16px; left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 32px); max-width: 500px; z-index: 2000;
+        }
+        .bottom-nav {
+            background: var(--brand-green-dark); border-radius: 22px; padding: 8px 6px;
+            display: flex; justify-content: space-around;
+            box-shadow: var(--shadow-lg);
+        }
+        .nav-item {
+            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+            text-decoration: none; padding: 8px 4px; border-radius: 14px;
+            transition: background 0.2s; position: relative;
+        }
+        .nav-item i    { font-size: 17px; color: rgba(255,255,255,0.7); }
+        .nav-item span { font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,0.6); }
+        .nav-item.primary { background: rgba(255,199,44,0.18); }
+        .nav-item.primary i    { color: var(--de-gold); }
+        .nav-item.primary span { color: var(--de-gold); }
+
+        .toast-notification {
+            position: fixed;
+            bottom: 24px;
+            right: 50%;
+            transform: translateX(50%) translateY(150px);
+            background: #0f172a;
+            color: #ffffff;
+            padding: 10px 16px;
+            border-radius: 35px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            z-index: 3000;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            width: calc(100% - 32px);
+            max-width: 360px;
+            cursor: pointer;
+        }
+        .toast-notification.show {
+            transform: translateX(50%) translateY(0);
+            opacity: 1;
+        }
+        .toast-bell-icon {
+            width: 36px;
+            height: 36px;
+            background: #d97706;
+            color: #ffffff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        .toast-text {
+            font-size: 12.5px;
+            font-weight: 700;
+            flex-grow: 1;
+            text-align: right;
+            line-height: 1.3;
+        }
+        .toast-text span.gold-highlight {
+            color: #ffce31;
+            font-weight: 900;
+        }
+        .toast-close {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div class="btn-icon">
+        <i class="fas fa-bars"></i>
+    </div>
+    <div class="header-logo">
+        <div class="logo-mark">ز</div>
+        <div class="logo-text">
+            <div class="brand">شركة <span>الزيادى</span></div>
+            <div class="sub">نظام إدارة المبيعات</div>
+        </div>
+    </div>
+    <a href="index.html" class="btn-logout" onclick="sessionStorage.clear();">
+        <i class="fas fa-power-off"></i> خروج
+    </a>
+</header>
+<div class="tri-strip"><span class="b"></span><span class="r"></span><span class="g"></span></div>
+
+<div class="stats-row" id="statsSection">
+    <div class="stat-chip">
+        <div class="chip-top">
+            <div class="chip-icon gold-bg"><i class="fa-solid fa-calculator"></i></div>
+        </div>
+        <span class="chip-num" id="statSalesVal">—</span>
+        <span class="chip-label">مبيعات اليوم</span>
+    </div>
+    <div class="stat-chip">
+        <div class="chip-top">
+            <div class="chip-icon black-bg"><i class="fa-solid fa-cubes-stacked"></i></div>
+        </div>
+        <span class="chip-num" id="statStockVal">—</span>
+        <span class="chip-label">أصناف بالمخزون</span>
+    </div>
+    <div class="stat-chip">
+        <div class="chip-top">
+            <div class="chip-icon red-bg"><i class="fa-solid fa-address-book"></i></div>
+        </div>
+        <span class="chip-num" id="statClientsVal">—</span>
+        <span class="chip-label">عملاء نشطون</span>
+    </div>
+</div>
+
+<div class="section-block" id="groupSalesOps">
+    <div class="section-label">
+        <div class="heading">
+            <div class="mark" style="background:var(--brand-green-light);color:#fff;"><i class="fa-solid fa-bolt"></i></div>
+            <span class="title">المبيعات والعمليات</span>
+        </div>
+    </div>
+    <div class="card-grid">
+        <a href="mabiat-menu.html" class="grid-card" id="cardSales">
+            <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-cash-register"></i></div>
+            <span class="card-label">المبيعات</span>
+        </a>
+        <a href="purchase-mgmt.html" class="grid-card" id="cardPurchases">
+            <div class="card-icon-wrap icon-red"><i class="fa-solid fa-file-import"></i></div>
+            <span class="card-label">المشتريات</span>
+        </a>
+        <a href="client_menu.html" class="grid-card" id="cardClients">
+            <div class="card-icon-wrap icon-black"><i class="fa-solid fa-users-gear"></i></div>
+            <span class="card-label">العملاء</span>
+        </a>
+        <a href="supplier-management.html" class="grid-card" id="cardSuppliers">
+            <div class="card-icon-wrap icon-red"><i class="fa-solid fa-truck-moving"></i></div>
+            <span class="card-label">الموردين</span>
+        </a>
+    </div>
+</div>
+
+<div class="section-block" id="groupInventoryDocs">
+    <div class="section-label">
+        <div class="heading">
+            <div class="mark" style="background:var(--brand-green-dark);"><i class="fa-solid fa-warehouse"></i></div>
+            <span class="title">المخزون والسندات</span>
+        </div>
+    </div>
+    <div class="card-grid">
+        <a href="inventory-menu.html" class="grid-card" id="cardInventory">
+            <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-boxes-packing"></i></div>
+            <span class="card-label">المخزن</span>
+        </a>
+        <a href="vouchers-hub.html" class="grid-card" id="cardVouchers">
+            <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-receipt"></i></div>
+            <span class="card-label">السندات</span>
+        </a>
+        <a href="banknote.html" class="grid-card" id="cardBanknote">
+            <div class="card-icon-wrap icon-black"><i class="fa-solid fa-vault"></i></div>
+            <span class="card-label">النقدية</span>
+        </a>
+        <a href="add-shortages.html" class="grid-card" id="cardShortages">
+            <div class="card-icon-wrap icon-red"><i class="fa-solid fa-store-slash"></i></div>
+            <span class="card-label">النواقص</span>
+        </a>
+    </div>
+</div>
+
+<div class="section-block" id="groupReports">
+    <div class="section-label">
+        <div class="heading">
+            <div class="mark" style="background:var(--de-red);"><i class="fa-solid fa-chart-pie"></i></div>
+            <span class="title">التقارير والجرد</span>
+        </div>
+    </div>
+    <div class="card-grid">
+        <a href="reports.html" class="grid-card" id="cardReports">
+            <div class="card-icon-wrap icon-black"><i class="fa-solid fa-chart-pie"></i></div>
+            <span class="card-label">التقارير</span>
+        </a>
+        <a href="quotation-history.html" class="grid-card" id="cardQuotation">
+            <div class="card-icon-wrap icon-black"><i class="fa-solid fa-clipboard-list"></i></div>
+            <span class="card-label">الجرد</span>
+        </a>
+    </div>
+</div>
+
+<div class="bottom-spacer"></div>
+
+<!-- الزر العائم على اليسار مع إعطاء أمر فتح صريح ومباشر للمتصفح -->
+<button class="fab-left-btn" type="button" onclick="window.location.href='required-items-summary.html';" title="تجميع الأصناف المطلوبة">
+    <i class="fa-solid fa-boxes-stacked"></i>
+</button>
+
+<div class="fab-stack">
+    <div class="fab-card" id="fabTop">
+        <button class="fab-btn black-fab" onclick="toggleFab(event,'fabTop')">
+            <i class="fa-solid fa-circle-plus"></i>
+            <span class="orders-count-badge" id="mainFabBadge">0</span>
+        </button>
+        <div class="fab-tray">
+            <a href="customer-orders.html" class="fab-item">
+                <div class="fab-item-icon black-icon"><i class="fa-solid fa-cart-plus"></i></div>
+                <span class="fab-item-label">طلب جديد</span>
+            </a>
+            <a href="all-orders.html" class="fab-item">
+                <div class="fab-item-icon black-icon">
+                    <i class="fa-solid fa-boxes-trucking"></i>
+                    <span class="orders-count-badge" id="allOrdersItemBadge">0</span>
+                </div>
+                <span class="fab-item-label">كل الطلبات</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="fab-card" id="fabBottom">
+        <button class="fab-btn gold-fab" onclick="toggleFab(event,'fabBottom')">
+            <i class="fa-solid fa-tags"></i>
+        </button>
+        <div class="fab-tray">
+            <a href="inventory.html" class="fab-item">
+                <div class="fab-item-icon gold-icon"><i class="fa-solid fa-tags"></i></div>
+                <span class="fab-item-label">الأصناف</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="bottom-nav-wrap">
+    <nav class="bottom-nav">
+        <a href="price-search.html" class="nav-item">
+            <i class="fa-solid fa-magnifying-glass-dollar"></i><span>استعلام سعر</span>
+        </a>
+        <a href="add-customer.html" class="nav-item">
+            <i class="fa-solid fa-user-plus"></i><span>إضافة عميل</span>
+        </a>
+        <a href="sales-invoice.html" class="nav-item primary">
+            <i class="fa-solid fa-bolt"></i><span>بيع سريع</span>
+        </a>
+        <a href="expenses.html" class="nav-item" id="navExpenses">
+            <i class="fa-solid fa-money-bill-trend-up"></i><span>قيد مصروف</span>
+        </a>
+    </nav>
+</div>
+
+<div class="toast-notification" id="orderToastNotification" onclick="window.location.href='all-orders.html'">
+    <button class="toast-close" onclick="event.stopPropagation(); dismissToast()"><i class="fas fa-times"></i></button>
+    <div class="toast-text" id="toastText">
+        لديك <span class="gold-highlight" id="toastCountText">0 طلبات معلقة</span> قيد التنفيذ.
+    </div>
+    <div class="toast-bell-icon"><i class="fas fa-bell"></i></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let toastTimer = null;
+    let lastPendingCount = 0;
+
+    function playNotificationSound() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            
+            const playTone = (freq, start, duration) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime + start);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + start);
+                osc.stop(ctx.currentTime + start + duration);
+            };
+
+            playTone(587.33, 0, 0.15);
+            playTone(880, 0.18, 0.25);
+        } catch (e) {
+            console.log("Audio play blocked");
+        }
+    }
+
+    onSnapshot(collection(db, "orders"), (snapshot) => {
+        let pendingCount = 0;
+
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.status !== 'done') {
+                pendingCount++;
+            }
+        });
+
+        updateOrderAlerts(pendingCount);
+    }, (error) => {
+        console.warn("خطأ في جلب الطلبات:", error);
+    });
+
+    function updateOrderAlerts(count) {
+        const mainBadge = document.getElementById('mainFabBadge');
+        const itemBadge = document.getElementById('allOrdersItemBadge');
+        const toast = document.getElementById('orderToastNotification');
+        const toastCountTxt = document.getElementById('toastCountText');
+
+        if (count > 0) {
+            if (mainBadge) {
+                mainBadge.textContent = count;
+                mainBadge.style.display = 'flex';
+            }
+            if (itemBadge) {
+                itemBadge.textContent = count;
+                itemBadge.style.display = 'flex';
+            }
+
+            if (count > lastPendingCount) {
+                playNotificationSound();
+            }
+            lastPendingCount = count;
+
+            if (toastCountTxt) {
+                toastCountTxt.textContent = `${count} طلبات معلقة`;
+            }
+            if (toast) {
+                toast.classList.add('show');
+                
+                if (toastTimer) clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    dismissToast();
+                }, 8000);
+            }
+        } else {
+            lastPendingCount = 0;
+            if (mainBadge) mainBadge.style.display = 'none';
+            if (itemBadge) itemBadge.style.display = 'none';
+            dismissToast();
+        }
+    }
+
+    window.dismissToast = function() {
+        const toast = document.getElementById('orderToastNotification');
+        if (toast) toast.classList.remove('show');
+        if (toastTimer) clearTimeout(toastTimer);
+    };
+</script>
+
+<script>
+    function toggleFab(e, id) {
+        e.stopPropagation();
+        ['fabTop', 'fabBottom'].forEach(f => {
+            if (f !== id) document.getElementById(f).classList.remove('open');
+        });
+        document.getElementById(id).classList.toggle('open');
+    }
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.fab-card').forEach(el => el.classList.remove('open'));
+    });
+
+    function setStat(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+    setStat('statSalesVal', '—');
+    setStat('statStockVal', '—');
+    setStat('statClientsVal', '—');
+
+    window.addEventListener('load', function () {
+        const role = sessionStorage.getItem('role') || 'employee';
+        const savedPermissions = sessionStorage.getItem('permissions');
+        const userPermissions = savedPermissions
+            ? JSON.parse(savedPermissions)
+            : ['sales', 'clients', 'vouchers', 'reports2', 'quotation'];
+
+        const permMap = {
+            cardSales:     'sales',
+            cardPurchases: 'purchases',
+            cardClients:   'clients',
+            cardSuppliers: 'suppliers',
+            cardInventory: 'inventory_admin',
+            cardVouchers:  'vouchers',
+            cardBanknote:  'banknote',
+            cardReports:   'reports',
+            cardQuotation: 'quotation'
+        };
+        const groupMap = {
+            groupSalesOps:       ['cardSales', 'cardPurchases', 'cardClients', 'cardSuppliers'],
+            groupInventoryDocs:  ['cardInventory', 'cardVouchers', 'cardBanknote', 'cardShortages'],
+            groupReports:        ['cardReports', 'cardQuotation']
+        };
+
+        const statsSection  = document.getElementById('statsSection');
+        const navExpenses   = document.getElementById('navExpenses');
+        const cardShortages = document.getElementById('cardShortages');
+
+        if (cardShortages) cardShortages.style.display = '';
+
+        function refreshGroupVisibility() {
+            Object.entries(groupMap).forEach(([groupId, cardIds]) => {
+                const groupEl = document.getElementById(groupId);
+                if (!groupEl) return;
+                const anyVisible = cardIds.some(cid => {
+                    const el = document.getElementById(cid);
+                    return el && el.style.display !== 'none';
+                });
+                groupEl.style.display = anyVisible ? '' : 'none';
+            });
+        }
+
+        if (role === 'admin') {
+            if (statsSection) statsSection.style.display = 'none';
+
+            Object.keys(permMap).forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.display = '';
+            });
+
+            if (navExpenses) navExpenses.style.display = '';
+
+        } else {
+            if (statsSection) statsSection.style.display = '';
+
+            Object.keys(permMap).forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.display = userPermissions.includes(permMap[id]) ? '' : 'none';
+            });
+
+            if (navExpenses) navExpenses.style.display = userPermissions.includes('expenses') ? '' : 'none';
+        }
+
+        refreshGroupVisibility();
+    });
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

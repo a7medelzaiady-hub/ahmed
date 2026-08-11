@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تعديل بيانات المورد - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --neon-blue: #007bff; 
+            --neon-orange: #f0883e; 
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 40px; }
+        
+        .header-nav { 
+            padding: 15px 20px; background: var(--header-bg); color: white;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 1000;
+        }
+
+        .edit-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 25px; padding: 25px; margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            max-width: 600px; margin-left: auto; margin-right: auto;
+        }
+
+        .form-label { font-size: 0.85rem; margin-bottom: 6px; color: var(--accent); font-weight: 700; }
+        .form-control { 
+            background: #fdfdfd !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px; padding: 12px; margin-bottom: 18px;
+            font-size: 0.9rem;
+        }
+        .form-control:focus { border-color: var(--accent) !important; box-shadow: 0 0 10px rgba(11, 94, 61, 0.1); }
+        .form-control:disabled { background: #f1f3f2 !important; color: #444 !important; font-weight: bold; border-style: dashed !important; }
+
+        .row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        
+        .btn-save { 
+            background: var(--accent); border: none; border-radius: 15px; 
+            padding: 15px; font-weight: 700; width: 100%; margin-top: 10px;
+            color: white; box-shadow: 0 4px 12px rgba(11, 94, 61, 0.2); transition: 0.3s;
+        }
+        .btn-save:active { transform: scale(0.98); }
+
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-light); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        
+        .section-title { 
+            font-size: 0.75rem; color: #707b7c; font-weight: 800; 
+            text-transform: uppercase; margin-bottom: 15px; 
+            border-bottom: 2px solid var(--border); padding-bottom: 5px; 
+            display: flex; align-items: center; gap: 8px; margin-top: 10px;
+        }
+
+        .calc-box {
+            background: #fff9f0; border: 1px solid #ffeeba; border-radius: 12px;
+            padding: 12px; margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loader" class="loading-overlay">
+    <div class="text-center">
+        <div class="spinner-border text-success mb-2"></div>
+        <div class="small fw-bold">جاري فحص حسابات المورد...</div>
+    </div>
+</div>
+
+<div class="header-nav">
+    <a href="javascript:history.back()" class="text-white"><i class="fas fa-chevron-right"></i></a>
+    <h6 class="m-0 fw-bold">تعديل ملف المورد</h6>
+    <div style="width: 20px;"></div>
+</div>
+
+<div class="container">
+    <div class="edit-card">
+        <form id="editForm">
+            <div class="section-title"><i class="fas fa-truck"></i> بيانات المورد الأساسية</div>
+            
+            <label class="form-label">اسم الشركة / المورد</label>
+            <input type="text" id="supName" class="form-control" required>
+
+            <label class="form-label">رقم الهاتف</label>
+            <input type="tel" id="supPhone" class="form-control">
+
+            <label class="form-label">العنوان / المقر</label>
+            <input type="text" id="supAddress" class="form-control">
+
+            <div class="section-title"><i class="fas fa-file-invoice-dollar"></i> الموقف المالي (محسوب)</div>
+            
+            <label class="form-label">الرصيد الفعلي الحالي</label>
+            <input type="text" id="supBalanceDisplay" class="form-control" style="color: var(--neon-orange) !important;" disabled>
+            
+            <div class="calc-box">
+                <small class="text-muted fw-bold d-block">
+                    <i class="fas fa-info-circle text-warning"></i> هذا الرصيد ناتج عن (الافتتاحي + المشتريات - المرتجعات - المدفوعات).
+                </small>
+            </div>
+
+            <div class="row-grid">
+                <div>
+                    <label class="form-label">رصيد أول المدة</label>
+                    <input type="number" id="supOpening" class="form-control" step="0.01">
+                </div>
+                <div>
+                    <label class="form-label">حد الائتمان</label>
+                    <input type="number" id="supLimit" class="form-control" step="0.01">
+                </div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn btn-save">
+                <i class="fas fa-check-circle me-1"></i> حفظ التغييرات
+            </button>
+        </form>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const supId = urlParams.get('id');
+
+    async function calculateSupplierBalance(supId, openingBal) {
+        const qTrans = query(collection(db, "transactions"), where("partyId", "==", supId));
+        const snapTrans = await getDocs(qTrans);
+        const qItems = query(collection(db, "supplier_transactions"), where("supplierId", "==", supId));
+        const snapItems = await getDocs(qItems);
+
+        let debt = 0;   // التزامات (علينا)
+        let credit = 0; // مدفوعات (لنا)
+
+        snapTrans.forEach(doc => {
+            const d = doc.data();
+            const amt = Number(d.amount) || 0;
+            if (d.type === "صرف") credit += amt;
+            else if (d.type === "قبض") debt += amt;
+        });
+
+        snapItems.forEach(doc => {
+            const d = doc.data();
+            const amt = Number(d.total) || Number(d.amount) || 0;
+            if (d.type === "شراء" || d.type === "فاتورة شراء") debt += amt;
+            else if (d.type === "مرتجع شراء") credit += amt;
+        });
+
+        return (Number(openingBal || 0) + debt) - credit;
+    }
+
+    async function loadCurrentData() {
+        if(!supId) return;
+        try {
+            const docRef = doc(db, "suppliers", supId);
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                document.getElementById('supName').value = data.name || '';
+                document.getElementById('supPhone').value = data.phone || '';
+                document.getElementById('supAddress').value = data.address || '';
+                document.getElementById('supOpening').value = data.openingBalance || 0;
+                document.getElementById('supLimit').value = data.creditLimit || 0;
+
+                const realBalance = await calculateSupplierBalance(supId, data.openingBalance);
+                document.getElementById('supBalanceDisplay').value = realBalance.toLocaleString() + " ج.م";
+            }
+            document.getElementById('loader').style.display = 'none';
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> جاري الحفظ...';
+
+        try {
+            const docRef = doc(db, "suppliers", supId);
+            await updateDoc(docRef, {
+                name: document.getElementById('supName').value.trim(),
+                phone: document.getElementById('supPhone').value.trim(),
+                address: document.getElementById('supAddress').value.trim(),
+                openingBalance: Number(document.getElementById('supOpening').value),
+                creditLimit: Number(document.getElementById('supLimit').value)
+            });
+
+            alert("تم تحديث بيانات المورد بنجاح");
+            window.location.href = `supplier-details.html?id=${supId}`;
+        } catch (error) {
+            alert("فشل في حفظ التعديلات");
+            btn.disabled = false;
+            btn.innerHTML = 'حفظ التغييرات';
+        }
+    });
+
+    loadCurrentData();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

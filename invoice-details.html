@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تفاصيل الفاتورة - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #dc3545;
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); }
+        
+        /* --- Header --- */
+        .header-section { 
+            padding: 15px; background: var(--header-bg); color: white; 
+            position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn-action { 
+            width: 38px; height: 38px; border-radius: 10px; border: none; 
+            background: rgba(255, 255, 255, 0.2); color: #fff; 
+            display: flex; align-items: center; justify-content: center; 
+            text-decoration: none; transition: 0.3s; 
+        }
+        .btn-action:hover { background: rgba(255, 255, 255, 0.3); }
+        .btn-delete {
+            background: rgba(220, 53, 69, 0.8) !important;
+        }
+        .btn-delete:hover {
+            background: rgba(220, 53, 69, 1) !important;
+        }
+
+        /* --- Invoice Card --- */
+        .info-card { 
+            background: var(--white); border-radius: 15px; padding: 15px; 
+            margin: 15px 0; border: 1px solid var(--border);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        
+        /* --- Items Table --- */
+        .items-table { width: 100%; border-collapse: collapse; background: var(--white); border-radius: 12px; overflow: hidden; }
+        .items-table th { background: #eef3f0; color: var(--accent); font-size: 0.8rem; padding: 12px 8px; text-align: center; }
+        .items-table td { padding: 12px 8px; text-align: center; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+        
+        .num-font { font-weight: 700; font-family: 'Consolas', monospace; }
+        .total-box { background: var(--white); border-radius: 15px; padding: 15px; border: 2px solid var(--accent); }
+    </style>
+</head>
+<body>
+
+<div id="content-area">
+    <div class="header-section d-flex justify-content-between align-items-center">
+        <div class="d-flex gap-2">
+            <button class="btn-action" onclick="window.print()"><i class="fas fa-print"></i></button>
+            <!-- زر مسح الفاتورة -->
+            <button class="btn-action btn-delete" id="btnDeleteInv" title="مسح الفاتورة"><i class="fas fa-trash-alt"></i></button>
+        </div>
+        <h6 class="m-0 fw-bold" id="invTitle">تفاصيل الفاتورة</h6>
+        <a href="javascript:history.back()" class="btn-action"><i class="fas fa-chevron-left"></i></a>
+    </div>
+
+    <div class="container mt-2">
+        <div class="info-card">
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold text-muted small">رقم الفاتورة:</span>
+                <span class="fw-bold num-font" id="invId">---</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold text-muted small">اسم العميل:</span>
+                <span class="fw-bold" id="custName">---</span>
+            </div>
+            <div class="d-flex justify-content-between">
+                <span class="fw-bold text-muted small">التاريخ:</span>
+                <span class="fw-bold num-font" id="invDate">---</span>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">الصنف</th>
+                        <th style="width: 20%;">الكمية</th>
+                        <th style="width: 20%;">السعر</th>
+                        <th style="width: 20%;">الإجمالي</th>
+                    </tr>
+                </thead>
+                <tbody id="itemsBody">
+                    <tr><td colspan="4" class="text-center">جاري تحميل الأصناف...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="total-box mt-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold">الإجمالي الكلي:</span>
+                <span class="fw-bold num-font text-success fs-5" id="invTotal">0.00</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small opacity-75">المسدد:</span>
+                <span class="fw-bold num-font text-primary" id="invPaid">0.00</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center border-top pt-1 mt-1">
+                <span class="small opacity-75">المتبقي:</span>
+                <span class="fw-bold num-font text-danger" id="invRemaining">0.00</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const invId = urlParams.get('id');
+
+    async function loadInvoiceDetails() {
+        if(!invId) {
+            alert('لم يتم العثور على الفاتورة');
+            return;
+        }
+
+        try {
+            const invSnap = await getDoc(doc(db, "invoices", invId));
+            
+            if(invSnap.exists()) {
+                const data = invSnap.data();
+                
+                document.getElementById('invId').innerText = invId.substring(0, 8).toUpperCase();
+                document.getElementById('custName').innerText = data.customerName || 'عام';
+                document.getElementById('invDate').innerText = data.time || '---';
+                document.getElementById('invTotal').innerText = (Number(data.total) || 0).toLocaleString() + " ج.م";
+                document.getElementById('invPaid').innerText = (Number(data.paid) || 0).toLocaleString() + " ج.م";
+                document.getElementById('invRemaining').innerText = (Number(data.remaining) || 0).toLocaleString() + " ج.م";
+
+                const itemsBody = document.getElementById('itemsBody');
+                itemsBody.innerHTML = '';
+
+                const items = data.items || [];
+                if(items.length === 0) {
+                    itemsBody.innerHTML = '<tr><td colspan="4" class="text-muted">لا توجد أصناف مسجلة لهذه الفاتورة</td></tr>';
+                } else {
+                    items.forEach(item => {
+                        const itemTotal = (Number(item.price) || 0) * (Number(item.qty) || 0);
+                        itemsBody.innerHTML += `
+                            <tr>
+                                <td class="fw-bold text-end">${item.name || item.productName || 'صنف'}</td>
+                                <td class="num-font">${item.qty || 1}</td>
+                                <td class="num-font">${(Number(item.price) || 0).toLocaleString()}</td>
+                                <td class="num-font fw-bold">${itemTotal.toLocaleString()}</td>
+                            </tr>
+                        `;
+                    });
+                }
+            } else {
+                document.getElementById('itemsBody').innerHTML = '<tr><td colspan="4" class="text-danger">الفاتورة غير موجودة!</td></tr>';
+            }
+        } catch (e) {
+            console.error(e);
+            document.getElementById('itemsBody').innerHTML = '<tr><td colspan="4" class="text-danger">حدث خطأ أثناء تحميل البيانات</td></tr>';
+        }
+    }
+
+    // دالة حذف الفاتورة
+    document.getElementById('btnDeleteInv').addEventListener('click', async () => {
+        if (!invId) return;
+        
+        const confirmDelete = confirm('هل أنت تأكد من رغبتك في حذف هذه الفاتورة نهائياً من قاعدة البيانات؟');
+        if (confirmDelete) {
+            try {
+                await deleteDoc(doc(db, "invoices", invId));
+                alert('تم حذف الفاتورة بنجاح!');
+                history.back(); // العودة لكشف الحساب
+            } catch (error) {
+                console.error("خطأ في الحذف: ", error);
+                alert('حدث خطأ أثناء محاولة حذف الفاتورة.');
+            }
+        }
+    });
+
+    loadInvoiceDetails();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

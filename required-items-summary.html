@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>تجميع الأصناف المطلوبة ومطابقة الحمولة والمخزن - الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+:root {
+  --brand: #0b5e3d;
+  --brand-d: #0a4a31;
+  --brand-lt: #eefaf1;
+  --bg-light: #f4f7f6;
+  --text-primary: #1b2e26;
+  --text-secondary: #4a5568;
+  --border: #dce3de;
+  --white: #ffffff;
+  --card-radius: 12px;
+}
+
+* { box-sizing: border-box !important; }
+
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+  background: var(--bg-light);
+  font-family: 'Cairo', sans-serif;
+  color: var(--text-primary);
+  padding-bottom: 80px;
+  margin: 0;
+}
+
+.header-nav {
+  background: linear-gradient(135deg, #0b5e3d 0%, #0a4a31 100%);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.nav-btn {
+  background: rgba(255,255,255,0.15);
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: white; text-decoration: none; border: none; cursor: pointer;
+  transition: background 0.2s;
+  font-size: 0.85rem;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.25); color: white; }
+
+.tools-bar {
+  padding: 10px 10px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.date-picker-wrap {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.date-picker-wrap input {
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--brand);
+  width: 110px;
+}
+
+.search-bar-wrap {
+  flex: 1;
+  position: relative;
+}
+.search-bar-wrap input {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 30px 6px 10px;
+  font-family: 'Cairo', sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  width: 100%;
+  background: white;
+  color: var(--text-primary);
+  outline: none;
+}
+.search-bar-wrap input:focus { border-color: var(--brand); }
+.search-icon {
+  position: absolute;
+  right: 10px; top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.summary-cards-container {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.item-summary-card {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 10px 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 160px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.item-summary-card:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.item-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 6px;
+}
+
+.item-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--brand-d);
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.total-required-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 800;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid #bae6fd;
+  text-align: center;
+  align-self: flex-start;
+}
+
+.stock-comparison-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.comparison-box {
+  background: #f8fafc;
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.comparison-box .label-val {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #475569;
+}
+
+.status-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 5px;
+  text-align: center;
+  width: 100%;
+}
+.status-tag.surplus { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.status-tag.deficit { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.status-tag.exact { background: #fef3c7; color: #b45309; border: 1px solid #fde047; }
+
+.loading-state, .empty-state {
+  grid-column: span 2;
+  text-align: center;
+  padding: 40px 10px;
+  font-size: 0.8rem;
+}
+
+.spinner {
+  width: 28px; height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 0 auto 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* مودال تفاصيل العملاء */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 3000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  animation: modalIn 0.2s ease-out;
+}
+@keyframes modalIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.modal-header-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1.5px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.modal-title-custom {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--brand-d);
+}
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.client-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #f8fafc;
+}
+.client-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.client-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.client-name {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.date-badge-inline {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 800;
+  font-size: 0.68rem;
+  padding: 1px 7px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+.client-order-num {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-weight: 600;
+}
+.client-qty-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #bae6fd;
+}
+</style>
+</head>
+<body>
+
+<div class="header-nav">
+  <a href="all-orders.html" class="nav-btn">
+    <i class="fas fa-arrow-right"></i>
+  </a>
+  <h6 class="m-0 fw-bold d-flex align-items-center gap-2" style="font-size: 0.82rem;">
+    <i class="fas fa-truck-ramp-box"></i>
+    <span>مقارنة حمولة العربية والمخزن</span>
+    <span class="badge" style="background: rgba(255,255,255,0.2); font-size: 0.65rem; padding: 2px 5px;" id="totalTypesBadge">0</span>
+  </h6>
+  <button onclick="loadAndCalculateData()" class="nav-btn" title="تحديث البيانات">
+    <i class="fas fa-rotate"></i>
+  </button>
+</div>
+
+<div class="tools-bar">
+  <div class="date-picker-wrap">
+    <i class="fas fa-calendar-alt" style="color: var(--brand);"></i>
+    <input type="date" id="selectedDate" onchange="loadAndCalculateData()">
+  </div>
+  <div class="search-bar-wrap">
+    <i class="fas fa-search search-icon"></i>
+    <input type="text" id="searchInput" placeholder="ابحث باسم الصنف..." oninput="filterSummary()">
+  </div>
+</div>
+
+<div class="summary-cards-container" id="summaryList">
+  <div class="loading-state">
+    <div class="spinner"></div>
+    <p style="color: #94a3b8; font-size: 0.78rem; font-weight: 700;">جاري التحميل والمطابقة...</p>
+  </div>
+</div>
+
+<!-- مودال تفاصيل العملاء -->
+<div class="modal-overlay" id="clientDetailsModal" onclick="closeClientModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header-custom">
+      <div class="modal-title-custom" id="modalItemTitle">تفاصيل طلبات العملاء</div>
+      <button class="modal-close-btn" onclick="closeClientModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="overflow-y: auto; flex: 1; padding-right: 2px;" id="modalClientsList">
+      <!-- يتم تعبئة العملاء هنا -->
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a"
+};
+
+const app = initializeApp(firebaseConfig);
+let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+let groupedItems = [];
+
+const today = new Date();
+const offset = today.getTimezoneOffset();
+const localToday = new Date(today.getTime() - (offset * 60 * 1000));
+const defaultDateStr = localToday.toISOString().split('T')[0];
+document.getElementById('selectedDate').value = defaultDateStr;
+
+function getUnitName(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('قطعة') || n.includes('قطعه')) return 'قطعة';
+  if (n.includes('كرتونة') || n.includes('كرتونه')) return 'كرتونة';
+  return 'جركن';
+}
+
+function cleanItemName(str) {
+  if (!str) return "";
+  return str.trim()
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .replace(/[أإآ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/ى/g, 'ي');
+}
+
+function isCarton(item) {
+  const u = (item.unit || "").trim().toLowerCase();
+  if (u === "box" || u === "كرتونة" || u === "كرتونه") return true;
+  if (u === "pcs" || u === "قطعة" || u === "جركن") return false;
+  const un = (item.unitName || "").trim().toLowerCase();
+  return un === "كرتونة" || un === "كرتونه";
+}
+
+function formatQuantityDetailed(totalPcs, capacity, unit) {
+  totalPcs = parseInt(totalPcs) || 0;
+  capacity = parseInt(capacity) || 1;
+  
+  if (totalPcs === 0) return `0 ${unit}`;
+  
+  const isNegative = totalPcs < 0;
+  const absPcs = Math.abs(totalPcs);
+  
+  let result = '';
+  if (capacity <= 1) { 
+    result = `${absPcs} ${unit}`; 
+  } else {
+    const cartons = Math.floor(absPcs / capacity);
+    const loose = absPcs % capacity;
+    
+    if (cartons > 0 && loose > 0) { 
+      result = `${cartons}ك و ${loose}${unit}`; 
+    } else if (cartons > 0) { 
+      result = `${cartons} كرتونة`; 
+    } else { 
+      result = `${loose} ${unit}`; 
+    }
+  }
+  
+  return isNegative ? `-${result}` : result;
+}
+
+// دالة التاريخ النسبية بدون وقت
+function formatOrderDateRelativeOnly(dateVal) {
+  if (!dateVal) return '';
+  try {
+    let d;
+    if (typeof dateVal.toDate === 'function') {
+      d = dateVal.toDate();
+    } else {
+      d = new Date(dateVal);
+    }
+    if (isNaN(d.getTime())) return String(dateVal);
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    
+    const diffTime = todayStart.getTime() - targetStart.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+    if (diffDays === 0) return 'اليوم';
+    if (diffDays === 1) return 'أمس';
+    if (diffDays === 2) return 'منذ يومين';
+    if (diffDays > 2 && diffDays <= 10) return `منذ ${diffDays} أيام`;
+    if (diffDays > 10) return `منذ ${diffDays} يوم`;
+    if (diffDays < 0) return 'غداً';
+    return '';
+  } catch(e) {
+    return String(dateVal);
+  }
+}
+
+async function loadAndCalculateData() {
+  const container = document.getElementById('summaryList');
+  container.innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p style="color: #94a3b8; font-size: 0.78rem; font-weight: 700;">جاري جلب بيانات العربية والمخزن...</p>
+    </div>`;
+
+  try {
+    const targetDate = document.getElementById('selectedDate').value || defaultDateStr;
+
+    // 1. كميات التحميل للعربية
+    const loadedInSession = JSON.parse(localStorage.getItem('loadedInSession_' + targetDate) || '{}');
+    const cartItems = JSON.parse(localStorage.getItem('cartItems_' + targetDate) || '{}');
+
+    // 2. كميات المخزن الرئيسي والمعاملات
+    const inventorySnap = await getDocs(collection(db, "inventory"));
+    const inventoryMap = {};
+    const nameToInventoryMap = {};
+
+    inventorySnap.forEach(docSnap => {
+      const data = docSnap.data();
+      const rawName = (data.name || '').trim();
+      const cleanedKey = cleanItemName(rawName);
+
+      const itemObj = {
+        id: docSnap.id,
+        name: rawName,
+        capacity: Number(data.unitFactor) || 1,
+        unit: data.unit || '',
+        stockPcs: Number(data.totalPcs || 0)
+      };
+
+      inventoryMap[docSnap.id] = itemObj;
+      nameToInventoryMap[cleanedKey] = itemObj;
+    });
+
+    // 3. احتساب تفاصيل العملاء والتاريخ المترجم بدون وقت
+    const ordersSnap = await getDocs(query(collection(db, "orders"), where("status", "==", "pending")));
+
+    const requiredMap = {};
+    ordersSnap.forEach(docSnap => {
+      const order = docSnap.data();
+      const clientName = order.clientName || order.customerName || 'عميل غير محدد';
+      const orderNum = order.orderNo || order.id || '';
+      const orderDateRelative = formatOrderDateRelativeOnly(order.createdAt || order.date);
+
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          const rawName = (item.name || 'صنف غير معروف').trim();
+          const cleanedKey = cleanItemName(rawName);
+          const rawQty = Number(item.quantity || item.qty || 0);
+
+          const invMatch = nameToInventoryMap[cleanedKey];
+          const cap = invMatch ? invMatch.capacity : 1;
+          const isItemCarton = isCarton(item);
+
+          const totalPcs = isItemCarton ? (rawQty * cap) : rawQty;
+
+          if (!requiredMap[cleanedKey]) {
+            requiredMap[cleanedKey] = {
+              displayName: rawName,
+              requiredPcs: 0,
+              clientDetails: []
+            };
+          }
+          requiredMap[cleanedKey].requiredPcs += totalPcs;
+          requiredMap[cleanedKey].clientDetails.push({
+            clientName: clientName,
+            orderNum: orderNum,
+            orderDate: orderDateRelative,
+            pcs: totalPcs
+          });
+        });
+      }
+    });
+
+    const itemKeys = new Set();
+    Object.keys(loadedInSession).forEach(id => itemKeys.add(id));
+
+    Object.keys(requiredMap).forEach(cleanedKey => {
+      const matched = nameToInventoryMap[cleanedKey];
+      if (matched) {
+        itemKeys.add(matched.id);
+      }
+    });
+
+    groupedItems = Array.from(itemKeys).map(id => {
+      const invItem = inventoryMap[id] || { 
+        name: cartItems[id]?.name || 'صنف غير معروف', 
+        capacity: cartItems[id]?.capacity || 1,
+        stockPcs: 0
+      };
+      const sess = loadedInSession[id] || { cartons: 0, loose: 0 };
+      
+      const loadedPcs = (parseFloat(sess.cartons || 0) * invItem.capacity) + parseInt(sess.loose || 0);
+      const cleanedKey = cleanItemName(invItem.name);
+      const reqObj = requiredMap[cleanedKey];
+      const requiredPcs = reqObj ? reqObj.requiredPcs : 0;
+      const clientDetails = reqObj ? reqObj.clientDetails : [];
+      
+      return {
+        id: id,
+        name: invItem.name,
+        capacity: invItem.capacity,
+        unit: getUnitName(invItem.name),
+        loadedPcs: loadedPcs,
+        stockPcs: invItem.stockPcs,
+        requiredPcs: requiredPcs,
+        carDiffPcs: loadedPcs - requiredPcs,
+        stockDiffPcs: invItem.stockPcs - requiredPcs,
+        clientDetails: clientDetails
+      };
+    });
+
+    groupedItems.sort((a, b) => a.carDiffPcs - b.carDiffPcs);
+
+    document.getElementById('totalTypesBadge').innerText = groupedItems.length;
+    renderSummary();
+
+  } catch (e) {
+    console.error("خطأ أثناء المطابقة:", e);
+    container.innerHTML = `<div class="empty-state"><h6>حدث خطأ أثناء تحميل الحسابات</h6></div>`;
+  }
+}
+
+window.loadAndCalculateData = loadAndCalculateData;
+window.filterSummary = () => renderSummary();
+
+function renderSummary() {
+  const term = cleanItemName(document.getElementById('searchInput').value || '');
+  const container = document.getElementById('summaryList');
+
+  let filtered = groupedItems.filter(item => cleanItemName(item.name).includes(term));
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state"><h6>لا توجد أصناف مطابقة</h6></div>`;
+    return;
+  }
+
+  let html = '';
+  filtered.forEach(item => {
+    const requiredText = formatQuantityDetailed(item.requiredPcs, item.capacity, item.unit);
+    
+    const loadedText = formatQuantityDetailed(item.loadedPcs, item.capacity, item.unit);
+    const carDiffText = formatQuantityDetailed(Math.abs(item.carDiffPcs), item.capacity, item.unit);
+    let carStatusTag = '';
+    if (item.carDiffPcs > 0) {
+      carStatusTag = `<span class="status-tag surplus"><i class="fas fa-plus-circle"></i> فائض بالعربية: ${carDiffText}</span>`;
+    } else if (item.carDiffPcs < 0) {
+      carStatusTag = `<span class="status-tag deficit"><i class="fas fa-minus-circle"></i> عجز بالعربية: ${carDiffText}</span>`;
+    } else {
+      carStatusTag = `<span class="status-tag exact"><i class="fas fa-check"></i> مطابقة بالعربية</span>`;
+    }
+
+    const stockText = formatQuantityDetailed(item.stockPcs, item.capacity, item.unit);
+    const stockDiffText = formatQuantityDetailed(Math.abs(item.stockDiffPcs), item.capacity, item.unit);
+    let stockStatusTag = '';
+    if (item.stockDiffPcs > 0) {
+      stockStatusTag = `<span class="status-tag surplus"><i class="fas fa-plus-circle"></i> فائض بالمخزن: ${stockDiffText}</span>`;
+    } else if (item.stockDiffPcs < 0) {
+      stockStatusTag = `<span class="status-tag deficit"><i class="fas fa-minus-circle"></i> عجز بالمخزن: ${stockDiffText}</span>`;
+    } else {
+      stockStatusTag = `<span class="status-tag exact"><i class="fas fa-check"></i> مطابقة بالمخزن</span>`;
+    }
+
+    html += `
+      <div class="item-summary-card" onclick="openClientModal('${item.id}')">
+        <div class="item-header">
+          <div class="item-title">
+            <i class="fas fa-box-archive" style="color: var(--brand);"></i>
+            <span>${item.name}</span>
+          </div>
+          <div class="total-required-badge">
+            مطلوب: ${requiredText}
+          </div>
+        </div>
+        
+        <div class="stock-comparison-block">
+          <div class="comparison-box">
+            <div class="label-val">
+              <span>🚚 المحمل:</span>
+              <b>${loadedText}</b>
+            </div>
+            ${carStatusTag}
+          </div>
+
+          <div class="comparison-box">
+            <div class="label-val">
+              <span>🏭 المخزن:</span>
+              <b>${stockText}</b>
+            </div>
+            ${stockStatusTag}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+window.openClientModal = function(itemId) {
+  const item = groupedItems.find(i => i.id === itemId);
+  if (!item) return;
+
+  document.getElementById('modalItemTitle').innerHTML = `<i class="fas fa-users" style="color: var(--brand);"></i> طلبات: ${item.name}`;
+  const listContainer = document.getElementById('modalClientsList');
+
+  if (!item.clientDetails || !item.clientDetails.length) {
+    listContainer.innerHTML = `<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.8rem; font-weight:700;">لا توجد طلبات معلقة لهذا الصنف</div>`;
+  } else {
+    let clientsHTML = '';
+    item.clientDetails.forEach(c => {
+      const qtyTxt = formatQuantityDetailed(c.pcs, item.capacity, item.unit);
+      clientsHTML += `
+        <div class="client-item-row">
+          <div class="client-info">
+            <div class="client-name-wrap">
+              <span class="client-name">${c.clientName}</span>
+              ${c.orderDate ? `<span class="date-badge-inline">${c.orderDate}</span>` : ''}
+            </div>
+            ${c.orderNum ? `<div class="client-order-num">رقم الطلب: #${c.orderNum}</div>` : ''}
+          </div>
+          <div class="client-qty-badge">${qtyTxt}</div>
+        </div>
+      `;
+    });
+    listContainer.innerHTML = clientsHTML;
+  }
+
+  document.getElementById('clientDetailsModal').classList.add('open');
+};
+
+window.closeClientModal = function() {
+  document.getElementById('clientDetailsModal').classList.remove('open');
+};
+
+loadAndCalculateData();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

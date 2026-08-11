@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل المرتجعات - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* الهوية البصرية الموحدة لشركة الزيادي */
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #d90429;
+            --success: #2d6a4f;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); }
+        
+        /* Header */
+        .header-section { 
+            padding: 15px; background: var(--header-bg); color: white;
+            position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Search Bar */
+        .search-box {
+            background: var(--white) !important; border: 1px solid var(--border) !important;
+            border-radius: 12px; padding: 12px 45px 12px 15px; color: var(--text-primary) !important; width: 100%;
+            margin-bottom: 20px; outline: none; font-weight: 600;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+        .search-box:focus { border-color: var(--accent) !important; }
+
+        /* Return Card Styles */
+        .return-card {
+            background: var(--white); border-radius: 18px; padding: 18px;
+            margin-bottom: 15px; border: 1px solid var(--border);
+            border-right: 5px solid var(--danger); /* تمييز المرتجع باللون الأحمر */
+            transition: 0.3s; cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        .return-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+
+        .amount-badge {
+            background: #fff5f5; color: var(--danger);
+            padding: 5px 12px; border-radius: 10px; font-weight: 800; border: 1px solid rgba(217, 4, 41, 0.1);
+        }
+        .date-text { font-size: 0.8rem; color: #6c757d; font-weight: 600; }
+        .supplier-name { color: var(--accent); font-weight: 700; font-size: 1.1rem; }
+
+        /* Modal Styles */
+        .modal-content { background: var(--white); border: none; color: var(--text-primary); border-radius: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .modal-header { border-bottom: 1px solid var(--border); padding: 20px; }
+        .modal-body { padding: 20px; }
+        
+        .table-custom { width: 100%; }
+        .table-custom th { color: var(--accent); border-bottom: 2px solid var(--border); padding: 10px 5px; text-align: start; font-weight: 700; }
+        .table-custom td { border-bottom: 1px solid var(--border); padding: 12px 5px; font-size: 0.95rem; text-align: start; font-weight: 600; }
+        
+        .back-btn { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.2); color: #fff; display: flex; align-items: center; justify-content: center; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <div class="container d-flex justify-content-between align-items-center">
+        <h5 class="m-0 fw-bold"><i class="fas fa-undo-alt me-2"></i>سجل مرتجعات المشتريات</h5>
+        <a href="purchase-mgmt.html" class="back-btn"><i class="fas fa-arrow-right"></i></a>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <div class="position-relative">
+        <i class="fas fa-search position-absolute" style="right: 15px; top: 15px; color: var(--accent);"></i>
+        <input type="text" class="search-box" id="searchInput" placeholder="🔍 بحث باسم المورد..." onkeyup="filterReturns()">
+    </div>
+    
+    <div id="returnsList">
+        <div class="text-center p-5"><div class="spinner-border" style="color: var(--accent);"></div></div>
+    </div>
+</div>
+
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" style="color: var(--accent);">تفاصيل أصناف المرتجع</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, query, where, getDocs, doc, getDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+   const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    async function fetchSupplierName(id) {
+        if (!id) return 'مورد غير معروف';
+        try {
+            const sDoc = await getDoc(doc(db, "suppliers", id));
+            return sDoc.exists() ? sDoc.data().name : 'مورد غير معروف';
+        } catch { return 'مورد غير معروف'; }
+    }
+
+    async function loadReturns() {
+        const listDiv = document.getElementById('returnsList');
+        try {
+            const q = query(collection(db, "supplier_transactions"), where("type", "==", "مرتجع شراء"));
+            const querySnapshot = await getDocs(q);
+            listDiv.innerHTML = '';
+
+            if (querySnapshot.empty) {
+                listDiv.innerHTML = '<div class="text-center opacity-50 p-5">لا توجد مرتجعات مسجلة حتى الآن</div>';
+                return;
+            }
+
+            const returnsPromises = querySnapshot.docs.map(async (docSnapshot) => {
+                const data = docSnapshot.data();
+                const sName = data.supplierName || await fetchSupplierName(data.supplierId);
+                const displayAmt = data.total || data.amount || 0;
+                return { ...data, sName, displayAmt };
+            });
+
+            const returnsData = await Promise.all(returnsPromises);
+            returnsData.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            returnsData.forEach((data) => {
+                const card = document.createElement('div');
+                card.className = 'return-card';
+                card.setAttribute('data-name', data.sName);
+                card.onclick = () => showItems(data);
+
+                card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="supplier-name">${data.sName}</div>
+                            <div class="date-text mt-1"><i class="far fa-calendar-alt me-1"></i> ${data.date}</div>
+                        </div>
+                        <div class="text-end">
+                            <div class="amount-badge">${Number(data.displayAmt).toLocaleString()} ج.م</div>
+                            <div class="small text-muted mt-1 fw-bold" style="font-size:0.7rem">قيمة المرتجع</div>
+                        </div>
+                    </div>
+                    <hr style="border-color: var(--border); margin: 12px 0;">
+                    <div class="small fw-bold" style="color: var(--success)">
+                        <i class="fas fa-box-open me-1"></i> ${data.items ? data.items.length + ' أصناف مرتجعة' : 'تفاصيل المرتجع'}
+                    </div>
+                `;
+                listDiv.appendChild(card);
+            });
+
+        } catch (error) {
+            console.error(error);
+            listDiv.innerHTML = '<div class="alert alert-danger">حدث خطأ أثناء تحميل البيانات</div>';
+        }
+    }
+
+    window.showItems = (data) => {
+        const modalBody = document.getElementById('modalBody');
+        let itemsRows = '';
+
+        if (data.items && data.items.length > 0) {
+            data.items.forEach(item => {
+                itemsRows += `
+                    <tr>
+                        <td>${item.name || 'صنف غير معروف'}</td>
+                        <td class="text-center">${item.qty || 0}</td>
+                        <td class="text-end">${Number(item.price || item.buy || 0).toLocaleString()}</td>
+                    </tr>`;
+            });
+
+            modalBody.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table-custom">
+                        <thead>
+                            <tr><th>الصنف</th><th class="text-center">الكمية</th><th class="text-end">السعر</th></tr>
+                        </thead>
+                        <tbody>${itemsRows}</tbody>
+                    </table>
+                </div>
+                <div class="mt-4 p-3 rounded-4 bg-light d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-muted">إجمالي المرتجع:</span>
+                    <h5 class="m-0 fw-bold" style="color: var(--danger)">${Number(data.displayAmt).toLocaleString()} ج.م</h5>
+                </div>
+            `;
+        } else {
+            modalBody.innerHTML = '<div class="text-center p-3 opacity-50">لا توجد تفاصيل أصناف مسجلة لهذا المرتجع</div>';
+        }
+
+        new bootstrap.Modal(document.getElementById('detailsModal')).show();
+    }
+
+    window.filterReturns = () => {
+        const val = document.getElementById('searchInput').value.toLowerCase();
+        document.querySelectorAll('.return-card').forEach(card => {
+            const name = card.getAttribute('data-name').toLowerCase();
+            card.style.display = name.includes(val) ? 'block' : 'none';
+        });
+    }
+
+    loadReturns();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

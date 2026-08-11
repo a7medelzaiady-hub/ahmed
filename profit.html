@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تقرير الأرباح والمبيعات اليومية — الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght=400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<!-- مكتبة SheetJS لتصدير ملفات إكسل -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --g8:#0b4e33;--g7:#0f6e48;--g6:#16a34a;
+  --g1:#dcfce7;--g0:#f0fdf4;
+  --a7:#b45309;--a1:#fef3c7;--a0:#fffbeb;
+  --r7:#b91c1c;--r1:#fee2e2;--r0:#fef2f2;
+  --b7:#0369a1;--b1:#e0f2fe;--b0:#f0f9ff;
+  --s9:#0f172a;--s7:#334155;--s5:#64748b;--s3:#cbd5e1;
+  --s1:#f1f5f9;--wh:#fff;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#e8edea;
+  font-family:'Cairo',sans-serif;
+  color:var(--s9);
+  font-size:.85rem;
+  padding-bottom:80px;
+  -webkit-font-smoothing:antialiased;
+}
+.topbar{
+  background:var(--g8);
+  height:56px;padding:0 14px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:300;
+  box-shadow:0 2px 12px rgba(5,46,22,.4);
+}
+.tb-brand{display:flex;align-items:center;gap:9px}
+.tb-logo{
+  width:34px;height:34px;border-radius:8px;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.95rem;color:#fff;flex-shrink:0;
+}
+.tb-name{font-size:.82rem;font-weight:800;color:#fff;line-height:1.25}
+.tb-sub{font-size:.62rem;color:rgba(255,255,255,.58);font-weight:500}
+.tb-btns{display:flex;gap:7px}
+.tb-btn{
+  width:34px;height:34px;border-radius:8px;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.88rem;color:#fff;cursor:pointer;
+  text-decoration:none;transition:background .15s;
+}
+.tb-btn:hover{background:rgba(255,255,255,.22);color:#fff}
+.save-btn-active {
+  background: var(--g6) !important;
+  border-color: rgba(255,255,255,.3) !important;
+}
+.save-btn-active:hover {
+  background: #117e38 !important;
+}
+
+.datebar{
+  background:var(--wh);
+  border-bottom:1px solid #d0ddd6;
+  padding:8px 14px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:nowrap;gap:8px;
+}
+.datebar-right{
+  display:flex;align-items:center;gap:8px;flex-grow:1;
+}
+.datebar-title{
+  font-size:.82rem;font-weight:900;color:var(--s7);
+  display:flex;align-items:center;gap:4px;white-space:nowrap;
+}
+.datebar-title i{color:var(--g7);font-size:.9rem}
+.datebar-sub{
+  font-size:.68rem;font-weight:700;color:var(--s5);
+  background:var(--s1);border-radius:5px;padding:3px 6px;white-space:nowrap;
+}
+.date-pick{
+  display:flex;align-items:center;gap:4px;
+  background:var(--g0);border:1.5px solid #9fd3b5;
+  border-radius:7px;padding:2px 6px;
+}
+.date-pick input[type="date"]{
+  border:none;background:transparent;
+  font-family:'Cairo',sans-serif;font-weight:800;
+  font-size:.78rem;color:var(--g8);outline:none;cursor:pointer;padding:0;
+}
+
+.searchbar{
+  background:var(--wh);
+  padding:10px 14px 6px;
+}
+.search-box{
+  display:flex;align-items:center;gap:8px;
+  background:var(--s1);border:1.5px solid #d7e2dc;
+  border-radius:10px;padding:8px 12px;
+}
+.search-box input{
+  border:none;background:transparent;outline:none;
+  font-family:'Cairo',sans-serif;font-weight:700;
+  font-size:.82rem;color:var(--s9);width:100%;
+}
+
+.hidden-cols-panel{
+  background: var(--wh);
+  padding: 0 14px 10px;
+  border-bottom: 1px solid #d0ddd6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.hidden-cols-title {
+  font-size: .7rem;
+  font-weight: 800;
+  color: var(--s5);
+}
+.restore-btn {
+  background: var(--g1);
+  color: var(--g8);
+  border: 1px solid #9fd3b5;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: .68rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.restore-btn:hover {
+  background: var(--g6);
+  color: #fff;
+}
+
+.exp-widget{
+  margin:10px;background:var(--wh);border-radius:12px;border:1px solid #fca5a5;padding:10px 12px;
+  cursor:pointer;transition: background 0.2s;
+}
+.exp-widget:hover{background:#fff8f8;}
+.exp-hdr{display:flex;align-items:center;justify-content:space-between;font-size:.76rem;font-weight:800;color:var(--r7);padding-bottom:2px;}
+.exp-hdr.active{border-bottom:1px dashed #fca5a5;padding-bottom:6px;margin-bottom:8px;}
+.exp-list{display:none;flex-wrap:wrap;gap:6px;}
+.exp-item{background:var(--r0);border:1px solid #fecaca;color:var(--r7);font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:6px;}
+.exp-toggle-icon{transition: transform 0.2s;}
+.exp-hdr.active .exp-toggle-icon{transform: rotate(180deg);}
+
+.equation-bar{
+  margin:10px 10px 4px;
+  background:#f4fbf7;
+  border:1px solid #b6d5c4;
+  border-radius:10px;
+  padding:10px 14px;
+  font-size:.78rem;
+  color:var(--g8);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:6px;
+  text-align:center;
+  line-height:1.5;
+  box-shadow:0 1px 4px rgba(0,0,0,.03);
+}
+.eq-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.kpi-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  padding:6px 10px 4px;
+}
+.kpi{
+  background:var(--wh);
+  border-radius:12px;
+  border:1px solid #dde8e2;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:12px 4px 10px;
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;gap:6px;
+}
+.kpi::after{content:'';position:absolute;top:0;right:0;left:0;height:3px;border-radius:12px 12px 0 0;}
+.kpi-b::after{background:var(--b7)}
+.kpi-p::after{background:var(--a7)}
+.kpi-s::after{background:var(--g6)}
+.kpi-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;}
+.kpi-b .kpi-ico{background:var(--b1);color:var(--b7)}
+.kpi-p .kpi-ico{background:var(--a1);color:var(--a7)}
+.kpi-s .kpi-ico{background:var(--g1);color:var(--g7)}
+.kpi-lbl{font-size:.62rem;font-weight:800;color:var(--s5);line-height:1.1;}
+.kpi-val{font-size:.95rem;font-weight:900;line-height:1.2;}
+.kpi-b .kpi-val{color:var(--b7)}
+.kpi-p .kpi-val{color:var(--a7)}
+.kpi-s .kpi-val{color:var(--g7)}
+.kpi-val.negative{color:var(--r7);}
+
+.archive-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px 12px 12px;
+  background: var(--wh);
+  border-bottom: 1px solid #d0ddd6;
+}
+.astat-card {
+  background: var(--s1);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.astat-card.highlight {
+  background: var(--g0);
+  border-color: #9fd3b5;
+}
+.astat-lbl {
+  font-size: .65rem;
+  font-weight: 800;
+  color: var(--s5);
+  margin-bottom: 2px;
+}
+.astat-val {
+  font-size: .88rem;
+  font-weight: 900;
+  color: var(--g8);
+}
+
+.sec-hdr{padding:10px 12px 5px;}
+.sec-ttl-btn{
+  background: none; border: none; padding: 0; width: 100%; text-align: right;
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:.76rem;font-weight:800;color:var(--s7);cursor: pointer;
+}
+.sec-ttl-right{display: flex; align-items: center; gap:6px;}
+.sec-dot{width:7px;height:7px;border-radius:50%;background:var(--g6)}
+.table-toggle-icon{font-size: 0.8rem; color: var(--s5); transition: transform 0.2s;}
+.table-toggle-icon.collapsed{transform: rotate(-90deg);}
+
+.tbl-card{
+  margin:0 8px 12px;
+  background:var(--wh);
+  border-radius:12px;
+  border:1px solid #d0ddd6;
+  box-shadow:0 3px 12px rgba(0,0,0,.06);
+  overflow:hidden;
+}
+.tbl-card-inner {
+  overflow-x: auto;
+}
+table.inv{
+  width: 100%;
+  border-collapse:separate;border-spacing:0;
+  font-size:.78rem;
+  table-layout: auto;
+}
+table.inv th, table.inv td {
+  white-space: nowrap;
+  padding: 8px 10px;
+  text-align: center;
+  vertical-align: middle;
+  width: 1%;
+}
+table.inv thead th{
+  background:var(--g8);color:#fff;font-weight:700;font-size:.74rem;
+  position:sticky;top:0;z-index:10;
+  border-right:1px solid rgba(255,255,255,0.15);
+  cursor: pointer;
+  user-select: none;
+}
+table.inv thead th:hover{
+  background: var(--g7);
+}
+table.inv thead th.sub-head{
+  background:var(--g7);
+  font-size:.68rem;
+  padding:5px 8px;
+}
+table.inv tbody td{
+  border-bottom:1px solid #eef3f0;
+  font-weight:700;
+  border-right:1px solid rgba(0,0,0,0.04);
+}
+table.inv tbody td:first-child{
+  text-align: right;
+  padding-right: 14px;
+  color: var(--s9);
+  font-weight: 800;
+  background: var(--g0);
+}
+table.inv tbody tr:hover td{background:#f5faf7 !important}
+table.inv tfoot td{
+  padding:10px 12px;font-weight:900;font-size:.8rem;
+  border-top:2px solid #b6d5c4;background:#ecf5ef;color:var(--g8);
+  border-right:1px solid rgba(0,0,0,0.04);
+}
+table.inv tfoot td:first-child{text-align:right;padding-right:14px;}
+
+.btn-export-excel {
+  background: #107c41;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.2s;
+}
+.btn-export-excel:hover {
+  background: #0b5c30;
+}
+
+.profit-pos{color:var(--g7); background:#f0fdf4;}
+.profit-neg{color:var(--r7); background:#fef2f2;}
+.badge-pct{
+  background:var(--g1); color:var(--g8);
+  padding:3px 6px; border-radius:5px; font-size:.68rem; font-weight:800;
+  display: inline-block;
+}
+.badge-pct.neg{
+  background:var(--r1); color:var(--r7);
+}
+
+.spin-wrap{padding:42px 16px;text-align:center}
+.spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--g1);border-top-color:var(--g6);animation:rot .7s linear infinite;margin:0 auto 10px;}
+@keyframes rot{to{transform:rotate(360deg)}}
+.spin-lbl{font-size:.78rem;font-weight:600;color:var(--s5)}
+.foot{text-align:center;padding:16px;font-size:.65rem;color:var(--s5);font-weight:600}
+
+.archive-time {
+  font-size: 0.65rem;
+  color: var(--s5);
+  display: block;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.divider-line {
+  height: 2px;
+  background: repeating-linear-gradient(to right, #b6d5c4, #b6d5c4 8px, transparent 8px, transparent 16px);
+  margin: 20px 14px 10px;
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="tb-brand">
+    <div class="tb-logo"><i class="fas fa-coins"></i></div>
+    <div>
+      <div class="tb-name">الزيادي لزيوت السيارات</div>
+      <div class="tb-sub">تقرير الأرباح والمبيعات اليومية</div>
+    </div>
+  </div>
+  <div class="tb-btns">
+    <button class="tb-btn save-btn-active" onclick="triggerManualSave()" title="حفظ الأرباح في السجل"><i class="fas fa-save"></i></button>
+    <button class="tb-btn" onclick="exportTodayToExcel()" title="تصدير مبيعات اليوم إلى إكسل"><i class="fas fa-file-excel"></i></button>
+    <button class="tb-btn" onclick="scrollToArchive()" title="سجل الأرباح المرحلة"><i class="fas fa-archive"></i></button>
+    <button class="tb-btn" onclick="window.print()" title="طباعة"><i class="fas fa-print"></i></button>
+    <a href="index.html" class="tb-btn" title="الرئيسية"><i class="fas fa-home"></i></a>
+  </div>
+</nav>
+
+<div class="datebar">
+  <div class="datebar-right">
+    <div class="datebar-title">
+      <i class="fas fa-chart-pie"></i> الأرباح اليومية
+    </div>
+    <div class="date-pick">
+      <input type="date" id="dateIn" onchange="load()">
+    </div>
+  </div>
+  <div class="datebar-sub" id="dateLabel">٢٠٢٦/٠٧/٠٩</div>
+</div>
+
+<div class="searchbar">
+  <div class="search-box">
+    <i class="fas fa-magnifying-glass"></i>
+    <input type="text" id="searchIn" placeholder="ابحث عن صنف..." oninput="filterTable()">
+  </div>
+</div>
+
+<div class="hidden-cols-panel" id="hiddenColsPanel" style="display: none;">
+  <span class="hidden-cols-title"><i class="fas fa-eye-slash"></i> أعمدة مخفية (اضغط لإظهارها):</span>
+  <div id="hiddenButtonsContainer" style="display:inline-flex; flex-wrap:wrap; gap:6px;"></div>
+</div>
+
+<div class="exp-widget" onclick="toggleExpenses()">
+  <div class="exp-hdr" id="expHdr">
+    <span><i class="fas fa-receipt"></i> المصروفات الثابتة اليومية</span>
+    <div>
+      <span id="totalExpDisplay" class="me-2">إجمالي: ١١٣٠ ج</span>
+      <i class="fas fa-chevron-down exp-toggle-icon"></i>
+    </div>
+  </div>
+  <div class="exp-list" id="expList"></div>
+</div>
+
+<div class="equation-bar">
+  <span class="eq-segment"><strong><i class="fas fa-calculator me-1"></i> المعادلة المالية اليومية:</strong></span>
+  <span class="eq-segment">( إجمالي المبيعات <span id="eqSales" style="color:var(--b7); font-weight:800;">0 ج</span> )</span>
+  <span class="eq-segment">- ( إجمالي المشتريات <span id="eqCost" style="color:var(--a7); font-weight:800;">0 ج</span> )</span>
+  <span class="eq-segment">- ( المصروفات <span id="eqExp" style="color:var(--r7); font-weight:800;">0 ج</span> )</span>
+  <span class="eq-segment">= <strong style="text-decoration: underline;">صافي الربح النهائي</strong></span>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi kpi-b">
+    <div class="kpi-ico"><i class="fas fa-money-bill-wave"></i></div>
+    <div class="kpi-lbl">إجمالي المبيعات</div>
+    <div class="kpi-val" id="kGrossSales">—</div>
+  </div>
+  <div class="kpi kpi-p">
+    <div class="kpi-ico"><i class="fas fa-scale-unbalanced"></i></div>
+    <div class="kpi-lbl">إجمالي الربح (قبل الخصم)</div>
+    <div class="kpi-val" id="kGrossProfit">—</div>
+  </div>
+  <div class="kpi kpi-s">
+    <div class="kpi-ico"><i class="fas fa-sack-dollar"></i></div>
+    <div class="kpi-lbl">صافي الربح اليومي</div>
+    <div class="kpi-val" id="kNetProfit">—</div>
+  </div>
+</div>
+
+<div class="sec-hdr">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <button class="sec-ttl-btn" onclick="toggleTableGrid()">
+      <div class="sec-ttl-right">
+        <span class="sec-dot"></span>
+        <span>تفصيل المبيعات والأرباح <small style="font-weight:700; color:var(--g7);">(مرتبة بالأعلى ربحاً)</small></span>
+      </div>
+      <i class="fas fa-chevron-down table-toggle-icon" id="tableToggleIcon"></i>
+    </button>
+    <button class="btn-export-excel ms-2" onclick="exportTodayToExcel()"><i class="fas fa-file-excel"></i> تصدير إكسل</button>
+  </div>
+</div>
+
+<div class="tbl-card" id="tableCardContainer">
+  <div class="tbl-card-inner">
+    <table class="inv" id="mainInvoiceTable">
+      <thead>
+        <tr>
+          <th rowspan="2" style="vertical-align:middle;" onclick="toggleColumn(0, 'الصنف')">الصنف</th>
+          <th colspan="2" class="sub-head" onclick="toggleColumn(1, 'الكمية المباعة')">الكمية المباعة</th>
+          <th colspan="2" class="sub-head" onclick="toggleColumn(3, 'سعر الشراء الفعلي')">سعر الشراء الفعلي</th>
+          <th colspan="2" class="sub-head" onclick="toggleColumn(5, 'متوسط سعر البيع')">متوسط سعر البيع</th>
+          <th rowspan="2" style="vertical-align:middle;" onclick="toggleColumn(7, 'إجمالي المشتريات')">إجمالي المشتريات</th>
+          <th rowspan="2" style="vertical-align:middle;" onclick="toggleColumn(8, 'إجمالي المبيعات')">إجمالي المبيعات</th>
+          <th rowspan="2" style="vertical-align:middle;" onclick="toggleColumn(9, 'ربح الصنف')">ربح الصنف</th>
+          <th rowspan="2" style="vertical-align:middle;" onclick="toggleColumn(10, 'نسبة الربح')">نسبة الربح</th>
+        </tr>
+        <tr>
+          <th class="sub-head" onclick="toggleColumn(1, 'الكمية المباعة')">كرتونة</th>
+          <th class="sub-head" onclick="toggleColumn(2, 'الكمية المباعة')">جركن</th>
+          <th class="sub-head" onclick="toggleColumn(3, 'سعر الشراء الفعلي')">كرتونة</th>
+          <th class="sub-head" onclick="toggleColumn(4, 'سعر الشراء الفعلي')">جركن</th>
+          <th class="sub-head" onclick="toggleColumn(5, 'متوسط سعر البيع')">كرتونة</th>
+          <th class="sub-head" onclick="toggleColumn(6, 'متوسط سعر البيع')">جركن</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="11">
+          <div class="spin-wrap"><div class="spin"></div><div class="spin-lbl">جار تجميع البيانات…</div></div>
+        </td></tr>
+      </tbody>
+      <tfoot id="tfoot" style="display:none">
+        <tr>
+          <td colspan="7" id="fLabelCell">الإجمالي الكلي للمبيعات والأرباح</td>
+          <td id="fTotalCost" style="color:var(--a7);">—</td>
+          <td id="fTotalSales">—</td>
+          <td id="fTotalProfit">—</td>
+          <td id="fProfitMargin">—</td>
+        </tr>
+        <tr id="fExpensesRow" style="background:#fee2e2; color:#b91c1c; border-top: 1px solid #fecaca;">
+          <td colspan="9" id="fExpLabelCell" style="text-align:right; padding-right:14px;">إجمالي المصروفات اليومية الثابتة</td>
+          <td colspan="2" id="fTotalExpenses">—</td>
+        </tr>
+        <tr id="fNetProfitRow" style="background:#dcfce7; color:#16a34a; font-size:1.05rem; border-top: 2px solid #b6d5c4;">
+          <td colspan="9" id="fNetLabelCell" style="text-align:right; padding-right:14px;">صافي الربح النهائي اليومي للتقرير العام</td>
+          <td id="fNetProfit">—</td>
+          <td id="fNetProfitMargin">—</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<div class="divider-line" id="archiveAnchor"></div>
+
+<div class="sec-hdr">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <button class="sec-ttl-btn" onclick="toggleArchiveSection()">
+      <div class="sec-ttl-right">
+        <span class="sec-dot" style="background: var(--s5);"></span>
+        <span><i class="fas fa-archive"></i> سجل الأرباح المُرحّلة للتواريخ السابقة (تحديث تلقائي)</span>
+      </div>
+      <i class="fas fa-chevron-down table-toggle-icon collapsed" id="archiveToggleIcon"></i>
+    </button>
+    <button class="btn-export-excel ms-2" onclick="exportArchiveToExcel()"><i class="fas fa-file-excel"></i> تصدير السجل</button>
+  </div>
+</div>
+
+<div class="tbl-card" id="archiveSectionContainer" style="display: none;">
+  <div class="archive-stats-row">
+    <div class="astat-card">
+      <div class="astat-lbl"><i class="fas fa-calendar-alt me-1"></i> أعدَاد الأيام</div>
+      <div class="astat-val" id="archiveDaysCount">0 أيام</div>
+    </div>
+    <div class="astat-card">
+      <div class="astat-lbl"><i class="fas fa-chart-line me-1"></i> متوسط المبيعات/يوم</div>
+      <div class="astat-val" id="archiveAvgSales" style="color:var(--b7);">0 ج</div>
+    </div>
+    <div class="astat-card highlight">
+      <div class="astat-lbl"><i class="fas fa-sack-dollar me-1"></i> متوسط الربح/يوم</div>
+      <div class="astat-val" id="archiveAvgProfit" style="color:var(--g7);">0 ج</div>
+    </div>
+  </div>
+
+  <div class="tbl-card-inner">
+    <table class="inv" id="archiveTable">
+      <thead>
+        <tr>
+          <th>تاريخ ووقت الترحيل</th>
+          <th>إجمالي المبيعات</th>
+          <th>إجمالي المشتريات</th>
+          <th>المصروفات</th>
+          <th>صافي الربح النهائي</th>
+        </tr>
+      </thead>
+      <tbody id="archiveTbody">
+        <tr><td colspan="5"><div class="spin-wrap"><div class="spin"></div><div class="spin-lbl">جاري تحميل السجل...</div></div></td></tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4" style="text-align:right; padding-right:14px; background:var(--g0); color:var(--g8);">إجمالي الأرباح المتراكمة في السجل</td>
+          <td id="archiveGrandTotal" style="background:var(--g0); color:var(--g8); font-weight:900;">0 ج</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<div class="foot"><span>الزيادي لزيوت السيارات</span> · نظام إدارة المخزون والمبيعات</div>
+
+<script type="text/javascript">
+let hiddenColumnsRegistry = {};
+
+function toggleExpenses() {
+  const list = document.getElementById("expList");
+  const hdr = document.getElementById("expHdr");
+  if (list.style.display === "flex") {
+    list.style.display = "none";
+    hdr.classList.remove("active");
+  } else {
+    list.style.display = "flex";
+    hdr.classList.add("active");
+  }
+}
+
+function toggleTableGrid() {
+  const table = document.getElementById("mainInvoiceTable");
+  const icon = document.getElementById("tableToggleIcon");
+  if (table.style.display === "none") {
+    table.style.display = "table";
+    icon.classList.remove("collapsed");
+  } else {
+    table.style.display = "none";
+    icon.classList.add("collapsed");
+  }
+}
+
+function toggleArchiveSection() {
+  const container = document.getElementById("archiveSectionContainer");
+  const icon = document.getElementById("archiveToggleIcon");
+  if (container.style.display === "none") {
+    container.style.display = "block";
+    icon.classList.remove("collapsed");
+  } else {
+    container.style.display = "none";
+    icon.classList.add("collapsed");
+  }
+}
+
+function scrollToArchive() {
+  const container = document.getElementById("archiveSectionContainer");
+  if (container.style.display === "none") {
+    toggleArchiveSection();
+  }
+  document.getElementById("archiveAnchor").scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleColumn(colIndex, arabicName, forceState) {
+  const tbl = document.getElementById("mainInvoiceTable");
+  let targetCols = [colIndex];
+  if(colIndex === 1) targetCols = [1, 2]; 
+  if(colIndex === 3) targetCols = [3, 4]; 
+  if(colIndex === 5) targetCols = [5, 6]; 
+
+  const firstRow = tbl.querySelector("tbody tr");
+  if(!firstRow) return;
+  
+  let isHidden = false;
+  targetCols.forEach(idx => {
+    const cell = firstRow.children[idx];
+    if(cell && cell.style.display === "none") isHidden = true;
+  });
+
+  let displayStyle = "";
+  if (forceState === "show") {
+    displayStyle = "";
+    delete hiddenColumnsRegistry[colIndex];
+  } else if (forceState === "hide") {
+    displayStyle = "none";
+    hiddenColumnsRegistry[colIndex] = arabicName;
+  } else {
+    if (isHidden) {
+      displayStyle = "";
+      delete hiddenColumnsRegistry[colIndex];
+    } else {
+      displayStyle = "none";
+      hiddenColumnsRegistry[colIndex] = arabicName;
+    }
+  }
+
+  const rows = tbl.querySelectorAll("tbody tr");
+  rows.forEach(row => {
+    targetCols.forEach(idx => {
+      if(row.children[idx]) row.children[idx].style.display = displayStyle;
+    });
+  });
+
+  const thsSec = tbl.querySelectorAll("thead tr")[1].children;
+  if(colIndex === 1 || colIndex === 2) { thsSec[0].style.display = displayStyle; thsSec[1].style.display = displayStyle; }
+  if(colIndex === 3 || colIndex === 4) { thsSec[2].style.display = displayStyle; thsSec[3].style.display = displayStyle; }
+  if(colIndex === 5 || colIndex === 6) { thsSec[4].style.display = displayStyle; thsSec[5].style.display = displayStyle; }
+
+  const thsFirst = tbl.querySelectorAll("thead tr")[0].children;
+  if(colIndex === 0) thsFirst[0].style.display = displayStyle;
+  if(colIndex === 1) thsFirst[1].style.display = displayStyle;
+  if(colIndex === 3) thsFirst[2].style.display = displayStyle;
+  if(colIndex === 5) thsFirst[3].style.display = displayStyle;
+  if(colIndex === 7) thsFirst[4].style.display = displayStyle;
+  if(colIndex === 8) thsFirst[5].style.display = displayStyle;
+  if(colIndex === 9) thsFirst[6].style.display = displayStyle;
+  if(colIndex === 10) thsFirst[7].style.display = displayStyle;
+
+  updateFooterColspans();
+  renderHiddenColsPanel();
+}
+
+function renderHiddenColsPanel() {
+  const panel = document.getElementById("hiddenColsPanel");
+  const container = document.getElementById("hiddenButtonsContainer");
+  const keys = Object.keys(hiddenColumnsRegistry);
+
+  if (keys.length === 0) {
+    panel.style.display = "none";
+    return;
+  }
+
+  panel.style.display = "flex";
+  container.innerHTML = "";
+  
+  keys.forEach(colIdx => {
+    const btn = document.createElement("button");
+    btn.className = "restore-btn";
+    btn.innerHTML = `<i class="fas fa-eye"></i> إظهار ${hiddenColumnsRegistry[colIdx]}`;
+    btn.onclick = () => toggleColumn(parseInt(colIdx), hiddenColumnsRegistry[colIdx], "show");
+    container.appendChild(btn);
+  });
+}
+
+function updateFooterColspans() {
+  const tbl = document.getElementById("mainInvoiceTable");
+  const firstRow = tbl.querySelector("tbody tr");
+  if(!firstRow) return;
+
+  let visibleFirstCols = 0;
+  for(let i=0; i<7; i++) { 
+    if(firstRow.children[i] && firstRow.children[i].style.display !== "none") {
+      visibleFirstCols++;
+    }
+  }
+
+  document.getElementById("fLabelCell").colSpan = visibleFirstCols;
+  
+  let col7Visible = firstRow.children[7] && firstRow.children[7].style.display !== "none";
+  let col8Visible = firstRow.children[8] && firstRow.children[8].style.display !== "none";
+  let col9Visible = firstRow.children[9] && firstRow.children[9].style.display !== "none";
+  let col10Visible = firstRow.children[10] && firstRow.children[10].style.display !== "none";
+
+  document.getElementById("fTotalCost").style.display = col7Visible ? "" : "none";
+  document.getElementById("fTotalSales").style.display = col8Visible ? "" : "none";
+  document.getElementById("fTotalProfit").style.display = col9Visible ? "" : "none";
+  document.getElementById("fProfitMargin").style.display = col10Visible ? "" : "none";
+
+  let totalVisibleCols = 0;
+  for(let i=0; i<11; i++) {
+    if(firstRow.children[i] && firstRow.children[i].style.display !== "none") totalVisibleCols++;
+  }
+
+  if(totalVisibleCols >= 2) {
+    document.getElementById("fExpensesRow").style.display = "";
+    document.getElementById("fNetProfitRow").style.display = "";
+    document.getElementById("fExpLabelCell").colSpan = totalVisibleCols - 2;
+    document.getElementById("fNetLabelCell").colSpan = totalVisibleCols - 2;
+    document.getElementById("fTotalExpenses").colSpan = 2;
+    document.getElementById("fNetProfit").style.display = col9Visible ? "" : "none";
+    document.getElementById("fNetProfitMargin").style.display = col10Visible ? "" : "none";
+  } else {
+    document.getElementById("fExpensesRow").style.display = "none";
+    document.getElementById("fNetProfitRow").style.display = "none";
+  }
+}
+window.updateFooterColspans = updateFooterColspans;
+</script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey:"AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain:"ahmedelzaiady.firebaseapp.com",
+  projectId:"ahmedelzaiady",
+  storageBucket:"ahmedelzaiady.firebasestorage.app",
+  messagingSenderId:"300306825071",
+  appId:"1:300306825071:web:0426ddde56280fa090329a"
+});
+let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+const FIXED_EXPENSES = {
+  "جاز": 250,
+  "راتب سواق": 250,
+  "ترخيص": 60,
+  "كاوتش": 60,
+  "زيت": 60,
+  "أم أسماء": 100,
+  "راتب أحمد": 350
+};
+const TOTAL_FIXED_EXPENSES = Object.values(FIXED_EXPENSES).reduce((a,b)=>a+b, 0);
+
+let currentDaySummary = null;
+let factorMap = {};     
+let currentBuyMap = {}; 
+let globalInvoices = [];
+let tableRowsData = [];
+let archivedRowsData = []; // للشيء الخاص ببيانات الأرشيف التصديرية
+
+function renderExpenses() {
+  const container = document.getElementById("expList");
+  let html = "";
+  for(let [name, val] of Object.entries(FIXED_EXPENSES)){
+    html += `<div class="exp-item">${name}: <strong>${val} ج</strong></div>`;
+  }
+  container.innerHTML = html;
+  document.getElementById("totalExpDisplay").innerHTML = `إجمالي المصروفات: <strong>${TOTAL_FIXED_EXPENSES} ج</strong>`;
+}
+
+function toEn(s){
+  if(!s)return "";
+  const a=[/٠/g,/١/g,/٢/g,/٣/g,/٤/g,/٥/g,/٦/g,/٧/g,/٨/g,/٩/g];
+  let r=s.toString();a.forEach((p,i)=>r=r.replace(p,i));return r;
+}
+
+function parseDate(df,ts){
+  if(df){
+    const s=toEn(df);
+    let m=s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    m=s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+    if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  if(ts?.seconds)return new Date(ts.seconds*1000).toISOString().slice(0,10);
+  return "";
+}
+
+function renderTable(filter){
+  const tbody = document.getElementById("tbody");
+  const tfoot = document.getElementById("tfoot");
+  const f = (filter||"").trim().toLowerCase();
+
+  const list = f ? tableRowsData.filter(r=>r.name.toLowerCase().includes(f)) : tableRowsData;
+
+  if(!list.length){
+    tbody.innerHTML = `<tr><td colspan="11"><div class="text-center p-4 text-muted">لا توجد مبيعات مطابقة لبحثك</div></td></tr>`;
+    tfoot.style.display = "none";
+    return;
+  }
+
+  let html = "";
+  list.forEach(r => {
+    let profitCls = r.profit >= 0 ? 'profit-pos' : 'profit-neg';
+    let pctCls = r.profit >= 0 ? '' : 'neg';
+    
+    html += `<tr>
+      <td>${r.name}</td>
+      <td>${r.qtyBox}</td>
+      <td>${r.qtyPiece}</td>
+      <td>${r.buyBox > 0 ? r.buyBox.toFixed(1) + ' ج' : '—'}</td>
+      <td>${r.buyPiece > 0 ? r.buyPiece.toFixed(1) + ' ج' : '—'}</td>
+      <td style="color:#0369a1; background:#f0f9ff;">${r.sellBox > 0 ? r.sellBox.toFixed(1) + ' ج' : '—'}</td>
+      <td style="color:#0369a1; background:#f0f9ff;">${r.sellPiece > 0 ? r.sellPiece.toFixed(1) + ' ج' : '—'}</td>
+      <td style="color:var(--a7); font-weight:700;">${r.totalCost.toFixed(2)} ج</td>
+      <td style="color:var(--b7); font-weight:800;">${r.totalSales.toFixed(2)} ج</td>
+      <td class="${profitCls}">${r.profit.toFixed(2)} ج</td>
+      <td><span class="badge-pct ${pctCls}">${r.margin.toFixed(1)}%</span></td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+  tfoot.style.display = "table-footer-group";
+  
+  if(window.updateFooterColspans) window.updateFooterColspans();
+}
+
+window.filterTable = function(){
+  const val = document.getElementById("searchIn").value;
+  renderTable(val);
+};
+
+// ** دالة تصدير تقرير المبيعات اليومية إلى Excel **
+function exportTodayToExcel() {
+  if (!tableRowsData || tableRowsData.length === 0) {
+    alert("لا توجد بيانات مبيعات للتصدير في هذا اليوم المحدد.");
+    return;
+  }
+
+  const dateVal = document.getElementById("dateIn").value || "اليوم";
+  
+  // تحضير صفوف البيانات
+  const excelData = tableRowsData.map(r => ({
+    "الصنف": r.name,
+    "كمية (كرتونة)": r.qtyBox,
+    "كمية (جركن)": r.qtyPiece,
+    "سعر الشراء (كرتونة)": r.buyBox > 0 ? r.buyBox : 0,
+    "سعر الشراء (جركن)": r.buyPiece > 0 ? r.buyPiece : 0,
+    "متوسط البيع (كرتونة)": r.sellBox > 0 ? r.sellBox : 0,
+    "متوسط البيع (جركن)": r.sellPiece > 0 ? r.sellPiece : 0,
+    "إجمالي المشتريات (ج)": r.totalCost,
+    "إجمالي المبيعات (ج)": r.totalSales,
+    "ربح الصنف (ج)": r.profit,
+    "نسبة الربح %": `${r.margin.toFixed(1)}%`
+  }));
+
+  // إضافة صف الملخص النهائي
+  if (currentDaySummary) {
+    excelData.push({}); // صف فارغ
+    excelData.push({
+      "الصنف": "إجمالي مبيعات اليوم",
+      "إجمالي المشتريات (ج)": currentDaySummary.cost,
+      "إجمالي المبيعات (ج)": currentDaySummary.sales,
+      "ربح الصنف (ج)": currentDaySummary.sales - currentDaySummary.cost
+    });
+    excelData.push({
+      "الصنف": "المصروفات اليومية الثابتة",
+      "ربح الصنف (ج)": -currentDaySummary.expenses
+    });
+    excelData.push({
+      "الصنف": "صافي الربح النهائي اليومي",
+      "ربح الصنف (ج)": currentDaySummary.netProfit
+    });
+  }
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "مبيعات اليوم");
+
+  XLSX.writeFile(workbook, `تقرير_مبيعات_الزيادي_${dateVal}.xlsx`);
+}
+window.exportTodayToExcel = exportTodayToExcel;
+
+// ** دالة تصدير أرشيف الأرباح التراكمية إلى Excel **
+function exportArchiveToExcel() {
+  if (!archivedRowsData || archivedRowsData.length === 0) {
+    alert("سجل الأرباح فارغ حالياً.");
+    return;
+  }
+
+  const excelData = archivedRowsData.map(r => ({
+    "تاريخ التقرير": r.date,
+    "إجمالي المبيعات (ج)": r.sales,
+    "إجمالي المشتريات (ج)": r.cost,
+    "المصروفات (ج)": r.expenses,
+    "صافي الربح النهائي (ج)": r.netProfit
+  }));
+
+  const daysCount = archivedRowsData.length;
+  const grandSales = archivedRowsData.reduce((a, b) => a + b.sales, 0);
+  const grandProfit = archivedRowsData.reduce((a, b) => a + b.netProfit, 0);
+
+  excelData.push({});
+  excelData.push({
+    "تاريخ التقرير": "الإجمالي الكلي للسجل",
+    "إجمالي المبيعات (ج)": grandSales,
+    "صافي الربح النهائي (ج)": grandProfit
+  });
+  excelData.push({
+    "تاريخ التقرير": `المتوسط اليومي (${daysCount} أيام)`,
+    "إجمالي المبيعات (ج)": (grandSales / daysCount),
+    "صافي الربح النهائي (ج)": (grandProfit / daysCount)
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "سجل الأرباح المؤرشفة");
+
+  XLSX.writeFile(workbook, `سجل_الأرباح_المؤرشفة_الزيادي.xlsx`);
+}
+window.exportArchiveToExcel = exportArchiveToExcel;
+
+// تشغيل الاستماع اللحظي لسجل الأرباح المؤرشفة وحساب المتوسطات تلقائياً
+function setupArchiveRealtime() {
+  const tbody = document.getElementById("archiveTbody");
+  onSnapshot(collection(db, "archived_profits"), (snap) => {
+    let html = "";
+    let grandTotalProfit = 0;
+    let grandTotalSales = 0;
+    
+    archivedRowsData = [];
+    snap.forEach(d => {
+      archivedRowsData.push({ id: d.id, ...d.data() });
+    });
+    
+    archivedRowsData.sort((a, b) => {
+      const dateA = a.date || "";
+      const dateB = b.date || "";
+      return dateB.localeCompare(dateA);
+    });
+
+    const daysCount = archivedRowsData.length;
+
+    archivedRowsData.forEach(data => {
+      let salesVal = data.sales || 0;
+      let netProfitVal = data.netProfit || 0;
+      
+      grandTotalProfit += netProfitVal;
+      grandTotalSales += salesVal;
+
+      let pColor = netProfitVal >= 0 ? 'var(--g6)' : 'var(--r7)';
+      let pBg = netProfitVal >= 0 ? '#f0fdf4' : '#fef2f2';
+      
+      let dateStr = data.date || "غير محدد";
+      let timeStr = "";
+      if(data.timestamp && data.timestamp.toDate) {
+         const t = data.timestamp.toDate();
+         timeStr = t.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      html += `<tr>
+        <td style="text-align:right;"><strong>${dateStr}</strong> <span class="archive-time"><i class="far fa-clock"></i> ${timeStr}</span></td>
+        <td style="color:var(--b7); font-weight:700;">${salesVal.toFixed(2)} ج</td>
+        <td style="color:var(--a7); font-weight:700;">${(data.cost || 0).toFixed(2)} ج</td>
+        <td style="color:var(--r7); font-weight:700;">${(data.expenses || 0).toFixed(2)} ج</td>
+        <td style="color:${pColor}; background:${pBg}; font-weight:900;">${netProfitVal.toFixed(2)} ج</td>
+      </tr>`;
+    });
+
+    if(html === "") {
+      html = `<tr><td colspan="5">لا توجد أرباح مرحلة حتى الآن في النظام.</td></tr>`;
+    }
+    
+    tbody.innerHTML = html;
+    document.getElementById("archiveGrandTotal").innerText = `${grandTotalProfit.toFixed(2)} ج`;
+
+    const avgProfit = daysCount > 0 ? (grandTotalProfit / daysCount) : 0;
+    const avgSales = daysCount > 0 ? (grandTotalSales / daysCount) : 0;
+
+    document.getElementById("archiveDaysCount").innerText = `${daysCount} يوم`;
+    document.getElementById("archiveAvgSales").innerText = `${avgSales.toFixed(2)} ج`;
+    
+    const avgProfitElem = document.getElementById("archiveAvgProfit");
+    avgProfitElem.innerText = `${avgProfit.toFixed(2)} ج`;
+    if(avgProfit < 0) {
+      avgProfitElem.style.color = "var(--r7)";
+    } else {
+      avgProfitElem.style.color = "var(--g7)";
+    }
+
+  }, (error) => {
+    console.error(error);
+    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--r7); font-weight:bold;">حدث خطأ في الاتصال بقاعدة البيانات لجمع السجل.</td></tr>`;
+  });
+}
+
+// دالة الحفظ التلقائي الذكية
+async function autoSaveProfitToServer(summary) {
+  if (!summary || !summary.date) return;
+  if (summary.sales <= 0 || summary.cost <= 0) {
+    console.log(`⚠️ تم تخطي الحفظ التلقائي اللحظي لمنع تصفير السجل أثناء تحميل فواتير اليوم (${summary.date}).`);
+    return;
+  }
+  
+  try {
+    const docRef = doc(db, "archived_profits", summary.date);
+    await setDoc(docRef, {
+      date: summary.date,
+      sales: summary.sales,
+      cost: summary.cost,
+      expenses: summary.expenses,
+      netProfit: summary.netProfit,
+      timestamp: new Date()
+    }, { merge: true });
+    console.log(`✅ تم تحديث أرباح اليوم (${summary.date}) تلقائياً بالسيرفر بنجاح.`);
+  } catch (error) {
+    console.error("❌ فشل ترحيل الأرباح التلقائي:", error);
+  }
+}
+
+// دالة الترحيل والحفظ اليدوية
+async function triggerManualSave() {
+  if (!currentDaySummary) {
+    alert("برجاء الانتظار حتى اكتمال تحميل البيانات الحالية أولاً.");
+    return;
+  }
+  
+  const confirmSave = confirm(`هل تود الاحتفاظ بأرباح هذا اليوم (${currentDaySummary.date}) وترحيلها إلى السجل؟`);
+  if (!confirmSave) return;
+  
+  try {
+    const docRef = doc(db, "archived_profits", currentDaySummary.date);
+    await setDoc(docRef, {
+      date: currentDaySummary.date,
+      sales: currentDaySummary.sales,
+      cost: currentDaySummary.cost,
+      expenses: currentDaySummary.expenses,
+      netProfit: currentDaySummary.netProfit,
+      timestamp: new Date()
+    }, { merge: true });
+    
+    alert(`🚀 تم ترحيل أرباح اليوم (${currentDaySummary.date}) والاحتفاظ بها في السجل بنجاح!`);
+    scrollToArchive();
+  } catch (error) {
+    console.error(error);
+    alert("❌ حدث خطأ أثناء محاولة حفظ الأرباح في السجل. تحقق من اتصالك بالإنترنت.");
+  }
+}
+window.triggerManualSave = triggerManualSave;
+
+function processCalculations() {
+  const date = document.getElementById("dateIn").value;
+  if(!date) return;
+
+  tableRowsData = [];
+  const D = {};
+  let totalGrossSales = 0;
+  let totalGrossProfit = 0;
+  let totalGrossCost = 0;
+
+  globalInvoices.forEach(inv => {
+    if(parseDate(inv.date, inv.timestamp) !== date) return;
+    if(!Array.isArray(inv.items)) return;
+
+    inv.items.forEach(item => {
+      if(item.isReturn) return; 
+
+      const name = (item.name || "").trim();
+      const qty = Number(item.qty) || 0;
+      const sellPrice = Number(item.price) || 0; 
+      const unit = (item.unitName || item.unit || "قطعة").toString().trim();
+      const factor = factorMap[name] || 1;
+
+      if(!name || qty <= 0) return;
+
+      let basePieceCost = currentBuyMap[name] || 0;
+
+      if(!D[name]) {
+        D[name] = { 
+          qtyBox: 0, 
+          qtyPiece: 0, 
+          totalSalesBox: 0, 
+          totalSalesPiece: 0,
+          totalSales: 0, 
+          totalCost: 0,
+          factor: factor,
+          basePieceCost: basePieceCost
+        };
+      }
+
+      if(unit === "box" || unit === "كرتونة") {
+        D[name].qtyBox += qty;
+        D[name].totalSalesBox += (qty * sellPrice);
+        D[name].totalSales += (qty * sellPrice);
+        D[name].totalCost += (qty * (basePieceCost * factor));
+      } else {
+        D[name].qtyPiece += qty;
+        D[name].totalSalesPiece += (qty * sellPrice);
+        D[name].totalSales += (qty * sellPrice);
+        D[name].totalCost += (qty * basePieceCost);
+      }
+    });
+  });
+
+  Object.keys(D).forEach(name => {
+    const d = D[name];
+    const profit = d.totalSales - d.totalCost;
+    totalGrossSales += d.totalSales;
+    totalGrossProfit += profit;
+    totalGrossCost += d.totalCost;
+
+    const buyPiece = d.basePieceCost;
+    const buyBox = d.basePieceCost * d.factor;
+    
+    const sellBox = d.qtyBox > 0 ? (d.totalSalesBox / d.qtyBox) : 0;
+    const sellPiece = d.qtyPiece > 0 ? (d.totalSalesPiece / d.qtyPiece) : 0;
+
+    const margin = d.totalSales > 0 ? (profit / d.totalSales) * 100 : 0;
+
+    tableRowsData.push({
+      name: name,
+      qtyBox: d.qtyBox,
+      qtyPiece: d.qtyPiece,
+      buyBox: buyBox,
+      buyPiece: buyPiece,
+      sellBox: sellBox,
+      sellPiece: sellPiece,
+      totalCost: d.totalCost,
+      totalSales: d.totalSales,
+      profit: profit,
+      margin: margin
+    });
+  });
+
+  tableRowsData.sort((a, b) => b.profit - a.profit);
+
+  const netProfit = totalGrossProfit - TOTAL_FIXED_EXPENSES;
+  
+  currentDaySummary = {
+    date: date,
+    sales: totalGrossSales,
+    cost: totalGrossCost,
+    expenses: TOTAL_FIXED_EXPENSES,
+    netProfit: netProfit
+  };
+
+  const totalProfitMargin = totalGrossSales > 0 ? (totalGrossProfit / totalGrossSales) * 100 : 0;
+  const netProfitMargin = totalGrossSales > 0 ? (netProfit / totalGrossSales) * 100 : 0;
+
+  document.getElementById("kGrossSales").innerText = `${totalGrossSales.toFixed(2)} ج`;
+  document.getElementById("kGrossProfit").innerText = `${totalGrossProfit.toFixed(2)} ج`;
+
+  const kNet = document.getElementById("kNetProfit");
+  kNet.innerText = `${netProfit.toFixed(2)} ج`;
+  if(netProfit < 0) kNet.classList.add("negative");
+  else kNet.classList.remove("negative");
+
+  document.getElementById("fTotalCost").innerText = `${totalGrossCost.toFixed(2)} ج`;
+  document.getElementById("fTotalSales").innerText = `${totalGrossSales.toFixed(2)} ج`;
+  document.getElementById("fTotalProfit").innerText = `${totalGrossProfit.toFixed(2)} ج`;
+  document.getElementById("fProfitMargin").innerHTML = `<span class="badge-pct">${totalProfitMargin.toFixed(1)}%</span>`;
+  
+  document.getElementById("fTotalExpenses").innerText = `-${TOTAL_FIXED_EXPENSES} ج`;
+  document.getElementById("fNetProfit").innerText = `${netProfit.toFixed(2)} ج`;
+  document.getElementById("fNetProfitMargin").innerHTML = `<span class="badge-pct ${netProfit < 0 ? 'neg':''}">${netProfitMargin.toFixed(1)}%</span>`;
+
+  document.getElementById("eqSales").innerText = `${totalGrossSales.toFixed(1)} ج`;
+  document.getElementById("eqCost").innerText = `${totalGrossCost.toFixed(1)} ج`;
+  document.getElementById("eqExp").innerText = `${TOTAL_FIXED_EXPENSES} ج`;
+
+  renderTable("");
+  autoSaveProfitToServer(currentDaySummary);
+}
+
+function initRealtimeListeners() {
+  const date = document.getElementById("dateIn").value;
+  document.getElementById("dateLabel").textContent = date.replace(/-/g, '/');
+
+  onSnapshot(collection(db, "inventory"), (itemsSnap) => {
+    factorMap = {};
+    currentBuyMap = {};
+    itemsSnap.forEach(doc => {
+      const itm = doc.data();
+      if(!itm.name) return;
+      const name = itm.name.trim();
+      const factor = Number(itm.unitFactor) || 1;
+      factorMap[name] = factor;
+      
+      let rawBuy = Number(itm.buy) || 0;
+      currentBuyMap[name] = rawBuy / factor; 
+    });
+
+    onSnapshot(collection(db, "invoices"), (sSnap) => {
+      globalInvoices = [];
+      sSnap.forEach(doc => {
+        const data = doc.data();
+        if (data.isDeleted !== true) {
+          globalInvoices.push(data);
+        }
+      });
+      processCalculations();
+    });
+  });
+}
+
+window.load = function() {
+  const date = document.getElementById("dateIn").value;
+  if(!date) return;
+  document.getElementById("dateLabel").textContent = date.replace(/-/g, '/');
+  document.getElementById("tbody").innerHTML = `<tr><td colspan="11"><div class="spin-wrap"><div class="spin"></div><div class="spin-lbl">جاري جلب وتحضير الجدول بدقة…</div></div></td></tr>`;
+  document.getElementById("tfoot").style.display = "none";
+  processCalculations();
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderExpenses();
+  const t = new Date();
+  document.getElementById("dateIn").value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  initRealtimeListeners();
+  setupArchiveRealtime();
+});
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

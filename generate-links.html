@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مُولد روابط العملاء - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --accent: #0b5e3d; --header-bg: #0b5e3d; --bg-light: #f4f7f6; --text-primary: #1b2e26; --border: #dce3de; --white: #ffffff; }
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); }
+        .header-nav { background: var(--header-bg); padding: 15px; color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 25px; }
+        .search-card { background: var(--white); border: 1px solid var(--border); border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); }
+        .search-input { border: 2px solid var(--border); border-radius: 10px; padding: 12px 20px; font-size: 1rem; font-weight: 600; }
+        .customer-row { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-action { background-color: var(--accent); color: white; border: none; border-radius: 8px; padding: 8px 15px; font-weight: 700; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+<div class="header-nav text-center">
+    <div style="position: absolute; right: 20px; top: 15px;">
+        <a href="index.html" class="btn btn-sm text-white" style="border: 1px solid white;">
+            <i class="fas fa-home"></i> الرئيسية
+        </a>
+    </div>
+    
+    <h5 class="m-0"><i class="fas fa-link me-2"></i> نظام البحث عن العملاء</h5>
+</div>
+
+
+<div class="container" style="max-width: 600px;">
+    <div class="search-card">
+        <input type="text" id="searchInput" class="form-control search-input" placeholder="اكتب اسم العميل هنا للبحث...">
+    </div>
+    <div id="resultsContainer" class="mt-3"></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        projectId: "ahmedelzaiady",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let allCustomers = [];
+
+    async function fetchCustomers() {
+        const querySnapshot = await getDocs(collection(db, "customers"));
+        allCustomers = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().name || "بدون اسم"
+        }));
+        document.getElementById('resultsContainer').innerHTML = '<div class="text-center text-muted">تم تحميل البيانات، ابدأ البحث الآن...</div>';
+    }
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        const val = e.target.value.toLowerCase();
+        const filtered = allCustomers.filter(c => c.name.toLowerCase().includes(val));
+        
+        let html = '';
+        filtered.forEach(c => {
+            html += `
+            <div class="customer-row">
+                <span class="fw-bold">${c.name}</span>
+                <button class="btn btn-action" onclick="window.shareLink('${c.id}', '${c.name}')">
+                    <i class="fas fa-share-alt"></i> إرسال الرابط
+                </button>
+            </div>`;
+        });
+        document.getElementById('resultsContainer').innerHTML = html || '<div class="text-center text-muted">لم يتم العثور على عميل بهذا الاسم</div>';
+    });
+
+    window.shareLink = (id, name) => {
+        const link = `https://ahmedelzaiady.web.app/customer-portal.html?cid=${id}`;
+        const msg = encodeURIComponent(`أهلاً ${name}، يمكنك متابعة كشف حسابك هنا: ${link}`);
+        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+    };
+
+    fetchCustomers();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

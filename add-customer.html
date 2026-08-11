@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة عميل - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d;         /* الأخضر الغامق */
+            --header-bg: #0b5e3d;
+            --gold: #ffce31;           /* الذهبي للتمييز */
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --danger: #e41e3f;
+            --border: #dce3de;
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 100px; }
+        
+        /* --- Header المعدل --- */
+        .header { 
+            background: var(--header-bg); padding: 15px; 
+            display: flex; align-items: center; justify-content: space-between;
+            color: white;
+            position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .section-header { font-size: 0.9rem; font-weight: 700; color: var(--accent); margin-top: 25px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+
+        .glass-card { 
+            background: #ffffff; border: 1px solid var(--border);
+            border-radius: 20px; padding: 20px; margin-bottom: 15px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .input-group-custom { margin-bottom: 15px; }
+        .input-group-custom label { display: block; margin-bottom: 8px; font-size: 0.85rem; font-weight: bold; color: var(--text-primary); opacity: 0.8; }
+        
+        .custom-input {
+            background: #fdfdfd !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text-primary) !important; 
+            border-radius: 12px; 
+            padding: 12px;
+            width: 100%; 
+            transition: 0.3s;
+        }
+        .custom-input:focus { 
+            border-color: var(--accent) !important; 
+            box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.1);
+            outline: none; 
+        }
+
+        /* تمييز حقول الأرقام باللون الأخضر */
+        input[type="number"].custom-input {
+            color: var(--accent) !important;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .balance-toggle { display: flex; gap: 10px; margin-top: 15px; }
+        .toggle-btn { 
+            flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+            background: #fff; color: var(--text-primary); font-weight: bold; transition: 0.3s;
+        }
+        /* تعديل ألوان أزرار مدين ودائن لتناسب الأخضر */
+        .toggle-btn.active-red { background: var(--danger); border-color: var(--danger); color: white; }
+        .toggle-btn.active-blue { background: var(--accent); border-color: var(--accent); color: white; }
+
+        .form-switch .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+
+        .bottom-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; padding: 15px;
+            background: white; border-top: 1px solid var(--border);
+            z-index: 1000;
+        }
+        .btn-submit {
+            background: var(--accent); color: white; border: none;
+            width: 100%; padding: 14px; border-radius: 12px; font-weight: bold;
+            font-size: 1.1rem; box-shadow: 0 4px 15px rgba(11, 94, 61, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <i class="fas fa-chevron-right" onclick="confirmBack()" style="cursor: pointer;"></i>
+    <h5 class="m-0 fw-bold">إضافة عميل جديد</h5>
+    <div style="width:20px"></div>
+</div>
+
+<div class="container">
+    
+    <div class="section-header">
+        <i class="fas fa-user-circle"></i> البيانات الأساسية
+    </div>
+    <div class="glass-card">
+        <div class="input-group-custom">
+            <label>الإسم بالكامل</label>
+            <input type="text" id="custName" class="custom-input" placeholder="أدخل الإسم هنا..." oninput="isChanged=true">
+        </div>
+        <div class="input-group-custom">
+            <label>رقم الهاتف</label>
+            <input type="tel" id="custPhone" class="custom-input" placeholder="01xxxxxxxxx" oninput="isChanged=true">
+        </div>
+        <div class="input-group-custom">
+            <label>العنوان</label>
+            <input type="text" id="custAddress" class="custom-input" placeholder="أدخل العنوان هنا..." oninput="isChanged=true">
+        </div>
+    </div>
+
+    <div class="section-header">
+        <i class="fas fa-wallet"></i> الحساب المالي
+    </div>
+    <div class="glass-card">
+        <div class="input-group-custom">
+            <label>الرصيد الإفتتاحي</label>
+            <input type="number" id="custInitialBalance" class="custom-input text-center" value="0.00" step="0.01" oninput="isChanged=true">
+        </div>
+        
+        <div class="balance-toggle">
+            <button class="toggle-btn active-red" id="btnDebit" onclick="setBalanceType('debit'); isChanged=true">مدين (عليه)</button>
+            <button class="toggle-btn" id="btnCredit" onclick="setBalanceType('credit'); isChanged=true">دائن (له)</button>
+        </div>
+
+        <div class="input-group-custom mt-4">
+            <label>الحد الائتماني</label>
+            <input type="number" id="creditLimit" class="custom-input text-center" value="0.00" step="0.01" oninput="isChanged=true">
+        </div>
+    </div>
+
+    <div class="section-header">
+        <i class="fas fa-cog"></i> إعدادات الطرف
+    </div>
+    <div class="glass-card">
+        <div class="form-check form-switch d-flex justify-content-between align-items-center flex-row-reverse p-0">
+            <input class="form-check-input" type="checkbox" id="isSupplier" onchange="isChanged=true">
+            <label class="form-check-label fw-bold" for="isSupplier" style="color: var(--text-primary);">
+                معاملته كمورد أيضاً
+                <br><small style="color: var(--accent); font-size: 0.7rem;">ميزة PRO - تتطلب تفعيل النسخة</small>
+            </label>
+        </div>
+    </div>
+
+</div>
+
+<div class="bottom-bar">
+    <button class="btn-submit" onclick="saveCustomerData()">حفظ بيانات العميل</button>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let balanceType = 'debit'; 
+    window.isChanged = false;
+
+    window.onbeforeunload = function() {
+        if (window.isChanged) return "هل أنت متأكد؟ لديك بيانات غير محفوظة.";
+    };
+
+    window.confirmBack = () => {
+        if (window.isChanged) {
+            if (confirm("لم يتم حفظ البيانات، هل تريد الرجوع فعلاً؟")) {
+                window.location.href = "customer-list.html";
+            }
+        } else {
+            window.location.href = "customer-list.html";
+        }
+    };
+
+    window.setBalanceType = (type) => {
+        balanceType = type;
+        const btnDebit = document.getElementById('btnDebit');
+        const btnCredit = document.getElementById('btnCredit');
+        
+        if(type === 'debit') {
+            btnDebit.className = 'toggle-btn active-red';
+            btnCredit.className = 'toggle-btn';
+        } else {
+            btnDebit.className = 'toggle-btn';
+            btnCredit.className = 'toggle-btn active-blue';
+        }
+    }
+
+    window.saveCustomerData = async function() {
+        const name = document.getElementById('custName').value.trim();
+        const phone = document.getElementById('custPhone').value.trim();
+        const address = document.getElementById('custAddress').value.trim();
+        const initialBalanceRaw = Number(document.getElementById('custInitialBalance').value) || 0;
+        const limit = Number(document.getElementById('creditLimit').value) || 0;
+
+        if(!name || !phone) {
+            alert("يا هندسة، الإسم ورقم التليفون بيانات أساسية!");
+            return;
+        }
+
+        const calculatedBalance = (balanceType === 'debit') ? Math.abs(initialBalanceRaw) : -Math.abs(initialBalanceRaw);
+
+        try {
+            await addDoc(collection(db, "customers"), {
+                name: name,
+                phone: phone,
+                address: address,
+                initialBalance: calculatedBalance,
+                balanceType: balanceType,
+                creditLimit: limit,
+                isSupplier: document.getElementById('isSupplier').checked,
+                currentBalance: calculatedBalance,
+                createdAt: serverTimestamp()
+            });
+
+            window.isChanged = false;
+            alert("تم حفظ بيانات العميل بنجاح!");
+            window.location.href = "customer-list.html"; 
+        } catch (e) {
+            console.error("Error adding document: ", e);
+            alert("حدث خطأ أثناء الحفظ، جرب تاني يا هندسة.");
+        }
+    }
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

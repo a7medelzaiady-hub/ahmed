@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل المرتجعات - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* الهوية البصرية الموحدة لشركة الزيادي */
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #d90429;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); }
+
+        /* Header */
+        .header-nav { 
+            padding: 15px 20px; 
+            background: var(--header-bg); 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            position: sticky; top: 0; z-index: 1000; 
+            color: white;
+        }
+
+        /* Search Box */
+        .search-box { 
+            background: var(--white) !important; 
+            border: 1px solid var(--border) !important; 
+            border-radius: 15px; 
+            color: var(--text-primary) !important; 
+            padding: 12px 18px; 
+            width: 100%; 
+            margin-bottom: 20px; 
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        .search-box:focus { border-color: var(--accent) !important; outline: none; }
+
+        /* Return Card */
+        .return-card { 
+            background: var(--white); 
+            border: 1px solid var(--border); 
+            border-radius: 20px; 
+            padding: 18px; 
+            margin-bottom: 12px; 
+            border-right: 5px solid var(--danger); 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            transition: 0.3s;
+        }
+        .return-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+
+        .action-btn { 
+            background: none; 
+            border: none; 
+            font-size: 1.2rem; 
+            cursor: pointer; 
+            padding: 8px;
+            transition: 0.2s;
+        }
+        .action-btn:active { transform: scale(0.9); }
+
+        /* Modal Styles */
+        .modal-content { 
+            background: var(--white); 
+            color: var(--text-primary); 
+            border-radius: 25px; 
+            border: none; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
+        
+        .amount-badge { color: var(--danger); font-weight: 800; font-size: 1.15rem; }
+        
+        #printFrame { display: none; }
+
+        .btn-new-return {
+            background-color: var(--danger);
+            color: white !important;
+            font-weight: 700;
+            padding: 8px 20px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header-nav d-flex justify-content-between align-items-center">
+    <h5 class="m-0 fw-bold"><i class="fas fa-history me-2"></i> سجل المرتجعات</h5>
+    <a href="sales-return.html" class="btn btn-new-return rounded-pill shadow-sm">+ مرتجع جديد</a>
+</div>
+
+<div class="container mt-3">
+    <div class="position-relative">
+        <input type="text" id="searchInput" class="search-box" placeholder="🔍 ابحث باسم العميل..." oninput="filterReturns()">
+    </div>
+    
+    <div id="returnsList">
+        <div class="text-center p-5">
+            <div class="spinner-border" style="color: var(--accent);"></div>
+            <p class="mt-2 text-muted small">جاري تحميل سجل المرتجعات...</p>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body p-4" id="modalBody"></div>
+            <div class="p-4 pt-0">
+                <button class="btn btn-light w-100 rounded-pill fw-bold border" data-bs-dismiss="modal">إغلاق النافذة</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<iframe id="printFrame"></iframe>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+   const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let allReturns = [];
+
+    window.loadReturns = async () => {
+        try {
+            const snap = await getDocs(query(collection(db, "returns"), orderBy("timestamp", "desc")));
+            allReturns = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            render(allReturns);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('returnsList').innerHTML = '<div class="alert alert-danger mx-3">خطأ في تحميل البيانات</div>';
+        }
+    };
+
+    function render(data) {
+        const list = document.getElementById('returnsList');
+        if(data.length === 0) {
+            list.innerHTML = '<div class="text-center opacity-50 mt-5"><i class="fas fa-folder-open d-block mb-2 fa-2x"></i>لا توجد عمليات مرتجع مسجلة</div>';
+            return;
+        }
+        list.innerHTML = data.map(ret => `
+            <div class="return-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <b class="d-block mb-1" style="color: var(--accent);">${ret.customerName}</b>
+                        <small class="text-muted fw-bold" style="font-size: 0.75rem;"><i class="far fa-clock me-1"></i>${ret.date || ret.time}</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="amount-badge">-${Number(ret.totalAmount || ret.total).toLocaleString('ar-EG')} ج.م</div>
+                        <small class="text-muted" style="font-size:0.7rem">رقم الفاتورة: ${ret.invoiceId ? ret.invoiceId.slice(-5) : 'عام'}</small>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-around mt-3 border-top pt-2">
+                    <button class="action-btn" style="color: #0d6efd" onclick="viewReturn('${ret.id}')" title="عرض التفاصيل"><i class="fas fa-eye"></i></button>
+                    <button class="action-btn" style="color: #6c757d" onclick="printReturn('${ret.id}')" title="طباعة"><i class="fas fa-print"></i></button>
+                    <button class="action-btn" style="color: var(--danger)" onclick="deleteReturnRecord('${ret.id}')" title="حذف السجل"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.filterReturns = () => {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = allReturns.filter(r => r.customerName.toLowerCase().includes(term));
+        render(filtered);
+    };
+
+    window.viewReturn = (id) => {
+        const ret = allReturns.find(r => r.id === id);
+        let itemsHtml = "";
+        
+        const items = ret.items || [];
+        items.forEach(item => {
+            itemsHtml += `
+            <div class="d-flex justify-content-between border-bottom py-2 small fw-bold">
+                <span>${item.name} <span class="text-muted">(x${item.qty})</span></span>
+                <span>${(item.qty * item.price).toLocaleString('ar-EG')} ج.م</span>
+            </div>`;
+        });
+
+        document.getElementById('modalBody').innerHTML = `
+            <div class="text-center mb-3">
+                <i class="fas fa-undo-alt fa-2x text-danger mb-2"></i>
+                <h6 class="fw-bold m-0">تفاصيل عملية الارتجاع</h6>
+            </div>
+            <div class="small mb-3 text-muted text-center fw-bold">كود الفاتورة الأصلية: ${ret.invoiceId || 'غير محدد'}</div>
+            <div class="mb-2 mt-4 px-1 small text-muted fw-bold">الأصناف المرتجعة:</div>
+            ${itemsHtml}
+            <div class="mt-4 p-3 rounded-4 bg-light d-flex justify-content-between align-items-center border">
+                <span class="fw-bold text-muted">إجمالي المبلغ المسترد:</span>
+                <b class="text-danger h5 m-0 fw-bold">${Number(ret.totalAmount || ret.total).toLocaleString('ar-EG')} ج.م</b>
+            </div>`;
+        new bootstrap.Modal(document.getElementById('detailsModal')).show();
+    };
+
+    window.printReturn = (id) => {
+        const ret = allReturns.find(r => r.id === id);
+        let rows = "";
+        const items = ret.items || [];
+        items.forEach(item => {
+            rows += `<tr>
+                <td style="padding:8px; border-bottom:1px dashed #ccc;">${item.name}</td>
+                <td style="text-align:center;">${item.qty}</td>
+                <td style="text-align:left;">${(item.qty * item.price).toLocaleString()}</td>
+            </tr>`;
+        });
+
+        const pri = document.getElementById('printFrame').contentWindow;
+        const printContent = `
+            <html dir="rtl"><head><style>
+                body { font-family: 'Arial'; padding: 10px; width: 72mm; margin: 0; }
+                .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                table { width: 100%; font-size: 13px; margin-top: 10px; border-collapse: collapse; }
+                .total { margin-top: 10px; border-top: 1px solid #000; padding-top: 5px; font-weight: bold; display: flex; justify-content: space-between; font-size: 16px; }
+                .footer { text-align: center; font-size: 11px; margin-top: 20px; border-top: 1px dashed #ccc; padding-top:10px; }
+            </style></head>
+            <body>
+                <div class="header">
+                    <h2 style="margin:0;">إيصال مرتجع مبيعات</h2>
+                    <p style="margin:5px 0;">شركة الزيادى لقطع الغيار</p>
+                    <small>${ret.date || ret.time}</small>
+                </div>
+                <p style="font-size:14px; margin: 10px 0;"><b>السيد/</b> ${ret.customerName}</p>
+                <table>
+                    <thead><tr style="border-bottom: 1px solid #000;"><th>الصنف</th><th>ك</th><th>ج.م</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div class="total"><span>إجمالي المرتجع:</span><span>${Number(ret.totalAmount || ret.total).toLocaleString()} ج.م</span></div>
+                <div class="footer">تم تحديث المخزن وخصم المبلغ من مديونية العميل<br>شركة الزيادى ترحب بكم</div>
+            </body></html>`;
+
+        pri.document.open();
+        pri.document.write(printContent);
+        pri.document.close();
+        setTimeout(() => { pri.focus(); pri.print(); }, 500);
+    };
+
+    window.deleteReturnRecord = async (id) => {
+        if(!confirm("⚠️ هل أنت متأكد من حذف هذا السجل؟\n\nتنبيه: سيتم حذف السجل من القائمة فقط، ولن يتم التعديل على رصيد العميل أو المخزن (لأغراض أرشفة السجلات فقط).")) return;
+        try {
+            await deleteDoc(doc(db, "returns", id));
+            loadReturns();
+        } catch (e) {
+            alert("فشل الحذف: " + e.message);
+        }
+    };
+
+    loadReturns();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

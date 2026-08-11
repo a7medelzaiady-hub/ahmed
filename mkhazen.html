@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المخزن</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary-green: #0b6641; 
+            --accent-green: #10b981;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --danger: #f43f5e;
+            --danger-bg: #fff1f2;
+        }
+
+        body { 
+            background-color: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 90px; /* مساحة للفوتر */
+        }
+
+        /* الهيدر */
+        .top-nav {
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            color: white;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-radius: 0 0 25px 25px;
+            box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
+        }
+
+        .top-nav i { cursor: pointer; font-size: 1.2rem; transition: 0.2s; }
+        .top-nav i:active { transform: scale(0.9); }
+
+        /* منطقة البحث */
+        .search-section {
+            padding: 20px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-top: -5px;
+        }
+        .search-wrapper {
+            position: relative;
+            flex-grow: 1;
+        }
+        .search-wrapper i {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-green);
+        }
+        .search-input {
+            width: 100%;
+            padding: 14px 40px 14px 15px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            font-size: 0.95rem;
+            outline: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            transition: 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent-green); }
+        
+        .qr-btn {
+            background: white;
+            color: var(--primary-green);
+            border: 1px solid var(--border-color);
+            width: 52px;
+            height: 52px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            cursor: pointer;
+        }
+
+        /* نظام الشبكة للأعمدة */
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr 0.6fr 0.6fr;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* عناوين الأعمدة */
+        .table-headers {
+            padding: 0 25px 10px 25px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .table-headers div { text-align: center; }
+        .table-headers div:first-child { text-align: right; }
+
+        /* كارت الصنف */
+        .item-card {
+            padding: 16px 20px;
+            background: white;
+            border-radius: 20px;
+            margin: 0 15px 12px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.01);
+        }
+        .item-card:active { transform: scale(0.98); background: #f8f9fa; }
+        
+        /* الصنف المنتهي (صفر) */
+        .item-card.out-of-stock {
+            opacity: 0.6;
+            background: #fdfdfd;
+            border-color: #f1f2f6;
+        }
+        .item-card.out-of-stock .item-price { color: var(--text-muted); }
+
+        .item-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 3px; color: var(--text-dark); line-height: 1.3;}
+        .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
+
+        .item-price { 
+            text-align: center; 
+            color: var(--primary-green); 
+            font-weight: 800;
+            font-size: 1.05rem;
+        }
+
+        .qty-badge {
+            background: #f0fdf4;
+            color: var(--primary-green);
+            padding: 5px 0;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-align: center;
+            width: 100%;
+            display: inline-block;
+            border: 1px solid #dcfce7;
+        }
+        
+        .qty-low { background: var(--danger-bg); color: var(--danger); border-color: #ffe4e6; }
+        .qty-zero { background: #f1f5f9; color: var(--text-muted); border-color: var(--border-color); }
+
+        /* الفوتر السفلي */
+        .bottom-summary {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: white;
+            padding: 18px 20px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: center;
+            border-top: 1px solid var(--border-color);
+            color: var(--primary-green);
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+            z-index: 999;
+        }
+
+        /* الزر العائم */
+        .fab {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background: var(--primary-green);
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            box-shadow: 0 8px 25px rgba(11, 102, 65, 0.4);
+            text-decoration: none;
+            transition: 0.3s;
+            z-index: 1000;
+        }
+        .fab:hover { background: #0a5234; transform: translateY(-3px); color: white;}
+
+        /* تحسين منطقة التمرير في المودال */
+        .modal-body-scroll {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        /* تخصيص شكل الـ Scrollbar ليكون متناسقاً */
+        .modal-body-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .modal-body-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .modal-body-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        .modal-body-scroll::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* تنسيق إضافي لتوضيح تغيرات الرصيد */
+        .balance-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <i class="fas fa-sync-alt" onclick="location.reload()"></i>
+    <span class="fw-bold">الأصناف والمخزون</span>
+    <i class="fas fa-chevron-left" onclick="history.back()"></i>
+</div>
+
+<div class="search-section">
+    <button class="qr-btn" aria-label="مسح الباركود"><i class="fas fa-qrcode"></i></button>
+    <div class="search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" class="search-input" placeholder="ابحث عن منتج أو باركود..." oninput="renderItems()">
+    </div>
+</div>
+
+<div class="table-headers grid-layout">
+    <div>المنتج والباركود</div>
+    <div>السعر</div>
+    <div>كرتونة</div>
+    <div>جركن</div>
+</div>
+
+<div id="itemsContainer"></div>
+
+<div class="bottom-summary">
+    <i class="fas fa-boxes me-2"></i> إجمالي الأصناف: <span id="totalCount" class="ms-2">0</span>
+</div>
+
+<a href="add-product.html" class="fab" aria-label="إضافة منتج">
+    <i class="fas fa-plus"></i>
+</a>
+
+<!-- المودال المحدث مع التمرير ورصيد ما قبل الحركة -->
+<div class="modal fade" id="transactionsModal" tabindex="-1" aria-labelledby="transactionsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="border-radius: 20px; border: none;">
+      <div class="modal-header" style="background: var(--bg-light); border-radius: 20px 20px 0 0; border-bottom: 1px solid var(--border-color);">
+        <h5 class="modal-title fw-bold" id="transactionsModalLabel" style="color: var(--primary-green);">سجل حركات الصنف وتطور الرصيد</h5>
+        <button type="button" class="btn-close m-0" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0 modal-body-scroll">
+        <div class="table-responsive">
+            <table class="table table-hover text-center mb-0" style="font-size: 0.9rem;">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10; font-size: 0.85rem; color: var(--text-muted);">
+                    <tr>
+                        <th>التاريخ</th>
+                        <th>النوع</th>
+                        <th>الكمية وتغير الرصيد</th>
+                        <th>السعر</th>
+                    </tr>
+                </thead>
+                <tbody id="transactionsBody">
+                    <!-- سيتم تعبئة الحركات هنا برمجياً -->
+                </tbody>
+            </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn btn-secondary" style="border-radius: 10px;" data-bs-dismiss="modal">إغلاق</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let allData = [];
+
+    // جلب بيانات الأصناف
+    onSnapshot(collection(db, "inventory"), (snap) => {
+        allData = [];
+        snap.forEach(doc => {
+            const data = doc.data();
+            if (!data.isDeleted) {
+                allData.push({ id: doc.id, ...data });
+            }
+        });
+        renderItems();
+    }, (error) => {
+        console.error("خطأ في جلب البيانات: ", error);
+        document.getElementById('itemsContainer').innerHTML = 
+            `<div class="text-center text-danger mt-4 fw-bold">حدث خطأ أثناء جلب البيانات، يرجى التأكد من اتصالك بالإنترنت.</div>`;
+    });
+
+    window.renderItems = function() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const container = document.getElementById('itemsContainer');
+        
+        // 1. فلترة البيانات
+        let filtered = allData.filter(i => 
+            (i.name && i.name.toLowerCase().includes(term)) || 
+            (i.barcode && i.barcode.includes(term))
+        );
+
+        // 2. الترتيب الجديد:
+        // الأولوية الأولى: الأصناف التي لديها كميات (موجبة أو سالبة) وليس لديها سعر (سعرها 0)
+        // الأولوية الثانية: الأصناف التي لديها أسعار
+        // الأولوية الأخيرة: الأصناف المنتهية (كميتها 0)
+        filtered.sort((a, b) => {
+            const qtyA = Number(a.totalPcs) || 0;
+            const qtyB = Number(b.totalPcs) || 0;
+            const priceA = Number(a.sell) || 0;
+            const priceB = Number(b.sell) || 0;
+
+            const isPriorityA = (qtyA !== 0) && (priceA === 0);
+            const isPriorityB = (qtyB !== 0) && (priceB === 0);
+
+            // رفع الأصناف التي لديها كميات وبدون سعر إلى الأعلى
+            if (isPriorityA && !isPriorityB) return -1;
+            if (!isPriorityA && isPriorityB) return 1;
+
+            // تحريك الأصناف المنتهية (كميتها 0) إلى النهاية
+            if (qtyA === 0 && qtyB !== 0) return 1;
+            if (qtyA !== 0 && qtyB === 0) return -1;
+
+            return 0;
+        });
+
+        // 3. بناء واجهة المستخدم HTML
+        let html = '';
+        filtered.forEach(item => {
+            const factor = Number(item.unitFactor) || 1;
+            const total = Number(item.totalPcs) || 0;
+            
+            // إصلاح دقيق لطريقة التقسيم والكسور عند وجود أرصدة سالبة في المخزن
+            const absTotal = Math.abs(total);
+            const sign = total < 0 ? -1 : 1;
+
+            const cartons = Math.floor(absTotal / factor) * sign;
+            const jerrycans = (absTotal % factor) * sign;
+
+            const isZero = total === 0;
+            const minAllowed = (Number(item.min) || 0) * factor;
+            const isLow = !isZero && (total <= minAllowed);
+
+            let badgeClass = 'qty-badge';
+            if (isZero) {
+                badgeClass += ' qty-zero';
+            } else if (isLow) {
+                badgeClass += ' qty-low';
+            }
+
+            html += `
+                <div class="item-card grid-layout ${isZero ? 'out-of-stock' : ''}" onclick="goToDetails('${item.id}')">
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-barcode">باركود: ${item.barcode || '---'}</div>
+                    </div>
+                    <div class="item-price">
+                        ${Number(item.sell || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                    </div>
+                    <div>
+                        <div class="${badgeClass}">${cartons}</div>
+                    </div>
+                    <div>
+                        <div class="${badgeClass}">${jerrycans}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (filtered.length === 0) {
+            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-search fa-2x mb-2"></i><br>لا توجد أصناف مطابقة للبحث</div>`;
+        }
+
+        container.innerHTML = html;
+        document.getElementById('totalCount').innerText = filtered.length;
+    };
+
+    // دالة عرض تفاصيل حركات الصنف مع حساب وتوضيح الأرصدة التراكمية (قبل وبعد)
+    window.goToDetails = async function(id) {
+        const modalElement = document.getElementById('transactionsModal');
+        const modalInstance = new bootstrap.Modal(modalElement);
+        modalInstance.show();
+
+        const tbody = document.getElementById('transactionsBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i> جاري تحميل البيانات وحساب الأرصدة...</td></tr>';
+
+        try {
+            // 1. جلب الحركات الخاصة بالمنتج المحدد
+            const q = query(
+                collection(db, "transactions"),
+                where("productId", "==", id)
+            );
+            
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-danger fw-bold">لا توجد حركات مسجلة لهذا الصنف.</td></tr>';
+                return;
+            }
+
+            // 2. تجميع الحركات في مصفوفة لترتيبها زمنياً بشكل تصاعدي
+            let txList = [];
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                let rawDate = data.date?.toDate ? data.date.toDate() : new Date(data.date || 0);
+                txList.push({ ...data, actualDate: rawDate });
+            });
+
+            // الترتيب من الأقدم إلى الأحدث لضمان دقة العمليات الحسابية التراكمية للرصيد
+            txList.sort((a, b) => a.actualDate - b.actualDate);
+
+            // 3. حساب حركة الرصيد (قبل وبعد) وبناء الجدول
+            let currentRunningBalance = 0;
+            let rowsHtml = [];
+
+            txList.forEach((tx) => {
+                const qty = Number(tx.quantity || tx.qty || 0);
+                const isSale = tx.type === 'sale';
+                
+                // رصيد ما قبل هذه الحركة
+                const balanceBefore = currentRunningBalance;
+                
+                // تحديث رصيد ما بعد هذه الحركة
+                if (isSale) {
+                    currentRunningBalance -= qty;
+                } else {
+                    currentRunningBalance += qty;
+                }
+
+                const typeText = isSale ? '<span class="badge bg-danger">بيع</span>' : '<span class="badge bg-success">شراء</span>';
+                const dateStr = tx.actualDate.toLocaleDateString('ar-EG');
+
+                const row = `
+                    <tr>
+                        <td class="align-middle">${dateStr}</td>
+                        <td class="align-middle">${typeText}</td>
+                        <td class="align-middle">
+                            <span class="fw-bold text-dark d-block">الكمية: ${qty}</span>
+                            <span class="balance-text">قبل: ${balanceBefore} | بعد: ${currentRunningBalance}</span>
+                        </td>
+                        <td class="align-middle text-success fw-bold">${Number(tx.price || 0).toLocaleString('en-US')}</td>
+                    </tr>
+                `;
+                
+                // نضع الحركة الأحدث في الأعلى لراحة التصفح للمستخدم
+                rowsHtml.unshift(row);
+            });
+
+            tbody.innerHTML = rowsHtml.join('');
+
+        } catch (error) {
+            console.error("خطأ في جلب الحركات وحساب الأرصدة: ", error);
+            tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-danger">حدث خطأ أثناء الاتصال بقاعدة البيانات.</td></tr>';
+        }
+    };
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

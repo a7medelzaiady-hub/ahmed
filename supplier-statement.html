@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>كشف حساب مورد - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --white: #ffffff;
+            --border: #dce3de;
+            --danger: #d90429;
+            --success: #2d6a4f;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+        
+        .header-section { 
+            padding: 12px 15px; background: var(--header-bg); 
+            position: sticky; top: 0; z-index: 1000; color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header-container { display: flex; justify-content: space-between; align-items: center; }
+        
+        .summary-card {
+            background: var(--white); border-radius: 20px; padding: 20px; 
+            margin: 15px 0; border: 1px solid var(--border);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+        }
+        .summary-card h2 { font-weight: 800; color: var(--accent); margin: 5px 0; font-size: 1.8rem; }
+
+        .statement-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+        .statement-table th { 
+            padding: 12px; font-size: 0.75rem; color: var(--accent); 
+            text-align: center; font-weight: 800; border-bottom: 2px solid var(--border);
+        }
+        .statement-table tr { background: var(--white); transition: 0.2s; }
+        .statement-table td { 
+            padding: 12px 8px; text-align: center; font-size: 0.85rem; 
+            border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+        }
+        .statement-table tr td:first-child { border-right: 1px solid var(--border); border-radius: 0 12px 12px 0; }
+        .statement-table tr td:last-child { border-left: 1px solid var(--border); border-radius: 12px 0 0 12px; }
+        
+        .val-plus { color: var(--danger); font-weight: 800; } 
+        .val-minus { color: var(--success); font-weight: 800; } 
+        .date-badge { font-size: 0.7rem; font-weight: 700; color: #6c757d; }
+        .notes-text { font-size: 0.75rem; color: #7f8c8d; margin-top: 3px; }
+
+        .btn-action { 
+            width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); 
+            background: rgba(255,255,255,0.1); color: #fff; transition: 0.3s; 
+        }
+        .btn-action:hover { background: #fff; color: var(--accent); }
+
+        .btn-delete-row {
+            background: none; border: none; color: #e63946; padding: 4px 8px; border-radius: 6px; transition: 0.2s;
+        }
+        .btn-delete-row:hover {
+            background: #ffe3e5; color: var(--danger);
+        }
+
+        #print-area { display: none; }
+        @media print {
+            body { background: #fff !important; }
+            #content-to-export { display: none; }
+            #print-area { display: block !important; padding: 20px; color: #000; }
+        }
+        .print-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .print-table th, .print-table td { border: 1px solid #000; padding: 8px; text-align: center; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="content-to-export">
+    <div class="header-section">
+        <div class="header-container container">
+            <div class="nav-btns d-flex gap-2">
+                <button class="btn-action" onclick="generatePDF()"><i class="fas fa-file-pdf"></i></button>
+                <button class="btn-action" onclick="exportToExcel()"><i class="fas fa-file-excel"></i></button>
+                <button class="btn-action" onclick="window.print()"><i class="fas fa-print"></i></button>
+            </div>
+            <div class="title-area text-center flex-grow-1">
+                <h6 class="fw-bold m-0" id="titleName">كشف حساب مورد</h6>
+            </div>
+            <a href="javascript:history.back()" class="btn-action d-flex align-items-center justify-content-center text-decoration-none">
+                <i class="fas fa-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="summary-card d-flex justify-content-between align-items-center">
+            <div>
+                <span class="small fw-bold opacity-75">سقف الائتمان</span>
+                <div class="fw-bold text-dark" id="displayLimit" style="font-size: 0.9rem;">0.00 ج.م</div>
+            </div>
+            <div class="text-end">
+                <span class="small fw-bold opacity-75">إجمالي المديونية الحالية</span>
+                <h2 id="displayTotal">0.00</h2>
+                <small id="balanceType" class="fw-bold">جنيه مصري</small>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="statement-table" id="myTable">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">التاريخ</th>
+                        <th style="width: 35%;">البيان والتفاصيل</th>
+                        <th style="width: 20%;">مدين (+)</th>
+                        <th style="width: 20%;">دائن (-)</th>
+                        <th style="width: 10%;">حذف</th>
+                    </tr>
+                </thead>
+                <tbody id="statementBody">
+                    <tr><td colspan="5" class="text-center py-5">
+                        <div class="spinner-border spinner-border-sm text-success"></div> جاري مراجعة القيود...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="print-area">
+    <div style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+        <h2 style="text-align: center; margin: 0;">شركة الزيادى لقطع الغيار</h2>
+        <p style="text-align: center; margin: 5px 0; font-weight: bold;">تقرير كشف حساب تفصيلي</p>
+    </div>
+    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+        <div>
+            <p><strong>المورد:</strong> <span id="p-name"></span></p>
+            <p><strong>التاريخ:</strong> <span id="p-date"></span></p>
+        </div>
+        <div style="text-align: left;">
+            <p><strong>الرصيد النهائي:</strong> <span id="p-balance" style="font-size: 1.2rem; border-bottom: 1px double #000;"></span></p>
+        </div>
+    </div>
+    <table class="print-table">
+        <thead>
+            <tr style="background: #f0f0f0;">
+                <th>التاريخ</th>
+                <th>البيان / التفاصيل</th>
+                <th>مدين (+)</th>
+                <th>دائن (-)</th>
+            </tr>
+        </thead>
+        <tbody id="printBody"></tbody>
+    </table>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, query, where, getDocs, doc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const supId = urlParams.get('id');
+
+    async function loadStatement() {
+        if(!supId) return;
+        const tbody = document.getElementById('statementBody');
+
+        try {
+            let combinedData = [];
+            const supSnap = await getDoc(doc(db, "suppliers", supId));
+            
+            if(supSnap.exists()){
+                const data = supSnap.data();
+                document.getElementById('titleName').innerText = data.name;
+                document.getElementById('displayLimit').innerText = `${(data.creditLimit || 0).toLocaleString('ar-EG')} ج.م`;
+                document.getElementById('p-name').innerText = data.name;
+                document.getElementById('p-date').innerText = new Date().toLocaleDateString('ar-EG');
+                
+                const initial = Number(data.openingBalance) || 0;
+                if(initial !== 0) {
+                    combinedData.push({
+                        id: 'opening',
+                        collectionName: 'suppliers',
+                        date: "---", 
+                        type: "رصيد افتتاحى",
+                        amount: Math.abs(initial),
+                        isOpening: true,
+                        isDebit: initial > 0 
+                    });
+                }
+            }
+
+            // جلب سندات المعاملات من جدول transactions والبحث بكل الحقول الممكنة
+            const [transSnapParty, transSnapSup, invSnap] = await Promise.all([
+                getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
+                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
+                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
+            ]);
+
+            const processedTransIds = new Set();
+
+            const processTransDoc = (documentDoc) => {
+                if (processedTransIds.has(documentDoc.id)) return;
+                
+                const d = documentDoc.data();
+
+                // 🛑 منع تكرار سند الصرف إذا كان مسجلاً بالفعل مع فاتورة
+                if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+
+                processedTransIds.add(documentDoc.id);
+
+                combinedData.push({ 
+                    id: documentDoc.id,
+                    collectionName: 'transactions',
+                    date: d.date || '---', 
+                    type: d.type || 'سداد نقدية', 
+                    amount: Number(d.amount || 0), 
+                    notes: d.note || d.notes || (d.type === 'صرف' || d.type === 'سداد' ? 'سند صرف نقدية' : 'سند قبض نقدية') 
+                });
+            };
+
+            transSnapParty.forEach(processTransDoc);
+            transSnapSup.forEach(processTransDoc);
+
+            // جلب فواتير المشتريات والمدفوع داخل الفاتورة
+            invSnap.forEach(documentDoc => {
+                const d = documentDoc.data();
+                const totalAmt = Number(d.total || d.amount || 0);
+                
+                // سطر الفاتورة الأصلية (مشتريات/مرتجع)
+                combinedData.push({ 
+                    id: documentDoc.id,
+                    collectionName: 'supplier_transactions',
+                    date: d.date || '---', 
+                    type: d.type || 'شراء', 
+                    amount: totalAmt, 
+                    notes: d.note || d.details || (d.type === 'مرتجع شراء' ? 'مرتجع مشتريات' : 'مشتريات') 
+                });
+
+                // استخراج المبلغ المسدد نقداً فورياً مع الفاتورة
+                const paidAmt = Number(d.paid) || 
+                    (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
+                    (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+
+                if (paidAmt > 0 && (d.type === 'شراء' || d.type === 'فاتورة شراء' || !d.type)) {
+                    combinedData.push({
+                        id: documentDoc.id + '_paid',
+                        collectionName: 'supplier_transactions_paid',
+                        date: d.date || '---',
+                        type: 'سداد مع الفاتورة',
+                        amount: paidAmt,
+                        notes: `دفعة مسددة مع الفاتورة (${d.paymentMethod || 'نقدي'})`,
+                        isCustomPayment: true
+                    });
+                }
+            });
+
+            // ترتيب الكشف حسب التاريخ
+            combinedData.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            const pbody = document.getElementById('printBody');
+            tbody.innerHTML = ''; pbody.innerHTML = '';
+
+            let totalDebit = 0;  
+            let totalCredit = 0; 
+
+            combinedData.forEach(t => {
+                let isDebit = t.isOpening 
+                    ? t.isDebit 
+                    : ((t.type.includes('شراء') && !t.type.includes('مرتجع')) || t.type === 'قبض');
+                    
+                let isCredit = t.isOpening 
+                    ? !t.isDebit 
+                    : (t.type.includes('مرتجع') || t.type.includes('صرف') || t.type.includes('سداد') || t.isCustomPayment);
+                
+                if(isDebit) totalDebit += t.amount;
+                if(isCredit) totalCredit += t.amount;
+
+                const amtFormatted = t.amount.toLocaleString('ar-EG', {minimumFractionDigits: 2});
+                
+                const deleteBtn = (t.isOpening || t.isCustomPayment) 
+                    ? '-' 
+                    : `<button class="btn-delete-row" onclick="deleteTransaction('${t.collectionName}', '${t.id}')"><i class="fas fa-trash-alt"></i></button>`;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td><span class="date-badge">${t.date}</span></td>
+                        <td class="text-end">
+                            <div class="fw-bold ${isCredit ? 'text-success' : ''}">${t.type}</div>
+                            <div class="notes-text">${t.notes || ''}</div>
+                        </td>
+                        <td class="${isDebit ? 'val-plus' : ''}">${isDebit ? amtFormatted : '-'}</td>
+                        <td class="${isCredit ? 'val-minus' : ''}">${isCredit ? amtFormatted : '-'}</td>
+                        <td>${deleteBtn}</td>
+                    </tr>`;
+
+                pbody.innerHTML += `<tr><td>${t.date}</td><td>${t.type} - ${t.notes || ''}</td><td>${isDebit ? amtFormatted : '-'}</td><td>${isCredit ? amtFormatted : '-'}</td></tr>`;
+            });
+
+            const finalBalance = totalDebit - totalCredit;
+            const displayEl = document.getElementById('displayTotal');
+            displayEl.innerText = Math.abs(finalBalance).toLocaleString('ar-EG', {minimumFractionDigits: 2});
+            
+            if(finalBalance > 0.1) {
+                displayEl.className = 'val-plus';
+                document.getElementById('balanceType').innerText = 'مديونية مستحقة للمورد';
+                document.getElementById('balanceType').style.color = 'var(--danger)';
+            } else if(finalBalance < -0.1) {
+                displayEl.className = 'val-minus';
+                document.getElementById('balanceType').innerText = 'رصيد دائن لصالحك';
+                document.getElementById('balanceType').style.color = 'var(--success)';
+            } else {
+                displayEl.style.color = 'var(--text-primary)';
+                document.getElementById('balanceType').innerText = 'الحساب مقفل / خالص';
+            }
+
+            document.getElementById('p-balance').innerText = Math.abs(finalBalance).toLocaleString('ar-EG') + ' ج.م';
+
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="5" class="text-danger py-5">حدث خطأ في جلب البيانات</td></tr>';
+        }
+    }
+
+    window.deleteTransaction = async (collectionName, docId) => {
+        if(confirm("هل أنت متأكد من رغبتك في حذف هذه الحركة نهائياً؟")) {
+            try {
+                await deleteDoc(doc(db, collectionName, docId));
+                alert("تم حذف الحركة بنجاح.");
+                loadStatement();
+            } catch (error) {
+                console.error("Error deleting document: ", error);
+                alert("عذراً، فشل حذف الحركة.");
+            }
+        }
+    };
+
+    window.generatePDF = () => {
+        const element = document.getElementById('print-area');
+        element.style.display = 'block';
+        const name = document.getElementById('p-name').innerText;
+        html2pdf().from(element).set({
+            margin: 10, filename: `كشف_حساب_${name}.pdf`,
+            html2canvas: { scale: 3 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        }).save().then(() => element.style.display = 'none');
+    };
+
+    window.exportToExcel = () => {
+        const name = document.getElementById('p-name').innerText;
+        XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("myTable")), `كشف_${name}.xlsx`);
+    };
+
+    loadStatement();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

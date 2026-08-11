@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حركة النقدية - الزيادي لزيوت السيارات</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root { --accent: #0b5e3d; --bg-light: #f4f7f6; --white: #ffffff; --danger: #dc3545; --success: #28a745; }
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; padding-bottom: 20px; font-size: 0.75rem; }
+        
+        .header-section { 
+            padding: 10px 15px; background: var(--accent); color: white;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100;
+        }
+        .header-section h6 { font-size: 0.95rem; margin: 0; }
+
+        .summary-card {
+            background: var(--white); border-radius: 8px; padding: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e2e8f0;
+        }
+        .summary-card small { font-size: 0.75rem; color: #64748b; }
+        .summary-card h6 { font-size: 0.9rem; margin-top: 3px; font-weight: 700; }
+
+        .filter-btn {
+            border-radius: 15px; font-weight: 600; font-size: 0.8rem; padding: 4px 15px;
+        }
+
+        .cash-table th { background-color: #f8fafc; color: #475569; font-weight: 700; font-size: 0.72rem; padding: 6px; }
+        .cash-table td { vertical-align: middle; padding: 8px; font-size: 0.8rem; }
+        
+        .badge-flow { font-weight: 700; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
+        .bg-in { background-color: #d1e7dd; color: #0f5132; }
+        .bg-out { background-color: #f8d7da; color: #842029; }
+        
+        .text-in { color: var(--success); font-weight: 700; }
+        .text-out { color: var(--danger); font-weight: 700; }
+        
+        .search-input { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <a href="index.html" class="text-white"><i class="fas fa-home"></i></a>
+    <h6 class="fw-bold">حركة النقدية (الخزينة الشاملة)</h6>
+    <span class="badge bg-light text-dark fw-bold" id="totalRecordsCount" style="font-size: 0.7rem;">0 حركة</span>
+</div>
+
+<div class="container mt-2">
+    
+    <div class="row g-2 mb-2">
+        <div class="col-4">
+            <div class="summary-card text-center">
+                <small>إجمالي الوارد (مبيعات + سدادات)</small>
+                <h6 class="text-success" id="sumIn">0 ج.م</h6>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="summary-card text-center">
+                <small>إجمالي الصادر (مشتريات + مصروفات)</small>
+                <h6 class="text-danger" id="sumOut">0 ج.م</h6>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="summary-card text-center" style="background: #edf7f4;">
+                <small>صافي الخزنة الحالي</small>
+                <h6 style="color: var(--accent);" id="netCache">0 ج.م</h6>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white p-2 rounded-3 shadow-sm mb-2">
+        <div class="d-flex justify-content-center gap-1 mb-2">
+            <button class="btn btn-success filter-btn type-filter-btn" data-type="all" onclick="changeTypeFilter('all', this)">
+                الكل
+            </button>
+            <button class="btn btn-outline-success filter-btn type-filter-btn" data-type="قبض" onclick="changeTypeFilter('قبض', this)">
+                الوارد
+            </button>
+            <button class="btn btn-outline-danger filter-btn type-filter-btn" data-type="صرف" onclick="changeTypeFilter('صرف', this)">
+                الصادر
+            </button>
+        </div>
+        <input type="text" id="cashSearchBar" class="form-control search-input" placeholder="ابحث باسم العميل، المورد، البند أو البيان...">
+    </div>
+
+    <div class="bg-white rounded-3 shadow-sm overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover m-0 text-center align-middle cash-table">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">التاريخ</th>
+                        <th style="width: 15%;">النوع</th>
+                        <th style="width: 30%;">الاسم / الحساب / البند</th>
+                        <th style="width: 25%;">البيان / التفاصيل</th>
+                        <th style="width: 15%;">المبلغ</th>
+                    </tr>
+                </thead>
+                <tbody id="cashFlowTableBody">
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            <i class="fas fa-spinner fa-spin me-1"></i> جاري قراءة وتجميع الحركات النقدية والمصروفات...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, initializeFirestore, persistentLocalCache, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+
+    let masterCashArray = [];
+    let currentTypeFilter = "all";
+
+    function extractPaidAmount(data) {
+        if (data.paidAmount !== undefined) return Number(data.paidAmount) || 0;
+        if (data.paid !== undefined) return Number(data.paid) || 0;
+        if (data.cashPaid !== undefined) return Number(data.cashPaid) || 0;
+        if (data.cash !== undefined) return Number(data.cash) || 0;
+        if (data.amountPaid !== undefined) return Number(data.amountPaid) || 0;
+        
+        for (let key in data) {
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.includes('paid') || lowerKey.includes('cash') || lowerKey.includes('مدفوع')) {
+                const val = Number(data[key]);
+                if (!isNaN(val) && val > 0) return val;
+            }
+        }
+        return 0;
+    }
+
+    function parseDateToTimestamp(dateStr) {
+        if (!dateStr || typeof dateStr !== 'string') return 0;
+        try {
+            const clean = dateStr.split(' ')[0].replace(/\//g, '-');
+            const parts = clean.split('-');
+            if(parts.length === 3) {
+                if(parts[0].length === 4) return new Date(clean).getTime() || 0;
+                return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+            }
+            return new Date(clean).getTime() || 0;
+        } catch(e) { return 0; }
+    }
+
+    async function fetchCashFlow() {
+        const tbody = document.getElementById('cashFlowTableBody');
+        try {
+            let namesCache = {};
+            masterCashArray = [];
+
+            // 1. جلب أسماء العملاء والموردين للكاش والربط الذكي
+            try {
+                const custSnap = await getDocs(collection(db, "customers"));
+                custSnap.forEach(cDoc => { namesCache[cDoc.id] = cDoc.data().name; });
+            } catch(e){}
+
+            try {
+                const suppSnap = await getDocs(collection(db, "suppliers"));
+                suppSnap.forEach(sDoc => { namesCache[sDoc.id] = sDoc.data().name; });
+            } catch(e){}
+
+            // 2. جلب السندات المباشرة المقبوضة والمصروفة (transactions)
+            try {
+                const snapTrans = await getDocs(collection(db, "transactions"));
+                snapTrans.forEach(doc => {
+                    const data = doc.data();
+                    let resolvedName = data.customerName || data.partyName || data.supplierName;
+                    let partyId = data.partyId || data.supplierId || "";
+
+                    if (!resolvedName || resolvedName === "عميل غير مدرج الاسم" || resolvedName.includes("حركة عامة")) {
+                        resolvedName = (partyId && namesCache[partyId]) ? namesCache[partyId] : "سند مالي مباشر";
+                    }
+
+                    masterCashArray.push({
+                        date: data.date || "---",
+                        timestamp: parseDateToTimestamp(data.date),
+                        type: data.type || "قبض", 
+                        customerName: resolvedName,
+                        notes: data.notes || (data.type === "صرف" ? "سند صرف نقدي" : "سند قبض نقدي"),
+                        amount: Number(data.amount) || 0
+                    });
+                });
+            } catch(e) { console.error("خطأ بالسندات:", e); }
+            
+// 2.1 جلب سدادات فواتير المبيعات من invoices
+try {
+
+    const invoicesSnap =
+        await getDocs(collection(db, "invoices"));
+
+    invoicesSnap.forEach(doc => {
+
+        const data = doc.data();
+
+        const cashAmount =
+            Number(data.cashAmount || 0);
+
+        const walletAmount =
+            Number(data.walletAmount || 0);
+
+        if (cashAmount > 0) {
+
+            masterCashArray.push({
+
+                date: data.date || "---",
+
+                timestamp:
+                    parseDateToTimestamp(data.date),
+
+                type: "قبض",
+
+                customerName:
+                    data.customerName || "عميل",
+
+                notes:
+                    "سداد نقدي فاتورة مبيعات",
+
+                amount: cashAmount
+
+            });
+
+        }
+
+        if (walletAmount > 0) {
+
+            masterCashArray.push({
+
+                date: data.date || "---",
+
+                timestamp:
+                    parseDateToTimestamp(data.date),
+
+                type: "قبض",
+
+                customerName:
+                    data.customerName || "عميل",
+
+                notes:
+                    "سداد محفظة فاتورة مبيعات",
+
+                amount: walletAmount
+
+            });
+
+        }
+
+    });
+
+} catch(e) {
+
+    console.error("خطأ فواتير المبيعات", e);
+
+}
+            // 3. جلب المدفوعات النقدية الفورية من فواتير المبيعات (sales)
+            try {
+                const snapSales = await getDocs(collection(db, "sales"));
+                snapSales.forEach(doc => {
+                    const data = doc.data();
+                    const paidAmount =
+    Number(data.cashAmount || 0) +
+    Number(data.cashPaid || 0) +
+    Number(data.paidCash || 0) +
+    Number(data.paid || 0);
+                    console.log("PURCHASE DATA", data);
+                    
+                    if (paidAmount > 0) {
+                        let custName = data.customerName || data.partyName || "";
+                        let cId = data.customerId || data.partyId || "";
+                        if(!custName && cId && namesCache[cId]) {
+                            custName = namesCache[cId];
+                        }
+                        masterCashArray.push({
+                            date: data.date || "---",
+                            timestamp: parseDateToTimestamp(data.date),
+                            type: "قبض", // مبيعات نقدية = كاش داخل الخزنة
+                            customerName: custName || "عميل نقدي (فاتورة بيع)",
+                            notes: `فاتورة بيع رقم: ${data.invoiceNumber || data.invNo || doc.id.substring(0,6)}`,
+                            amount: paidAmount
+                        });
+                    }
+                });
+            } catch(e) { console.error("خطأ بفواتير البيع:", e); }
+
+            // 4. جلب المدفوعات النقدية الفورية من فواتير المشتريات (purchases)
+            try {
+                const snapPurchases = await getDocs(collection(db, "purchases"));
+                snapPurchases.forEach(doc => {
+                    const data = doc.data();
+                    const paidAmount = extractPaidAmount(data);
+                    
+                    if (paidAmount > 0) {
+                        let suppName = data.supplierName || data.partyName || "";
+                        let sId = data.supplierId || data.partyId || "";
+                        if(!suppName && sId && namesCache[sId]) {
+                            suppName = namesCache[sId];
+                        }
+                        masterCashArray.push({
+                            date: data.date || "---",
+                            timestamp: parseDateToTimestamp(data.date),
+                            type: "صرف", // مشتريات نقدية = كاش خارج من الخزنة
+                            customerName: suppName || "مورد نقدي (فاتورة شراء)",
+                            notes: `فاتورة شراء رقم: ${data.invoiceNumber || data.invNo || doc.id.substring(0,6)}`,
+                            amount: paidAmount
+                        });
+                    }
+                });
+            } catch(e) { console.error("خطأ بفواتير الشراء:", e); }
+            // 4.1 سندات الموردين
+try {
+
+    const supplierTrans =
+        await getDocs(collection(db, "supplierTransactions"));
+
+    supplierTrans.forEach(doc => {
+
+        const data = doc.data();
+
+        masterCashArray.push({
+
+            date: data.date || "---",
+
+            timestamp:
+                parseDateToTimestamp(data.date),
+
+            type:
+                data.type === "قبض"
+                ? "قبض"
+                : "صرف",
+
+            customerName:
+                data.supplierName || "مورد",
+
+            notes:
+                data.notes || "سند مورد",
+
+            amount:
+                Number(data.amount) || 0
+
+        });
+
+    });
+
+} catch(e) {
+
+    console.log("supplierTransactions not found");
+
+}
+
+            // 5. جلب المصروفات العامة والتشغيلية (expenses) لدمجها كـ صادر
+            try {
+                const snapExpenses = await getDocs(collection(db, "expenses"));
+                snapExpenses.forEach(doc => {
+                    const data = doc.data();
+                    const expenseAmount = Number(data.amount) || Number(data.value) || 0;
+                    
+                    if (expenseAmount > 0) {
+                        masterCashArray.push({
+                            date: data.date || "---",
+                            timestamp: parseDateToTimestamp(data.date),
+                            type: "صرف", // مصروفات تشغيلية = خارج من الخزنة
+                            customerName: data.category || data.expenseName || data.title || "مصروفات تشغيلية وعامة",
+                            notes: data.notes || data.statement || "إيصال مصروفات",
+                            amount: expenseAmount
+                        });
+                    }
+                });
+            } catch(e) { console.error("خطأ في قراءة المصروفات:", e); }
+
+            // ترتيب مصفوفة النقدية الشاملة من الأحدث إلى الأقدم
+            masterCashArray.sort((a, b) => b.timestamp - a.timestamp);
+
+            applyFilters();
+
+        } catch (error) {
+            console.error(error);
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">حدث خطأ أثناء تحميل حركة النقدية.</td></tr>`;
+        }
+    }
+
+    window.changeTypeFilter = (type, btnElement) => {
+        currentTypeFilter = type;
+        
+        document.querySelectorAll('.type-filter-btn').forEach(btn => {
+            btn.classList.replace('btn-success', 'btn-outline-success');
+            btn.classList.replace('btn-danger', 'btn-outline-danger');
+        });
+
+        if(type === 'all') btnElement.classList.replace('btn-outline-success', 'btn-success');
+        else if(type === 'قبض') btnElement.classList.replace('btn-outline-success', 'btn-success');
+        else if(type === 'صرف') btnElement.classList.replace('btn-outline-danger', 'btn-danger');
+
+        applyFilters();
+    };
+
+    window.applyFilters = () => {
+        const searchTxt = document.getElementById('cashSearchBar').value.toLowerCase();
+        const tbody = document.getElementById('cashFlowTableBody');
+        
+        const filteredData = masterCashArray.filter(item => {
+            const matchesType = (currentTypeFilter === "all") || (item.type === currentTypeFilter);
+            const matchesSearch = item.customerName.toLowerCase().includes(searchTxt) || item.notes.toLowerCase().includes(searchTxt);
+            return matchesType && matchesSearch;
+        });
+
+        let totalIn = 0;
+        let totalOut = 0;
+        tbody.innerHTML = "";
+        
+        if(filteredData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">لا توجد نتائج مطابقة لفلترة البحث الحالية.</td></tr>`;
+        } else {
+            filteredData.forEach(item => {
+                const isIncoming = item.type === "قبض";
+                if(isIncoming) totalIn += item.amount; else totalOut += item.amount;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-secondary" style="font-size: 0.75rem;">${item.date}</td>
+                    <td>
+                        <span class="badge-flow ${isIncoming ? 'bg-in' : 'bg-out'}">
+                            ${isIncoming ? 'وارد' : 'صادر'}
+                        </span>
+                    </td>
+                    <td class="fw-bold text-dark text-start">${item.customerName}</td>
+                    <td class="text-muted text-start" style="font-size: 0.75rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.notes}">${item.notes}</td>
+                    <td class="${isIncoming ? 'text-in' : 'text-out'}">
+                        ${isIncoming ? '+' : '-'}${item.amount.toLocaleString()}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        document.getElementById('totalRecordsCount').innerText = `${filteredData.length} حركة`;
+        document.getElementById('sumIn').innerText = totalIn.toLocaleString() + " ج.م";
+        document.getElementById('sumOut').innerText = totalOut.toLocaleString() + " ج.م";
+        
+        const net = totalIn - totalOut;
+        const netElement = document.getElementById('netCache');
+        netElement.innerText = net.toLocaleString() + " ج.م";
+        
+        if(net >= 0) { netElement.style.color = "var(--accent)"; } 
+        else { netElement.style.color = "var(--danger)"; }
+    };
+
+    document.getElementById('cashSearchBar').addEventListener('input', applyFilters);
+
+    // تفعيل جلب البيانات فور تحميل الصفحة
+    fetchCashFlow();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

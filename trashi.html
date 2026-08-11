@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>trashi - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --accent: #2c3e50;
+            --header-bg: #1a252f;
+            --bg-light: #f4f6f8;
+            --text-primary: #2c3e50;
+            --white: #ffffff;
+            --danger: #d90429;
+            --success: #2d6a4f;
+            --warning: #f39c12;
+            --card-radius: 12px;
+        }
+        body {
+            background: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            padding-bottom: 40px;
+        }
+        .header-nav {
+            background: var(--header-bg);
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .back-btn {
+            background: rgba(255,255,255,0.2);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+            border: none;
+        }
+        .nav-tabs .nav-link {
+            font-family: 'Cairo';
+            font-weight: 700;
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--danger);
+            border-bottom-color: var(--danger);
+            background: none;
+        }
+        .bulk-actions-bar {
+            background: var(--white);
+            border: 1px dashed #cbd5e1;
+            border-radius: var(--card-radius);
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .bulk-actions-bar .btn {
+            font-family: 'Cairo';
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 5px 10px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .trash-card {
+            background: var(--white);
+            border: 1px solid #e2e8f0;
+            border-radius: var(--card-radius);
+            padding: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .trash-actions .btn {
+            font-family: 'Cairo';
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .custom-popup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        .custom-popup-box { background: white; width: 90%; max-width: 360px; padding: 22px; border-radius: 16px; text-align: center; font-family: 'Cairo'; }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <a href="index.html" class="back-btn"><i class="fas fa-arrow-right"></i></a>
+    <h6 class="m-0 fw-bold"><i class="fas fa-trash-alt me-1 text-danger"></i> سلة المحذوفات trashi</h6>
+    <div style="width: 32px;"></div>
+</div>
+
+<div class="container px-2 mt-3">
+    <!-- التبويبات للتنقل بين الأقسام المحذوفة -->
+    <ul class="nav nav-tabs justify-content-center mb-3" id="trashTabs">
+        <li class="nav-item"><a class="nav-link active" onclick="switchTab('invoices')">🧾 الفواتير</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="switchTab('inventory')">📦 الأصناف</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="switchTab('customers')">👥 العملاء</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="switchTab('transactions')">💸 العمليات</a></li>
+    </ul>
+
+    <!-- شريط العمليات الجماعية (مسح واستعادة الكل) -->
+    <div id="bulkActionsContainer" style="display: none;">
+        <div class="bulk-actions-bar animate__animated animate__fadeIn">
+            <span class="text-muted fw-bold" id="itemsCountText" style="font-size: 0.75rem;"></span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-success" onclick="bulkRestore()">
+                    <i class="fas fa-undo-alt"></i> استعادة الكل
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="bulkHardDelete()">
+                    <i class="fas fa-dumpster animate__animated animate__shakeX"></i> مسح الكل نهائياً
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- مكان عرض العناصر -->
+    <div id="trashContainer">
+        <div class="text-center py-5 text-muted">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p class="mt-2 fw-bold">جارٍ جلب المحذوفات في trashi...</p>
+        </div>
+    </div>
+</div>
+
+<!-- نظام التنبيهات المخصص للـ UI -->
+<div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">
+    <div class="custom-popup-box">
+        <div id="customModalIcon" style="width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;"></div>
+        <h6 class="fw-bold mb-2" id="customModalTitle">تنبيه</h6>
+        <div id="customModalBody" class="text-muted mb-3" style="font-size: 0.8rem;"></div>
+        <div class="d-flex gap-2 justify-content-center" id="customModalActions"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, updateDoc, deleteDoc, doc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let currentTab = 'invoices';
+    let trashItems = [];
+
+    const tabNamesAr = {
+        'invoices': 'الفواتير',
+        'inventory': 'الأصناف',
+        'customers': 'العملاء',
+        'transactions': 'العمليات'
+    };
+
+    window.showCustomUi = (options) => {
+        const modal = document.getElementById('customGlobalModal');
+        document.getElementById('customModalTitle').innerText = options.title || "تنبيه";
+        document.getElementById('customModalBody').innerHTML = options.message || "";
+        const actions = document.getElementById('customModalActions');
+        actions.innerHTML = "";
+
+        if (options.type === "confirm") {
+            const yes = document.createElement('button');
+            yes.className = "btn btn-sm btn-danger px-3 fw-bold";
+            yes.innerText = "تأكيد";
+            yes.onclick = () => { modal.style.display='none'; if(options.onConfirm) options.onConfirm(); };
+            
+            const no = document.createElement('button');
+            no.className = "btn btn-sm btn-light px-3 fw-bold";
+            no.innerText = "إلغاء";
+            no.onclick = () => modal.style.display='none';
+            
+            actions.appendChild(yes);
+            actions.appendChild(no);
+        } else {
+            const ok = document.createElement('button');
+            ok.className = "btn btn-sm btn-dark px-4";
+            ok.innerText = "موافق";
+            ok.onclick = () => { modal.style.display='none'; if(options.onConfirm) options.onConfirm(); };
+            actions.appendChild(ok);
+        }
+        modal.style.display = 'flex';
+    };
+
+    window.switchTab = (tabName) => {
+        currentTab = tabName;
+        document.querySelectorAll('#trashTabs .nav-link').forEach(link => link.classList.remove('active'));
+        if(event && event.target) {
+            event.target.classList.add('active');
+        }
+        loadTrashData();
+    };
+
+    async function loadTrashData() {
+        const container = document.getElementById('trashContainer');
+        const bulkBar = document.getElementById('bulkActionsContainer');
+        container.innerHTML = `<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i></div>`;
+        bulkBar.style.display = 'none';
+        
+        try {
+            const snap = await getDocs(collection(db, currentTab));
+            trashItems = [];
+            
+            snap.forEach(d => {
+                const data = d.data();
+                if (data.isDeleted === true) {
+                    trashItems.push({ id: d.id, ...data });
+                }
+            });
+
+            if (trashItems.length === 0) {
+                container.innerHTML = `<div class="text-center py-5 text-muted fw-bold"><i class="fas fa-folder-open fa-2x d-block mb-2"></i> السلة trashi فارغة في هذا القسم</div>`;
+                return;
+            }
+
+            document.getElementById('itemsCountText').innerText = `عدد العناصر: ${trashItems.length}`;
+            bulkBar.style.display = 'block';
+
+            container.innerHTML = trashItems.map(item => {
+                let detailsText = "";
+                if (currentTab === 'invoices') detailsText = `فاتورة لعميل: <b>${item.customerName || 'نقدي'}</b> بقيمة <b>${item.total} ج.م</b>`;
+                else if (currentTab === 'inventory') detailsText = `صنف: <b>${item.name}</b> - كود: ${item.code || 'بدون'}`;
+                else if (currentTab === 'customers') detailsText = `عميل: <b>${item.name}</b> - هاتف: ${item.phone || 'بدون'}`;
+                else if (currentTab === 'transactions') detailsText = `حركة مالي: <b>${item.type}</b> بمبلغ <b>${item.amount} ج.م</b>`;
+
+                return `
+                    <div class="trash-card d-flex justify-content-between align-items-center">
+                        <div>
+                            <div style="font-size:0.85rem;">${detailsText}</div>
+                            <small class="text-muted" style="font-size:0.68rem;"><i class="far fa-calendar-alt me-1"></i> محذوف مؤقتاً</small>
+                        </div>
+                        <div class="trash-actions d-flex gap-1">
+                            <button class="btn btn-outline-success" onclick="restoreItem('${item.id}')" title="استعادة"><i class="fas fa-undo"></i></button>
+                            <button class="btn btn-outline-danger" onclick="hardDeleteItem('${item.id}')" title="حذف نهائي"><i class="fas fa-times-circle"></i></button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+        } catch (err) {
+            container.innerHTML = `<div class="alert alert-danger p-2 text-center">فشل تحميل سلة المحذوفات trashi.</div>`;
+        }
+    }
+
+    // --- دالة الترانزاكشن المخصصة لاستعادة الفاتورة مع إعادة خصم المخزن واستعادة سندات القبض ---
+    async function restoreInvoiceWithTransaction(invoiceId) {
+        await runTransaction(db, async (transaction) => {
+            const invoiceRef = doc(db, "invoices", invoiceId);
+            const invoiceDoc = await transaction.get(invoiceRef);
+
+            if (!invoiceDoc.exists()) {
+                throw new Error("الفاتورة غير موجودة بالمتروكات!");
+            }
+
+            const invoiceData = invoiceDoc.data();
+            const items = invoiceData.items || [];
+
+            // 1. قراءة جميع المستندات المرتبطة أولاً (قراءة كل أصناف الفاتورة من المخزن)
+            const itemReads = [];
+            for (const item of items) {
+                if (item.stockId) {
+                    const itemRef = doc(db, "inventory", item.stockId);
+                    itemReads.push({
+                        itemRef,
+                        itemData: item,
+                        promise: transaction.get(itemRef)
+                    });
+                }
+            }
+
+            // انتظار نتيجة قراءة الأصناف
+            const itemDocs = await Promise.all(itemReads.map(r => r.promise));
+
+            // 2. تحديث المخزن (عند الاستعادة: البيع يخصم كمية من الجديد، والمرتجع يُضاف للمخزن)
+            for (let i = 0; i < itemReads.length; i++) {
+                const { itemRef, itemData } = itemReads[i];
+                const itemDoc = itemDocs[i];
+
+                if (itemDoc.exists()) {
+                    const currentStock = itemDoc.data().totalPcs || 0;
+                    const factor = Number(itemData.unitFactor) || 1;
+                    
+                    // حساب إجمالي القطع بالمعادلة الموحدة
+                    let totalPcs = 0;
+                    if (itemData.totalPieces !== undefined && itemData.totalPieces !== null) {
+                        totalPcs = Number(itemData.totalPieces);
+                    } else {
+                        const qty = Number(itemData.qty) || 0;
+                        const returnQty = Number(itemData.returnQty) || 0;
+                        totalPcs = (itemData.unitName === 'قطعة') ? (qty + returnQty) : ((qty + returnQty) * factor);
+                    }
+
+                    // عند الاستعادة: لو صنف بيع عادي -> ينخصم من المخزن. لو مرتجع -> ينضاف للمخزن.
+                    const isReturn = itemData.isReturn === true;
+                    const stockChange = isReturn ? totalPcs : -totalPcs;
+                    const newStock = currentStock + stockChange;
+
+                    transaction.update(itemRef, { totalPcs: newStock });
+                }
+            }
+
+            // 3. إلغاء حذف الفاتورة نفسها
+            transaction.update(invoiceRef, {
+                isDeleted: false,
+                deletedAt: null
+            });
+        });
+
+        // 4. استعادة جميع معاملات السداد/سندات القبض المرتبطة بهذه الفاتورة تلقائياً
+        const transQuery = query(collection(db, "transactions"), where("invoiceId", "==", invoiceId));
+        const transSnap = await getDocs(transQuery);
+
+        if (!transSnap.empty) {
+            const batch = writeBatch(db);
+            transSnap.forEach(tDoc => {
+                batch.update(doc(db, "transactions", tDoc.id), {
+                    isDeleted: false,
+                    deletedAt: null
+                });
+            });
+            await batch.commit();
+        }
+    }
+
+    window.restoreItem = (id) => {
+        window.showCustomUi({
+            title: "🔄 استعادة العنصر",
+            message: "هل تريد بالتأكيد إلغاء الحذف وإرجاع هذا العنصر إلى النظام؟",
+            type: "confirm",
+            onConfirm: async () => {
+                try {
+                    if (currentTab === 'invoices') {
+                        await restoreInvoiceWithTransaction(id);
+                    } else {
+                        await updateDoc(doc(db, currentTab, id), {
+                            isDeleted: false,
+                            deletedAt: null
+                        });
+                    }
+                    loadTrashData();
+                } catch (err) {
+                    console.error(err);
+                    window.showCustomUi({
+                        title: "❌ خطأ في الاستعادة",
+                        message: "حدث خطأ أثناء استعادة العنصر: " + err.message
+                    });
+                }
+            }
+        });
+    };
+
+    window.hardDeleteItem = (id) => {
+        window.showCustomUi({
+            title: "🛑 حذف نهائي مدمر",
+            message: "⚠️ تحذير! هذا الإجراء سيقوم بمسح العنصر تماماً من السيرفر ولا يمكن التراجع عنه أبداً. هل تود الاستمرار؟",
+            type: "confirm",
+            onConfirm: async () => {
+                try {
+                    await deleteDoc(doc(db, currentTab, id));
+                    loadTrashData();
+                } catch (err) {
+                    console.error(err);
+                    window.showCustomUi({
+                        title: "❌ خطأ",
+                        message: "حدث خطأ أثناء الحذف النهائي: " + err.message
+                    });
+                }
+            }
+        });
+    };
+
+    // --- العمليات الجماعية (استعادة ومسح الكل مع دعم الترانزاكشن للفواتير) ---
+
+    window.bulkRestore = () => {
+        if (trashItems.length === 0) return;
+        const currentNameAr = tabNamesAr[currentTab];
+        
+        window.showCustomUi({
+            title: "🔄 استعادة كل " + currentNameAr,
+            message: `هل تريد بالتأكيد استعادة جميع العناصر الموجودة في قسم <b>(${currentNameAr})</b> وإعادتها للنظام دفعة واحدة؟ <br><b class="text-success">العدد: ${trashItems.length} عنصر</b>`,
+            type: "confirm",
+            onConfirm: async () => {
+                try {
+                    if (currentTab === 'invoices') {
+                        for (const item of trashItems) {
+                            await restoreInvoiceWithTransaction(item.id);
+                        }
+                    } else {
+                        const batch = writeBatch(db);
+                        trashItems.forEach(item => {
+                            const itemRef = doc(db, currentTab, item.id);
+                            batch.update(itemRef, { isDeleted: false, deletedAt: null });
+                        });
+                        await batch.commit();
+                    }
+                    loadTrashData();
+                } catch (err) {
+                    console.error(err);
+                    window.showCustomUi({
+                        title: "❌ خطأ أثناء الاستعادة الجماعية",
+                        message: "حدث خطأ أثناء معالجة البيانات: " + err.message
+                    });
+                }
+            }
+        });
+    };
+
+    window.bulkHardDelete = () => {
+        if (trashItems.length === 0) return;
+        const currentNameAr = tabNamesAr[currentTab];
+        
+        window.showCustomUi({
+            title: "🛑 تدمير وحذف كل " + currentNameAr,
+            message: `⚠️ <b>تحذير صارم جداً!</b><br>أنت على وشك حذف <b>جميع محتويات قسم (${currentNameAr}) نهائياً من السيرفر</b>.<br>سيتم مسح <b class="text-danger">${trashItems.length} عنصر</b> تماماً ولا يمكن التراجع أو استرجاع البيانات نهائياً! هل أنت متأكد؟`,
+            type: "confirm",
+            onConfirm: async () => {
+                try {
+                    const batch = writeBatch(db);
+                    trashItems.forEach(item => {
+                        const itemRef = doc(db, currentTab, item.id);
+                        batch.delete(itemRef);
+                    });
+                    await batch.commit();
+                    loadTrashData();
+                } catch (err) {
+                    console.error(err);
+                    window.showCustomUi({
+                        title: "❌ خطأ أثناء المسح الجماعي",
+                        message: "حدث خطأ أثناء العملية: " + err.message
+                    });
+                }
+            }
+        });
+    };
+
+    loadTrashData();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

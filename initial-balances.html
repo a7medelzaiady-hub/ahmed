@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أرصدة أول المدة للعملاء - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; /* الأخضر الداكن اللي شغالين بيه */
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+        }
+        
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 100px; }
+        
+        .header { 
+            background: var(--header-bg); padding: 15px 20px; display: flex; 
+            align-items: center; justify-content: space-between; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: white;
+            position: sticky; top: 0; z-index: 1000;
+        }
+
+        .info-alert {
+            background: #fff; border: 1px dashed var(--accent);
+            border-radius: 15px; padding: 15px; margin: 15px; 
+            font-size: 0.85rem; color: var(--accent); font-weight: 600;
+        }
+
+        .cust-row {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 15px; padding: 15px; margin: 0 15px 10px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+
+        .cust-name { font-weight: 700; font-size: 0.95rem; display: block; color: var(--text-primary); }
+        .cust-phone { font-size: 0.75rem; color: #707b7c; }
+
+        .input-group-custom { width: 130px; }
+        .balance-input {
+            background: #f8faf9 !important; border: 1px solid var(--border) !important;
+            color: var(--accent) !important; text-align: center; border-radius: 10px !important; 
+            font-weight: 800; font-family: 'Consolas', monospace; padding: 8px;
+        }
+        .balance-input:focus { border-color: var(--accent) !important; box-shadow: 0 0 8px rgba(11, 94, 61, 0.1); outline: none; }
+
+        .search-box {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 12px; color: var(--text-primary); padding: 12px; 
+            margin: 0 15px 15px; width: calc(100% - 30px); font-weight: 600;
+        }
+        .search-box:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+
+        .save-all-btn {
+            position: fixed; bottom: 20px; left: 20px; right: 20px;
+            background: var(--accent); border: none; border-radius: 18px; 
+            padding: 16px; font-weight: 700; color: white; font-size: 1.1rem;
+            box-shadow: 0 5px 15px rgba(11, 94, 61, 0.3); z-index: 1001;
+            transition: 0.3s;
+        }
+        .save-all-btn:active { transform: scale(0.97); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+
+    <div class="d-flex align-items-center gap-3">
+
+        <a href="index.html" class="text-white text-decoration-none">
+            <i class="fas fa-house fs-5"></i>
+        </a>
+
+        <i class="fas fa-chevron-right fs-5"
+           onclick="history.back()"
+           style="cursor:pointer"></i>
+
+    </div>
+
+    <h6 class="m-0 fw-bold">أرصدة أول المدة للعملاء</h6>
+
+    <div style="width:60px"></div>
+
+</div>
+
+<div class="container-fluid p-0">
+    <div class="info-alert text-center">
+        <i class="fas fa-info-circle me-1"></i> ضبط المبالغ المستحقة على العملاء قبل بدء استخدام البرنامج.
+    </div>
+
+    <input type="text" id="searchInput" class="search-box" placeholder="بحث باسم العميل...">
+
+    <div id="customersList">
+        <div class="text-center mt-5"><div class="spinner-border" style="color: var(--accent)"></div></div>
+    </div>
+</div>
+<button class="btn save-all-btn" id="saveAllBtn">
+    <i class="fas fa-save me-2"></i> حفظ جميع الأرصدة الافتتاحية
+</button>
+<button class="btn save-all-btn" id="deleteAllBtn" 
+style="bottom:90px; background:#dc3545;">
+    <i class="fas fa-trash-alt me-2"></i> حذف كل العملاء
+</button>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+ const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+    
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    async function loadCustomers() {
+        const listDiv = document.getElementById('customersList');
+        try {
+            const querySnapshot = await getDocs(collection(db, "customers"));
+            let html = '';
+            
+            if (querySnapshot.empty) {
+                listDiv.innerHTML = '<div class="text-center mt-5 opacity-50">لا يوجد عملاء مضافين حالياً</div>';
+                return;
+            }
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const currentStartBal = data.initialBalance || 0;
+                
+                html += `
+                    <div class="cust-row" data-name="${data.name.toLowerCase()}">
+                        <div>
+                            <span class="cust-name">${data.name}</span>
+                            <span class="cust-phone"><i class="fas fa-phone-alt me-1" style="font-size: 10px; color: var(--accent);"></i> ${data.phone || 'بدون هاتف'}</span>
+                        </div>
+                        <div class="input-group-custom">
+                            <input type="number" 
+                                   class="form-control balance-input" 
+                                   data-id="${doc.id}" 
+                                   value="${currentStartBal}" 
+                                   placeholder="0.00">
+                        </div>
+                    </div>
+                `;
+            });
+
+            listDiv.innerHTML = html;
+
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                document.querySelectorAll('.cust-row').forEach(row => {
+                    row.style.display = row.getAttribute('data-name').includes(term) ? 'flex' : 'none';
+                });
+            });
+
+        } catch (error) {
+            listDiv.innerHTML = '<div class="text-center text-danger mt-5">خطأ في تحميل بيانات العملاء</div>';
+        }
+    }
+
+    document.getElementById('saveAllBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('saveAllBtn');
+        const inputs = document.querySelectorAll('.balance-input');
+        
+        if(!confirm("هل أنت متأكد من تحديث الأرصدة الافتتاحية لجميع العملاء؟")) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> جاري الحفظ...';
+
+        try {
+            const batch = writeBatch(db);
+            inputs.forEach(input => {
+                const custId = input.getAttribute('data-id');
+                const newVal = Number(input.value) || 0;
+                const docRef = doc(db, "customers", custId);
+                batch.update(docRef, { initialBalance: newVal });
+            });
+
+            const wasOffline = !navigator.onLine;
+            const commitPromise = batch.commit();
+
+            if (wasOffline) {
+                alert("تم حفظ الأرصدة على الجهاز، وستتم مزامنتها تلقائيًا فور توفر الإنترنت ✅");
+            } else {
+                alert("تم تحديث أرصدة أول المدة بنجاح ✅");
+            }
+            commitPromise.catch((err) => console.error("فشلت مزامنة الأرصدة الافتتاحية:", err));
+            window.location.reload();
+        } catch (error) {
+            alert("حدث خطأ أثناء الحفظ");
+            btn.disabled = false;
+            btn.innerHTML = 'حفظ جميع الأرصدة الافتتاحية';
+        }
+    });
+document.getElementById('deleteAllBtn').addEventListener('click', async () => {
+
+    const confirmDelete = prompt(
+        "⚠️ سيتم حذف جميع العملاء نهائياً\n\nاكتب كلمة DELETE للتأكيد"
+    );
+
+    if (confirmDelete !== "DELETE") {
+        alert("تم إلغاء الحذف");
+        return;
+    }
+
+    const btn = document.getElementById('deleteAllBtn');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> جاري الحذف...';
+
+    try {
+
+        const snapshot = await getDocs(collection(db, "customers"));
+
+        const batch = writeBatch(db);
+
+        snapshot.forEach((customerDoc) => {
+            batch.delete(doc(db, "customers", customerDoc.id));
+        });
+
+        await batch.commit();
+
+        alert("تم حذف جميع العملاء بنجاح ✅");
+
+        window.location.reload();
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert("حدث خطأ أثناء حذف العملاء");
+
+        btn.disabled = false;
+
+        btn.innerHTML = '<i class="fas fa-trash-alt me-2"></i> حذف كل العملاء';
+    }
+
+});
+    loadCustomers();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

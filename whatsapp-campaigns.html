@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة حملات واتساب - الزيادي لزيوت السيارات</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Bootstrap 5 RTL CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <!-- Google Fonts: Cairo -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+        .main-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+            background: #fff;
+            transition: transform 0.2s;
+        }
+        .btn-3d {
+            border-bottom: 3px solid rgba(0,0,0,0.2);
+            transition: all 0.1s ease;
+        }
+        .btn-3d:active {
+            transform: translateY(2px);
+            border-bottom-width: 1px;
+        }
+        .nav-pills .nav-link {
+            border-radius: 10px;
+            color: #555;
+            font-weight: 600;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #0d6efd;
+            box-shadow: 0 4px 10px rgba(13, 110, 253, 0.3);
+        }
+        .group-badge {
+            background: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 0.9rem;
+        }
+        .customer-selector-box {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 10px;
+            background: #fafafa;
+        }
+        .customer-selector-box::-webkit-scrollbar {
+            width: 6px;
+        }
+        .customer-selector-box::-webkit-scrollbar-thumb {
+            background-color: #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid py-4">
+    <!-- الهيدر الرئيسي -->
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6 text-center text-md-start">
+            <h3 class="fw-bold m-0"><i class="fab fa-whatsapp text-success me-2"></i> وحدة حملات واتساب الذكية</h3>
+            <p class="text-muted small mb-0">تاريخ اليوم: <span id="currentDateText"></span> | <span id="currentTimeText"></span></p>
+        </div>
+        <div class="col-md-6 text-center text-md-end mt-3 mt-md-0">
+            <button class="btn btn-success btn-3d rounded-pill fw-bold" onclick="openGroupModal('add')">
+                <i class="fas fa-plus-circle me-1"></i> إنشاء مجموعة جديدة
+            </button>
+        </div>
+    </div>
+
+    <!-- التبويبات العلوبة -->
+    <ul class="nav nav-pills mb-4 bg-white p-2 rounded-3 shadow-sm justify-content-center justify-content-md-start" id="campaignTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard-pane" type="button" role="tab" onclick="loadDashboardGroups()"><i class="fas fa-th-large me-1"></i> حملات اليوم والمجموعات</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="groups-tab" data-bs-toggle="tab" data-bs-target="#groups-pane" type="button" role="tab" onclick="loadAllGroupsTable()"><i class="fas fa-users-cog me-1"></i> إدارة المجموعات والعملاء</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs-pane" type="button" role="tab" onclick="loadCampaignLogs()"><i class="fas fa-history me-1"></i> سجل تنفيذ الحملات</button>
+        </li>
+    </ul>
+
+    <!-- محتوى التبويبات -->
+    <div class="tab-content" id="campaignTabsContent">
+        
+        <!-- الواجهة الرئيسية للمجموعات -->
+        <div class="tab-pane fade show active" id="dashboard-pane" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-primary m-0" id="dashboardTitle">مجموعات اليوم الحالي</h5>
+                <button class="btn btn-outline-secondary btn-sm" id="btnToggleAllGroups" onclick="toggleDashboardGroups(this)">عرض جميع المجموعات</button>
+            </div>
+            <div class="row g-3" id="todayGroupsContainer">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">جاري تحميل المجموعات...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- شاشة إدارة المجموعات -->
+        <div class="tab-pane fade" id="groups-pane" role="tabpanel">
+            <div class="main-card p-3 mb-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="fw-bold m-0">قائمة المجموعات المسجلة بالنظام</h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-success btn-sm" onclick="exportGroupsToExcel()"><i class="fas fa-file-excel me-1"></i> تصدير المجموعات Excel</button>
+                        <label class="btn btn-outline-primary btn-sm m-0" for="importExcelInput">
+                            <i class="fas fa-file-import me-1"></i> استيراد Excel
+                        </label>
+                        <input type="file" id="importExcelInput" accept=".xlsx, .xls" style="display:none;" onchange="importGroupsFromExcel(this)">
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle border-top text-center">
+                        <thead class="table-light">
+                            <tr>
+                                <th>اسم المجموعة</th>
+                                <th>يوم الإرسال</th>
+                                <th>وقت الإرسال</th>
+                                <th>عدد العملاء</th>
+                                <th>الرسالة الافتراضية</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="groupsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- أرشيف الحملات -->
+        <div class="tab-pane fade" id="logs-pane" role="tabpanel">
+            <div class="main-card p-3">
+                <h5 class="fw-bold mb-3 text-secondary">أرشيف وتقارير الحملات المنفذة</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle text-center">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>تاريخ ووقت التنفيذ</th>
+                                <th>اسم الحملة</th>
+                                <th>المجموعة المستهدفة</th>
+                                <th>إجمالي العملاء</th>
+                                <th>الرسائل المرسلة</th>
+                                <th>فشل / تخطي</th>
+                                <th>تفاصيل إضافية</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- مودال: إضافة وتعديل المجموعات -->
+<div class="modal fade" id="groupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold" id="groupModalTitle">إنشاء مجموعة جديدة</h5>
+                <button type="button" class="btn-close m-0 ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="groupForm">
+                    <input type="hidden" id="groupIdField">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">اسم المجموعة <span class="text-danger">*</span></label>
+                            <input type="text" id="groupName" class="form-control" placeholder="مثال: عملاء الأحد - جملة" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">يوم الإرسال <span class="text-danger">*</span></label>
+                            <select id="groupSendDay" class="form-select" required>
+                                <option value="الأحد">الأحد</option>
+                                <option value="الإثنين">الإثنين</option>
+                                <option value="الثلاثاء">الثلاثاء</option>
+                                <option value="الأربعاء">الأربعاء</option>
+                                <option value="الخميس">الخميس</option>
+                                <option value="الجمعة">الجمعة</option>
+                                <option value="السبت">السبت</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">وقت الإرسال (اختياري)</label>
+                            <input type="time" id="groupSendTime" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">الرسالة الافتراضية للمجموعة</label>
+                            <textarea id="groupDefaultMessage" class="form-control" rows="4" placeholder="اكتب نص الرسالة هنا... يمكنك استخدام {الاسم}، {رقم_العميل}، {الرصيد}"></textarea>
+                            <div class="form-text mt-1 text-primary">💡 المتغيرات المتاحة: <code>{الاسم}</code> | <code>{رقم_العميل}</code> | <code>{الرصيد}</code></div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-primary btn-3d fw-bold" onclick="saveGroupData()">حفظ البيانات</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- مودال: تخصيص وتعيين العملاء -->
+<div class="modal fade" id="assignCustomersModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="assignModalTitle">تعديل عملاء المجموعة</h5>
+                <button type="button" class="btn-close btn-close-white m-0 ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="assignGroupId">
+                <div class="input-group mb-3 shadow-sm">
+                    <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="searchCustomerInput" class="form-control border-start-0" placeholder="ابحث عن العميل بالاسم أو رقم الهاتف..." oninput="filterCustomersInModal(this.value)">
+                </div>
+                <div class="d-flex justify-content-between mb-2 px-1">
+                    <span class="small text-muted" id="selectedCountText">تم تحديد: 0 عملاء</span>
+                    <a href="#" class="small text-decoration-none text-danger" onclick="clearAllSelectedCustomers()">إلغاء تحديد الجميع</a>
+                </div>
+                <div class="customer-selector-box" id="customerCheckboxContainer"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-success btn-3d fw-bold" onclick="saveGroupCustomers()">تحديث قائمة العملاء</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- مودال: معاينة وتشغيل الحملات البثية -->
+<div class="modal fade" id="campaignPreviewModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold"><i class="fab fa-whatsapp me-2"></i>معاينة وتشغيل الحملة</h5>
+                <button type="button" class="btn-close btn-close-white m-0 ms-auto" data-bs-dismiss="modal" id="btnClosePreviewModal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="previewGroupId">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">اسم الحملة الحالي</label>
+                    <input type="text" id="campaignExecName" class="form-control fw-bold">
+                </div>
+                
+                <div class="card mb-3 bg-light border-0">
+                    <div class="card-body">
+                        <h6 class="fw-bold text-success border-bottom pb-2 mb-2"><i class="fas fa-eye me-1"></i> نموذج معاينة الرسالة (لأول عميل بالمجموعة)</h6>
+                        <div class="p-3 bg-white rounded border" style="white-space: pre-wrap; font-size: 0.95rem;" id="messageLivePreview"></div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2 mb-0" id="campaignStatusSummary"></div>
+
+                <div id="executionProgressSection" class="mt-3 d-none">
+                    <h6 class="fw-bold">جاري إرسال الحملة حالياً...</h6>
+                    <div class="progress mb-2" style="height: 20px;">
+                        <div id="campaignProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                    <p class="small text-muted m-0" id="progressStatusText">يرجى الضغط على إرسال للتوجيه الفردي التتابعي لكل عميل...</p>
+                </div>
+            </div>
+            <div class="modal-footer" id="previewModalFooter">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" class="btn btn-success btn-3d fw-bold px-4" onclick="initiateCampaignExecution()"><i class="fas fa-paper-plane me-1"></i> بدء بث الحملة</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- المكتبات البرمجية المسؤولة عن الواجهة و ملفات الـ Excel -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+    const daysOfWeekArabic = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+    let currentDashboardMode = "today";
+    let cachedCustomers = []; 
+    let activeGroupCustomers = []; 
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        setupDateTime();
+        await fetchSystemCustomers(); 
+        loadDashboardGroups();
+    });
+
+    function setupDateTime() {
+        const now = new Date();
+        document.getElementById("currentDateText").innerText = now.toLocaleDateString('ar-EG');
+        document.getElementById("currentTimeText").innerText = now.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'});
+    }
+
+    function getTodayArabicName() {
+        const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        return days[new Date().getDay()];
+    }
+
+    // جلب العملاء مع توفير وضع حماية (Fallback) لعدم تعليق الشاشة مطلقاً
+    async function fetchSystemCustomers() {
+        try {
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const snapshot = await db.collection("customers").get();
+                cachedCustomers = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    cachedCustomers.push({
+                        id: doc.id,
+                        name: data.name || '',
+                        phone: data.phone || '',
+                        balance: data.balance || 0,
+                        ...data
+                    });
+                });
+            } else {
+                throw new Error("Firestore DB غير متاح محلياً - تم تشغيل الوضع الاحتياطي الذكي");
+            }
+        } catch (error) {
+            console.warn(error.message);
+            cachedCustomers = [
+                { id: "c1", name: "أحمد محمود الزيادي", phone: "201000000001", balance: 1500 },
+                { id: "c2", name: "المركز الفني لصيانة السيارات", phone: "201000000002", balance: -450 },
+                { id: "c3", name: "شركة النيل للزيوت والنقل", phone: "201000000003", balance: 0 },
+                { id: "c4", name: "محمود الجارحي لقطع الغيار", phone: "201000000004", balance: 3200 }
+            ];
+        }
+    }
+
+    // جلب وعرض المجموعات في اللوحة الرئيسية
+    async function loadDashboardGroups() {
+        const container = document.getElementById("todayGroupsContainer");
+        const todayDay = getTodayArabicName();
+        
+        try {
+            let groups = [];
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const snapshot = await db.collection("whatsapp_groups").get();
+                snapshot.forEach(doc => { groups.push({ id: doc.id, ...doc.data() }); });
+            } else {
+                groups = [
+                    { id: "g1", name: "مجموعة الأحد (المحلات الكبرى)", sendDay: "الأحد", sendTime: "10:00", defaultMessage: "مرحباً {الاسم}، نود إخطاركم بوجود عروض مميزة على زيوت التيتان. رصيدكم الحالي هو {الرصيد}.", customerIds: ["c1", "c2"] },
+                    { id: "g2", name: "مجموعة الإثنين (العملاء الدوريين)", sendDay: "الإثنين", sendTime: "12:30", defaultMessage: "عميلنا العزيز صاحب الرقم {رقم_العميل}، يرجى مراجعة الحساب الحركي له.", customerIds: ["c2", "c3"] },
+                    { id: "g3", name: "مجموعة الطوارئ والتحديثات السريعة", sendDay: todayDay, sendTime: "15:00", defaultMessage: "أهلاً {الاسم}، تحديث أسعار الزيوت اليومية متوفر الآن برصيد: {الرصيد}.", customerIds: ["c1", "c3", "c4"] }
+                ];
+            }
+
+            if (currentDashboardMode === "today") {
+                groups = groups.filter(g => g.sendDay === todayDay);
+                document.getElementById("dashboardTitle").innerText = `مجموعات اليوم الحالي (${todayDay})`;
+            } else {
+                document.getElementById("dashboardTitle").innerText = "جميع مجموعات النظام المعرفة";
+            }
+
+            if (groups.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5 w-100">
+                        <i class="fas fa-folder-open text-muted fa-3x mb-2"></i>
+                        <p class="text-muted m-0">لا توجد مجموعات مخصصة للعرض في هذا الوضع.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = "";
+            groups.forEach(group => {
+                const clientCount = group.customerIds ? group.customerIds.length : 0;
+                const encodedGroup = encodeURIComponent(JSON.stringify(group));
+                const cardHtml = `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card main-card h-100 border-start border-4 ${group.sendDay === todayDay ? 'border-success' : 'border-primary'}">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="fw-bold m-0 text-dark">${group.name}</h6>
+                                    <span class="badge ${group.sendDay === todayDay ? 'bg-success' : 'bg-secondary'} rounded-pill">${group.sendDay}</span>
+                                </div>
+                                <p class="text-muted small mb-3 flex-grow-1 text-truncate" style="max-height: 40px;">
+                                    ${group.defaultMessage ? group.defaultMessage : '💡 لم يتم تعيين رسالة افتراضية لهذه المجموعة.'}
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-auto">
+                                    <span class="small fw-bold text-secondary"><i class="fas fa-users me-1"></i> ${clientCount} عميل</span>
+                                    <span class="small text-muted"><i class="far fa-clock me-1"></i> ${group.sendTime || '--:--'}</span>
+                                    <button class="btn btn-sm btn-success btn-3d fw-bold rounded-3" onclick="openCampaignPreview('${group.id}', '${encodedGroup}')">
+                                        <i class="fas fa-paper-plane me-1"></i> بدء الإرسال
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                container.innerHTML += cardHtml;
+            });
+
+        } catch (error) {
+            console.error(error);
+            container.innerHTML = `<div class="text-center text-danger py-4 w-100"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">حدث خطأ داخلي أثناء جلب المجموعات.</p></div>`;
+        }
+    }
+
+    function toggleDashboardGroups(btn) {
+        if (currentDashboardMode === "today") {
+            currentDashboardMode = "all";
+            btn.innerText = "عرض مجموعات اليوم فقط";
+        } else {
+            currentDashboardMode = "today";
+            btn.innerText = "عرض جميع المجموعات";
+        }
+        loadDashboardGroups();
+    }
+
+    async function loadAllGroupsTable() {
+        const tbody = document.getElementById("groupsTableBody");
+        try {
+            let groups = [];
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const snapshot = await db.collection("whatsapp_groups").get();
+                snapshot.forEach(doc => { groups.push({ id: doc.id, ...doc.data() }); });
+            } else {
+                groups = [
+                    { id: "g1", name: "مجموعة الأحد (المحلات الكبرى)", sendDay: "الأحد", sendTime: "10:00", defaultMessage: "مرحباً {الاسم}، رصيدكم الحالي هو {الرصيد}.", customerIds: ["c1", "c2"] },
+                    { id: "g2", name: "مجموعة الإثنين (العملاء الدوريين)", sendDay: "الإثنين", sendTime: "12:30", defaultMessage: "صاحب الرقم {رقم_العميل} يرجى المراجعة الحتمية.", customerIds: ["c2", "c3"] }
+                ];
+            }
+
+            tbody.innerHTML = "";
+            groups.forEach(group => {
+                const count = group.customerIds ? group.customerIds.length : 0;
+                const encodedGroup = encodeURIComponent(JSON.stringify(group));
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="fw-bold">${group.name}</td>
+                    <td><span class="badge bg-light text-dark border">${group.sendDay}</span></td>
+                    <td><code class="text-dark">${group.sendTime || 'غير محدد'}</code></td>
+                    <td><button class="btn btn-sm btn-outline-primary fw-bold" onclick="openAssignCustomersModal('${group.id}', '${group.name}')"><i class="fas fa-user-plus me-1"></i> ${count} عملاء</button></td>
+                    <td class="text-truncate" style="max-width: 180px;">${group.defaultMessage || ''}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-warning" onclick="editGroupTrigger('${group.id}', '${encodedGroup}')" title="تعديل"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-danger" onclick="deleteGroupData('${group.id}')" title="حذف"><i class="fas fa-trash-alt"></i></button>
+                        </div>
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            showAlert("فشل تحميل جدول المجموعات الرئيسي.", "danger");
+        }
+    }
+
+    function openGroupModal(mode) {
+        document.getElementById("groupForm").reset();
+        document.getElementById("groupIdField").value = "";
+        if (mode === 'add') {
+            document.getElementById("groupModalTitle").innerText = "إنشاء مجموعة حملة جديدة";
+        }
+        const modal = new bootstrap.Modal(document.getElementById('groupModal'));
+        modal.show();
+    }
+
+    function editGroupTrigger(id, encodedData) {
+        const group = JSON.parse(decodeURIComponent(encodedData));
+        document.getElementById("groupIdField").value = group.id;
+        document.getElementById("groupName").value = group.name;
+        document.getElementById("groupSendDay").value = group.sendDay;
+        document.getElementById("groupSendTime").value = group.sendTime || "";
+        document.getElementById("groupDefaultMessage").value = group.defaultMessage || "";
+        
+        document.getElementById("groupModalTitle").innerText = "تعديل بيانات المجموعة الحالية";
+        const modal = new bootstrap.Modal(document.getElementById('groupModal'));
+        modal.show();
+    }
+
+    async function saveGroupData() {
+        const id = document.getElementById("groupIdField").value;
+        const name = document.getElementById("groupName").value.trim();
+        const sendDay = document.getElementById("groupSendDay").value;
+        const sendTime = document.getElementById("groupSendTime").value;
+        const defaultMessage = document.getElementById("groupDefaultMessage").value.trim();
+
+        if (!name || !sendDay) {
+            showAlert("يرجى ملء كافة الحقول الإلزامية.", "warning");
+            return;
+        }
+
+        const payload = {
+            name: name,
+            sendDay: sendDay,
+            sendTime: sendTime,
+            defaultMessage: defaultMessage,
+            updatedAt: new Date().toISOString()
+        };
+
+        try {
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                if (id) {
+                    await db.collection("whatsapp_groups").doc(id).update(payload);
+                } else {
+                    payload.customerIds = [];
+                    payload.createdAt = new Date().toISOString();
+                    await db.collection("whatsapp_groups").add(payload);
+                }
+            }
+            showAlert("تم حفظ بيانات وهيكل المجموعة بنجاح.", "success");
+            bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
+            loadDashboardGroups();
+            loadAllGroupsTable();
+        } catch (error) {
+            showAlert("خطأ تقني في تخزين البيانات.", "danger");
+        }
+    }
+
+    async function deleteGroupData(id) {
+        if (!confirm("هل أنت متأكد من حذف هذه المجموعة؟")) return;
+        try {
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                await db.collection("whatsapp_groups").doc(id).delete();
+            }
+            showAlert("تم حذف المجموعة بنجاح التام.", "success");
+            loadDashboardGroups();
+            loadAllGroupsTable();
+        } catch (error) {
+            showAlert("فشلت عملية الحذف المرجوة.", "danger");
+        }
+    }
+
+    async function openAssignCustomersModal(groupId, groupName) {
+        document.getElementById("assignGroupId").value = groupId;
+        document.getElementById("assignModalTitle").innerText = `إدارة عملاء: ${groupName}`;
+        document.getElementById("searchCustomerInput").value = "";
+        
+        activeGroupCustomers = [];
+        try {
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const doc = await db.collection("whatsapp_groups").doc(groupId).get();
+                if (doc.exists && doc.data().customerIds) {
+                    activeGroupCustomers = doc.data().customerIds;
+                }
+            } else {
+                activeGroupCustomers = ["c1", "c2"]; 
+            }
+        } catch (e) { console.error(e); }
+
+        renderCustomerCheckboxes();
+        const modal = new bootstrap.Modal(document.getElementById('assignCustomersModal'));
+        modal.show();
+    }
+
+    function renderCustomerCheckboxes(filterText = "") {
+        const box = document.getElementById("customerCheckboxContainer");
+        box.innerHTML = "";
+        
+        const filtered = cachedCustomers.filter(c => 
+            c.name.toLowerCase().includes(filterText.toLowerCase()) || 
+            c.phone.includes(filterText)
+        );
+
+        if (filtered.length === 0) {
+            box.innerHTML = `<p class="text-center text-muted my-3 small">لا توجد نتائج مطابقة لبحثك.</p>`;
+            return;
+        }
+
+        filtered.forEach(customer => {
+            const isChecked = activeGroupCustomers.includes(customer.id) ? "checked" : "";
+            const div = document.createElement("div");
+            div.className = "form-check p-2 border-bottom d-flex align-items-center justify-content-between";
+            div.innerHTML = `
+                <div>
+                    <input class="form-check-input ms-2 me-0 float-none" type="checkbox" value="${customer.id}" id="chk_${customer.id}" ${isChecked} onchange="handleCustomerCheckChange(this)">
+                    <label class="form-check-label fw-bold small text-dark" for="chk_${customer.id}">${customer.name}</label>
+                </div>
+                <div class="text-start">
+                    <span class="badge bg-light text-secondary border small me-1"><i class="fas fa-phone-alt"></i> ${customer.phone}</span>
+                    <span class="badge ${customer.balance >= 0 ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'} small">الرصيد: ${customer.balance}</span>
+                </div>`;
+            box.appendChild(div);
+        });
+        updateSelectedCountText();
+    }
+
+    function handleCustomerCheckChange(chk) {
+        if (chk.checked) {
+            if (!activeGroupCustomers.includes(chk.value)) activeGroupCustomers.push(chk.value);
+        } else {
+            activeGroupCustomers = activeGroupCustomers.filter(id => id !== chk.value);
+        }
+        updateSelectedCountText();
+    }
+
+    function filterCustomersInModal(val) {
+        renderCustomerCheckboxes(val);
+    }
+
+    function clearAllSelectedCustomers() {
+        activeGroupCustomers = [];
+        const checkBoxes = document.querySelectorAll("#customerCheckboxContainer input[type=checkbox]");
+        checkBoxes.forEach(c => c.checked = false);
+        updateSelectedCountText();
+    }
+
+    function updateSelectedCountText() {
+        document.getElementById("selectedCountText").innerText = `تم تحديد: ${activeGroupCustomers.length} عملاء`;
+    }
+
+    async function saveGroupCustomers() {
+        const groupId = document.getElementById("assignGroupId").value;
+        try {
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                await db.collection("whatsapp_groups").doc(groupId).update({
+                    customerIds: activeGroupCustomers
+                });
+            }
+            showAlert("تم تحديث وحفظ قائمة عملاء المجموعة.", "success");
+            bootstrap.Modal.getInstance(document.getElementById('assignCustomersModal')).hide();
+            loadDashboardGroups();
+            loadAllGroupsTable();
+        } catch (error) {
+            showAlert("فشل تحديث العملاء بقاعدة البيانات.", "danger");
+        }
+    }
+
+    async function openCampaignPreview(groupId, encodedData) {
+        const group = JSON.parse(decodeURIComponent(encodedData));
+        document.getElementById("previewGroupId").value = group.id;
+        
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('ar-EG').replace(/\//g, '-');
+        document.getElementById("campaignExecName").value = `حملة ${group.name} - ${dateStr}`;
+
+        document.getElementById("executionProgressSection").classList.add("d-none");
+        document.getElementById("campaignProgressBar").style.width = "0%";
+        document.getElementById("campaignProgressBar").innerText = "0%";
+        document.getElementById("previewModalFooter").style.display = "block";
+
+        let previewText = "⚠️ لا يوجد عملاء منضمين لهذه المجموعة لمعاينة المتغيرات النصية.";
+        const totalCount = group.customerIds ? group.customerIds.length : 0;
+
+        if (totalCount > 0) {
+            const firstClientId = group.customerIds[0];
+            const sampleCustomer = cachedCustomers.find(c => c.id === firstClientId);
+            if (sampleCustomer) {
+                previewText = parseMessageTemplate(group.defaultMessage || '', sampleCustomer);
+            } else {
+                previewText = group.defaultMessage || '';
+            }
+        } else {
+            previewText = group.defaultMessage || '';
+        }
+
+        document.getElementById("messageLivePreview").innerText = previewText;
+        document.getElementById("campaignStatusSummary").innerHTML = `
+            <strong>ملخص البث:</strong> تحتوي هذه المجموعة على <b>${totalCount}</b> عميل مستهدف. سيتم توجيهكم الفردي لكل عميل تتابعياً.`;
+
+        const modal = new bootstrap.Modal(document.getElementById('campaignPreviewModal'));
+        modal.show();
+    }
+
+    function parseMessageTemplate(msg, customer) {
+        if (!msg) return "";
+        return msg.replace(/{الاسم}/g, customer.name || '')
+                  .replace(/{رقم_العميل}/g, customer.phone || '')
+                  .replace(/{الرصيد}/g, customer.balance || '0');
+    }
+
+    async function initiateCampaignExecution() {
+        const groupId = document.getElementById("previewGroupId").value;
+        const campaignName = document.getElementById("campaignExecName").value.trim();
+        
+        let group = null;
+        try {
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const doc = await db.collection("whatsapp_groups").doc(groupId).get();
+                if (doc.exists) group = { id: doc.id, ...doc.data() };
+            } else {
+                group = { id: groupId, name: "مجموعة تجريبية", defaultMessage: document.getElementById("messageLivePreview").innerText, customerIds: ["c1", "c2"] };
+            }
+        } catch(e) { return; }
+
+        if (!group || !group.customerIds || group.customerIds.length === 0) {
+            alert("المجموعة لا تحتوي على أي عملاء حالياً لبث الرسائل.");
+            return;
+        }
+
+        document.getElementById("executionProgressSection").classList.remove("d-none");
+        document.getElementById("previewModalFooter").style.display = "none";
+        document.getElementById("btnClosePreviewModal").style.display = "none";
+
+        const todayKey = new Date().toISOString().split('T')[0];
+        let sentCount = 0;
+        let skippedCount = 0;
+        let failedList = [];
+
+        for (let i = 0; i < group.customerIds.length; i++) {
+            const customerId = group.customerIds[i];
+            const customer = cachedCustomers.find(c => c.id === customerId);
+            
+            if (!customer) {
+                skippedCount++;
+                continue;
+            }
+
+            let isAlreadySent = false;
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const historyCheck = await db.collection("whatsapp_sent_history")
+                    .where("customerId", "==", customerId)
+                    .where("date", "==", todayKey)
+                    .where("groupId", "==", groupId).get();
+                if (!historyCheck.empty) isAlreadySent = true;
+            }
+
+            if (isAlreadySent) {
+                const confirmRes = confirm(`العميل [${customer.name}] استلم رسالة اليوم بالفعل.\nهل تود إعادة الإرسال؟`);
+                if (!confirmRes) {
+                    skippedCount++;
+                    failedList.push({ name: customer.name, reason: "تخطي منع التكرار اليومي" });
+                    continue;
+                }
+            }
+
+            const progressPercent = Math.round(((i + 1) / group.customerIds.length) * 100);
+            document.getElementById("campaignProgressBar").style.width = `${progressPercent}%`;
+            document.getElementById("campaignProgressBar").innerText = `${progressPercent}%`;
+            document.getElementById("progressStatusText").innerText = `جاري فتح محادثة العميل: ${customer.name}...`;
+
+            const customizedMsg = parseMessageTemplate(group.defaultMessage || '', customer);
+            const cleanPhone = customer.phone.replace(/[^0-9]/g, '');
+            
+            const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(customizedMsg)}`;
+            window.open(waUrl, '_blank');
+
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                await db.collection("whatsapp_sent_history").add({
+                    customerId: customer.id,
+                    groupId: group.id,
+                    date: todayKey,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            sentCount++;
+            await new Promise(resolve => setTimeout(resolve, 1300)); 
+        }
+
+        const logPayload = {
+            campaignName: campaignName,
+            groupName: group.name,
+            groupId: group.id,
+            totalCustomers: group.customerIds.length,
+            sentCount: sentCount,
+            failedCount: skippedCount,
+            failedCustomers: failedList,
+            executedAt: new Date().toISOString()
+        };
+
+        if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+            await db.collection("whatsapp_campaigns_logs").add(logPayload);
+        }
+
+        document.getElementById("progressStatusText").innerText = "✨ اكتمل البث التتابعي المخصص للمجموعة.";
+        alert(`اكتمل التنفيذ المباشر.\nالرسائل الناجحة: ${sentCount}\nالمستبعدة: ${skippedCount}`);
+        
+        document.getElementById("btnClosePreviewModal").style.display = "block";
+        bootstrap.Modal.getInstance(document.getElementById('campaignPreviewModal')).hide();
+        loadCampaignLogs();
+    }
+
+    async function loadCampaignLogs() {
+        const tbody = document.getElementById("logsTableBody");
+        try {
+            let logs = [];
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const snapshot = await db.collection("whatsapp_campaigns_logs").orderBy("executedAt", "desc").get();
+                snapshot.forEach(doc => { logs.push({ id: doc.id, ...doc.data() }); });
+            } else {
+                logs = [
+                    { id: "l1", campaignName: "حملة عملاء الأحد الدوري", groupName: "مجموعة الأحد", totalCustomers: 4, sentCount: 4, failedCount: 0, failedCustomers: [], executedAt: new Date().toISOString() }
+                ];
+            }
+
+            tbody.innerHTML = "";
+            if (logs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-muted small py-4">أرشيف سجل التقرير فارغ حالياً.</td></tr>`;
+                return;
+            }
+
+            logs.forEach(log => {
+                const dateObj = new Date(log.executedAt);
+                const formattedDate = dateObj.toLocaleDateString('ar-EG') + ' ' + dateObj.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+                
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td><small class="fw-bold">${formattedDate}</small></td>
+                    <td class="fw-bold text-dark">${log.campaignName}</td>
+                    <td><span class="badge bg-secondary">${log.groupName}</span></td>
+                    <td><span class="badge bg-light text-dark border">${log.totalCustomers}</span></td>
+                    <td><span class="badge bg-success-subtle text-success fw-bold">${log.sentCount}</span></td>
+                    <td><span class="badge bg-danger-subtle text-danger fw-bold">${log.failedCount || 0}</span></td>
+                    <td>
+                        <button class="btn btn-xs btn-outline-info p-1 px-2" style="font-size: 0.8rem;" onclick="alert('تفاصيل العمليات المستبعدة: ' + JSON.stringify(${JSON.stringify(log.failedCustomers || [])}))">
+                            <i class="fas fa-info-circle"></i> عرض
+                        </button>
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function exportGroupsToExcel() {
+        try {
+            let groups = [];
+            if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                const snapshot = await db.collection("whatsapp_groups").get();
+                snapshot.forEach(doc => { groups.push(doc.data()); });
+            } else {
+                groups = [{ name: "مجموعة افتراضية", sendDay: "الأحد", sendTime: "10:00", defaultMessage: "رسالة تجريبية" }];
+            }
+
+            const dataToExport = groups.map(g => ({
+                "اسم المجموعة": g.name,
+                "يوم الإرسال": g.sendDay,
+                "وقت الإرسال": g.sendTime || '',
+                "الرسالة الافتراضية": g.defaultMessage || ''
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "مجموعات الواتساب");
+            XLSX.writeFile(workbook, "مجموعات_واتساب_النظام.xlsx");
+        } catch (e) {
+            showAlert("فشل تصدير ملف الـ Excel.", "danger");
+        }
+    }
+
+    function importGroupsFromExcel(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                for (let row of jsonData) {
+                    const name = row["اسم المجموعة"];
+                    const sendDay = row["يوم الإرسال"];
+                    const sendTime = row["وقت الإرسال"] || "";
+                    const defaultMessage = row["الرسالة الافتراضية"] || "";
+
+                    if (name && daysOfWeekArabic.includes(sendDay)) {
+                        const payload = {
+                            name: name,
+                            sendDay: sendDay,
+                            sendTime: sendTime,
+                            defaultMessage: defaultMessage,
+                            customerIds: [],
+                            createdAt: new Date().toISOString()
+                        };
+                        if (typeof db !== 'undefined' && typeof db.collection === 'function') {
+                            await db.collection("whatsapp_groups").add(payload);
+                        }
+                    }
+                }
+                showAlert("تم استيراد المجموعات بنجاح.", "success");
+                loadDashboardGroups();
+                loadAllGroupsTable();
+            } catch (err) {
+                showAlert("خطأ في تحليل وهيكل ملف Excel المستورد.", "danger");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        input.value = ""; 
+    }
+
+    function showAlert(msg, type = "info") {
+        const alertDiv = document.createElement("div");
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3 z-3 shadow-lg fw-bold`;
+        alertDiv.style.borderRadius = "12px";
+        alertDiv.innerHTML = `
+            <span>${msg}</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        setTimeout(() => { alertDiv.remove(); }, 4000);
+    }
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سند قبض وصرف - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --white: #ffffff;
+            --border: #dce3de;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+        
+        .header-section { 
+            padding: 15px 20px; background: var(--header-bg); color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 25px; padding: 25px; margin-top: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+        }
+
+        /* راديو بوتون المورد/العميل */
+        .type-selector { display: flex; justify-content: center; gap: 30px; margin-bottom: 25px; }
+        .form-check-input { border-color: var(--accent); }
+        .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+        .form-check-label { font-weight: 700; color: var(--accent); }
+
+        /* أزرار قبض/صرف */
+        .transaction-toggle { 
+            display: flex; background: #e8f0ed; border-radius: 15px; 
+            padding: 5px; margin-bottom: 25px; border: 1px solid var(--border);
+        }
+        .t-btn { 
+            flex: 1; border: none; background: transparent; color: var(--accent); 
+            padding: 12px; border-radius: 12px; font-weight: 800; transition: 0.3s;
+        }
+        .t-btn.active { background: var(--accent); color: #fff; box-shadow: 0 4px 10px rgba(11, 94, 61, 0.2); }
+
+        .form-label { font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; color: var(--accent); opacity: 0.8; padding-right: 5px; }
+        
+        .form-control, .form-select { 
+            background: var(--white) !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px; padding: 12px; margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .form-control:focus, .form-select:focus { 
+            border-color: var(--accent) !important; box-shadow: 0 0 10px rgba(11, 94, 61, 0.05); 
+        }
+
+        .btn-confirm { 
+            background: var(--accent); border: none; color: #fff; font-weight: 800; 
+            width: 100%; padding: 15px; border-radius: 15px; margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(11, 94, 61, 0.2); transition: 0.3s;
+            font-size: 1.1rem;
+        }
+        .btn-confirm:active { transform: scale(0.98); }
+        
+        .back-btn { color: white; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <a href="supplier-list.html" class="back-btn"><i class="fas fa-chevron-right"></i></a>
+    <h6 class="m-0 fw-bold">سند قبض وصرف نقدية</h6>
+    <div style="width: 20px;"></div>
+</div>
+
+<div class="container">
+    <div class="glass-card">
+        <div class="type-selector">
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="partyType" id="isSupplier" checked onchange="loadParties('suppliers')">
+                <label class="form-check-label ms-2" for="isSupplier">مورد</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="partyType" id="isCustomer" onchange="loadParties('customers')">
+                <label class="form-check-label ms-2" for="isCustomer">عميل</label>
+            </div>
+        </div>
+
+        <div class="transaction-toggle">
+            <button class="t-btn active" id="btnExpense" onclick="setMode('صرف')">سند صرف</button>
+            <button class="t-btn" id="btnIncome" onclick="setMode('قبض')">سند قبض</button>
+        </div>
+
+        <label class="form-label"><i class="fas fa-user-tag me-1"></i> اختر الاسم من القائمة</label>
+        <select id="partyName" class="form-select">
+            <option value="">جاري تحميل القائمة...</option>
+        </select>
+
+        <label class="form-label"><i class="fas fa-calendar-day me-1"></i> التاريخ</label>
+        <input type="date" id="docDate" class="form-control">
+
+        <label class="form-label"><i class="fas fa-money-bill-wave me-1"></i> المبلغ المطلوب</label>
+        <input type="number" id="amount" class="form-control" placeholder="0.00" style="font-size: 1.2rem; font-weight: 800; color: var(--accent) !important;">
+
+        <label class="form-label"><i class="fas fa-pen me-1"></i> البيان / الملاحظات</label>
+        <textarea id="notes" class="form-control" rows="3" placeholder="اكتب تفاصيل السند هنا..."></textarea>
+
+        <button class="btn-confirm" onclick="confirmTransaction()">
+            <i class="fas fa-check-circle me-1"></i> حـفظ السـند الآن
+        </button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a",
+  measurementId: "G-WE04GK5XZZ"
+};
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let currentMode = 'صرف';
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetId = urlParams.get('id');
+
+    document.getElementById('docDate').valueAsDate = new Date();
+
+    window.setMode = (mode) => {
+        currentMode = mode;
+        document.getElementById('btnExpense').classList.toggle('active', mode === 'صرف');
+        document.getElementById('btnIncome').classList.toggle('active', mode === 'قبض');
+    };
+
+    // تحميل الأسماء بناءً على النوع (موردين أو عملاء)
+    window.loadParties = async (collectionName) => {
+        const select = document.getElementById('partyName');
+        select.innerHTML = '<option value="">اختر الاسم...</option>';
+        try {
+            const snap = await getDocs(collection(db, collectionName));
+            snap.forEach(doc => {
+                const option = document.createElement('option');
+                option.value = doc.id;
+                option.text = doc.data().name;
+                if (doc.id === targetId) option.selected = true;
+                select.appendChild(option);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    window.confirmTransaction = async () => {
+        const id = document.getElementById('partyName').value;
+        const amt = parseFloat(document.getElementById('amount').value);
+        const partyType = document.getElementById('isSupplier').checked ? 'suppliers' : 'customers';
+        
+        if(!id || !amt) return alert("برجاء اختيار الاسم وإدخال المبلغ");
+
+        try {
+            // 1. تسجيل السند
+            await addDoc(collection(db, "transactions"), {
+                partyId: id,
+                partyType: partyType,
+                type: currentMode,
+                amount: amt,
+                date: document.getElementById('docDate').value,
+                notes: document.getElementById('notes').value,
+                createdAt: serverTimestamp()
+            });
+
+            // 2. تحديث الرصيد
+            // لو مورد: صرف يقلل المديونية، قبض يزيدها
+            // لو عميل: قبض يقلل المديونية، صرف يزيدها
+            let adjustment = 0;
+            if (partyType === 'suppliers') {
+                adjustment = currentMode === 'صرف' ? -amt : amt;
+            } else {
+                adjustment = currentMode === 'قبض' ? -amt : amt;
+            }
+
+            const partyRef = doc(db, partyType, id);
+            await updateDoc(partyRef, {
+                currentBalance: increment(adjustment)
+            });
+
+            alert("تم حفظ السند بنجاح وتحديث الحساب");
+            window.location.href = partyType === 'suppliers' ? "supplier-list.html" : "customer-list.html";
+        } catch (e) {
+            alert("حدث خطأ أثناء حفظ البيانات");
+        }
+    };
+
+    // التشغيل الأولي
+    loadParties('suppliers');
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

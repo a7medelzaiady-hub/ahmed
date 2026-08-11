@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>إضافة النواقص - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --emerald-800: #0b5e3d;
+            --emerald-700: #0f7a50;
+            --bg-light: #f4f7f6;
+            --text-deep: #071a10;
+            --border-subtle: #e4f0ea;
+            --white: #ffffff;
+            --rose-dark: #c4213a;
+            --rose-light: #fdeef1;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-deep); padding-bottom: 30px; }
+        
+        .header { 
+            background: var(--emerald-800); padding: 15px 20px; display: flex; 
+            align-items: center; justify-content: space-between; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: white;
+            position: sticky; top: 0; z-index: 1000;
+        }
+
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border-subtle); 
+            border-radius: 20px; padding: 20px; 
+            box-shadow: 0 4px 15px rgba(11, 94, 61, 0.03); margin-bottom: 15px; 
+        }
+
+        label { font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; color: var(--emerald-700); }
+
+        input { 
+            background: var(--white) !important; border: 1px solid var(--border-subtle) !important; 
+            color: var(--text-deep) !important; border-radius: 12px !important; 
+            margin-bottom: 5px; padding: 12px !important; font-weight: 600; font-size: 0.95rem;
+        }
+        input:focus { border-color: var(--emerald-800) !important; box-shadow: 0 0 8px rgba(11, 94, 61, 0.1) !important; }
+
+        .btn-add { 
+            background: linear-gradient(135deg, var(--emerald-800), var(--emerald-700)); 
+            color: #fff; border: none; width: 100%; padding: 14px; border-radius: 14px; 
+            font-weight: bold; font-size: 1.05rem; transition: 0.2s;
+            box-shadow: 0 4px 12px rgba(11, 94, 61, 0.15);
+        }
+        .btn-add:active { transform: scale(0.98); }
+
+        .dropdown-container { position: relative; }
+        
+        .voice-mic-btn {
+            position: absolute;
+            top: 50%; left: 12px;
+            transform: translateY(-50%);
+            background: none; border: none;
+            color: var(--emerald-700); font-size: 1.25rem;
+            cursor: pointer; z-index: 10; padding: 4px;
+            transition: color 0.2s, transform 0.2s;
+        }
+        .voice-mic-btn.listening {
+            color: var(--rose-dark);
+            animation: micPulse 0.8s infinite alternate;
+        }
+        @keyframes micPulse {
+            from { transform: translateY(-50%) scale(1); }
+            to { transform: translateY(-50%) scale(1.25); }
+        }
+        
+        .custom-dropdown-menu {
+            position: absolute;
+            top: 100%; left: 0; right: 0;
+            background: var(--white);
+            border: 1px solid var(--emerald-700);
+            border-radius: 12px;
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 1100;
+            box-shadow: 0 8px 24px rgba(11, 94, 61, 0.12);
+            display: none;
+        }
+        .custom-dropdown-menu.show { display: block; }
+        
+        .dropdown-search-item {
+            padding: 12px 16px; cursor: pointer; font-weight: 700; font-size: 0.95rem;
+            border-bottom: 1px solid #f8faf9; text-align: right; color: var(--text-deep);
+            transition: background 0.2s;
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        }
+        .dropdown-search-item:last-child { border-bottom: none; }
+        .dropdown-search-item:hover { background: #f0f6f3; color: var(--emerald-700); }
+        .dropdown-search-item .match-badge {
+            font-size: 0.7rem; font-weight: 700; color: var(--emerald-700);
+            background: #e6f7ef; border-radius: 6px; padding: 2px 6px; flex-shrink: 0;
+        }
+        
+        .dropdown-suggestion-header {
+            background-color: #fff8e1; color: #b78103; font-size: 0.8rem;
+            font-weight: 800; padding: 8px 16px; border-bottom: 1px solid #ffe082;
+        }
+
+        .shortage-item-card {
+            background: var(--white); border: 1px solid var(--border-subtle); border-radius: 16px;
+            padding: 14px 16px; margin-bottom: 10px; border-right: 5px solid var(--rose-dark);
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+        
+        .qty-badge {
+            background-color: var(--rose-light); color: var(--rose-dark); border: 1px solid #fbcdd5;
+            padding: 6px 12px; font-size: 1rem; font-weight: 800; border-radius: 10px;
+            min-width: 42px; text-align: center;
+        }
+
+        .btn-done {
+            background-color: #e6f7ef; color: var(--emerald-700); border: 1px solid #c3edd9;
+            font-weight: 700; border-radius: 10px; padding: 6px 12px; font-size: 0.85rem; transition: 0.2s;
+        }
+        .btn-done:active { background-color: var(--emerald-700); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <a href="index.html" class="text-white text-decoration-none"><i class="fas fa-arrow-right fs-5"></i></a>
+    <h6 class="m-0 fw-bold" style="font-size: 1.05rem;">دفتر تسجيل نواقص الزيوت والبضاعة</h6>
+    <span class="badge bg-warning text-dark fw-bold" style="font-size: 0.75rem; padding: 6px 10px; border-radius: 8px;">نواقص يومية</span>
+</div>
+
+<div class="container mt-3">
+    <!-- كارت الإدخال -->
+    <div class="glass-card">
+        <h6 class="mb-3 fw-bold text-success" style="font-size: 1rem;"><i class="fas fa-plus-circle me-1"></i> تسجيل صنف ناقص جديد</h6>
+        <form id="shortageForm" onsubmit="event.preventDefault(); window.saveShortage();">
+            <div class="row">
+                <div class="col-12 mb-2">
+                    <label>اسم صنف الزيت / الفلتر</label>
+                    <div class="dropdown-container">
+                        <input type="text" id="itemName" class="form-control pe-5" placeholder="اكتب أو اضغط على المايك للتحدث..." autocomplete="off" required>
+                        <button type="button" id="micBtn" class="voice-mic-btn" onclick="window.startVoiceInput()" title="اضغط للتحدث">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <div id="dropdownMenu" class="custom-dropdown-menu"></div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <label>الكمية</label>
+                    <input type="number" id="itemQty" class="form-control text-center" placeholder="0" min="1" required>
+                </div>
+                <div class="col-8">
+                    <label>ملاحظة (اختياري)</label>
+                    <input type="text" id="itemNote" class="form-control" placeholder="مثال: زبون مستعجل..">
+                </div>
+            </div>
+            <button type="submit" class="btn-add mt-3" id="btnSubmit">
+                <i class="fas fa-plus me-1"></i> إضافة لقائمة النواقص
+            </button>
+        </form>
+    </div>
+
+    <!-- كارت العرض -->
+    <div class="glass-card border-0 bg-transparent p-0 shadow-none">
+        <h6 class="mb-3 fw-bold text-danger ps-2" style="font-size: 1rem;"><i class="fas fa-exclamation-triangle me-1"></i> قائمة النواقص الحالية بالمحل</h6>
+        <div id="shortagesListContainer">
+            <div class="text-center p-4 text-muted bg-white rounded-4 border">جاري تحميل النواقص الحالية...</div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let inventoryItems = [];
+    // نسخة معالجة مسبقاً (Normalized) من أسماء المخزن لتسريع كل عملية بحث لاحقة
+    let normalizedInventory = [];
+    const MAX_SUGGESTIONS = 3;
+
+    async function loadInventory() {
+        try {
+            const invSnap = await getDocs(collection(db, "inventory"));
+            inventoryItems = [];
+            invSnap.forEach(doc => {
+                const data = doc.data();
+                const name = data.name || data.itemName;
+                if(name) inventoryItems.push(name.trim());
+            });
+            buildNormalizedInventory();
+            initAutocomplete();
+        } catch (e) {
+            console.error("خطأ في جلب أصناف المخزن:", e);
+        }
+    }
+
+    // ══════════════════════════════
+    // أدوات تطبيع النص العربي (لتوحيد أشكال الحروف المتشابهة)
+    // ══════════════════════════════
+    function normalizeArabic(str) {
+        if (!str) return "";
+        return str
+            .replace(/[\u064B-\u0652\u0670\u0640]/g, '')   // إزالة التشكيل والتطويل
+            .replace(/[إأآا]/g, 'ا')
+            .replace(/ى/g, 'ي')
+            .replace(/ؤ/g, 'و')
+            .replace(/ئ/g, 'ي')
+            .replace(/ة/g, 'ه')
+            .replace(/[^\u0600-\u06FFa-zA-Z0-9 ]/g, ' ')     // إزالة الرموز
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
+    function buildNormalizedInventory() {
+        normalizedInventory = inventoryItems.map(item => ({
+            original: item,
+            norm: normalizeArabic(item),
+            words: normalizeArabic(item).split(' ').filter(Boolean)
+        }));
+    }
+
+    // مسافة ليفنشتاين (لمطابقة تقريبية سريعة على نصوص قصيرة - مفيدة لأخطاء النطق الصوتي)
+    function levenshtein(a, b) {
+        const al = a.length, bl = b.length;
+        if (al === 0) return bl;
+        if (bl === 0) return al;
+        let prev = new Array(bl + 1);
+        let curr = new Array(bl + 1);
+        for (let j = 0; j <= bl; j++) prev[j] = j;
+        for (let i = 1; i <= al; i++) {
+            curr[0] = i;
+            for (let j = 1; j <= bl; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+            }
+            [prev, curr] = [curr, prev];
+        }
+        return prev[bl];
+    }
+
+    // نظام تسجيل نقاط للمطابقة: أعلى نقاط = أقرب صنف للبحث
+    function scoreMatch(queryNorm, entry) {
+        const itemNorm = entry.norm;
+        if (!queryNorm || !itemNorm) return 0;
+
+        if (itemNorm === queryNorm) return 1000;                 // تطابق كامل
+        if (itemNorm.startsWith(queryNorm)) return 700;           // يبدأ بنفس النص
+
+        let score = 0;
+        // إحدى كلمات الصنف تبدأ بنص البحث
+        if (entry.words.some(w => w.startsWith(queryNorm))) score = Math.max(score, 480);
+        // نص البحث موجود كجزء من اسم الصنف
+        if (itemNorm.includes(queryNorm)) score = Math.max(score, 350);
+
+        // تطابق جزئي للكلمات (بحث متعدد الكلمات)
+        const queryWords = queryNorm.split(' ').filter(w => w.length >= 2);
+        if (queryWords.length > 0) {
+            const matched = queryWords.filter(qw => entry.words.some(w => w.includes(qw))).length;
+            if (matched > 0) score = Math.max(score, matched * 160);
+        }
+
+        // مطابقة تقريبية (فروقات نطق/كتابة بسيطة) - فقط لو لسه مفيش تطابق قوي
+        if (score < 200 && queryNorm.length >= 3) {
+            const compareLen = Math.min(itemNorm.length, queryNorm.length + 6);
+            const dist = levenshtein(queryNorm, itemNorm.slice(0, compareLen));
+            const maxLen = Math.max(queryNorm.length, compareLen);
+            const similarity = 1 - dist / maxLen;
+            if (similarity > 0.55) score = Math.max(score, Math.round(similarity * 250));
+        }
+
+        return score;
+    }
+
+    function initAutocomplete() {
+        const input = document.getElementById('itemName');
+        const menu = document.getElementById('dropdownMenu');
+        let debounceTimer = null;
+
+        input.addEventListener('input', function() {
+            const rawValue = this.value;
+            clearTimeout(debounceTimer);
+
+            if (!rawValue.trim()) {
+                menu.classList.remove('show');
+                menu.innerHTML = "";
+                return;
+            }
+
+            // تأخير بسيط جداً لتجميع الكتابة السريعة وتقليل عدد عمليات البحث بدون أي تأثير محسوس على السرعة
+            debounceTimer = setTimeout(() => runSearch(rawValue), 90);
+        });
+
+        function runSearch(rawValue) {
+            const queryNorm = normalizeArabic(rawValue);
+            menu.innerHTML = "";
+
+            const results = normalizedInventory
+                .map(entry => ({ item: entry.original, norm: entry.norm, score: scoreMatch(queryNorm, entry) }))
+                .filter(r => r.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, MAX_SUGGESTIONS);
+
+            // لو في تطابق كامل ومؤكد مع اسم مسجل بالمخزن، معنى كده إن الاسم صح مية بالمية
+            // فمفيش داعي نقترح حاجة ونشغّل المستخدم بيها
+            const isConfidentExactMatch = results.length > 0 && results[0].score === 1000;
+            if (isConfidentExactMatch) {
+                menu.classList.remove('show');
+                return;
+            }
+
+            if (results.length === 0) {
+                menu.innerHTML = `<div class="dropdown-search-item text-muted text-center" style="font-size:0.85rem;">⚠️ هذا الصنف غير مسجل بالمخزن</div>`;
+            } else {
+                const hasDirectMatch = results.some(r => r.norm.includes(queryNorm));
+                if (!hasDirectMatch) {
+                    const header = document.createElement('div');
+                    header.className = 'dropdown-suggestion-header';
+                    header.innerHTML = `<i class="fas fa-lightbulb me-1"></i> هل تقصد أحد هذه الأصناف من المخزن؟`;
+                    menu.appendChild(header);
+                }
+
+                results.forEach(r => {
+                    const div = document.createElement('div');
+                    div.className = 'dropdown-search-item';
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = r.item;
+                    div.appendChild(nameSpan);
+
+                    if (r.score >= 700) {
+                        const badge = document.createElement('span');
+                        badge.className = 'match-badge';
+                        badge.textContent = 'الأقرب';
+                        div.appendChild(badge);
+                    }
+
+                    div.addEventListener('click', () => {
+                        input.value = r.item;
+                        menu.classList.remove('show');
+                    });
+                    menu.appendChild(div);
+                });
+            }
+            menu.classList.add('show');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target) && !menu.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+    }
+
+    // ══════════════════════════════
+    // تحويل الأعداد المنطوقة/الشرقية إلى أرقام (لخانة الكمية)
+    // ══════════════════════════════
+    const arabicNumberWords = {
+        'صفر': 0,
+        'واحد': 1, 'واحده': 1,
+        'اتنين': 2, 'اثنين': 2, 'اثنان': 2,
+        'تلاته': 3, 'ثلاثه': 3,
+        'اربعه': 4,
+        'خمسه': 5,
+        'سته': 6,
+        'سبعه': 7,
+        'تمانيه': 8, 'ثمانيه': 8,
+        'تسعه': 9,
+        'عشره': 10,
+        'حداشر': 11, 'احد عشر': 11,
+        'اتناشر': 12, 'اثنا عشر': 12,
+        'تلتاشر': 13, 'ثلاثه عشر': 13,
+        'اربعتاشر': 14, 'اربعه عشر': 14,
+        'خمستاشر': 15, 'خمسه عشر': 15,
+        'ستاشر': 16, 'سته عشر': 16,
+        'سبعتاشر': 17, 'سبعه عشر': 17,
+        'تمنتاشر': 18, 'تمانيه عشر': 18,
+        'تسعتاشر': 19, 'تسعه عشر': 19,
+        'عشرين': 20
+    };
+
+    function easternToWesternDigits(str) {
+        const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+        return str.replace(/[٠-٩]/g, d => map[d]);
+    }
+
+    // بيدور على عدد (رقم أو كلمة) في بداية الجملة المنطوقة ويفصله عن اسم الصنف
+    function extractLeadingQuantity(text) {
+        const trimmed = text.trim();
+        if (!trimmed) return { qty: null, rest: text };
+        const tokens = trimmed.split(/\s+/);
+
+        // جرب أول كلمتين مع بعض (أعداد زي "احد عشر")
+        if (tokens.length >= 2) {
+            const twoWord = normalizeArabic(tokens[0] + ' ' + tokens[1]);
+            if (arabicNumberWords.hasOwnProperty(twoWord)) {
+                return { qty: arabicNumberWords[twoWord], rest: tokens.slice(2).join(' ').trim() };
+            }
+        }
+
+        const first = tokens[0];
+
+        // رقم مكتوب بالفعل كأرقام
+        if (/^\d+$/.test(first)) {
+            return { qty: parseInt(first, 10), rest: tokens.slice(1).join(' ').trim() };
+        }
+
+        // كلمة عدد عربية منطوقة
+        const normFirst = normalizeArabic(first);
+        if (arabicNumberWords.hasOwnProperty(normFirst)) {
+            return { qty: arabicNumberWords[normFirst], rest: tokens.slice(1).join(' ').trim() };
+        }
+
+        return { qty: null, rest: text };
+    }
+
+    // ══════════════════════════════
+    // الإدخال الصوتي مع قاموس التصحيح الفوري عالي الكفاءة
+    // ══════════════════════════════
+    window.startVoiceInput = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("ميزة الإدخال الصوتي غير مدعومة في متصفحك الحالي.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ar-EG';
+        recognition.interimResults = true; 
+        recognition.continuous = false;
+
+        const micBtn = document.getElementById('micBtn');
+        const input = document.getElementById('itemName');
+
+        recognition.onstart = () => { micBtn.classList.add('listening'); };
+        recognition.onerror = () => { micBtn.classList.remove('listening'); };
+        recognition.onend = () => { micBtn.classList.remove('listening'); };
+
+        recognition.onresult = (event) => {
+            let currentTranscript = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                currentTranscript += event.results[i][0].transcript;
+            }
+
+            // 💡 قاموس البدائل الإجباري لمنع تهريف محرك البحث في المحل
+            const voiceDictionary = {
+                "ليبي": "ليبى",
+                "ليبتك": "ليبى",
+                "ليلتك": "ديلفاك",
+                "ديلفك": "ديلفاك",
+                "دلفك": "ديلفاك",
+                "دلفاك": "ديلفاك",
+                "شيل": "شل"
+            };
+
+            let modifiedText = currentTranscript;
+            Object.keys(voiceDictionary).forEach(wrongWord => {
+                const regex = new RegExp(wrongWord, "g");
+                modifiedText = modifiedText.replace(regex, voiceDictionary[wrongWord]);
+            });
+
+            // تحويل أي أرقام شرقية (١٢٣) لأرقام غربية (123)
+            modifiedText = easternToWesternDigits(modifiedText);
+
+            // لو الجملة بدأت بعدد (رقم أو كلمة زي "اتنين")، يتحط في خانة الكمية
+            // ويفضل باقي الجملة لخانة اسم الصنف. مثال: "٢ ديلفاك ٥لتر اصلى"
+            // => الكمية: 2 ، الصنف: "ديلفاك 5لتر اصلى"
+            const qtyInput = document.getElementById('itemQty');
+            const { qty, rest } = extractLeadingQuantity(modifiedText);
+
+            if (qty !== null) {
+                qtyInput.value = qty;
+                input.value = rest;
+            } else {
+                input.value = modifiedText;
+            }
+
+            input.dispatchEvent(new Event('input')); 
+        };
+
+        recognition.start();
+    };
+
+    window.playWarningSound = () => {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            let osc1 = audioCtx.createOscillator();
+            let gain1 = audioCtx.createGain();
+            osc1.type = 'sawtooth'; 
+            osc1.frequency.value = 1100;
+            gain1.gain.setValueAtTime(0.8, audioCtx.currentTime);
+            gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+            osc1.connect(gain1); gain1.connect(audioCtx.destination);
+            osc1.start(); osc1.stop(audioCtx.currentTime + 0.25);
+            
+            setTimeout(() => {
+                let osc2 = audioCtx.createOscillator();
+                let gain2 = audioCtx.createGain();
+                osc2.type = 'sawtooth';
+                osc2.frequency.value = 1100;
+                gain2.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc2.connect(gain2); gain2.connect(audioCtx.destination);
+                osc2.start(); osc2.stop(audioCtx.currentTime + 0.25);
+            }, 150);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    function listenToShortages() {
+        const q = query(collection(db, "shortages"), orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+            const container = document.getElementById('shortagesListContainer');
+            let html = "";
+            
+            if(snapshot.empty) {
+                container.innerHTML = `
+                    <div class="text-center p-4 bg-white border rounded-4 text-success fw-bold">
+                        <i class="fas fa-check-circle fs-2 d-block mb-2"></i>
+                        كل الأصناف متوفرة ولا توجد نواقص حالياً الحمد لله 👍
+                    </div>`;
+                return;
+            }
+
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+                const dateStr = data.date ? data.date : "غير محدد";
+                
+                html += `
+                    <div class="shortage-item-card" id="row_${id}">
+                        <div class="flex-grow-1 pe-2">
+                            <h6 class="fw-bold mb-1 text-dark" style="font-size: 0.95rem; line-height: 1.4;">${data.name}</h6>
+                            <div class="d-flex flex-wrap gap-2 align-items-center text-muted" style="font-size: 0.75rem; font-weight: 600;">
+                                <span><i class="far fa-clock me-1"></i>${dateStr}</span>
+                                ${data.note ? `<span class="badge bg-light text-secondary border px-2 py-1"><i class="fas fa-comment me-1"></i>${data.note}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <div class="qty-badge" title="الكمية المطلوبة">${data.qty}</div>
+                            <button class="btn-done" onclick="window.deleteShortage('${id}')">
+                                <i class="fas fa-check me-1"></i>تم
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        });
+    }
+
+    window.saveShortage = async () => {
+        const nameInput = document.getElementById('itemName');
+        const qtyInput = document.getElementById('itemQty');
+        const noteInput = document.getElementById('itemNote');
+        const btn = document.getElementById('btnSubmit');
+
+        const enteredName = nameInput.value.trim();
+
+        if(!enteredName || !qtyInput.value) return;
+
+        if (!inventoryItems.includes(enteredName)) {
+            window.playWarningSound();
+            alert("⛔ خطأ تحذيري: هذا الصنف غير مسجل بالمخزن! يرجى اختيار صنف صحيح من القائمة المنسدلة.");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري الإضافة...';
+
+        try {
+            await addDoc(collection(db, "shortages"), {
+                name: enteredName,
+                qty: Number(qtyInput.value),
+                note: noteInput.value,
+                createdAt: serverTimestamp(),
+                date: new Date().toLocaleDateString('ar-EG', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+            });
+
+            nameInput.value = "";
+            qtyInput.value = "";
+            noteInput.value = "";
+        } catch (e) {
+            alert("حدث خطأ أثناء الحفظ");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus me-1"></i> إضافة لقائمة النواقص';
+        }
+    };
+
+    window.deleteShortage = async (id) => {
+        if(confirm("هل تم توفير هذا الصنف بالفعل ليتم حذفه من النواقص؟")) {
+            try {
+                await deleteDoc(doc(db, "shortages", id));
+            } catch (e) {
+                alert("فشل في حذف الصنف");
+            }
+        }
+    };
+
+    loadInventory();
+    listenToShortages();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>
