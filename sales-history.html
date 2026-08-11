@@ -518,13 +518,13 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-try {
-    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
-        console.warn("تعذر تفعيل التخزين الدائم:", err.code);
-    });
-} catch (e) {
-    console.warn("تعذر تفعيل التخزين الدائم:", e);
-}
+    try {
+        db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+            console.warn("تعذر تفعيل التخزين الدائم:", err.code);
+        });
+    } catch (e) {
+        console.warn("تعذر تفعيل التخزين الدائم:", e);
+    }
 
     let allInvoices = [];
     let customersData = {};
@@ -1628,63 +1628,76 @@ try {
             icon: "danger",
             onConfirm: async () => {
                 try {
+                    // 1. جلب المعاملات المرتبطة بالفاتورة دفعة واحدة
                     const txSnapshot = await db.collection("transactions").where("invoiceId", "==", id).get();
 
-                    await db.runTransaction(async (transaction) => {
-                        const items = inv.items || [];
+                    // 2. تجميع معرفات المنتجات الفريدة
+                    const items = inv ? (inv.items || []) : [];
+                    const stockIds = [...new Set(items.map(item => item.stockId).filter(Boolean))];
 
-                        const productTargets = items
-                            .filter(item => item.stockId)
-                            .map(item => ({ item, ref: db.collection("inventory").doc(item.stockId) }));
-
-                        const productSnaps = [];
-                        for (const target of productTargets) {
-                            const snap = await transaction.get(target.ref);
-                            productSnaps.push({ ...target, snap });
-                        }
-
-                        for (const { item, ref, snap } of productSnaps) {
-                            if (!snap.exists) continue;
-
-                            const prodData = snap.data();
-                            const qty = Number(item.qty || 0);
-                            const rawUnit = (item.unit || "").trim().toLowerCase();
-                            const itemName = (item.name || "").toLowerCase();
-
-                            const isCarton = (rawUnit === 'box' || rawUnit === 'carton' || rawUnit === 'كرتونة' || rawUnit === 'كرتونه' || itemName.includes('شحم بريفيكس'));
-                            const isReturn = item.isReturn === true;
-
-                            const pcsPerCarton = Number(prodData.pcsPerCarton) || Number(prodData.cartonSize) || 1;
-                            let piecesToModify = qty;
-                            if (isCarton && pcsPerCarton > 1) {
-                                piecesToModify = qty * pcsPerCarton;
-                            }
-
-                            const multiplier = isReturn ? -1 : 1;
-                            const currentTotalPcs = Number(prodData.totalPcs) || 0;
-                            const newTotalPcs = Math.max(0, currentTotalPcs + (piecesToModify * multiplier));
-
-                            transaction.update(ref, { totalPcs: newTotalPcs });
-                        }
-
-                        txSnapshot.forEach(txDoc => {
-                            transaction.update(db.collection("transactions").doc(txDoc.id), {
-                                isDeleted: true,
-                                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-                            });
+                    // 3. جلب بيانات المنتجات بالتوازي للحد من عمليات القراءة لـ Firestore
+                    const inventoryDocs = {};
+                    if (stockIds.length > 0) {
+                        const docSnaps = await Promise.all(
+                            stockIds.map(sId => db.collection("inventory").doc(sId).get())
+                        );
+                        docSnaps.forEach(snap => {
+                            if (snap.exists) inventoryDocs[snap.id] = snap.data();
                         });
+                    }
 
-                        transaction.update(db.collection("invoices").doc(id), {
+                    // 4. تنفيذ التعديلات باستخدام WriteBatch لتقليل استهلاك الكوتا وتفادي القفل (Deadlock)
+                    const batch = db.batch();
+
+                    items.forEach(item => {
+                        if (!item.stockId || !inventoryDocs[item.stockId]) return;
+
+                        const ref = db.collection("inventory").doc(item.stockId);
+                        const prodData = inventoryDocs[item.stockId];
+
+                        const qty = Number(item.qty || 0);
+                        const rawUnit = (item.unit || "").trim().toLowerCase();
+                        const itemName = (item.name || "").toLowerCase();
+
+                        const isCarton = (rawUnit === 'box' || rawUnit === 'carton' || rawUnit === 'كرتونة' || rawUnit === 'كرتونه' || itemName.includes('شحم بريفيكس'));
+                        const isReturn = item.isReturn === true;
+
+                        const pcsPerCarton = Number(prodData.pcsPerCarton) || Number(prodData.cartonSize) || Number(prodData.unitFactor) || 1;
+                        let piecesToModify = qty;
+                        if (isCarton && pcsPerCarton > 1) {
+                            piecesToModify = qty * pcsPerCarton;
+                        }
+
+                        const multiplier = isReturn ? -1 : 1;
+                        const currentTotalPcs = Number(prodData.totalPcs) || 0;
+                        const newTotalPcs = Math.max(0, currentTotalPcs + (piecesToModify * multiplier));
+
+                        batch.update(ref, { totalPcs: newTotalPcs });
+                    });
+
+                    txSnapshot.forEach(txDoc => {
+                        batch.update(db.collection("transactions").doc(txDoc.id), {
                             isDeleted: true,
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     });
 
+                    batch.update(db.collection("invoices").doc(id), {
+                        isDeleted: true,
+                        deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    await batch.commit();
+
                     await loadData(false, loadedScope === 'ARCHIVE');
                     window.showCustomUi({ title: "تم النقل", message: "تم نقل الفاتورة إلى السلة بنجاح وتعديل كميات المخزن بدقة.", icon: "success" });
                 } catch (err) {
                     console.error("خطأ أثناء الحذف وإرجاع المخزون:", err);
-                    window.showCustomUi({ title: "خطأ", message: "حدث خطأ أثناء نقل الفاتورة للمخزن وإعادة الأصناف.", icon: "danger" });
+                    let errorMsg = err.message || "";
+                    if (errorMsg.includes("Quota exceeded") || err.code === "resource-exhausted") {
+                        errorMsg = "تم تجاوز الحد اليومي المجاني لقاعدة البيانات (Quota Exceeded). يمكنك الانتظار لتجديد الكوتا أو الترقية لخطة Blaze.";
+                    }
+                    window.showCustomUi({ title: "خطأ في النقل", message: errorMsg, icon: "danger" });
                 }
             }
         });
