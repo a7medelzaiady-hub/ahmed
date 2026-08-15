@@ -185,6 +185,7 @@
         .item-card:active { transform: scale(0.96); background: #f8fafc; }
         .item-card.zero-row { background: rgba(225, 29, 72, 0.02); border-color: rgba(225, 29, 72, 0.15); }
         .item-card.low-row  { background: rgba(217, 119, 6, 0.02); border-color: rgba(217, 119, 6, 0.15); }
+        .item-card.neg-row  { background: rgba(225, 29, 72, 0.05); border-color: rgba(225, 29, 72, 0.35); }
 
         .card-top { 
             display: flex; 
@@ -235,6 +236,7 @@
         }
         .zero-row .row-icon { background: rgba(225,29,72,0.07); color: var(--danger); }
         .low-row  .row-icon { background: rgba(217,119,6,0.08); color: var(--gold); }
+        .neg-row  .row-icon { background: rgba(225,29,72,0.12); color: var(--danger); }
 
         .status-dot {
             width: 8px; height: 8px; border-radius: 50%; 
@@ -286,6 +288,7 @@
         .qty-total i { font-size: 9px; }
         .zero-row .qty-total { background: rgba(225,29,72,0.05); color: var(--danger); }
         .low-row  .qty-total { background: rgba(217,119,6,0.06); color: var(--gold); }
+        .neg-row  .qty-total { background: rgba(225,29,72,0.08); color: var(--danger); }
 
         .zero-divider {
             grid-column: 1 / -1; padding: 10px 16px; background: #fff1f2;
@@ -294,6 +297,9 @@
             display: flex; align-items: center; gap: 8px; margin: 6px 0;
         }
         .zero-divider em { background: rgba(225,29,72,0.08); padding: 2px 10px; border-radius: 20px; font-style: normal; }
+        .zero-divider.neg-divider { background: #fff1f2; border-color: rgba(225,29,72,0.4); }
+        .zero-divider.low-divider { background: #fffbeb; border-color: rgba(217,119,6,0.3); color: var(--gold); }
+        .zero-divider.low-divider em { background: rgba(217,119,6,0.1); }
 
         .loading { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--sub); }
         .spinner { width: 36px; height: 36px; border: 3.5px solid #edf2f7; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
@@ -367,6 +373,16 @@
         }
         .mc-current .mini-val { color: var(--accent); font-size: 15px; font-weight: 900; }
         .mc-current .mini-lbl { color: var(--accent); font-weight: 800; }
+
+        .mc-usage {
+            grid-column: 1 / -1;
+            background: rgba(2, 132, 199, 0.04);
+            border: 1px dashed #0284c7;
+            justify-content: center;
+            padding: 8px;
+        }
+        .mc-usage .mini-val { color: #0284c7; font-size: 12.5px; }
+        .mc-usage .mini-lbl { color: #0284c7; }
 
         .section-title {
             font-size: 12.5px;
@@ -508,6 +524,11 @@
     let cacheTimestamp = 0;        
     const CACHE_TTL_MS = 5 * 60 * 1000; 
 
+    // خريطة معدل الاستخدام (إجمالي كمية المبيعات التاريخية) لكل صنف — تُستخدم لترتيب مجموعة "نفد المخزون"
+    let usageMap = new Map();
+    let usageComputed = false;
+    let usageComputing = false;
+
     enableIndexedDbPersistence(db)
         .then(() => { console.log("تم تفعيل الكاش المحلي بنجاح"); })
         .catch((err) => { console.warn("تنبيه الكاش:", err.message); });
@@ -519,18 +540,15 @@
             if (data.isDeleted !== true) allItems.push({ id: d.id, ...data });
         });
 
-        allItems.sort((a, b) => {
-            const qa = Number(a.totalPcs) || 0;
-            const qb = Number(b.totalPcs) || 0;
-            
-            if (qa <= 0 && qb <= 0) return (a.name||'').localeCompare(b.name||'', 'ar');
-            if (qa <= 0) return  1;
-            if (qb <= 0) return -1;
-            return qb - qa;
-        });
+        sortAllItems();
 
         updateStats();
         renderList();
+
+        // نحسب معدل الاستخدام مرة واحدة فى الخلفية دون تعطيل عرض القائمة
+        if (!usageComputed && !usageComputing) {
+            computeUsageFrequency();
+        }
 
         const isFromCache = snap.metadata.fromCache;
         const now = new Date();
@@ -583,6 +601,42 @@
         return isNegative ? `-${result}` : result;
     }
 
+    // تصنيف الصنف حسب الأولوية: 0 = سالب (الأعلى إلحاحاً) ، 1 = منخفض/قريب من النفاذ ، 2 = عادي ، 3 = صفر (الأخير)
+    function getStatusCategory(item) {
+        const factor   = Number(item.unitFactor) || 1;
+        const totalPcs = Number(item.totalPcs)   || 0;
+        const minPcs   = (Number(item.min) || 0) * factor;
+
+        if (totalPcs < 0)  return 0;
+        if (totalPcs === 0) return 3;
+        if (totalPcs <= minPcs) return 1;
+        return 2;
+    }
+
+    // الترتيب الذكي للأصناف: سالب ← قريب من النفاذ ← عادي ← صفر (مرتب حسب الأكثر استخداماً فالأقل)
+    function sortAllItems() {
+        allItems.sort((a, b) => {
+            const catA = getStatusCategory(a);
+            const catB = getStatusCategory(b);
+            if (catA !== catB) return catA - catB;
+
+            // مجموعة الصفر: الأكثر طلباً/استخداماً تاريخياً أولاً ثم الأقل
+            if (catA === 3) {
+                const usageA = usageMap.get(a.id) || 0;
+                const usageB = usageMap.get(b.id) || 0;
+                if (usageA !== usageB) return usageB - usageA;
+                return (a.name || '').localeCompare(b.name || '', 'ar');
+            }
+
+            const qa = Number(a.totalPcs) || 0;
+            const qb = Number(b.totalPcs) || 0;
+
+            // العادي: الأعلى رصيداً أولاً | السالب والمنخفض: الأكثر إلحاحاً (الأقل/الأكثر سلبية) أولاً
+            if (catA === 2) return qb - qa;
+            return qa - qb;
+        });
+    }
+
     function updateStats() {
         let ok = 0, low = 0, zero = 0;
         allItems.forEach(item => {
@@ -620,19 +674,30 @@
 
         listBody.classList.remove('full-width');
 
-        const withQty = list.filter(i => (Number(i.totalPcs) || 0) > 0);
-        const zeroQty = list.filter(i => (Number(i.totalPcs) || 0) <= 0);
+        // القائمة (list) محفوظة بنفس ترتيب allItems الذكي، لذا يكفي الفصل حسب الفئة دون إعادة ترتيب
+        const negItems    = list.filter(i => (Number(i.totalPcs) || 0) < 0);
+        const activeItems = list.filter(i => (Number(i.totalPcs) || 0) > 0);
+        const zeroItems   = list.filter(i => (Number(i.totalPcs) || 0) === 0);
 
         let html = '';
         let n = 1;
-        withQty.forEach(item => { html += buildRow(item, n++); });
 
-        if (zeroQty.length > 0) {
+        if (negItems.length > 0) {
+            html += `<div class="zero-divider neg-divider">
+                        <i class="fas fa-circle-exclamation"></i>
+                        <em>رصيد بالسالب — يحتاج مراجعة عاجلة (${negItems.length})</em>
+                     </div>`;
+            negItems.forEach(item => { html += buildRow(item, n++); });
+        }
+
+        activeItems.forEach(item => { html += buildRow(item, n++); });
+
+        if (zeroItems.length > 0) {
             html += `<div class="zero-divider">
                         <i class="fas fa-triangle-exclamation"></i>
-                        <em>نفد المخزون أو بالسالب — عدد الأصناف ${zeroQty.length}</em>
+                        <em>نفد المخزون — الأكثر طلباً أولاً (${zeroItems.length})</em>
                      </div>`;
-            zeroQty.forEach(item => { html += buildRow(item, n++); });
+            zeroItems.forEach(item => { html += buildRow(item, n++); });
         }
 
         listBody.innerHTML = html;
@@ -659,6 +724,12 @@
         if (totalPcs <= 0)          status = 'zero';
         else if (totalPcs <= minPcs) status = 'low';
 
+        const isNegative = totalPcs < 0;
+        let rowClass = '';
+        if (isNegative) rowClass = ' neg-row';
+        else if (status === 'zero') rowClass = ' zero-row';
+        else if (status === 'low') rowClass = ' low-row';
+
         const rawUnit = (item.unitName || '').trim();
         const unitName = (rawUnit && normalizeAr(rawUnit) !== normalizeAr('كرتونة')) ? rawUnit : 'قطعة';
 
@@ -673,7 +744,7 @@
         const safeName = (item.name || 'بدون اسم').replace(/'/g, "\\'");
 
         return `
-        <div class="item-card${status==='zero' ? ' zero-row' : status==='low' ? ' low-row' : ''}" onclick="showItemHistory('${item.id}', '${safeName}', false)">
+        <div class="item-card${rowClass}" onclick="showItemHistory('${item.id}', '${safeName}', false)">
             <span class="status-dot ${status}"></span>
             <div class="card-top">
                 <div class="row-info">
@@ -729,6 +800,88 @@
         rawDocsCache = docs;
         cacheTimestamp = now;
         return docs;
+    }
+
+    // حساب معدل استخدام كل صنف (إجمالي كمية المبيعات التاريخية) لترتيب مجموعة "نفد المخزون" حسب الأكثر طلباً
+    async function computeUsageFrequency() {
+        usageComputing = true;
+        try {
+            const rawDocs = await getRawDocs(false);
+            const cleanText = (txt) => String(txt || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+            const idMap = new Map(allItems.map(it => [cleanText(it.id), it]));
+
+            const isPurchaseType = (t) => t.includes('supplier_transactions') || t.includes('شراء') || t.includes('purchase') || t.includes('وارد') || t.includes('تزويد') || t.includes('مورد');
+            const isReturnType   = (t) => t.includes('return') || t.includes('مرتجع') || t.includes('ارتجاع');
+            const isLossType     = (t) => t.includes('loss') || t.includes('تالف') || t.includes('اتلاف');
+
+            const map = new Map();
+            const addUsage = (id, qty) => map.set(id, (map.get(id) || 0) + qty);
+
+            const scanObject = (obj, colName) => {
+                if (!obj || typeof obj !== 'object') return;
+                const rawType = cleanText(obj.type || obj.status || obj.actionType || colName || '');
+                // نحتسب فقط عمليات البيع الفعلية فى معدل الاستخدام (نستبعد الشراء والمرتجع والتالف)
+                if (obj.isReturn === true || isReturnType(rawType) || isPurchaseType(rawType) || isLossType(rawType)) return;
+
+                let matchedItem = null;
+                for (let key in obj) {
+                    const lowerKey = key.toLowerCase();
+                    if (lowerKey.includes('id') || lowerKey === 'code') {
+                        const found = idMap.get(cleanText(obj[key]));
+                        if (found) { matchedItem = found; break; }
+                    }
+                }
+                if (!matchedItem) {
+                    for (let key in obj) {
+                        const lowerKey = key.toLowerCase();
+                        if (lowerKey.includes('name') || lowerKey.includes('item') || lowerKey.includes('product')) {
+                            const val = cleanText(obj[key]);
+                            if (!val) continue;
+                            matchedItem = allItems.find(it => it.name && val.includes(cleanText(it.name)));
+                            if (matchedItem) break;
+                        }
+                    }
+                }
+                if (!matchedItem) return;
+
+                let qty = 0;
+                if (typeof obj.totalPieces === 'number' && obj.totalPieces > 0) {
+                    qty = obj.totalPieces;
+                } else {
+                    for (let key in obj) {
+                        const lowerKey = key.toLowerCase();
+                        if (['totalpieces','qty','quantity','count','amount','totalpcs','pcs','number'].includes(lowerKey)) {
+                            const parsed = parseInt(obj[key]);
+                            if (!isNaN(parsed) && parsed > 0) { qty = parsed; break; }
+                        }
+                    }
+                }
+                if (qty > 0) addUsage(matchedItem.id, qty);
+            };
+
+            rawDocs.forEach(({ data, colName }) => {
+                scanObject(data, colName);
+                for (let key in data) {
+                    if (Array.isArray(data[key])) {
+                        data[key].forEach(sub => scanObject(sub, colName));
+                    } else if (data[key] && typeof data[key] === 'object') {
+                        scanObject(data[key], colName);
+                    }
+                }
+            });
+
+            usageMap = map;
+            usageComputed = true;
+
+            // إعادة ترتيب وعرض القائمة بعد توفر بيانات معدل الاستخدام (يؤثر فقط على ترتيب مجموعة الصفر)
+            sortAllItems();
+            renderList();
+        } catch (e) {
+            console.warn('تعذر حساب معدل الاستخدام للأصناف:', e.message);
+        } finally {
+            usageComputing = false;
+        }
     }
 
     window.showItemHistory = async function(itemId, itemName, forceRefresh) {
@@ -930,6 +1083,8 @@
             const totalSalesTxt = formatQuantityDetailed(totalSalesPcs, capacity, unit);
             const totalReturnsTxt = formatQuantityDetailed(totalReturnsPcs + totalLossesPcs, capacity, unit);
             const currentStockTxt = formatQuantityDetailed(currentStockPcs, capacity, unit);
+            const usageCount = usageMap.get(itemId) || 0;
+            const usageTxt = formatQuantityDetailed(usageCount, capacity, unit);
 
             let html = `
             <div class="modal-dashboard">
@@ -967,6 +1122,13 @@
                         <span class="mini-lbl"><i class="fas fa-calculator" style="margin-left: 4px;"></i>الرصيد الحالي المتوفر بالمخزن</span>
                     </div>
                 </div>
+                ${usageComputed ? `
+                <div class="mini-card mc-usage">
+                    <div class="mini-info" style="text-align: center;">
+                        <span class="mini-val"><i class="fas fa-fire" style="margin-left: 4px;"></i>${usageTxt}</span>
+                        <span class="mini-lbl">معدل الاستخدام التاريخي (لترتيب الأولوية)</span>
+                    </div>
+                </div>` : ''}
             </div>
 
             <div class="section-title"><i class="fas fa-clipboard-list"></i> تفاصيل الحركات التاريخية</div>
