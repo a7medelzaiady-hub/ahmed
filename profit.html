@@ -181,6 +181,34 @@ body{
   white-space: nowrap;
 }
 
+.autosave-bar{
+  margin:8px 10px 0;
+  background:var(--g0);
+  border:1px solid #9fd3b5;
+  border-radius:10px;
+  padding:7px 12px;
+  font-size:.7rem;
+  font-weight:800;
+  color:var(--g8);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  text-align:center;
+  transition:background .2s,border-color .2s,color .2s;
+}
+.autosave-bar.saving{
+  background:var(--a0);
+  border-color:#fcd34d;
+  color:var(--a7);
+}
+.autosave-bar.error{
+  background:var(--r0);
+  border-color:#fca5a5;
+  color:var(--r7);
+}
+.autosave-bar i{font-size:.72rem}
+
 .kpi-row{
   display:grid;
   grid-template-columns:repeat(3,1fr);
@@ -373,7 +401,7 @@ table.inv tfoot td:first-child{text-align:right;padding-right:14px;}
     </div>
   </div>
   <div class="tb-btns">
-    <button class="tb-btn save-btn-active" onclick="triggerManualSave()" title="حفظ الأرباح في السجل"><i class="fas fa-save"></i></button>
+    <button class="tb-btn save-btn-active" onclick="triggerManualSave()" title="حفظ فوري الآن (الحفظ التلقائي يعمل دائماً في الخلفية)"><i class="fas fa-save"></i></button>
     <button class="tb-btn" onclick="exportTodayToExcel()" title="تصدير مبيعات اليوم إلى إكسل"><i class="fas fa-file-excel"></i></button>
     <button class="tb-btn" onclick="scrollToArchive()" title="سجل الأرباح المرحلة"><i class="fas fa-archive"></i></button>
     <button class="tb-btn" onclick="window.print()" title="طباعة"><i class="fas fa-print"></i></button>
@@ -422,6 +450,11 @@ table.inv tfoot td:first-child{text-align:right;padding-right:14px;}
   <span class="eq-segment">- ( إجمالي المشتريات <span id="eqCost" style="color:var(--a7); font-weight:800;">0 ج</span> )</span>
   <span class="eq-segment">- ( المصروفات <span id="eqExp" style="color:var(--r7); font-weight:800;">0 ج</span> )</span>
   <span class="eq-segment">= <strong style="text-decoration: underline;">صافي الربح النهائي</strong></span>
+</div>
+
+<div class="autosave-bar" id="autoSaveBar">
+  <i class="fas fa-circle-notch fa-spin" id="autoSaveIcon"></i>
+  <span id="autoSaveText">جاري تفعيل الحفظ التلقائي...</span>
 </div>
 
 <div class="kpi-row">
@@ -775,6 +808,32 @@ let globalInvoices = [];
 let tableRowsData = [];
 let archivedRowsData = []; // للشيء الخاص ببيانات الأرشيف التصديرية
 
+// --- حالة الحفظ التلقائي ---
+let inventoryReady = false;
+let invoicesReady = false;
+let autoSaveTimer = null;
+let autoSaveInFlight = false;
+
+function setAutoSaveStatus(state, text) {
+  const bar = document.getElementById("autoSaveBar");
+  const icon = document.getElementById("autoSaveIcon");
+  const txt = document.getElementById("autoSaveText");
+  if (!bar) return;
+  bar.classList.remove("saving", "error");
+  if (state === "saving") {
+    bar.classList.add("saving");
+    icon.className = "fas fa-circle-notch fa-spin";
+  } else if (state === "saved") {
+    icon.className = "fas fa-check-circle";
+  } else if (state === "error") {
+    bar.classList.add("error");
+    icon.className = "fas fa-triangle-exclamation";
+  } else {
+    icon.className = "fas fa-circle-notch fa-spin";
+  }
+  txt.textContent = text;
+}
+
 function renderExpenses() {
   const container = document.getElementById("expList");
   let html = "";
@@ -1011,14 +1070,14 @@ function setupArchiveRealtime() {
   });
 }
 
-// دالة الحفظ التلقائي الذكية
+// دالة الحفظ الفعلية إلى فايربيز
 async function autoSaveProfitToServer(summary) {
   if (!summary || !summary.date) return;
-  if (summary.sales <= 0 || summary.cost <= 0) {
-    console.log(`⚠️ تم تخطي الحفظ التلقائي اللحظي لمنع تصفير السجل أثناء تحميل فواتير اليوم (${summary.date}).`);
-    return;
-  }
-  
+  if (autoSaveInFlight) return;
+
+  autoSaveInFlight = true;
+  setAutoSaveStatus("saving", "جاري حفظ أرباح اليوم تلقائياً...");
+
   try {
     const docRef = doc(db, "archived_profits", summary.date);
     await setDoc(docRef, {
@@ -1029,39 +1088,46 @@ async function autoSaveProfitToServer(summary) {
       netProfit: summary.netProfit,
       timestamp: new Date()
     }, { merge: true });
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setAutoSaveStatus("saved", `تم الحفظ التلقائي بنجاح — آخر تحديث الساعة ${timeStr}`);
     console.log(`✅ تم تحديث أرباح اليوم (${summary.date}) تلقائياً بالسيرفر بنجاح.`);
   } catch (error) {
+    setAutoSaveStatus("error", "تعذر الحفظ التلقائي — تحقق من الاتصال بالإنترنت");
     console.error("❌ فشل ترحيل الأرباح التلقائي:", error);
+  } finally {
+    autoSaveInFlight = false;
   }
 }
 
-// دالة الترحيل والحفظ اليدوية
+// دالة جدولة الحفظ التلقائي مع تأخير بسيط (debounce) لتجميع أي تحديثات متتالية سريعة
+// في طلب حفظ واحد بدل إرسال طلبات كثيرة لحظة بلحظة، مع تجاهل الحفظ فقط أثناء التحميل الأولي
+// (قبل اكتمال تحميل المخزون والفواتير من قاعدة البيانات) لمنع كتابة بيانات ناقصة بالخطأ.
+function scheduleAutoSave(summary) {
+  if (!inventoryReady || !invoicesReady) {
+    setAutoSaveStatus("loading", "جاري تحميل بيانات اليوم قبل بدء الحفظ التلقائي...");
+    return;
+  }
+  setAutoSaveStatus("saving", "تم رصد تحديث جديد، جاري تجهيز الحفظ...");
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    autoSaveProfitToServer(summary);
+  }, 1500);
+}
+window.scheduleAutoSave = scheduleAutoSave;
+
+// دالة الترحيل والحفظ اليدوية (حفظ فوري بدون انتظار، كخيار احتياطي فقط)
 async function triggerManualSave() {
   if (!currentDaySummary) {
     alert("برجاء الانتظار حتى اكتمال تحميل البيانات الحالية أولاً.");
     return;
   }
-  
-  const confirmSave = confirm(`هل تود الاحتفاظ بأرباح هذا اليوم (${currentDaySummary.date}) وترحيلها إلى السجل؟`);
-  if (!confirmSave) return;
-  
-  try {
-    const docRef = doc(db, "archived_profits", currentDaySummary.date);
-    await setDoc(docRef, {
-      date: currentDaySummary.date,
-      sales: currentDaySummary.sales,
-      cost: currentDaySummary.cost,
-      expenses: currentDaySummary.expenses,
-      netProfit: currentDaySummary.netProfit,
-      timestamp: new Date()
-    }, { merge: true });
-    
-    alert(`🚀 تم ترحيل أرباح اليوم (${currentDaySummary.date}) والاحتفاظ بها في السجل بنجاح!`);
-    scrollToArchive();
-  } catch (error) {
-    console.error(error);
-    alert("❌ حدث خطأ أثناء محاولة حفظ الأرباح في السجل. تحقق من اتصالك بالإنترنت.");
-  }
+
+  clearTimeout(autoSaveTimer);
+  await autoSaveProfitToServer(currentDaySummary);
+  alert(`🚀 تم حفظ أرباح اليوم (${currentDaySummary.date}) فورياً في السجل بنجاح!`);
+  scrollToArchive();
 }
 window.triggerManualSave = triggerManualSave;
 
@@ -1186,7 +1252,16 @@ function processCalculations() {
   document.getElementById("eqExp").innerText = `${TOTAL_FIXED_EXPENSES} ج`;
 
   renderTable("");
-  autoSaveProfitToServer(currentDaySummary);
+
+  // فقط الأيام اللي عليها فواتير فعلية هي اللي بتتحفظ تلقائياً
+  // (نتحقق من وجود فواتير فعلية بدل التحقق من قيم المبيعات/التكلفة، حتى لا يفوت الحفظ
+  // يوماً حقيقياً بربح أو تكلفة صفر، ولا يُحفظ خطأً أثناء التحميل الأولي).
+  const hasInvoicesForDate = globalInvoices.some(inv => parseDate(inv.date, inv.timestamp) === date);
+  if (hasInvoicesForDate) {
+    scheduleAutoSave(currentDaySummary);
+  } else if (inventoryReady && invoicesReady) {
+    setAutoSaveStatus("saved", "لا توجد فواتير مسجلة لهذا اليوم بعد");
+  }
 }
 
 function initRealtimeListeners() {
@@ -1206,6 +1281,7 @@ function initRealtimeListeners() {
       let rawBuy = Number(itm.buy) || 0;
       currentBuyMap[name] = rawBuy / factor; 
     });
+    inventoryReady = true;
 
     onSnapshot(collection(db, "invoices"), (sSnap) => {
       globalInvoices = [];
@@ -1215,6 +1291,7 @@ function initRealtimeListeners() {
           globalInvoices.push(data);
         }
       });
+      invoicesReady = true;
       processCalculations();
     });
   });
