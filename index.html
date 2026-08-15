@@ -120,7 +120,6 @@
 
         #errMsg { font-weight: 700; min-height: 22px; font-size: 0.8rem; }
 
-        /* بوب اب السيستم الموحد */
         .custom-popup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }  
         .custom-popup-box { background: #ffffff; width: 88%; max-width: 350px; padding: 22px; border-radius: 16px; text-align: center; font-family: 'Cairo'; box-shadow: 0 10px 25px rgba(0,0,0,0.3); color: #1b2e26; }  
     </style>
@@ -159,7 +158,7 @@
     <div id="errMsg" class="text-danger mt-3"></div>
 </div>
 
-<!-- نافذة التنبيهات المنبثقة الخاصة بالسيستم الموحد -->
+<!-- نافذة التنبيهات المنبثقة -->
 <div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">  
     <div class="custom-popup-box">  
         <div id="customModalIcon" style="width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;"></div>  
@@ -197,7 +196,6 @@
     const loginContent = document.getElementById('loginContent');
     const CACHE_KEY_USERS = 'zaiady_users_credentials_cache';
 
-    // دالة التنبيهات الموحدة للسيستم
     window.showCustomUi = (options) => {  
         const modal = document.getElementById('customGlobalModal');  
         const title = document.getElementById('customModalTitle');  
@@ -232,7 +230,6 @@
         modal.style.display = 'flex';  
     };
 
-    // إدارة شريط الإنذار الخاص بالإنترنت
     function showOfflineBanner(show) {
         const banner = document.getElementById('offlineBanner');
         if (show) {
@@ -247,14 +244,12 @@
     window.addEventListener('online',  () => showOfflineBanner(false));
     window.addEventListener('offline', () => showOfflineBanner(true));
 
-    // تهيئة مستخدمين وتحديث كلمات المرور
     async function autoInitializeUser() {
         let localUsers = {};
         try {
             localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
         } catch(_) {}
 
-        // تحديث الكاش المحلي بكلمات المرور الجديدة
         localUsers["user"] = { pass: "010277", role: "restricted" };
         localUsers["admin"] = { pass: "01000222", role: "admin" };
         localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
@@ -269,7 +264,6 @@
 
     document.addEventListener("DOMContentLoaded", () => {
         if (!navigator.onLine) { showOfflineBanner(true); }
-        
         autoInitializeUser(); 
         
         const loggedUser = sessionStorage.getItem('isLoggedIn');
@@ -301,7 +295,6 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري التحقق...';
         err.innerText = ""; 
 
-        // ══════ أولاً: المعالجة في وضع عدم وجود إنترنت (Offline Mode) ══════
         if (!navigator.onLine) {
             try {
                 const localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
@@ -328,7 +321,6 @@
             return;
         }
 
-        // ══════ ثانياً: المعالجة في الوضع الطبيعي المتصل (Online Mode) ══════
         try {
             const userRef = doc(db, "users", userVal);
             const userSnap = await getDoc(userRef);
@@ -337,14 +329,12 @@
                 const userData = userSnap.data();
                 if (String(userData.pass).trim() === String(passVal).trim()) {
                     
-                    // تحديث تاريخ تسجيل الدخول وحالة الاتصال للآدمن
                     const nowIso = new Date().toISOString();
                     await setDoc(userRef, { 
                         isOnline: true, 
                         lastLogin: nowIso 
                     }, { merge: true });
 
-                    // تحديث الكاش المحلي فوراً
                     try {
                         let localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
                         localUsers[userVal] = { pass: String(passVal).trim(), role: userData.role || 'restricted' };
