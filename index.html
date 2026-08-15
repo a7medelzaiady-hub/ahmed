@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-   <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     
     <style>
@@ -247,32 +247,27 @@
     window.addEventListener('online',  () => showOfflineBanner(false));
     window.addEventListener('offline', () => showOfflineBanner(true));
 
-    // تهيئة مستخدم افتراضي باسم "user" وتخزينه محلياً لحالات الطوارئ وبدون إنترنت
+    // تهيئة مستخدمين وتحديث كلمات المرور
     async function autoInitializeUser() {
-        // حماية محلية أولية للكاش في حال عدم وجود إنترنت تماماً عند التشغيل الأول
         let localUsers = {};
         try {
             localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
         } catch(_) {}
 
-        if (!localUsers["user"]) {
-            localUsers["user"] = { pass: "304201", role: "restricted" };
-            localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
-        }
+        // تحديث الكاش المحلي بكلمات المرور الجديدة
+        localUsers["user"] = { pass: "010277", role: "restricted" };
+        localUsers["admin"] = { pass: "01000222", role: "admin" };
+        localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
 
         if (navigator.onLine) {
             try {
-                const targetRef = doc(db, "users", "user");
-                const snap = await getDoc(targetRef);
-                if (!snap.exists()) {
-                    await setDoc(targetRef, { pass: "304201", role: "restricted" });
-                }
+                await setDoc(doc(db, "users", "user"), { pass: "010277", role: "restricted" }, { merge: true });
+                await setDoc(doc(db, "users", "admin"), { pass: "01000222", role: "admin" }, { merge: true });
             } catch (e) { console.error(e); }
         }
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-        // فحص حالة الإنترنت عند تحميل الصفحة مباشرة
         if (!navigator.onLine) { showOfflineBanner(true); }
         
         autoInitializeUser(); 
@@ -330,7 +325,7 @@
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-sign-in-alt me-1"></i> دخول النظام';
             }
-            return; // إنهاء الدالة لوجود الجهاز أوفلاين
+            return;
         }
 
         // ══════ ثانياً: المعالجة في الوضع الطبيعي المتصل (Online Mode) ══════
@@ -342,7 +337,14 @@
                 const userData = userSnap.data();
                 if (String(userData.pass).trim() === String(passVal).trim()) {
                     
-                    // تحديث الكاش المحلي فوراً لتأمين عملية الدخول القادمة أوفلاين
+                    // تحديث تاريخ تسجيل الدخول وحالة الاتصال للآدمن
+                    const nowIso = new Date().toISOString();
+                    await setDoc(userRef, { 
+                        isOnline: true, 
+                        lastLogin: nowIso 
+                    }, { merge: true });
+
+                    // تحديث الكاش المحلي فوراً
                     try {
                         let localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
                         localUsers[userVal] = { pass: String(passVal).trim(), role: userData.role || 'restricted' };
