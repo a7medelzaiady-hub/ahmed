@@ -4,12 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>سجل المبيعات - الزيادي لزيوت السيارات</title>
-    <!-- إعدادات التطبيق الهاتفي PWA -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0b5e3d">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -390,7 +384,7 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <a href="trashi.html" class="add-btn trash-nav-btn" title="فتح سلة المحذوفات"><i class="fas fa-trash-alt"></i></a>
+            <a href="trashi.html" class="add-btn trash-nav-btn" title="فتح سلة المحذوفات" style="display:none;"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
         </div>
@@ -406,7 +400,7 @@
                     <i class="fas fa-sync-alt"></i> تحديث
                 </button>
             </div>
-            <button class="panel-btn btn-reset-danger" id="deleteAllCustomersBtn">
+            <button class="panel-btn btn-reset-danger" id="deleteAllCustomersBtn" style="display:none;">
                 <i class="fas fa-trash-can"></i> تصفير النظام للسلة
             </button>
         </div>
@@ -518,13 +512,6 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    try {
-        db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
-            console.warn("تعذر تفعيل التخزين الدائم:", err.code);
-        });
-    } catch (e) {
-        console.warn("تعذر تفعيل التخزين الدائم:", e);
-    }
 
     let allInvoices = [];
     let customersData = {};
@@ -1185,7 +1172,6 @@
         `).join('');
 
         const discountHtml = discount > 0 ? `<div style="display:flex; justify-content:space-between; color:#ff0000;"><span>الخصم:</span><b>${discount.toFixed(2)}</b></div>` : '';
-        // السطر الخاص بصافي الفاتورة الحالية يظهر فقط إذا كان هناك خصم نقدي
         const netTotalHtml = discount > 0 ? `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #000; padding-bottom:3px; font-weight:700;"><span>صافي الفاتورة الحالية:</span><b>${totalInvoice.toFixed(2)}</b></div>` : '';
 
         const cashHtml = cashPaid > 0 ? `<div style="display:flex; justify-content:space-between; color:#000000; margin-top:2px;"><span>سداد نقدى (كاش):</span><b>${cashPaid.toFixed(2)}</b></div>` : '';
@@ -1481,66 +1467,6 @@
         }
     };
 
-    document.getElementById('deleteAllCustomersBtn').onclick = () => {
-        window.showCustomUi({
-            title: "🔒 تصفير الحسابات ونقلها للسلة",
-            message: "الرجاء إدخل كلمة التأكيد (الزيادي) للمتابعة في تصفير النظام ونقله للسلة:",
-            type: "prompt",
-            icon: "danger",
-            confirmText: "تأكيد التصفير المؤقت",
-            onConfirm: async (inputValue) => {
-                if (inputValue !== "الزيادي") {
-                    setTimeout(() => {
-                        window.showCustomUi({ title: "خطأ", message: "كلمة التأكيد غير صحيحة.", icon: "danger" });
-                    }, 300);
-                    return;
-                }
-                setTimeout(() => {
-                    window.showCustomUi({
-                        title: "🛑 تحذير نقل للسلة",
-                        message: "هل أنت متأكد من تصفير المخزن، الفواتير، والعمليات ونقلها جميعاً لسلة المحذوفات؟",
-                        type: "confirm",
-                        icon: "danger",
-                        onConfirm: async () => {
-                            try {
-                                const collectionsToTrash = ["invoices", "transactions", "inventory", "customers", "suppliers", "purchases"];
-                                let opsQueue = [];
-                                for (const colName of collectionsToTrash) {
-                                    const snap = await db.collection(colName).get();
-                                    snap.forEach(d => {
-                                        opsQueue.push({ ref: db.collection(colName).doc(d.id) });
-                                    });
-                                }
-
-                                const CHUNK_SIZE = 450;
-                                for (let i = 0; i < opsQueue.length; i += CHUNK_SIZE) {
-                                    const chunk = opsQueue.slice(i, i + CHUNK_SIZE);
-                                    const batch = db.batch();
-                                    chunk.forEach(op => {
-                                        batch.update(op.ref, {
-                                            isDeleted: true,
-                                            deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-                                        });
-                                    });
-                                    await batch.commit();
-                                }
-
-                                window.showCustomUi({
-                                    title: "نجاح التصفير",
-                                    message: "🚀 تم تصفير البيانات بنجاح ونقلها بالكامل إلى السلة.",
-                                    icon: "success",
-                                    onConfirm: () => { location.reload(); }
-                                });
-                            } catch (err) {
-                                window.showCustomUi({ title: "خطأ", message: "حدث خطأ أثناء نقل البيانات للسلة.", icon: "danger" });
-                            }
-                        }
-                    });
-                }, 300);
-            }
-        });
-    };
-
     window.filterByStat = (type, cardElement) => {
         document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
         cardElement.classList.add('active-filter');
@@ -1628,14 +1554,14 @@
             icon: "danger",
             onConfirm: async () => {
                 try {
-                    // 1. جلب المعاملات المرتبطة بالفاتورة دفعة واحدة
+                    // 1. جلب المعاملات المرتبطة بالفاتورة
                     const txSnapshot = await db.collection("transactions").where("invoiceId", "==", id).get();
 
                     // 2. تجميع معرفات المنتجات الفريدة
                     const items = inv ? (inv.items || []) : [];
                     const stockIds = [...new Set(items.map(item => item.stockId).filter(Boolean))];
 
-                    // 3. جلب بيانات المنتجات بالتوازي للحد من عمليات القراءة لـ Firestore
+                    // 3. جلب بيانات المنتجات بالتوازي للتوفير في الكوتا
                     const inventoryDocs = {};
                     if (stockIds.length > 0) {
                         const docSnaps = await Promise.all(
@@ -1646,9 +1572,10 @@
                         });
                     }
 
-                    // 4. تنفيذ التعديلات باستخدام WriteBatch لتقليل استهلاك الكوتا وتفادي القفل (Deadlock)
+                    // 4. استخدام WriteBatch بدلاً من Transaction لتوفير عمليات القراءة/الكتابة
                     const batch = db.batch();
 
+                    // تعديل كميات الأصناف في المخزن
                     items.forEach(item => {
                         if (!item.stockId || !inventoryDocs[item.stockId]) return;
 
@@ -1662,7 +1589,7 @@
                         const isCarton = (rawUnit === 'box' || rawUnit === 'carton' || rawUnit === 'كرتونة' || rawUnit === 'كرتونه' || itemName.includes('شحم بريفيكس'));
                         const isReturn = item.isReturn === true;
 
-                        const pcsPerCarton = Number(prodData.pcsPerCarton) || Number(prodData.cartonSize) || Number(prodData.unitFactor) || 1;
+                        const pcsPerCarton = Number(prodData.pcsPerCarton || prodData.cartonSize || prodData.unitFactor) || 1;
                         let piecesToModify = qty;
                         if (isCarton && pcsPerCarton > 1) {
                             piecesToModify = qty * pcsPerCarton;
@@ -1675,6 +1602,7 @@
                         batch.update(ref, { totalPcs: newTotalPcs });
                     });
 
+                    // نقل المعاملات المالية للسلة
                     txSnapshot.forEach(txDoc => {
                         batch.update(db.collection("transactions").doc(txDoc.id), {
                             isDeleted: true,
@@ -1682,11 +1610,13 @@
                         });
                     });
 
+                    // نقل الفاتورة نفسها للسلة
                     batch.update(db.collection("invoices").doc(id), {
                         isDeleted: true,
                         deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
 
+                    // تنفيذ التغييرات بطلب واحد
                     await batch.commit();
 
                     await loadData(false, loadedScope === 'ARCHIVE');
@@ -1769,13 +1699,6 @@
     };
     
     loadData(true, false);
-</script>
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js")
-    .then(() => console.log("SW Registered Successfully"))
-    .catch((err) => console.log("SW Registration Failed", err));
-}
 </script>
 </body>
 </html>
