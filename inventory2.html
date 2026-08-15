@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المخزن والتنبيهات الذكية</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-green: #0b6641; 
+            --accent-green: #10b981;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --danger: #f43f5e;
+            --danger-bg: #fff1f2;
+            --warning: #d97706;
+            --warning-bg: #fef3c7;
+        }
+
+        body { 
+            background-color: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 90px;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            color: white;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-radius: 0 0 25px 25px;
+            box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
+        }
+
+        .top-nav i { cursor: pointer; font-size: 1.2rem; transition: 0.2s; }
+        .top-nav i:active { transform: scale(0.9); }
+
+        /* شريط التنبيهات الذكي للأنواقص */
+        .alert-banner {
+            margin: 12px 15px 0 15px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe3e3 100%);
+            border: 1px solid #fca5a5;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .alert-banner:active { transform: scale(0.98); }
+        .alert-banner-info { display: flex; align-items: center; gap: 10px; }
+        .alert-banner-icon {
+            width: 38px; height: 38px; border-radius: 12px;
+            background: var(--danger); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+            animation: pulse-danger 2s infinite;
+        }
+        @keyframes pulse-danger {
+            0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+        }
+        .alert-banner-text { font-size: 0.85rem; font-weight: 800; color: #991b1b; }
+        .alert-banner-sub { font-size: 0.75rem; font-weight: 600; color: #b91c1c; }
+        .alert-btn-filter {
+            background: #991b1b; color: #fff; border: none;
+            padding: 6px 12px; border-radius: 10px;
+            font-size: 0.75rem; font-weight: 800;
+        }
+
+        .search-section {
+            padding: 15px 20px 10px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .search-wrapper { position: relative; flex-grow: 1; }
+        .search-wrapper i {
+            position: absolute; right: 15px; top: 50%;
+            transform: translateY(-50%); color: var(--primary-green);
+        }
+        .search-input {
+            width: 100%; padding: 14px 40px 14px 15px;
+            background: white; border: 1px solid var(--border-color);
+            border-radius: 15px; font-size: 0.95rem; outline: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02); transition: 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent-green); }
+        
+        .qr-btn {
+            background: white; color: var(--primary-green);
+            border: 1px solid var(--border-color);
+            width: 52px; height: 52px; border-radius: 15px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            cursor: pointer;
+        }
+
+        /* أزرار الفلترة السريعة */
+        .filter-pills {
+            display: flex; gap: 8px; padding: 0 20px 12px;
+            overflow-x: auto; scrollbar-width: none;
+        }
+        .filter-pill {
+            padding: 6px 14px; border-radius: 20px; font-size: 0.8rem;
+            font-weight: 700; background: #fff; border: 1px solid var(--border-color);
+            color: var(--text-muted); cursor: pointer; white-space: nowrap; transition: 0.2s;
+        }
+        .filter-pill.active {
+            background: var(--primary-green); color: #fff; border-color: var(--primary-green);
+        }
+        .filter-pill.danger-pill.active {
+            background: var(--danger); border-color: var(--danger);
+        }
+
+        .grid-layout {
+            display: grid; grid-template-columns: 2fr 1fr 0.6fr 0.6fr;
+            gap: 10px; align-items: center;
+        }
+
+        .table-headers {
+            padding: 0 25px 10px 25px; font-size: 0.8rem;
+            font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+        }
+        .table-headers div { text-align: center; }
+        .table-headers div:first-child { text-align: right; }
+
+        .item-card {
+            padding: 16px 20px; background: white; border-radius: 20px;
+            margin: 0 15px 12px; transition: all 0.2s ease;
+            cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.01); position: relative;
+        }
+        .item-card:active { transform: scale(0.98); background: #f8f9fa; }
+        
+        .item-card.out-of-stock {
+            background: #fff5f5; border-color: #fca5a5;
+        }
+        .item-card.low-stock {
+            background: #fffbeb; border-color: #fcd34d;
+        }
+
+        .item-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 3px; color: var(--text-dark); line-height: 1.3;}
+        .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
+
+        .item-tags { display: flex; gap: 5px; margin-top: 4px; }
+        .hot-tag {
+            background: #ffe4e6; color: #e11d48; font-size: 0.68rem;
+            font-weight: 800; padding: 2px 7px; border-radius: 6px;
+        }
+        .shortage-tag {
+            background: #fee2e2; color: #dc2626; font-size: 0.68rem;
+            font-weight: 800; padding: 2px 7px; border-radius: 6px;
+        }
+
+        .item-price { 
+            text-align: center; color: var(--primary-green); 
+            font-weight: 800; font-size: 1.05rem;
+        }
+
+        .qty-badge {
+            background: #f0fdf4; color: var(--primary-green);
+            padding: 5px 0; border-radius: 10px; font-weight: 700;
+            font-size: 0.9rem; text-align: center; width: 100%;
+            display: inline-block; border: 1px solid #dcfce7;
+        }
+        
+        .qty-low { background: var(--warning-bg); color: var(--warning); border-color: #fde68a; }
+        .qty-zero { background: var(--danger-bg); color: var(--danger); border-color: #fecdd3; }
+
+        .bottom-summary {
+            position: fixed; bottom: 0; width: 100%; background: white;
+            padding: 15px 20px; font-weight: 800; font-size: 0.9rem;
+            display: flex; justify-content: space-around;
+            border-top: 1px solid var(--border-color);
+            color: var(--primary-green); box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+            z-index: 999;
+        }
+
+        .fab {
+            position: fixed; bottom: 80px; right: 20px;
+            background: var(--primary-green); color: white;
+            width: 60px; height: 60px; border-radius: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.6rem; box-shadow: 0 8px 25px rgba(11, 102, 65, 0.4);
+            text-decoration: none; transition: 0.3s; z-index: 1000;
+        }
+        .fab:hover { background: #0a5234; transform: translateY(-3px); color: white;}
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <i class="fas fa-sync-alt" onclick="location.reload()"></i>
+    <span class="fw-bold">المخزن والتنبيهات</span>
+    <i class="fas fa-chevron-left" onclick="history.back()"></i>
+</div>
+
+<!-- شريط تنبيه النواقص الذكي -->
+<div class="alert-banner" id="alertBanner" onclick="filterShortagesOnly()">
+    <div class="alert-banner-info">
+        <div class="alert-banner-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div>
+            <div class="alert-banner-text" id="alertBannerTitle">تنبيه نواقص المخزون</div>
+            <div class="alert-banner-sub" id="alertBannerSub">يوجد أصناف في حالة حرجة</div>
+        </div>
+    </div>
+    <button class="alert-btn-filter">عرض النواقص</button>
+</div>
+
+<div class="search-section">
+    <button class="qr-btn" aria-label="مسح الباركود"><i class="fas fa-qrcode"></i></button>
+    <div class="search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" class="search-input" placeholder="ابحث عن منتج أو باركود..." oninput="renderItems()">
+    </div>
+</div>
+
+<!-- أزرار الفلترة السريعة -->
+<div class="filter-pills">
+    <button class="filter-pill active" id="btnFilterAll" onclick="setFilter('all')">الكل (<span id="countAll">0</span>)</button>
+    <button class="filter-pill danger-pill" id="btnFilterShortages" onclick="setFilter('shortages')">⚠️ النواقص والحرج (<span id="countShortages">0</span>)</button>
+    <button class="filter-pill" id="btnFilterPopular" onclick="setFilter('popular')">🔥 الأكثر استهلاكاً (<span id="countPopular">0</span>)</button>
+</div>
+
+<div class="table-headers grid-layout">
+    <div>المنتج والباركود</div>
+    <div>السعر</div>
+    <div>كرتونة</div>
+    <div>جركن</div>
+</div>
+
+<div id="itemsContainer"></div>
+
+<div class="bottom-summary">
+    <div><i class="fas fa-boxes me-1"></i> إجمالي الأصناف: <span id="totalCount">0</span></div>
+    <div class="text-danger"><i class="fas fa-arrow-down me-1"></i> النواقص: <span id="shortageCount">0</span></div>
+</div>
+
+<a href="add-product.html" class="fab" aria-label="إضافة منتج">
+    <i class="fas fa-plus"></i>
+</a>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let allData = [];
+    let activeFilter = 'all'; // 'all', 'shortages', 'popular'
+    let previousCriticalCount = 0;
+
+    // محرك الأصوات الذكي بدون ملفات خارجية (Web Audio API)
+    function playAlertSound(type = 'warning') {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+
+            const playTone = (freq, typeOsc, delay, duration) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = typeOsc;
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+                gain.gain.setValueAtTime(0.2, ctx.currentTime + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + delay);
+                osc.stop(ctx.currentTime + delay + duration);
+            };
+
+            if (type === 'danger') {
+                // نغمة إنذار حادة ثنائية عند النفاد التام
+                playTone(880, 'sawtooth', 0, 0.2);
+                playTone(440, 'sawtooth', 0.22, 0.35);
+            } else {
+                // نغمة تنبيهية عند اقتراب النفاد
+                playTone(587.33, 'sine', 0, 0.18);
+                playTone(739.99, 'sine', 0.2, 0.25);
+            }
+        } catch (e) {
+            console.log("الصوت محجوب حتى التفاعل مع الصفحة");
+        }
+    }
+
+    onSnapshot(collection(db, "inventory"), (snap) => {
+        allData = [];
+        let zeroCount = 0;
+        let lowCount = 0;
+        let popularShortageCount = 0;
+
+        snap.forEach(doc => {
+            const data = doc.data();
+            if (!data.isDeleted) {
+                const factor = Number(data.unitFactor) || 1;
+                const total = Number(data.totalPcs !== undefined && data.totalPcs !== null ? data.totalPcs : (data.qty || 0));
+                const minAllowed = (Number(data.min) || 0) * factor;
+                const isZero = total <= 0;
+                const isLow = !isZero && (minAllowed > 0 && total <= minAllowed);
+                
+                // صنف نشط / أكثر استخداماً إذا كان له حد أدنى مرجعي مرتفع أو مبيعات كثيرة
+                const isPopular = Number(data.salesCount || 0) > 10 || Number(data.min || 0) >= 5;
+
+                if (isZero) zeroCount++;
+                if (isLow) lowCount++;
+                if ((isZero || isLow) && isPopular) popularShortageCount++;
+
+                allData.push({ 
+                    id: doc.id, 
+                    ...data,
+                    isZero,
+                    isLow,
+                    isPopular,
+                    totalPcsVal: total
+                });
+            }
+        });
+
+        // تشغيل صوت التنبيه عند اكتشاف زيادة في النواقص
+        const totalCritical = zeroCount + lowCount;
+        if (totalCritical > previousCriticalCount && previousCriticalCount !== 0) {
+            playAlertSound(zeroCount > 0 ? 'danger' : 'warning');
+        }
+        previousCriticalCount = totalCritical;
+
+        updateAlertBanner(zeroCount, lowCount, popularShortageCount);
+        renderItems();
+    }, (error) => {
+        console.error("خطأ في جلب البيانات: ", error);
+        document.getElementById('itemsContainer').innerHTML = 
+            `<div class="text-center text-danger mt-4 fw-bold">حدث خطأ أثناء جلب البيانات.</div>`;
+    });
+
+    function updateAlertBanner(zeroCount, lowCount, popularShortageCount) {
+        const banner = document.getElementById('alertBanner');
+        const title = document.getElementById('alertBannerTitle');
+        const sub = document.getElementById('alertBannerSub');
+        const countShortagesEl = document.getElementById('countShortages');
+
+        const totalShortages = zeroCount + lowCount;
+        if (countShortagesEl) countShortagesEl.innerText = totalShortages;
+
+        if (totalShortages > 0) {
+            banner.style.display = 'flex';
+            if (zeroCount > 0) {
+                title.innerText = `⚠️ تنبيه: ${zeroCount} صنف انتهى بالكامل!`;
+                sub.innerText = popularShortageCount > 0 
+                    ? `منها ${popularShortageCount} صنف من الأكثر استخداماً!` 
+                    : `يرجى إعادة الطلب في أقرب وقت.`;
+            } else {
+                title.innerText = `⚡ تنبيه: ${lowCount} صنف اقترب من النفاد`;
+                sub.innerText = `الكميات المتبقية وصلت لحد الأمان الأدنى.`;
+            }
+        } else {
+            banner.style.display = 'none';
+        }
+    }
+
+    window.setFilter = function(filterType) {
+        activeFilter = filterType;
+        document.querySelectorAll('.filter-pill').forEach(btn => btn.classList.remove('active'));
+        if (filterType === 'all') document.getElementById('btnFilterAll').classList.add('active');
+        if (filterType === 'shortages') document.getElementById('btnFilterShortages').classList.add('active');
+        if (filterType === 'popular') document.getElementById('btnFilterPopular').classList.add('active');
+        renderItems();
+    };
+
+    window.filterShortagesOnly = function() {
+        setFilter('shortages');
+    };
+
+    window.renderItems = function() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const container = document.getElementById('itemsContainer');
+        
+        let filtered = allData.filter(i => {
+            const matchesSearch = (i.name && i.name.toLowerCase().includes(term)) || 
+                                  (i.barcode && i.barcode.includes(term));
+            
+            if (!matchesSearch) return false;
+
+            if (activeFilter === 'shortages') return i.isZero || i.isLow;
+            if (activeFilter === 'popular') return i.isPopular;
+            return true;
+        });
+
+        // ترتيب الأولوية الذكي: الأصناف المنتهية للأكثر استخداماً تظهر أولاً
+        filtered.sort((a, b) => {
+            if (a.isZero && a.isPopular && !(b.isZero && b.isPopular)) return -1;
+            if (!(a.isZero && a.isPopular) && b.isZero && b.isPopular) return 1;
+            
+            if (a.isZero && !b.isZero) return -1;
+            if (!a.isZero && b.isZero) return 1;
+
+            if (a.isLow && !b.isLow) return -1;
+            if (!a.isLow && b.isLow) return 1;
+
+            return 0;
+        });
+
+        let html = '';
+        let shortageTotal = 0;
+        let popularCount = 0;
+
+        filtered.forEach(item => {
+            const factor = Number(item.unitFactor) || 1; 
+            const total = item.totalPcsVal;
+            
+            const cartons = Math.floor(total / factor);
+            const jerrycans = total % factor;
+
+            if (item.isZero || item.isLow) shortageTotal++;
+            if (item.isPopular) popularCount++;
+
+            let cardClass = 'item-card';
+            let badgeClass = 'qty-badge';
+
+            if (item.isZero) {
+                cardClass += ' out-of-stock';
+                badgeClass += ' qty-zero';
+            } else if (item.isLow) {
+                cardClass += ' low-stock';
+                badgeClass += ' qty-low';
+            }
+
+            html += `
+                <div class="${cardClass}" onclick="goToDetails('${item.id}')">
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-barcode">باركود: ${item.barcode || '---'}</div>
+                        <div class="item-tags">
+                            ${item.isPopular ? '<span class="hot-tag"><i class="fas fa-fire me-1"></i>الأكثر طلباً</span>' : ''}
+                            ${item.isZero ? '<span class="shortage-tag"><i class="fas fa-times-circle me-1"></i>منتهي</span>' : ''}
+                            ${item.isLow ? '<span class="shortage-tag" style="background:#fef3c7; color:#b45309;"><i class="fas fa-exclamation-triangle me-1"></i>وشيك النفاد</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="item-price">
+                        ${Number(item.sell || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                    </div>
+                    <div>
+                        <div class="${badgeClass}">${cartons}</div>
+                    </div>
+                    <div>
+                        <div class="${badgeClass}">${jerrycans}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (filtered.length === 0) {
+            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-box-open fa-2x mb-2"></i><br>لا توجد أصناف مطابقة للتصفية الحالية</div>`;
+        }
+
+        container.innerHTML = html;
+        
+        document.getElementById('countAll').innerText = allData.length;
+        document.getElementById('countPopular').innerText = allData.filter(x => x.isPopular).length;
+        document.getElementById('totalCount').innerText = filtered.length;
+        document.getElementById('shortageCount').innerText = shortageTotal;
+    };
+
+    window.goToDetails = function(id) {
+        window.location.href = `product-details.html?id=${id}`;
+    };
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>
