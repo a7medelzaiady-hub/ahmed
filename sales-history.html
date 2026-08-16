@@ -636,6 +636,23 @@
         return 0;
     }
 
+    function toArabicDigits(num) {
+        const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        return String(num).replace(/[0-9]/g, d => arabicDigits[d]);
+    }
+
+    function formatArabicDayMonth(dateStr) {
+        // المدخل بصيغة YYYY-MM-DD ويرجع مثل ١٦-اغسطس
+        if (!dateStr || !dateStr.includes('-')) return dateStr || "";
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        const monthNames = ["يناير", "فبراير", "مارس", "ابريل", "مايو", "يونيو", "يوليو", "اغسطس", "سبتمبر", "اكتوبر", "نوفمبر", "ديسمبر"];
+        const day = parseInt(parts[2], 10);
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        const monthName = monthNames[monthIndex] || "";
+        return `${toArabicDigits(day)}-${monthName}`;
+    }
+
     function cleanDateString(dateStr) {
         if (!dateStr) return "";
         dateStr = convertToEnglishNumbers(dateStr);
@@ -1648,9 +1665,8 @@
                 if (data.isDeleted === true) return;
 
                 const invObj = { id: d.id, ...data };
-                const invDate = parseInvoiceDate(invObj);
-                const invTime = formatInvoiceTime(invObj.time, invObj.date);
-                const invDateWithTime = `${invDate} | ${invTime}`;
+                const invDateRaw = parseInvoiceDate(invObj); // بصيغة YYYY-MM-DD
+                const invDateFormatted = formatArabicDayMonth(invDateRaw);
                 const customerName = invObj.customerName || 'النقدى';
 
                 if (invObj.items && invObj.items.length > 0) {
@@ -1671,10 +1687,29 @@
                         else { qtyJarkan = rawQty; priceJarkan = rawPrice; }
 
                         excelRows.push({
-                            "التاريخ": invDateWithTime, "الحركة": movementType, "اسم العميل": customerName,
+                            "التاريخ": invDateFormatted, "الحركة": movementType, "البيان": itemName, "اسم العميل": customerName,
                             "الصنف": itemName, "عدد الجركن": qtyJarkan, "عدد الكرتونة": qtyCarton,
                             "سعر الجركن": priceJarkan, "سعر الكرتونة": priceCarton
                         });
+                    });
+                }
+
+                // صفوف السداد: نقدى ومحفظة كل واحد فى سطر مستقل
+                const cashPaid = Number(invObj.cashAmount ?? invObj.cashPaid ?? invObj.paid) || 0;
+                const walletPaid = Number(invObj.walletAmount ?? invObj.walletPaid) || 0;
+
+                if (cashPaid > 0) {
+                    excelRows.push({
+                        "التاريخ": invDateFormatted, "الحركة": "سداد منه نقدى", "البيان": "سداد نقدى", "اسم العميل": customerName,
+                        "الصنف": "", "عدد الجركن": "", "عدد الكرتونة": 1,
+                        "سعر الجركن": "", "سعر الكرتونة": cashPaid
+                    });
+                }
+                if (walletPaid > 0) {
+                    excelRows.push({
+                        "التاريخ": invDateFormatted, "الحركة": "سداد منه محفظه", "البيان": "سداد نقدى", "اسم العميل": customerName,
+                        "الصنف": "", "عدد الجركن": "", "عدد الكرتونة": 1,
+                        "سعر الجركن": "", "سعر الكرتونة": walletPaid
                     });
                 }
             });
