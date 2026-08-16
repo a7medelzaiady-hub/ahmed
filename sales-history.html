@@ -469,11 +469,11 @@
                 </div>
             </div>
             <div class="action-buttons-group">
-                <button class="btn btn-outline-dark" onclick="downloadInvoicesImagesByDate()" title="تحميل الفواتير وملحوظاتها">
-                    <i class="fas fa-images"></i> صور الفواتير ZIP
+                <button class="btn btn-outline-dark" onclick="downloadInvoicesImagesByDate()" title="تحميل كل الفواتير مقسمة حسب اليوم">
+                    <i class="fas fa-images"></i> صور كل الفواتير ZIP
                 </button>
-                <button class="btn btn-dark text-white" onclick="printDailyComprehensiveReport()" title="تقرير مالي للمبيعات والمخزن اليومي">
-                    <i class="fas fa-file-invoice"></i> تقرير اليوم
+                <button class="btn btn-dark text-white" onclick="printDailyComprehensiveReport()" title="تقرير مالي شامل لكل الأيام">
+                    <i class="fas fa-file-invoice"></i> تقرير كل الأيام
                 </button>
             </div>
         </div>
@@ -1263,197 +1263,277 @@
         });
     }
 
-    window.downloadInvoicesImagesByDate = async () => {
-        const filterInput = document.getElementById('dateFilterInput').value;
-        const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
-        const targetInvoices = allInvoices.filter(inv => parseInvoiceDate(inv) === targetDate);
+    async function fetchFullArchive() {
+        const [custSnap, transSnap, invSnap] = await Promise.all([
+            db.collection("customers").get().catch(() => null),
+            db.collection("transactions").get().catch(() => null),
+            db.collection("invoices").orderBy("timestamp", "desc").get()
+        ]);
 
-        if (targetInvoices.length === 0) {
-            window.showCustomUi({ title: "تنبيه", message: "لا توجد فواتير في هذا التاريخ لتنزيلها.", icon: "info" });
-            return;
+        const customersMap = {};
+        const customersNameIndex = {};
+        if (custSnap) {
+            custSnap.forEach(d => {
+                const cData = d.data();
+                customersMap[d.id] = { id: d.id, name: cData.name };
+                if (cData.name) customersNameIndex[normalizeName(cData.name)] = d.id;
+            });
         }
 
-        window.showCustomUi({ 
-            title: "جاري التجميع والتحميل...", 
-            message: `جاري تجميع الفواتير لليوم.\nيرجى الانتظار لحين الانتهاء وتوليد الملف...`, 
-            type: "alert", 
-            icon: "info" 
+        const vouchers = [];
+        if (transSnap) {
+            transSnap.forEach(d => {
+                const tr = d.data();
+                if (tr.isDeleted === true) return;
+
+                const isInvoicePayment = tr.invoiceId || tr.purchaseId || tr.billId || tr.isInvoicePayment ||
+                                         (tr.note && (tr.note.includes('فاتورة') || tr.note.includes('فواتير')));
+
+                if (tr.type === 'قبض' && !isInvoicePayment) {
+                    let partyId = tr.partyId || tr.customerId || tr.supplierId || "";
+                    let partyName = tr.customerName || tr.partyName || tr.supplierName || tr.name || "";
+
+                    if (!partyId && partyName) {
+                        const norm = normalizeName(partyName);
+                        if (customersNameIndex[norm]) partyId = customersNameIndex[norm];
+                    }
+
+                    const amt = Number(tr.amount || tr.total || 0);
+                    const method = tr.method || tr.paymentMethod || 'نقدى';
+                    let cashAmount = 0, walletAmount = 0;
+
+                    if (method === 'محفظة' || method === 'محفظه') { walletAmount = amt; } else { cashAmount = amt; }
+                    if (tr.cashPaid !== undefined || tr.cashAmount !== undefined) cashAmount = Number(tr.cashPaid ?? tr.cashAmount) || 0;
+                    if (tr.walletPaid !== undefined || tr.walletAmount !== undefined) walletAmount = Number(tr.walletPaid ?? tr.walletAmount) || 0;
+
+                    const resolvedCustomerName = (customersMap[partyId] && customersMap[partyId].name) || partyName || 'عميل غير معروف';
+
+                    vouchers.push({
+                        id: d.id,
+                        date: parseVoucherDate(tr),
+                        cashAmount, walletAmount, method,
+                        customerName: resolvedCustomerName,
+                        note: tr.note || tr.notes || ''
+                    });
+                }
+            });
+        }
+
+        const invoices = [];
+        invSnap.forEach(d => {
+            const data = d.data();
+            if (data.isDeleted === true) return;
+
+            let cPaid = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+            let wPaid = Number(data.walletAmount ?? data.walletPaid) || 0;
+
+            invoices.push({ id: d.id, ...data, calculatedCash: cPaid, calculatedWallet: wPaid });
+        });
+
+        return { invoices, vouchers };
+    }
+
+    window.downloadInvoicesImagesByDate = async () => {
+        window.showCustomUi({
+            title: "جاري التجميع والتحميل...",
+            message: `جاري تجميع كل الفواتير مقسمة حسب كل يوم فى مجلد خاص بيه.\nيرجى الانتظار لحين الانتهاء وتوليد الملف...`,
+            type: "alert",
+            icon: "info"
         });
 
         try {
+            const { invoices } = await fetchFullArchive();
+
+            if (invoices.length === 0) {
+                window.showCustomUi({ title: "تنبيه", message: "لا توجد فواتير لتنزيلها.", icon: "info" });
+                return;
+            }
+
+            // تجميع الفواتير حسب اليوم
+            const invoicesByDate = {};
+            invoices.forEach(inv => {
+                const dKey = parseInvoiceDate(inv) || 'بدون_تاريخ';
+                if (!invoicesByDate[dKey]) invoicesByDate[dKey] = [];
+                invoicesByDate[dKey].push(inv);
+            });
+
             const zip = new JSZip();
-            const folder = zip.folder(`صور_الفواتير_يوم_${targetDate}`);
-            let modificationReportText = `تقرير ملاحظات وتعديلات الفواتير ليوم: ${targetDate}\n==================================================\n\n`;
-            let hasAnyNotes = false;
+            const sortedDateKeys = Object.keys(invoicesByDate).sort((a, b) => b.localeCompare(a));
 
-            for (let i = 0; i < targetInvoices.length; i++) {
-                const inv = targetInvoices[i];
-                const safeCustomerName = (inv.customerName || 'عميل_نقدى').replace(/[/\\?%*:|"<>]/g, '-');
-                const invNote = inv.notes || "";
-                
-                if (invNote.trim() !== "" && invNote !== "معدلة") {
-                    hasAnyNotes = true;
-                    modificationReportText += `[فاتورة رقم ${i + 1}] العميل: ${inv.customerName || 'عميل نقدى'}\n`;
-                    modificationReportText += `تفاصيل التعديل: ${invNote}\n--------------------------------------------------\n`;
-                }
+            for (const dateKey of sortedDateKeys) {
+                const dayInvoices = invoicesByDate[dateKey];
+                const folder = zip.folder(`فواتير_يوم_${dateKey}`);
+                let modificationReportText = `تقرير ملاحظات وتعديلات الفواتير ليوم: ${dateKey}\n==================================================\n\n`;
+                let hasAnyNotes = false;
 
-                try {
-                    const invoiceBlob = await getInvoiceImageBlob(inv);
-                    if (invoiceBlob) {
-                        folder.file(`فاتورة_${safeCustomerName}_${i + 1}.png`, invoiceBlob);
+                for (let i = 0; i < dayInvoices.length; i++) {
+                    const inv = dayInvoices[i];
+                    const safeCustomerName = (inv.customerName || 'عميل_نقدى').replace(/[/\\?%*:|"<>]/g, '-');
+                    const invNote = inv.notes || "";
+
+                    if (invNote.trim() !== "" && invNote !== "معدلة") {
+                        hasAnyNotes = true;
+                        modificationReportText += `[فاتورة رقم ${i + 1}] العميل: ${inv.customerName || 'عميل نقدى'}\n`;
+                        modificationReportText += `تفاصيل التعديل: ${invNote}\n--------------------------------------------------\n`;
                     }
-                } catch (e) {
-                    console.error("تخطي توليد صورة فاتورة:", e);
+
+                    try {
+                        const invoiceBlob = await getInvoiceImageBlob(inv);
+                        if (invoiceBlob) {
+                            folder.file(`فاتورة_${safeCustomerName}_${i + 1}.png`, invoiceBlob);
+                        }
+                    } catch (e) {
+                        console.error("تخطي توليد صورة فاتورة:", e);
+                    }
                 }
+
+                if (!hasAnyNotes) {
+                    modificationReportText += `لا توجد أي تعديلات أو ملاحظات مسجلة على فواتير هذا اليوم.\n`;
+                }
+
+                folder.file(`سجل_تعديلات_وملحوظات_اليوم.txt`, modificationReportText);
             }
 
-            if (!hasAnyNotes) {
-                modificationReportText += `لا توجد أي تعديلات أو ملاحظات مسجلة على فواتير هذا اليوم.\n`;
-            }
-
-            folder.file(`سجل_تعديلات_وملحوظات_اليوم.txt`, modificationReportText);
             const content = await zip.generateAsync({ type: "blob" });
-            
+
             const url = URL.createObjectURL(content);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `صور_الفواتير_يوم_${targetDate}.zip`;
+            a.download = `جميع_الفواتير_مقسمة_حسب_اليوم.zip`;
             a.click();
             URL.revokeObjectURL(url);
-            
-            window.showCustomUi({ title: "اكتمل التنزيل", message: "تم تنزيل ملف ZIP بنجاح.", icon: "success" });
+
+            window.showCustomUi({ title: "اكتمل التنزيل", message: "تم تنزيل ملف ZIP بنجاح، وكل يوم فى مجلد خاص بيه.", icon: "success" });
         } catch (error) {
             console.error(error);
             window.showCustomUi({ title: "خطأ", message: "حدث خطأ أثناء تجميع وضغط الملفات.", icon: "danger" });
         }
     };
 
-    window.printDailyComprehensiveReport = () => {
-        const filterInput = document.getElementById('dateFilterInput').value;
-        const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
-
-        const targetInvoices = allInvoices.filter(inv => parseInvoiceDate(inv) === targetDate);
-        const targetVouchers = allReceiptVouchers.filter(v => parseVoucherDate(v) === targetDate);
-
-        if (targetInvoices.length === 0 && targetVouchers.length === 0) {
-            window.showCustomUi({ title: "لا توجد حركات ماليّة", message: `لا تتوفر مبيعات أو سندات سداد مسجلة في تاريخ (${targetDate}).`, icon: "info" });
-            return;
-        }
-
-        let totalSales = 0;
-        let totalCashPaid = 0;
-        let totalWalletPaid = 0;
-        let totalRemainingDebt = 0;
-
-        targetInvoices.forEach(inv => {
-            totalSales += (Number(inv.total) || 0);
-            totalCashPaid += inv.calculatedCash;
-            totalWalletPaid += inv.calculatedWallet;
-            totalRemainingDebt += Math.max(0, Number(inv.remaining) || 0);
+    window.printDailyComprehensiveReport = async () => {
+        window.showCustomUi({
+            title: "جاري تجهيز التقرير...",
+            message: `جاري تجميع تقرير كل الأيام.\nيرجى الانتظار...`,
+            type: "alert",
+            icon: "info"
         });
 
-        targetVouchers.forEach(v => {
-            totalCashPaid += v.cashAmount;
-            totalWalletPaid += v.walletAmount;
-        });
+        try {
+            const { invoices, vouchers } = await fetchFullArchive();
 
-        const itemsSummary = {};
-        targetInvoices.forEach(inv => {
-            (inv.items || []).forEach(itm => {
-                const itemName = itm.name || "صنف غير معروف";
-                const qty = Number(itm.qty) || 0;
-                const price = Number(itm.price) || 0;
-                const totalItemPrice = qty * price;
-                const rawUnit = (itm.unit || "").trim().toLowerCase();
+            if (invoices.length === 0 && vouchers.length === 0) {
+                window.showCustomUi({ title: "لا توجد حركات ماليّة", message: `لا تتوفر مبيعات أو سندات سداد مسجلة بعد.`, icon: "info" });
+                return;
+            }
 
-                let isCarton = (rawUnit === 'box' || rawUnit === 'carton' || rawUnit === 'كرتونة' || rawUnit === 'كرتونه' || itemName.includes('شحم بريفيكس'));
-                const displayUnit = isCarton ? "كرتونة" : "جركن";
+            const allDatesSet = new Set();
+            invoices.forEach(inv => allDatesSet.add(parseInvoiceDate(inv) || 'بدون_تاريخ'));
+            vouchers.forEach(v => allDatesSet.add(parseVoucherDate(v) || 'بدون_تاريخ'));
+            const sortedDates = Array.from(allDatesSet).sort((a, b) => b.localeCompare(a));
 
-                if (!itemsSummary[itemName]) {
-                    itemsSummary[itemName] = { qty: 0, total: 0, unit: displayUnit };
-                }
-                itemsSummary[itemName].qty += qty;
-                itemsSummary[itemName].total += totalItemPrice;
+            let fullReportHtml = "";
+
+            sortedDates.forEach((targetDate, dayIdx) => {
+                const targetInvoices = invoices.filter(inv => (parseInvoiceDate(inv) || 'بدون_تاريخ') === targetDate);
+                const targetVouchers = vouchers.filter(v => (parseVoucherDate(v) || 'بدون_تاريخ') === targetDate);
+
+                let totalSales = 0, totalCashPaid = 0, totalWalletPaid = 0, totalRemainingDebt = 0;
+
+                targetInvoices.forEach(inv => {
+                    totalSales += (Number(inv.total) || 0);
+                    totalCashPaid += inv.calculatedCash;
+                    totalWalletPaid += inv.calculatedWallet;
+                    totalRemainingDebt += Math.max(0, Number(inv.remaining) || 0);
+                });
+
+                targetVouchers.forEach(v => {
+                    totalCashPaid += v.cashAmount;
+                    totalWalletPaid += v.walletAmount;
+                });
+
+                let invoicesDetailsHtml = "";
+                targetInvoices.forEach((inv, i) => {
+                    const name = inv.customerName || 'عميل نقدى';
+                    const invTotal = Number(inv.total) || 0;
+                    const cash = inv.calculatedCash || 0;
+                    const wallet = inv.calculatedWallet || 0;
+                    const rem = Number(inv.remaining) || 0;
+                    const noteText = inv.notes && inv.notes !== "معدلة" ? inv.notes : "لا توجد";
+
+                    invoicesDetailsHtml += `
+                        <div style="font-size:10.5px; border-bottom:1px solid #eee; padding:6px 0; line-height:1.4;">
+                            <div style="display:flex; justify-content:space-between;">
+                                <span><b>${i+1}. ${name}</b></span>
+                                <span class="num" style="font-weight:bold;">${invTotal.toFixed(1)} EGP</span>
+                            </div>
+                            <div style="display:flex; gap:10px; color:#555; font-size:9.5px;">
+                                <span>كاش: <b class="num">${cash.toFixed(1)}</b></span>
+                                <span>محفظة: <b class="num">${wallet.toFixed(1)}</b></span>
+                                <span style="color:${rem > 0 ? 'var(--germany-red)' : '#000000'}">آجل: <b class="num">${rem.toFixed(1)}</b></span>
+                            </div>
+                            <div style="font-size:9px; color:#665200; margin-top:3px; background:#fffdf5; padding:2px 5px; border-radius:3px;">
+                                <i class="fas fa-edit"></i> <b>الملحوظة:</b> ${noteText}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                let vouchersDetailsHtml = "";
+                targetVouchers.forEach((v, i) => {
+                    vouchersDetailsHtml += `
+                        <div style="font-size:10.5px; border-bottom:1px solid #eee; padding:5px 0; line-height:1.4;">
+                            <div style="display:flex; justify-content:space-between;">
+                                <span><b>${i+1}. ${v.customerName}</b></span>
+                                <span class="num" style="color:var(--purple); font-weight:bold;">${(v.cashAmount + v.walletAmount).toFixed(1)} EGP</span>
+                            </div>
+                            <div style="display:flex; gap:10px; color:#555; font-size:9.5px;">
+                                <span>كاش: <b class="num">${v.cashAmount.toFixed(1)}</b></span>
+                                <span>محفظة: <b class="num">${v.walletAmount.toFixed(1)}</b></span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                const isLastDay = dayIdx === sortedDates.length - 1;
+                fullReportHtml += `
+                    <div style="width:100%; font-family:'Cairo', sans-serif; color:#000; direction:rtl; padding:8px; background:#fff; box-sizing: border-box; ${isLastDay ? '' : 'page-break-after: always;'}">
+                        <div style="text-align:center; margin-bottom:15px; border-bottom:2px solid #000; padding-bottom:8px;">
+                            <h5 style="margin:0; font-weight:800; font-size:18px;">شركة الزيادي لزيوت السيارات</h5>
+                            <p style="margin:3px 0; font-size:12px; font-weight:700;">تقرير اليوم المالي التفصيلي</p>
+                            <div style="font-size:11px; margin-top:5px; font-weight:600;">تاريخ التقرير: <b>${targetDate}</b></div>
+                        </div>
+
+                        <div style="border:1px solid #000; padding:8px; border-radius:6px; background:#fafafa; margin-bottom:14px; font-size:11.5px; line-height:1.6;">
+                            <h6 style="margin:0 0 6px 0; font-weight:bold; font-size:12px; border-bottom:1px solid #ccc; padding-bottom:3px;">📊 إجمالي الخزنة والحركة:</h6>
+                            <div style="display:flex; justify-content:space-between;"><span>إجمالي المبيعات:</span><b class="num">${totalSales.toFixed(1)} EGP</b></div>
+                            <div style="display:flex; justify-content:space-between;"><span>صافي الكاش:</span><b class="num">${totalCashPaid.toFixed(1)} EGP</b></div>
+                            <div style="display:flex; justify-content:space-between;"><span>صافي المحفظة:</span><b class="num">${totalWalletPaid.toFixed(1)} EGP</b></div>
+                            <div style="display:flex; justify-content:space-between; color:var(--germany-red);"><span>إجمالي الديون الآجلة الجديدة:</span><b class="num">${totalRemainingDebt.toFixed(1)} EGP</b></div>
+                        </div>
+
+                        <div style="margin-bottom:14px;">
+                            <h6 style="margin:0 0 4px 0; font-weight:bold; font-size:11.5px; border-bottom:1.5px solid #000; padding-bottom:3px;">مبيعات الفواتير (${targetInvoices.length}):</h6>
+                            ${invoicesDetailsHtml}
+                        </div>
+
+                        <div style="margin-bottom:14px;">
+                            <h6 style="margin:0 0 4px 0; font-weight:bold; font-size:11.5px; border-bottom:1.5px solid #000; padding-bottom:3px;">سندات القبض (${targetVouchers.length}):</h6>
+                            ${vouchersDetailsHtml}
+                        </div>
+
+                        <div style="text-align:center; margin-top:25px; font-size:10px; border-top:1.5px dashed #000; padding-top:8px;">
+                            محاسب / أحمد محمود الزيادي
+                        </div>
+                    </div>
+                `;
             });
-        });
 
-        let invoicesDetailsHtml = "";
-        targetInvoices.forEach((inv, i) => {
-            const name = inv.customerName || 'عميل نقدى';
-            const invTotal = Number(inv.total) || 0;
-            const cash = inv.calculatedCash || 0;
-            const wallet = inv.calculatedWallet || 0;
-            const rem = Number(inv.remaining) || 0;
-            const noteText = inv.notes && inv.notes !== "معدلة" ? inv.notes : "لا توجد";
-            
-            invoicesDetailsHtml += `
-                <div style="font-size:10.5px; border-bottom:1px solid #eee; padding:6px 0; line-height:1.4;">
-                    <div style="display:flex; justify-content:space-between;">
-                        <span><b>${i+1}. ${name}</b></span>
-                        <span class="num" style="font-weight:bold;">${invTotal.toFixed(1)} EGP</span>
-                    </div>
-                    <div style="display:flex; gap:10px; color:#555; font-size:9.5px;">
-                        <span>كاش: <b class="num">${cash.toFixed(1)}</b></span>
-                        <span>محفظة: <b class="num">${wallet.toFixed(1)}</b></span>
-                        <span style="color:${rem > 0 ? 'var(--germany-red)' : '#000000'}">آجل: <b class="num">${rem.toFixed(1)}</b></span>
-                    </div>
-                    <div style="font-size:9px; color:#665200; margin-top:3px; background:#fffdf5; padding:2px 5px; border-radius:3px;">
-                        <i class="fas fa-edit"></i> <b>الملحوظة:</b> ${noteText}
-                    </div>
-                </div>
-            `;
-        });
-
-        let vouchersDetailsHtml = "";
-        targetVouchers.forEach((v, i) => {
-            vouchersDetailsHtml += `
-                <div style="font-size:10.5px; border-bottom:1px solid #eee; padding:5px 0; line-height:1.4;">
-                    <div style="display:flex; justify-content:space-between;">
-                        <span><b>${i+1}. ${v.customerName}</b></span>
-                        <span class="num" style="color:var(--purple); font-weight:bold;">${(v.cashAmount + v.walletAmount).toFixed(1)} EGP</span>
-                    </div>
-                    <div style="display:flex; gap:10px; color:#555; font-size:9.5px;">
-                        <span>كاش: <b class="num">${v.cashAmount.toFixed(1)}</b></span>
-                        <span>محفظة: <b class="num">${v.walletAmount.toFixed(1)}</b></span>
-                    </div>
-                </div>
-            `;
-        });
-
-        const printSection = document.getElementById('thermalPrintSection');
-        printSection.innerHTML = `
-            <div style="width:100%; font-family:'Cairo', sans-serif; color:#000; direction:rtl; padding:8px; background:#fff; box-sizing: border-box;">
-                <div style="text-align:center; margin-bottom:15px; border-bottom:2px solid #000; padding-bottom:8px;">
-                    <h5 style="margin:0; font-weight:800; font-size:18px;">شركة الزيادي لزيوت السيارات</h5>
-                    <p style="margin:3px 0; font-size:12px; font-weight:700;">تقرير اليوم المالي التفصيلي</p>
-                    <div style="font-size:11px; margin-top:5px; font-weight:600;">تاريخ التقرير: <b>${targetDate}</b></div>
-                </div>
-
-                <div style="border:1px solid #000; padding:8px; border-radius:6px; background:#fafafa; margin-bottom:14px; font-size:11.5px; line-height:1.6;">
-                    <h6 style="margin:0 0 6px 0; font-weight:bold; font-size:12px; border-bottom:1px solid #ccc; padding-bottom:3px;">📊 إجمالي الخزنة والحركة:</h6>
-                    <div style="display:flex; justify-content:space-between;"><span>إجمالي المبيعات:</span><b class="num">${totalSales.toFixed(1)} EGP</b></div>
-                    <div style="display:flex; justify-content:space-between;"><span>صافي الكاش:</span><b class="num">${totalCashPaid.toFixed(1)} EGP</b></div>
-                    <div style="display:flex; justify-content:space-between;"><span>صافي المحفظة:</span><b class="num">${totalWalletPaid.toFixed(1)} EGP</b></div>
-                    <div style="display:flex; justify-content:space-between; color:var(--germany-red);"><span>إجمالي الديون الآجلة الجديدة:</span><b class="num">${totalRemainingDebt.toFixed(1)} EGP</b></div>
-                </div>
-
-                <div style="margin-bottom:14px;">
-                    <h6 style="margin:0 0 4px 0; font-weight:bold; font-size:11.5px; border-bottom:1.5px solid #000; padding-bottom:3px;">مبيعات الفواتير (${targetInvoices.length}):</h6>
-                    ${invoicesDetailsHtml}
-                </div>
-
-                <div style="margin-bottom:14px;">
-                    <h6 style="margin:0 0 4px 0; font-weight:bold; font-size:11.5px; border-bottom:1.5px solid #000; padding-bottom:3px;">سندات القبض (${targetVouchers.length}):</h6>
-                    ${vouchersDetailsHtml}
-                </div>
-
-                <div style="text-align:center; margin-top:25px; font-size:10px; border-top:1.5px dashed #000; padding-top:8px;">
-                    محاسب / أحمد محمود الزيادي
-                </div>
-            </div>
-        `;
-
-        window.print();
+            document.getElementById('thermalPrintSection').innerHTML = fullReportHtml;
+            window.print();
+        } catch (error) {
+            console.error(error);
+            window.showCustomUi({ title: "خطأ", message: "حدث خطأ أثناء تجهيز التقرير.", icon: "danger" });
+        }
     };
 
     window.printThermalInvoice = (id) => {
