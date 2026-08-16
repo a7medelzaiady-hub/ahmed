@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>التصدير الشامل - شركة الزيادي</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<!-- مكتبات التصدير: نفس المكتبات المستخدمة بالضبط في كل صفحة أصلية -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- Firebase (نفس إعدادات المشروع في كل الصفحات) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+    :root {
+        --primary: #0b5e3d;
+        --primary-light: #eefdf6;
+        --primary-gradient: linear-gradient(135deg, #064e3b, #0b5e3d, #14532d);
+        --bg-light: #f4f6f8;
+        --text-dark: #0f172a;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --white: #ffffff;
+        --danger: #ef4444;
+        --danger-light: #fee2e2;
+        --success: #10b981;
+        --success-light: #d1fae5;
+        --warning: #f59e0b;
+        --warning-light: #fef3c7;
+        --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        --radius-sm: 12px;
+        --radius-md: 16px;
+        --radius-lg: 24px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+        background: #e2e8f0;
+        font-family: 'Cairo', sans-serif;
+        color: var(--text-dark);
+        padding-bottom: 40px;
+        -webkit-font-smoothing: antialiased;
+    }
+    .app-container {
+        max-width: 560px;
+        margin: 0 auto;
+        background: var(--bg-light);
+        min-height: 100vh;
+        box-shadow: 0 0 40px rgba(0,0,0,0.1);
+    }
+    .header-nav {
+        background: var(--primary-gradient);
+        color: white;
+        padding: 22px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+        box-shadow: 0 10px 25px rgba(6, 78, 59, 0.2);
+    }
+    .back-btn {
+        color: white;
+        background: rgba(255,255,255,0.12);
+        width: 36px; height: 36px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        text-decoration: none !important;
+    }
+    .header-title { text-align: center; }
+    .header-title span {
+        font-size: 0.65rem; letter-spacing: 1.5px; opacity: 0.85;
+        font-weight: 800; color: #fcd34d; display: block;
+    }
+    .header-title h1 { font-size: 1.1rem; font-weight: 900; margin: 3px 0 0; }
+
+    .card-custom {
+        background: white;
+        border-radius: var(--radius-lg);
+        margin: 16px;
+        padding: 20px;
+        box-shadow: var(--card-shadow);
+        border: 1px solid rgba(0,0,0,0.02);
+    }
+    .intro-txt { font-size: 0.82rem; color: var(--text-muted); font-weight: 700; line-height: 1.8; margin-bottom: 16px; }
+
+    .label-custom { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 800; }
+    .input-field {
+        width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
+        border: 1px solid var(--border-color); background: #f8fafc;
+        font-weight: 700; font-size: 0.85rem; color: var(--text-dark); outline: none;
+    }
+    .input-field:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.08); background: white; }
+
+    .btn-export-all {
+        background: var(--primary-gradient);
+        color: white; width: 100%; border: none; padding: 16px;
+        border-radius: var(--radius-sm); font-weight: 900; font-size: 1rem;
+        box-shadow: 0 4px 15px rgba(11, 94, 61, 0.35);
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        transition: 0.2s; margin-top: 16px;
+    }
+    .btn-export-all:disabled { opacity: 0.65; }
+    .btn-export-all:active:not(:disabled) { transform: scale(0.98); }
+
+    .steps-list { margin: 18px 16px 0; display: flex; flex-direction: column; gap: 8px; }
+    .step-row {
+        display: flex; align-items: center; gap: 10px;
+        background: white; border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm); padding: 10px 14px;
+        font-size: 0.82rem; font-weight: 700; color: var(--text-muted);
+        box-shadow: var(--card-shadow);
+    }
+    .step-icon {
+        width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; font-size: 0.75rem;
+        background: #f1f5f9; color: var(--text-muted);
+    }
+    .step-row.pending .step-icon { background: #f1f5f9; color: var(--text-muted); }
+    .step-row.running .step-icon { background: var(--warning-light); color: var(--warning); }
+    .step-row.done .step-icon { background: var(--success-light); color: var(--success); }
+    .step-row.empty .step-icon { background: #f1f5f9; color: #94a3b8; }
+    .step-row.failed .step-icon { background: var(--danger-light); color: var(--danger); }
+    .step-row.done, .step-row.failed { color: var(--text-dark); }
+    .step-note { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; margin-right: auto; }
+
+    .final-status {
+        margin: 18px 16px 0; text-align: center; font-size: 0.85rem; font-weight: 800; display: none;
+        padding: 14px; border-radius: var(--radius-sm);
+    }
+    .final-status.ok { background: var(--success-light); color: #065f46; display: block; }
+    .final-status.warn { background: var(--warning-light); color: #92400e; display: block; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header-nav">
+        <div style="width: 36px;"></div>
+        <div class="header-title">
+            <span>شركة الزيادي</span>
+            <h1><i class="fas fa-file-archive me-1"></i> التصدير الشامل</h1>
+        </div>
+        <a href="index.html" class="back-btn"><i class="fas fa-home"></i></a>
+    </div>
+
+    <div class="card-custom">
+        <div class="intro-txt">
+            زر واحد يجمع تصدير <b>المبيعات</b>، <b>المشتريات</b>، <b>السندات</b>، <b>المصروفات</b>،
+            <b>أرباح اليوم المحدد</b>، و<b>سجل الأرباح المرحّل بالكامل</b> — كل واحد بملف إكسل مستقل بنفس
+            أسلوب وتنسيق التصدير الموجود بداخل صفحته الأصلية، ثم يتم ضغط الكل تلقائياً في ملف ZIP واحد للتنزيل.
+        </div>
+
+        <div>
+            <label class="label-custom">تاريخ تقرير أرباح اليوم (سيُستخدم لملف "أرباح اليوم" فقط)</label>
+            <input type="date" id="profitDateInput" class="input-field">
+        </div>
+
+        <button class="btn-export-all" id="btnExportAll" onclick="runFullExport()">
+            <i class="fas fa-cloud-download-alt"></i> تصدير شامل الآن (ملف ZIP واحد)
+        </button>
+    </div>
+
+    <div class="steps-list" id="stepsList"></div>
+
+    <div class="final-status" id="finalStatus"></div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    document.getElementById('profitDateInput').valueAsDate = new Date();
+
+    /* ============================================================
+       أدوات مشتركة
+       ============================================================ */
+    function todayISO() { return new Date().toISOString().split('T')[0]; }
+
+    function normalizeName(str) {
+        return String(str || '')
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/[\u064B-\u0652]/g, '')
+            .replace(/[إأآا]/g, 'ا')
+            .replace(/ى/g, 'ي')
+            .replace(/ة/g, 'ه')
+            .toLowerCase();
+    }
+
+    function convertToEnglishNumbers(str) {
+        if (!str) return "";
+        const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+        let res = str.toString();
+        for (let i = 0; i < 10; i++) { res = res.replace(arabicNumbers[i], i); }
+        return res;
+    }
+
+    function toArabicDigits(num) {
+        const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        return String(num).replace(/[0-9]/g, d => arabicDigits[d]);
+    }
+
+    function formatArabicDayMonth(dateStr) {
+        if (!dateStr || !dateStr.includes('-')) return dateStr || "";
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        const monthNames = ["يناير", "فبراير", "مارس", "ابريل", "مايو", "يونيو", "يوليو", "اغسطس", "سبتمبر", "اكتوبر", "نوفمبر", "ديسمبر"];
+        const year = parseInt(parts[0], 10);
+        const day = parseInt(parts[2], 10);
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        const monthName = monthNames[monthIndex] || "";
+        return `${toArabicDigits(day)}-${monthName}-${toArabicDigits(year)}`;
+    }
+
+    function cleanDateString(dateStr) {
+        if (!dateStr) return "";
+        dateStr = convertToEnglishNumbers(dateStr);
+        const match = dateStr.match(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/) || dateStr.match(/\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/);
+        return match ? match[0] : dateStr;
+    }
+
+    function parseInvoiceDate(inv) {
+        let dateStr = "";
+        if (inv.date) { dateStr = cleanDateString(inv.date); }
+        else if (inv.timestamp?.seconds) {
+            const d = new Date(inv.timestamp.seconds * 1000);
+            return d.toLocaleDateString('en-CA');
+        }
+        if (!dateStr) return "";
+        dateStr = convertToEnglishNumbers(dateStr);
+        let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+        if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+        m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+        if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        return dateStr;
+    }
+
+    function toEn(s) {
+        if (!s) return "";
+        const a = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+        let r = s.toString(); a.forEach((p, i) => r = r.replace(p, i)); return r;
+    }
+
+    function parseProfitDate(df, ts) {
+        if (df) {
+            const s = toEn(df);
+            let m = s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+            if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+            m = s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+            if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        }
+        if (ts?.seconds) return new Date(ts.seconds * 1000).toISOString().slice(0, 10);
+        return "";
+    }
+
+    const FIXED_EXPENSES = {
+        "جاز": 250, "راتب سواق": 250, "ترخيص": 60, "كاوتش": 60, "زيت": 60, "أم أسماء": 100, "راتب أحمد": 350
+    };
+    const TOTAL_FIXED_EXPENSES = Object.values(FIXED_EXPENSES).reduce((a, b) => a + b, 0);
+
+    function wbToArray(workbook) {
+        return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    }
+
+    /* ============================================================
+       1) المبيعات — نفس منطق exportExcelBtn في سجل المبيعات
+       ============================================================ */
+    async function buildSalesWorkbook() {
+        const snap = await db.collection("invoices").get();
+        let excelRows = [];
+
+        snap.forEach(d => {
+            const data = d.data();
+            if (data.isDeleted === true) return;
+
+            const invObj = { id: d.id, ...data };
+            const invDateRaw = parseInvoiceDate(invObj);
+            const invDateFormatted = formatArabicDayMonth(invDateRaw);
+            const customerName = invObj.customerName || 'النقدى';
+
+            if (invObj.items && invObj.items.length > 0) {
+                invObj.items.forEach(itm => {
+                    let qtyCarton = 0; let qtyJarkan = 0;
+                    let priceCarton = 0; let priceJarkan = 0;
+                    const isRet = itm.isReturn === true;
+                    const movementType = isRet ? "مرتجع" : "بيع";
+
+                    const itemName = (itm.name || "");
+                    const rawUnit = (itm.unit || "").trim().toLowerCase();
+                    const rawQty = Number(itm.qty) || 0;
+                    const rawPrice = Number(itm.price) || 0;
+
+                    let isCarton = (rawUnit === 'box' || rawUnit === 'carton' || rawUnit === 'كرتونة' || rawUnit === 'كرتونه' || itemName.includes('شحم بريفيكس'));
+
+                    if (isCarton) { qtyCarton = rawQty; priceCarton = rawPrice; }
+                    else { qtyJarkan = rawQty; priceJarkan = rawPrice; }
+
+                    excelRows.push({
+                        "التاريخ": invDateFormatted, "الحركة": movementType, "اسم العميل": customerName,
+                        "الصنف": itemName, "عدد الجركن": qtyJarkan, "عدد الكرتونة": qtyCarton,
+                        "سعر الجركن": priceJarkan, "سعر الكرتونة": priceCarton
+                    });
+                });
+            }
+
+            const cashPaid = Number(invObj.cashAmount ?? invObj.cashPaid ?? invObj.paid) || 0;
+            const walletPaid = Number(invObj.walletAmount ?? invObj.walletPaid) || 0;
+
+            if (cashPaid > 0) {
+                excelRows.push({
+                    "التاريخ": invDateFormatted, "الحركة": "سداد منه نقدى", "اسم العميل": customerName,
+                    "الصنف": "سداد نقدى", "عدد الجركن": "", "عدد الكرتونة": 1,
+                    "سعر الجركن": "", "سعر الكرتونة": cashPaid
+                });
+            }
+            if (walletPaid > 0) {
+                excelRows.push({
+                    "التاريخ": invDateFormatted, "الحركة": "سداد منه محفظه", "اسم العميل": customerName,
+                    "الصنف": "سداد نقدى", "عدد الجركن": "", "عدد الكرتونة": 1,
+                    "سعر الجركن": "", "سعر الكرتونة": walletPaid
+                });
+            }
+        });
+
+        if (!excelRows.length) return null;
+
+        const ws = XLSX.utils.json_to_sheet(excelRows);
+        ws['!dir'] = "rtl";
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "المبيعات والأرشيف");
+        return { filename: "سجل_المبيعات_التفصيلي.xlsx", data: wbToArray(wb) };
+    }
+
+    /* ============================================================
+       2) المشتريات — نفس منطق exportToExcel في سجل المشتريات
+       ============================================================ */
+    async function buildPurchasesWorkbook() {
+        const supSnap = await db.collection("suppliers").get();
+        const suppliersBase = {};
+        supSnap.forEach(d => {
+            const data = d.data();
+            suppliersBase[d.id] = { name: data.name, openingBalance: Number(data.openingBalance) || 0 };
+        });
+
+        const transSnap = await db.collection("supplier_transactions").orderBy("timestamp", "asc").get();
+        let allInvoices = [];
+        transSnap.forEach(docSnap => {
+            const data = { id: docSnap.id, ...docSnap.data() };
+            const amt = Number(data.grossTotal) || Number(data.total) || 0;
+            const cashP = Number(data.cashPaid || 0);
+            const walletP = Number(data.walletPaid || 0);
+            const directPaid = data.totalPaid ? Number(data.totalPaid) : (cashP + walletP || Number(data.paidAmount) || 0);
+
+            data.displayGross = amt;
+            data.displayNetPending = amt - directPaid;
+            data.computedCashPaid = cashP;
+            data.computedWalletPaid = walletP;
+            data.computedTotalPaid = directPaid;
+
+            if (data.type === "شراء" || data.type === "فاتورة شراء") { data.isReturn = false; }
+            else if (data.type === "مرتجع شراء") { data.isReturn = true; }
+
+            allInvoices.push(data);
+        });
+
+        if (!allInvoices.length) return null;
+
+        let excelData = [["التاريخ", "الحركة", "اسم المورد", "اسم الصنف", "عدد قطعة", "عدد كرتونة", "سعر قطعة", "سعر كرتونة"]];
+        allInvoices.forEach(inv => {
+            const supplierName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : "";
+            if (Array.isArray(inv.items) && inv.items.length > 0) {
+                inv.items.forEach(item => {
+                    const unit = item.unitName || "كرتونة";
+                    const isItemReturn = item.returnQty > 0 || inv.isReturn;
+                    const motionType = isItemReturn ? "بيع" : "شراء";
+
+                    let qtyPcs = 0, qtyCrt = 0, pricePcs = 0, priceCrt = 0;
+
+                    if (unit === "جركن" || unit === "قطعة") {
+                        qtyPcs = Number(item.qty || item.returnQty || 0);
+                        pricePcs = Number(item.buy || 0);
+                    } else {
+                        qtyCrt = Number(item.qty || item.returnQty || 0);
+                        priceCrt = Number(item.buy || 0);
+                    }
+                    excelData.push([inv.date || "", motionType, supplierName, item.name || "", qtyPcs, qtyCrt, pricePcs, priceCrt]);
+                });
+            }
+            const currentPaid = Number(inv.computedTotalPaid || 0);
+            if (currentPaid > 0) {
+                excelData.push([inv.date || "", "سداد له نقدى", supplierName, "سداد نقدى", 0, 1, 0, currentPaid]);
+            }
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+        worksheet['!cols'] = [15, 15, 25, 30, 15, 15, 15, 15].map(w => ({ wch: w }));
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "المشتريات");
+        return { filename: "تقرير_المشتريات.xlsx", data: wbToArray(workbook) };
+    }
+
+    /* ============================================================
+       3) السندات — نفس منطق loadVouchers + exportToExcel
+       ============================================================ */
+    async function buildVouchersWorkbook() {
+        const [supSnap, custSnap] = await Promise.all([
+            db.collection("suppliers").get(),
+            db.collection("customers").get()
+        ]);
+
+        let partiesMap = {};
+        supSnap.forEach(docSnap => {
+            const data = docSnap.data();
+            partiesMap[docSnap.id] = { name: data.name, type: 'مورد', initialBalance: Number(data.openingBalance ?? data.initialBalance ?? 0) };
+        });
+        custSnap.forEach(docSnap => {
+            const data = docSnap.data();
+            partiesMap[docSnap.id] = { name: data.name, type: 'عميل', initialBalance: Number(data.initialBalance ?? data.openingBalance ?? 0) };
+        });
+
+        const nameIndex = {};
+        Object.keys(partiesMap).forEach(id => {
+            const key = normalizeName(partiesMap[id].name);
+            if (key && !(key in nameIndex)) nameIndex[key] = id;
+        });
+
+        const transSnap = await db.collection("transactions").orderBy("date", "desc").get();
+        let allVouchers = [];
+
+        transSnap.forEach(docSnap => {
+            const d = docSnap.data();
+
+            let actualPartyId = d.partyId || d.customerId || d.supplierId || d.clientId ||
+                d.party_id || d.custId || d.client_id || d.accountId || d.account_id || "";
+            let savedName = d.customerName || d.partyName || d.supplierName || d.clientName || d.name || "";
+
+            let resolvedName = "غير مسجل";
+            let resolvedPartyType = d.partyType || (d.supplierId ? 'مورد' : 'عميل');
+
+            if (actualPartyId && partiesMap[actualPartyId]) {
+                resolvedName = partiesMap[actualPartyId].name;
+                resolvedPartyType = partiesMap[actualPartyId].type;
+            } else if (savedName && savedName.trim() !== "") {
+                const normalizedSaved = normalizeName(savedName);
+                const matchedId = nameIndex[normalizedSaved];
+                if (matchedId) {
+                    actualPartyId = matchedId;
+                    resolvedName = partiesMap[matchedId].name;
+                    resolvedPartyType = partiesMap[matchedId].type;
+                } else {
+                    resolvedName = savedName;
+                }
+            }
+
+            const isValidVoucherType = (d.type === 'قبض' || d.type === 'صرف');
+            const isInvoicePayment = d.invoiceId || d.purchaseId || d.billId || d.isInvoicePayment ||
+                (d.note && (d.note.includes('فاتورة') || d.note.includes('فواتير')));
+
+            if (isValidVoucherType && !isInvoicePayment) {
+                allVouchers.push({
+                    id: docSnap.id, date: d.date, type: d.type, partyId: actualPartyId, partyType: resolvedPartyType,
+                    resolvedName: resolvedName, amount: Number(d.amount || d.total || 0),
+                    method: d.method || d.paymentMethod || 'نقدى', note: d.note || d.notes || ''
+                });
+            }
+        });
+
+        if (!allVouchers.length) return null;
+
+        const excelRows = allVouchers.map(v => {
+            let movementLabel = '';
+            if (v.type === 'قبض') {
+                movementLabel = v.method === 'محفظة' ? 'سداد منه محفظه' : 'سداد منه نقدى';
+            } else {
+                movementLabel = v.method === 'محفظة' ? 'سداد له محفظه' : 'سداد له نقدى';
+            }
+            return {
+                'التاريخ': v.date, 'الحركة': movementLabel, 'اسم العميل': v.resolvedName, 'نوع السداد': 'سداد نقدى',
+                'عدد جركن': 0, 'عدد كرتونة': 1, 'سعر جركن': 0, 'سعر كرتونة': v.amount
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(excelRows);
+        worksheet['!dir'] = "rtl";
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "كشف السندات الجاري");
+        return { filename: `سجل_سندات_الزيادي_${todayISO()}.xlsx`, data: wbToArray(workbook) };
+    }
+
+    /* ============================================================
+       4) المصروفات — نفس منطق exportToExcel في صفحة المصروفات
+       ============================================================ */
+    async function buildExpensesWorkbook() {
+        const snap = await db.collection("expenses").orderBy("date", "desc").get();
+        let allExpenses = [];
+        snap.forEach(docSnap => {
+            const data = docSnap.data();
+            allExpenses.push({
+                id: docSnap.id, type: data.type, amount: Number(data.amount) || 0, date: data.date,
+                note: data.note || '', paymentMethod: data.paymentMethod || 'نقدى'
+            });
+        });
+
+        if (!allExpenses.length) return null;
+
+        const formattedData = allExpenses.map(exp => ({
+            "التاريخ": exp.date, "نوع المصروف": exp.type, "نوع الكاش": exp.paymentMethod,
+            "البيان": exp.note, "المبلغ": exp.amount
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(formattedData);
+        worksheet['!dir'] = "rtl";
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير المصروفات");
+        return { filename: `تقرير_مصروفات_شركة_الزيادي_${todayISO()}.xlsx`, data: wbToArray(workbook) };
+    }
+
+    /* ============================================================
+       5) أرباح اليوم المحدد — نفس منطق exportTodayToExcel في تقرير الأرباح
+       ============================================================ */
+    async function buildProfitTodayWorkbook(targetDate) {
+        const invSnap = await db.collection("inventory").get();
+        let factorMap = {}; let currentBuyMap = {};
+        invSnap.forEach(docSnap => {
+            const itm = docSnap.data();
+            if (!itm.name) return;
+            const name = itm.name.trim();
+            const factor = Number(itm.unitFactor) || 1;
+            factorMap[name] = factor;
+            let rawBuy = Number(itm.buy) || 0;
+            currentBuyMap[name] = rawBuy / factor;
+        });
+
+        const invoicesSnap = await db.collection("invoices").get();
+        let globalInvoices = [];
+        invoicesSnap.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.isDeleted !== true) globalInvoices.push(data);
+        });
+
+        const date = targetDate || todayISO();
+        const D = {};
+        let totalGrossSales = 0, totalGrossCost = 0;
+
+        globalInvoices.forEach(inv => {
+            if (parseProfitDate(inv.date, inv.timestamp) !== date) return;
+            if (!Array.isArray(inv.items)) return;
+
+            inv.items.forEach(item => {
+                if (item.isReturn) return;
+
+                const name = (item.name || "").trim();
+                const qty = Number(item.qty) || 0;
+                const sellPrice = Number(item.price) || 0;
+                const unit = (item.unitName || item.unit || "قطعة").toString().trim();
+                const factor = factorMap[name] || 1;
+
+                if (!name || qty <= 0) return;
+
+                let basePieceCost = currentBuyMap[name] || 0;
+
+                if (!D[name]) {
+                    D[name] = {
+                        qtyBox: 0, qtyPiece: 0, totalSalesBox: 0, totalSalesPiece: 0,
+                        totalSales: 0, totalCost: 0, factor: factor, basePieceCost: basePieceCost
+                    };
+                }
+
+                if (unit === "box" || unit === "كرتونة") {
+                    D[name].qtyBox += qty;
+                    D[name].totalSalesBox += (qty * sellPrice);
+                    D[name].totalSales += (qty * sellPrice);
+                    D[name].totalCost += (qty * (basePieceCost * factor));
+                } else {
+                    D[name].qtyPiece += qty;
+                    D[name].totalSalesPiece += (qty * sellPrice);
+                    D[name].totalSales += (qty * sellPrice);
+                    D[name].totalCost += (qty * basePieceCost);
+                }
+            });
+        });
+
+        const tableRowsData = [];
+        Object.keys(D).forEach(name => {
+            const d = D[name];
+            const profit = d.totalSales - d.totalCost;
+            totalGrossSales += d.totalSales;
+            totalGrossCost += d.totalCost;
+
+            const buyPiece = d.basePieceCost;
+            const buyBox = d.basePieceCost * d.factor;
+            const sellBox = d.qtyBox > 0 ? (d.totalSalesBox / d.qtyBox) : 0;
+            const sellPiece = d.qtyPiece > 0 ? (d.totalSalesPiece / d.qtyPiece) : 0;
+            const margin = d.totalSales > 0 ? (profit / d.totalSales) * 100 : 0;
+
+            tableRowsData.push({
+                name: name, qtyBox: d.qtyBox, qtyPiece: d.qtyPiece,
+                buyBox: buyBox, buyPiece: buyPiece, sellBox: sellBox, sellPiece: sellPiece,
+                totalCost: d.totalCost, totalSales: d.totalSales, profit: profit, margin: margin
+            });
+        });
+        tableRowsData.sort((a, b) => b.profit - a.profit);
+
+        if (!tableRowsData.length) return null;
+
+        const totalGrossProfit = totalGrossSales - totalGrossCost;
+        const netProfit = totalGrossProfit - TOTAL_FIXED_EXPENSES;
+
+        const excelData = tableRowsData.map(r => ({
+            "الصنف": r.name,
+            "كمية (كرتونة)": r.qtyBox,
+            "كمية (جركن)": r.qtyPiece,
+            "سعر الشراء (كرتونة)": r.buyBox > 0 ? r.buyBox : 0,
+            "سعر الشراء (جركن)": r.buyPiece > 0 ? r.buyPiece : 0,
+            "متوسط البيع (كرتونة)": r.sellBox > 0 ? r.sellBox : 0,
+            "متوسط البيع (جركن)": r.sellPiece > 0 ? r.sellPiece : 0,
+            "إجمالي المشتريات (ج)": r.totalCost,
+            "إجمالي المبيعات (ج)": r.totalSales,
+            "ربح الصنف (ج)": r.profit,
+            "نسبة الربح %": `${r.margin.toFixed(1)}%`
+        }));
+
+        excelData.push({});
+        excelData.push({
+            "الصنف": "إجمالي مبيعات اليوم",
+            "إجمالي المشتريات (ج)": totalGrossCost,
+            "إجمالي المبيعات (ج)": totalGrossSales,
+            "ربح الصنف (ج)": totalGrossProfit
+        });
+        excelData.push({ "الصنف": "المصروفات اليومية الثابتة", "ربح الصنف (ج)": -TOTAL_FIXED_EXPENSES });
+        excelData.push({ "الصنف": "صافي الربح النهائي اليومي", "ربح الصنف (ج)": netProfit });
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "مبيعات اليوم");
+        return { filename: `تقرير_مبيعات_الزيادي_${date}.xlsx`, data: wbToArray(workbook) };
+    }
+
+    /* ============================================================
+       6) سجل الأرباح المرحّلة — نفس منطق exportArchiveToExcel
+       ============================================================ */
+    async function buildProfitArchiveWorkbook() {
+        const snap = await db.collection("archived_profits").get();
+        let archivedRowsData = [];
+        snap.forEach(docSnap => {
+            const data = docSnap.data();
+            archivedRowsData.push({
+                id: docSnap.id, date: data.date, sales: data.sales || 0, cost: data.cost || 0,
+                expenses: data.expenses || 0, netProfit: data.netProfit || 0
+            });
+        });
+
+        if (!archivedRowsData.length) return null;
+
+        archivedRowsData.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+        const excelData = archivedRowsData.map(r => ({
+            "تاريخ التقرير": r.date,
+            "إجمالي المبيعات (ج)": r.sales,
+            "إجمالي المشتريات (ج)": r.cost,
+            "المصروفات (ج)": r.expenses,
+            "صافي الربح النهائي (ج)": r.netProfit
+        }));
+
+        const daysCount = archivedRowsData.length;
+        const grandSales = archivedRowsData.reduce((a, b) => a + b.sales, 0);
+        const grandProfit = archivedRowsData.reduce((a, b) => a + b.netProfit, 0);
+
+        excelData.push({});
+        excelData.push({
+            "تاريخ التقرير": "الإجمالي الكلي للسجل",
+            "إجمالي المبيعات (ج)": grandSales,
+            "صافي الربح النهائي (ج)": grandProfit
+        });
+        excelData.push({
+            "تاريخ التقرير": `المتوسط اليومي (${daysCount} أيام)`,
+            "إجمالي المبيعات (ج)": (grandSales / daysCount),
+            "صافي الربح النهائي (ج)": (grandProfit / daysCount)
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "سجل الأرباح المؤرشفة");
+        return { filename: `سجل_الأرباح_المؤرشفة_الزيادي.xlsx`, data: wbToArray(workbook) };
+    }
+
+    /* ============================================================
+       واجهة التقدّم + المنسّق الرئيسي
+       ============================================================ */
+    const STEPS = [
+        { key: 'sales', label: 'سجل المبيعات', icon: 'fa-cash-register', fn: buildSalesWorkbook },
+        { key: 'purchases', label: 'سجل المشتريات', icon: 'fa-truck-loading', fn: buildPurchasesWorkbook },
+        { key: 'vouchers', label: 'سندات القبض والصرف', icon: 'fa-receipt', fn: buildVouchersWorkbook },
+        { key: 'expenses', label: 'المصروفات', icon: 'fa-money-bill-wave', fn: buildExpensesWorkbook },
+        { key: 'profitToday', label: 'أرباح اليوم المحدد', icon: 'fa-chart-pie', fn: null },
+        { key: 'profitArchive', label: 'سجل الأرباح المرحّلة', icon: 'fa-archive', fn: buildProfitArchiveWorkbook }
+    ];
+
+    function renderSteps() {
+        const list = document.getElementById('stepsList');
+        list.innerHTML = STEPS.map(s => `
+            <div class="step-row pending" id="step-${s.key}">
+                <div class="step-icon"><i class="fas ${s.icon}"></i></div>
+                <span>${s.label}</span>
+                <span class="step-note" id="step-note-${s.key}"></span>
+            </div>
+        `).join('');
+    }
+    renderSteps();
+
+    function setStepState(key, state, note) {
+        const row = document.getElementById(`step-${key}`);
+        const noteEl = document.getElementById(`step-note-${key}`);
+        if (!row) return;
+        row.classList.remove('pending', 'running', 'done', 'failed', 'empty');
+        row.classList.add(state);
+        const iconWrap = row.querySelector('.step-icon i');
+        if (state === 'running') iconWrap.className = 'fas fa-circle-notch fa-spin';
+        else if (state === 'done') iconWrap.className = 'fas fa-check';
+        else if (state === 'empty') iconWrap.className = 'fas fa-minus';
+        else if (state === 'failed') iconWrap.className = 'fas fa-xmark';
+        if (noteEl) noteEl.textContent = note || '';
+    }
+
+    async function runFullExport() {
+        const btn = document.getElementById('btnExportAll');
+        const finalStatus = document.getElementById('finalStatus');
+        finalStatus.className = 'final-status';
+        finalStatus.textContent = '';
+        renderSteps();
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> جاري تجميع كل الملفات...';
+
+        const profitDate = document.getElementById('profitDateInput').value || todayISO();
+        STEPS.find(s => s.key === 'profitToday').fn = () => buildProfitTodayWorkbook(profitDate);
+
+        const zip = new JSZip();
+        let addedCount = 0;
+        let failedCount = 0;
+
+        for (const step of STEPS) {
+            setStepState(step.key, 'running');
+            try {
+                const result = await step.fn();
+                if (result) {
+                    zip.file(result.filename, result.data);
+                    addedCount++;
+                    setStepState(step.key, 'done', result.filename);
+                } else {
+                    setStepState(step.key, 'empty', 'لا توجد بيانات');
+                }
+            } catch (err) {
+                console.error(`فشل تجهيز ملف: ${step.label}`, err);
+                failedCount++;
+                setStepState(step.key, 'failed', 'حدث خطأ');
+            }
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-cloud-download-alt"></i> تصدير شامل الآن (ملف ZIP واحد)';
+
+        if (addedCount === 0) {
+            finalStatus.className = 'final-status warn';
+            finalStatus.textContent = 'لا توجد أي بيانات متاحة للتصدير حالياً في أي من الأنظمة.';
+            return;
+        }
+
+        try {
+            const content = await zip.generateAsync({ type: 'blob' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(content);
+            a.download = `التصدير_الشامل_الزيادي_${todayISO()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+
+            finalStatus.className = 'final-status ok';
+            finalStatus.textContent = failedCount > 0
+                ? `تم تنزيل الملف المضغوط بنجاح (${addedCount} ملف) — مع تعذر تجهيز ${failedCount} ملف، راجع التفاصيل أعلاه.`
+                : `تم تنزيل الملف المضغوط بنجاح ويحتوي على ${addedCount} ملف إكسيل.`;
+        } catch (err) {
+            console.error(err);
+            finalStatus.className = 'final-status warn';
+            finalStatus.textContent = 'حدث خطأ أثناء ضغط الملفات في أرشيف ZIP.';
+        }
+    }
+</script>
+</body>
+</html>
