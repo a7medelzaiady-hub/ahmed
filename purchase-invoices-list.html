@@ -115,7 +115,7 @@
             height: 36px;
             background: rgba(255, 255, 255, 0.12);
             border-radius: 50%;
-            text-decoration: none !important; /* إزالة خط السهم بالكامل */
+            text-decoration: none !important;
             outline: none;
         }
         .back-btn:hover { background: rgba(255, 255, 255, 0.2); text-decoration: none !important; }
@@ -142,7 +142,7 @@
 
         .hdr-home-link {
             color: white;
-            text-decoration: none !important; /* منع وجود خطوط تحت الأيقونة */
+            text-decoration: none !important;
             font-size: 0.8rem;
             font-weight: 700;
             display: flex;
@@ -191,7 +191,6 @@
         
         .toolbar-btn:active { transform: scale(0.96); }
 
-        /* زر إضافة فاتورة عائم في الأسفل (FAB) */
         .fab-btn-add {
             position: fixed;
             bottom: 20px;
@@ -306,7 +305,6 @@
         .type-credit { background: var(--warning-light); color: #b45309; }
         .type-return { background: var(--danger-light); color: #b91c1c; }
 
-        /* المبالغ والتفاصيل */
         .amounts-section {
             background: #fafbfc;
             border: 1px solid #f1f5f9;
@@ -324,7 +322,7 @@
         }
         .amt-row:last-child { border-bottom: none; }
         .amt-title { color: var(--text-muted); font-weight: 700; }
-        .amt-val { font-weight: 800; color: var(--text-dark); text-align: center; } /* توسيط الأرقام */
+        .amt-val { font-weight: 800; color: var(--text-dark); text-align: center; }
 
         .main-amount-row {
             display: flex;
@@ -336,7 +334,6 @@
         .main-amount-label { font-size: 0.8rem; font-weight: 800; color: var(--text-dark); }
         .main-amount-val { font-size: 1.15rem; font-weight: 900; text-align: center; }
 
-        /* شريط التحكم السفلي بالكارت */
         .inv-actions-footer {
             display: flex;
             justify-content: space-between;
@@ -371,9 +368,6 @@
         .btn-delete-mobile { color: var(--danger); background: var(--danger-light); border-color: #fecaca; }
         .btn-edit-mobile { color: var(--warning); background: var(--warning-light); border-color: #fef3c7; }
 
-        /* ============================================================
-           DETAILS BOX (توسيط الأرقام وتطابق الأعمدة)
-           ============================================================ */
         .details-box {
             background: #f8fafc;
             border-radius: var(--radius-md);
@@ -387,16 +381,16 @@
             color: var(--text-muted); 
             padding: 6px 4px; 
             border-bottom: 2px solid var(--border-color);
-            text-align: center; /* توسيط العناوين */
+            text-align: center;
         }
         .details-table th:first-child, .details-table td:first-child {
-            text-align: right; /* الاحتفاظ بالاسم محاذياً لليمين */
+            text-align: right;
         }
         .details-table td { 
             font-weight: 700; 
             padding: 8px 4px; 
             vertical-align: middle; 
-            text-align: center; /* توسيط الأرقام بالكامل */
+            text-align: center;
         }
         .price-align-box {
             display: inline-flex;
@@ -408,9 +402,6 @@
             font-family: 'Montserrat', sans-serif;
         }
 
-        /* ============================================================
-           THERMAL PRINT DESIGN
-           ============================================================ */
         #thermalInvoiceHidden {
             position: absolute; left: -9999px; top: -9999px;
             width: 400px; background: #ffffff; color: #000000; padding: 25px;
@@ -668,11 +659,8 @@
             const totalInvoiceVal = Number(inv.displayGross);
             const netPendingVal = Number(inv.isReturn ? inv.displayGross : inv.displayNetPending);
             
-            // المبلغ المدفوع من الفاتورة الحالية
             const currentInvoicePaid = Number(inv.computedTotalPaid || 0);
-            
             const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -totalInvoiceVal : inv.displayNetPending);
-
             const targetPriceColor = inv.isReturn ? 'var(--danger)' : (inv.displayNetPending > 0 ? 'var(--danger)' : 'var(--success)');
             
             const totalStatusLabel = finalSupplierTotal < 0 ? 'دائن' : 'مدين';
@@ -730,7 +718,6 @@
                     </button>
                 </div>
 
-                <!-- جدول الأصناف في المنتصف ومحاذاة السعر والإجمالي بجانب بعضهما -->
                 <div id="details_${inv.id}" class="details-box" style="display:none;">
                     <table class="table table-sm details-table table-borderless">
                         <thead>
@@ -1109,15 +1096,22 @@
                     const unit = item.unitName || "كرتونة";
                     const isItemReturn = item.returnQty > 0 || inv.isReturn;
                     const motionType = isItemReturn ? "بيع" : "شراء";
-                    let qtyPcs = "", qtyCrt = "", pricePcs = "", priceCrt = "";
-                    if (unit === "جركن" || unit === "قطعة") { qtyPcs = item.qty || item.returnQty || 0; pricePcs = item.buy || 0; }
-                    else { qtyCrt = item.qty || item.returnQty || 0; priceCrt = item.buy || 0; }
+                    
+                    let qtyPcs = 0, qtyCrt = 0, pricePcs = 0, priceCrt = 0;
+                    
+                    if (unit === "جركن" || unit === "قطعة") { 
+                        qtyPcs = Number(item.qty || item.returnQty || 0); 
+                        pricePcs = Number(item.buy || 0); 
+                    } else { 
+                        qtyCrt = Number(item.qty || item.returnQty || 0); 
+                        priceCrt = Number(item.buy || 0); 
+                    }
                     excelData.push([inv.date || "", motionType, supplierName, item.name || "", qtyPcs, qtyCrt, pricePcs, priceCrt]);
                 });
             }
             const currentPaid = Number(inv.computedTotalPaid || 0);
             if (currentPaid > 0) {
-                excelData.push([inv.date || "", "سداد له نقدى", supplierName, "سداد نقدى", "", 1, "", currentPaid]);
+                excelData.push([inv.date || "", "سداد له نقدى", supplierName, "سداد نقدى", 0, 1, 0, currentPaid]);
             }
         });
 
