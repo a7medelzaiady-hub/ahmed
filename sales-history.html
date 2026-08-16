@@ -384,7 +384,7 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <a href="trashi.html" class="add-btn trash-nav-btn" title="فتح سلة المحذوفات" style="display:none;"><i class="fas fa-trash-alt"></i></a>
+            <a href="trashi.html" class="add-btn trash-nav-btn" title="فتح سلة المحذوفات" style="display:flex;"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
         </div>
@@ -400,8 +400,9 @@
                     <i class="fas fa-sync-alt"></i> تحديث
                 </button>
             </div>
-            <button class="panel-btn btn-reset-danger" id="deleteAllCustomersBtn" style="display:none;">
-                <i class="fas fa-trash-can"></i> تصفير النظام للسلة
+            <!-- زر تصفير النظام ومسح المبيعات للآدمن -->
+            <button class="panel-btn btn-reset-danger" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
+                <i class="fas fa-trash-can"></i> تصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
         </div>
 
@@ -494,7 +495,7 @@
         <div id="customModalIcon" style="width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;"></div>
         <h6 class="fw-bold mb-2" id="customModalTitle" style="font-size: 1.05rem;">تنبيه النظام</h6>
         <div id="customModalBody" style="font-size: 0.85rem; color: #475569; margin-bottom: 20px; text-align: right; white-space: pre-line; line-height: 1.7; max-height: 300px; overflow-y: auto; padding: 5px;"></div>
-        <input type="text" id="customModalInput" class="form-control text-center mb-3 fw-bold" style="display:none; font-family:'Cairo'; font-size:0.95rem; border-radius: 12px; padding: 10px;" placeholder="اكتب كلمة التأكيد هنا...">
+        <input type="password" id="customModalInput" class="form-control text-center mb-3 fw-bold" style="display:none; font-family:'Cairo'; font-size:0.95rem; border-radius: 12px; padding: 10px;" placeholder="اكتب كلمة التأكيد هنا...">
         <div class="d-flex gap-2 justify-content-center" id="customModalActions"></div>
     </div>
 </div>
@@ -512,6 +513,9 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    // كلمة سر الأدمن
+    const ADMIN_PASSWORD = "123";
 
     let allInvoices = [];
     let customersData = {};
@@ -545,6 +549,8 @@
         title.innerText = options.title || "تنبيه النظام";
         body.innerHTML = options.message || "";
         inputField.value = "";
+        inputField.type = options.inputType || "password";
+        inputField.placeholder = options.inputPlaceholder || "اكتب كلمة التأكيد هنا...";
         inputField.style.display = options.type === "prompt" ? "block" : "none";
 
         if (options.icon === "success") {
@@ -642,7 +648,6 @@
     }
 
     function formatArabicDayMonth(dateStr) {
-        // المدخل بصيغة YYYY-MM-DD ويرجع مثل ١٦-اغسطس-٢٠٢٦
         if (!dateStr || !dateStr.includes('-')) return dateStr || "";
         const parts = dateStr.split('-');
         if (parts.length !== 3) return dateStr;
@@ -1169,6 +1174,84 @@
         loadData(true, false, filterInput || null);
     };
 
+    // دالة تصفير السجل للآدمن
+    window.clearAllSalesAdmin = () => {
+        window.showCustomUi({
+            title: "🔒 صلاحية الآدمن فقط",
+            message: "يرجى إدخال كلمة سر الأدمن لتصفير نظام المبيعات ونقل جميع السجلات الحالية لسلة المحذوفات:",
+            type: "prompt",
+            inputType: "password",
+            inputPlaceholder: "كلمة المرور...",
+            confirmText: "تحقق ومسح",
+            onConfirm: async (enteredPassword) => {
+                if (enteredPassword !== ADMIN_PASSWORD) {
+                    window.showCustomUi({
+                        title: "خطأ",
+                        message: "❌ كلمة المرور غير صحيحة! تم إلغاء العملية.",
+                        icon: "danger"
+                    });
+                    return;
+                }
+
+                window.showCustomUi({
+                    title: "تأكيد مسح وتصفير السجل",
+                    message: "⚠️ هل أنت متأكد تماماً من نقل جميع الفواتير والسندات المعروضة إلى سلة المحذوفات؟",
+                    type: "confirm",
+                    icon: "danger",
+                    onConfirm: async () => {
+                        try {
+                            const batch = db.batch();
+                            let count = 0;
+
+                            // 1. نقل الفواتير
+                            allInvoices.forEach(inv => {
+                                const ref = db.collection("invoices").doc(inv.id);
+                                batch.update(ref, {
+                                    isDeleted: true,
+                                    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                                });
+                                count++;
+                            });
+
+                            // 2. نقل السندات والمعاملات
+                            rawTransactionsList.forEach(tr => {
+                                const ref = db.collection("transactions").doc(tr.id);
+                                batch.update(ref, {
+                                    isDeleted: true,
+                                    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                                });
+                                count++;
+                            });
+
+                            if (count === 0) {
+                                window.showCustomUi({ title: "تنبيه", message: "لا توجد سجلات حالية لتصفيرها.", icon: "info" });
+                                return;
+                            }
+
+                            await batch.commit();
+
+                            window.showCustomUi({
+                                title: "تم التصفير",
+                                message: "✅ تم نقل جميع الفواتير والمعاملات المالية المعروضة إلى سلة المحذوفات بنجاح.",
+                                icon: "success",
+                                onConfirm: () => {
+                                    loadData(true, loadedScope === 'ARCHIVE');
+                                }
+                            });
+                        } catch (err) {
+                            console.error(err);
+                            window.showCustomUi({
+                                title: "خطأ",
+                                message: "حدث خطأ أثناء تصفير النظام: " + err.message,
+                                icon: "danger"
+                            });
+                        }
+                    }
+                });
+            }
+        });
+    };
+
     function generateThermalInvoiceHtml(inv) {
         const displayTime = formatInvoiceTime(inv.time, inv.date);
         const invDate = parseInvoiceDate(inv) || "بدون تاريخ";
@@ -1349,7 +1432,6 @@
                 return;
             }
 
-            // تجميع الفواتير حسب اليوم
             const invoicesByDate = {};
             invoices.forEach(inv => {
                 const dKey = parseInvoiceDate(inv) || 'بدون_تاريخ';
@@ -1652,14 +1734,11 @@
             icon: "danger",
             onConfirm: async () => {
                 try {
-                    // 1. جلب المعاملات المرتبطة بالفاتورة
                     const txSnapshot = await db.collection("transactions").where("invoiceId", "==", id).get();
 
-                    // 2. تجميع معرفات المنتجات الفريدة
                     const items = inv ? (inv.items || []) : [];
                     const stockIds = [...new Set(items.map(item => item.stockId).filter(Boolean))];
 
-                    // 3. جلب بيانات المنتجات بالتوازي للتوفير في الكوتا
                     const inventoryDocs = {};
                     if (stockIds.length > 0) {
                         const docSnaps = await Promise.all(
@@ -1670,10 +1749,8 @@
                         });
                     }
 
-                    // 4. استخدام WriteBatch بدلاً من Transaction لتوفير عمليات القراءة/الكتابة
                     const batch = db.batch();
 
-                    // تعديل كميات الأصناف في المخزن
                     items.forEach(item => {
                         if (!item.stockId || !inventoryDocs[item.stockId]) return;
 
@@ -1700,7 +1777,6 @@
                         batch.update(ref, { totalPcs: newTotalPcs });
                     });
 
-                    // نقل المعاملات المالية للسلة
                     txSnapshot.forEach(txDoc => {
                         batch.update(db.collection("transactions").doc(txDoc.id), {
                             isDeleted: true,
@@ -1708,13 +1784,11 @@
                         });
                     });
 
-                    // نقل الفاتورة نفسها للسلة
                     batch.update(db.collection("invoices").doc(id), {
                         isDeleted: true,
                         deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
 
-                    // تنفيذ التغييرات بطلب واحد
                     await batch.commit();
 
                     await loadData(false, loadedScope === 'ARCHIVE');
@@ -1746,7 +1820,7 @@
                 if (data.isDeleted === true) return;
 
                 const invObj = { id: d.id, ...data };
-                const invDateRaw = parseInvoiceDate(invObj); // بصيغة YYYY-MM-DD
+                const invDateRaw = parseInvoiceDate(invObj);
                 const invDateFormatted = formatArabicDayMonth(invDateRaw);
                 const customerName = invObj.customerName || 'النقدى';
 
@@ -1775,7 +1849,6 @@
                     });
                 }
 
-                // صفوف السداد: نقدى ومحفظة كل واحد فى سطر مستقل
                 const cashPaid = Number(invObj.cashAmount ?? invObj.cashPaid ?? invObj.paid) || 0;
                 const walletPaid = Number(invObj.walletAmount ?? invObj.walletPaid) || 0;
 
