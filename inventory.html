@@ -194,12 +194,13 @@
         .close-modal { background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .modal-body { padding: 12px 16px 20px; overflow-y: auto; flex: 1; background: #f8fafc; }
         
+        /* تحسينات كروت الملخص لمنع الانكسار */
         .modal-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-        .mini-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: flex; align-items: center; gap: 8px; }
+        .mini-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 10px 8px; display: flex; align-items: center; gap: 8px; min-width: 0; }
         .mini-card i { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
-        .mini-info { display: flex; flex-direction: column; text-align: right; }
-        .mini-val { font-size: 12.5px; font-weight: 800; }
-        .mini-lbl { font-size: 10.5px; color: var(--sub); font-weight: 700; margin-top: 2px; }
+        .mini-info { display: flex; flex-direction: column; text-align: right; min-width: 0; flex: 1; }
+        .mini-val { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mini-lbl { font-size: 10px; color: var(--sub); font-weight: 700; margin-top: 2px; white-space: nowrap; }
         
         .mc-init i { background: rgba(100, 116, 139, 0.08); color: var(--sub); }
         .mc-buy i { background: rgba(2, 132, 199, 0.08); color: #0284c7; }
@@ -229,7 +230,7 @@
         .tx-details { flex: 1; text-align: right; min-width: 0; }
         .tx-title { font-size: 13px; font-weight: 800; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tx-date { font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
-        .tx-amount { font-size: 12.5px; font-weight: 900; text-align: left; direction: ltr; }
+        .tx-amount { font-size: 12px; font-weight: 900; text-align: left; direction: ltr; white-space: nowrap; }
         .tx-amount.plus { color: #0284c7; }
         .tx-amount.minus { color: var(--danger); }
 
@@ -241,6 +242,7 @@
             .qty-main { font-size: 16px; }
             .stats { padding: 12px; gap: 8px; }
             .stat-num { font-size: 24px; }
+            .mini-val { font-size: 11px; }
         }
     </style>
 </head>
@@ -357,16 +359,15 @@
         }
     }, 7000);
 
-    // دالة تحديد أولوية الترتيب المطلوبة
     function getItemPriority(item) {
         const factor = Number(item.unitFactor || item.factor) || 1;
         const totalPcs = Number(item.totalPcs) || 0;
         const minPcs = (Number(item.min) || 0) * factor;
 
-        if (totalPcs < 0) return 1;                     // 1. الأصناف السالبة
-        if (totalPcs > 0 && totalPcs <= minPcs) return 2; // 2. الأصناف التي قربت تخلص
-        if (totalPcs > minPcs) return 3;                 // 3. الأصناف العادية والمتوفرة
-        return 4;                                        // 4. الأصناف التي رصيدها صفر
+        if (totalPcs < 0) return 1;                     
+        if (totalPcs > 0 && totalPcs <= minPcs) return 2; 
+        if (totalPcs > minPcs) return 3;                 
+        return 4;                                        
     }
 
     onSnapshot(collection(db, "inventory"), snap => {
@@ -378,7 +379,6 @@
             if (data.isDeleted !== true) allItems.push({ id: d.id, ...data });
         });
 
-        // تطبيق ترتيب الأولويات الجديد
         allItems.sort((a, b) => {
             const pA = getItemPriority(a);
             const pB = getItemPriority(b);
@@ -387,10 +387,10 @@
             const qA = Number(a.totalPcs) || 0;
             const qB = Number(b.totalPcs) || 0;
 
-            if (pA === 1) return qA - qB; // السالبة: الأكثر سالبية أولاً
-            if (pA === 2) return qA - qB; // كمية منخفضة: الأقل رصيداً أولاً
-            if (pA === 3) return qB - qA; // العادية: الأكثر كمية أولاً
-            return (a.name || '').localeCompare(b.name || '', 'ar'); // الصفر: أبجدياً
+            if (pA === 1) return qA - qB; 
+            if (pA === 2) return qA - qB; 
+            if (pA === 3) return qB - qA; 
+            return (a.name || '').localeCompare(b.name || '', 'ar'); 
         });
 
         updateStats();
@@ -416,11 +416,12 @@
             .replace(/ة/g, 'ه');
     }
 
+    // تنسيق وعرض الكميات بدقة
     function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
         totalPcs = parseInt(totalPcs) || 0;
         capacity = parseInt(capacity) || 1;
         
-        if (totalPcs === 0) return capacity > 1 ? `0 كرتونة و 0 ${unit}` : `0 ${unit}`;
+        if (totalPcs === 0) return capacity > 1 ? `0 كرتونة` : `0 ${unit}`;
         
         const isNegative = totalPcs < 0;
         const absPcs = Math.abs(totalPcs);
@@ -598,6 +599,7 @@
                 return { supp, cli };
             };
 
+            // الدالة المعدلة لمعالجة وتحويل أعداد الكراتين والجراكين بدقة
             const inspectObj = (obj) => {
                 let match = false;
                 let extractedQty = 0;
@@ -609,9 +611,31 @@
                 }
 
                 if (match) {
-                    let rawVal = parseFloat(obj.totalPieces || obj.totalPcs || obj.qty || obj.quantity || obj.count || 0);
-                    const itemUnit = String(obj.unit || obj.unitName || '').toLowerCase();
-                    extractedQty = (itemUnit.includes('box') || itemUnit.includes('كرت')) ? (rawVal * capacity) : rawVal;
+                    // إذا كان إجمالي القطع مسجلاً صراحة بالمعاملة
+                    if (obj.totalPieces !== undefined && obj.totalPieces !== null && obj.totalPieces !== '') {
+                        extractedQty = parseFloat(obj.totalPieces) || 0;
+                    } else if (obj.totalPcs !== undefined && obj.totalPcs !== null && obj.totalPcs !== '') {
+                        extractedQty = parseFloat(obj.totalPcs) || 0;
+                    } else {
+                        let rawVal = parseFloat(obj.qty || obj.quantity || obj.count || obj.cartons || obj.boxes || 0);
+                        const itemUnit = String(obj.unit || obj.unitName || obj.selectedUnit || obj.unit_type || '').toLowerCase().trim();
+                        
+                        const isPieceUnit = itemUnit.includes('جركن') || itemUnit.includes('قطعة') || itemUnit.includes('قطعه') || itemUnit.includes('عبوة') || itemUnit.includes('عبوه') || itemUnit.includes('علبة') || itemUnit.includes('علبه') || itemUnit.includes('فرادي') || itemUnit.includes('فرادى') || itemUnit.includes('piece') || itemUnit.includes('pcs');
+                        const isCartonUnit = itemUnit.includes('كرتون') || itemUnit.includes('كرت') || itemUnit.includes('box') || itemUnit.includes('carton') || itemUnit.includes('ctn') || itemUnit.includes('pack');
+
+                        if (isPieceUnit) {
+                            extractedQty = rawVal;
+                        } else if (isCartonUnit) {
+                            extractedQty = rawVal * capacity;
+                        } else {
+                            // إذا لم تُحدد الوحدة صراحة، وكانت سعة الكرتونة أكبر من 1 فالغالبية العظمى للمعاملات تُسجل بالكرتونة
+                            if (obj.isCarton === true || capacity > 1) {
+                                extractedQty = rawVal * capacity;
+                            } else {
+                                extractedQty = rawVal;
+                            }
+                        }
+                    }
                 }
                 return { match, qty: extractedQty, isReturn: obj.isReturn === true };
             };
@@ -752,7 +776,7 @@
             <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0b5e3d; padding-bottom: 10px;">
                 <h2 style="color: #0b5e3d;">شركة الزيادى لزيوت السيارات</h2>
                 <h4>تقرير جرد الأصناف والمخزون الحقيقي</h4>
-                <div style="font-size: 11px; color: #94a3b8;">تاريخ التتقرير: ${dateStr} | إجمالي الأصناف: ${allItems.length}</div>
+                <div style="font-size: 11px; color: #94a3b8;">تاريخ التقرير: ${dateStr} | إجمالي الأصناف: ${allItems.length}</div>
             </div>
             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                 <thead>
