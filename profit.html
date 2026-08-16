@@ -15,6 +15,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- مكتبة SheetJS لتصدير ملفات إكسل -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- مكتبة JSZip لضغط الملفات في أرشيف ZIP واحد -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
 :root{
@@ -402,7 +404,8 @@ table.inv tfoot td:first-child{text-align:right;padding-right:14px;}
   </div>
   <div class="tb-btns">
     <button class="tb-btn save-btn-active" onclick="triggerManualSave()" title="حفظ فوري الآن (الحفظ التلقائي يعمل دائماً في الخلفية)"><i class="fas fa-save"></i></button>
-    <button class="tb-btn" onclick="exportTodayToExcel()" title="تصدير مبيعات اليوم إلى إكسل"><i class="fas fa-file-excel"></i></button>
+    <button class="tb-btn" onclick="exportTodayToExcel()" title="تصدير مبيعات اليوم المحدد إلى إكسل"><i class="fas fa-file-excel"></i></button>
+    <button class="tb-btn" onclick="exportEachDayToZipFile()" title="تصدير جميع الأيام مضغوطة في ملف ZIP واحد"><i class="fas fa-file-archive"></i></button>
     <button class="tb-btn" onclick="scrollToArchive()" title="سجل الأرباح المرحلة"><i class="fas fa-archive"></i></button>
     <button class="tb-btn" onclick="window.print()" title="طباعة"><i class="fas fa-print"></i></button>
     <a href="index.html" class="tb-btn" title="الرئيسية"><i class="fas fa-home"></i></a>
@@ -484,7 +487,10 @@ table.inv tfoot td:first-child{text-align:right;padding-right:14px;}
       </div>
       <i class="fas fa-chevron-down table-toggle-icon" id="tableToggleIcon"></i>
     </button>
-    <button class="btn-export-excel ms-2" onclick="exportTodayToExcel()"><i class="fas fa-file-excel"></i> تصدير إكسل</button>
+    <div style="display:flex; gap:6px;">
+      <button class="btn-export-excel" onclick="exportTodayToExcel()"><i class="fas fa-file-excel"></i> تصدير اليوم</button>
+      <button class="btn-export-excel" style="background:#0369a1;" onclick="exportEachDayToZipFile()" title="تصدير كل الأيام في ملف مضغوط ZIP"><i class="fas fa-file-archive"></i> تصدير الكل (ملف ZIP)</button>
+    </div>
   </div>
 </div>
 
@@ -782,13 +788,13 @@ const app = initializeApp({
   appId:"1:300306825071:web:0426ddde56280fa090329a"
 });
 let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+try {
+    db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
+} catch (e) {
+    db = getFirestore(app);
+}
 
 const FIXED_EXPENSES = {
   "جاز": 250,
@@ -806,7 +812,7 @@ let factorMap = {};
 let currentBuyMap = {}; 
 let globalInvoices = [];
 let tableRowsData = [];
-let archivedRowsData = []; // للشيء الخاص ببيانات الأرشيف التصديرية
+let archivedRowsData = [];
 
 // --- حالة الحفظ التلقائي ---
 let inventoryReady = false;
@@ -906,7 +912,7 @@ window.filterTable = function(){
   renderTable(val);
 };
 
-// ** دالة تصدير تقرير المبيعات اليومية إلى Excel **
+// ** دالة تصدير تقرير مبيعات اليوم المحدد إلى Excel **
 function exportTodayToExcel() {
   if (!tableRowsData || tableRowsData.length === 0) {
     alert("لا توجد بيانات مبيعات للتصدير في هذا اليوم المحدد.");
@@ -915,7 +921,6 @@ function exportTodayToExcel() {
 
   const dateVal = document.getElementById("dateIn").value || "اليوم";
   
-  // تحضير صفوف البيانات
   const excelData = tableRowsData.map(r => ({
     "الصنف": r.name,
     "كمية (كرتونة)": r.qtyBox,
@@ -930,9 +935,8 @@ function exportTodayToExcel() {
     "نسبة الربح %": `${r.margin.toFixed(1)}%`
   }));
 
-  // إضافة صف الملخص النهائي
   if (currentDaySummary) {
-    excelData.push({}); // صف فارغ
+    excelData.push({});
     excelData.push({
       "الصنف": "إجمالي مبيعات اليوم",
       "إجمالي المشتريات (ج)": currentDaySummary.cost,
@@ -956,6 +960,166 @@ function exportTodayToExcel() {
   XLSX.writeFile(workbook, `تقرير_مبيعات_الزيادي_${dateVal}.xlsx`);
 }
 window.exportTodayToExcel = exportTodayToExcel;
+
+// ** دالة تصدير كل الأيام في ملفات إكسل منفصلة مضغوطة داخل ملف ZIP **
+async function exportEachDayToZipFile() {
+  if (!globalInvoices || globalInvoices.length === 0) {
+    alert("لا توجد فواتير أو بيانات مسجلة للتصدير.");
+    return;
+  }
+
+  if (typeof JSZip === "undefined") {
+    alert("جاري تحميل مكتبة الضغط JSZip... يرجى إعادة المحاولة بعد لحظات.");
+    return;
+  }
+
+  const daysGrouped = {};
+
+  globalInvoices.forEach(inv => {
+    const dStr = parseDate(inv.date, inv.timestamp);
+    if (!dStr) return;
+
+    if (!daysGrouped[dStr]) {
+      daysGrouped[dStr] = [];
+    }
+    daysGrouped[dStr].push(inv);
+  });
+
+  const sortedDates = Object.keys(daysGrouped).sort((a, b) => b.localeCompare(a));
+
+  if (sortedDates.length === 0) {
+    alert("لم يتم العثور على تواريخ صالحة في الفواتير.");
+    return;
+  }
+
+  setAutoSaveStatus("saving", `جاري تجهيز ${sortedDates.length} ملف إكسل وضغطهم...`);
+
+  const zip = new JSZip();
+
+  sortedDates.forEach(dateStr => {
+    const invoicesOfDay = daysGrouped[dateStr];
+    const D = {};
+    let totalGrossSales = 0;
+    let totalGrossCost = 0;
+
+    invoicesOfDay.forEach(inv => {
+      if (!Array.isArray(inv.items)) return;
+
+      inv.items.forEach(item => {
+        if (item.isReturn) return;
+
+        const name = (item.name || "").trim();
+        const qty = Number(item.qty) || 0;
+        const sellPrice = Number(item.price) || 0;
+        const unit = (item.unitName || item.unit || "قطعة").toString().trim();
+        const factor = factorMap[name] || 1;
+        const basePieceCost = currentBuyMap[name] || 0;
+
+        if (!name || qty <= 0) return;
+
+        if (!D[name]) {
+          D[name] = {
+            qtyBox: 0,
+            qtyPiece: 0,
+            totalSalesBox: 0,
+            totalSalesPiece: 0,
+            totalSales: 0,
+            totalCost: 0,
+            factor: factor,
+            basePieceCost: basePieceCost
+          };
+        }
+
+        if (unit === "box" || unit === "كرتونة") {
+          D[name].qtyBox += qty;
+          D[name].totalSalesBox += (qty * sellPrice);
+          D[name].totalSales += (qty * sellPrice);
+          D[name].totalCost += (qty * (basePieceCost * factor));
+        } else {
+          D[name].qtyPiece += qty;
+          D[name].totalSalesPiece += (qty * sellPrice);
+          D[name].totalSales += (qty * sellPrice);
+          D[name].totalCost += (qty * basePieceCost);
+        }
+      });
+    });
+
+    const dayRows = [];
+    Object.keys(D).forEach(name => {
+      const d = D[name];
+      const profit = d.totalSales - d.totalCost;
+      totalGrossSales += d.totalSales;
+      totalGrossCost += d.totalCost;
+
+      const buyPiece = d.basePieceCost;
+      const buyBox = d.basePieceCost * d.factor;
+      const sellBox = d.qtyBox > 0 ? (d.totalSalesBox / d.qtyBox) : 0;
+      const sellPiece = d.qtyPiece > 0 ? (d.totalSalesPiece / d.qtyPiece) : 0;
+      const margin = d.totalSales > 0 ? (profit / d.totalSales) * 100 : 0;
+
+      dayRows.push({
+        "الصنف": name,
+        "كمية (كرتونة)": d.qtyBox,
+        "كمية (جركن)": d.qtyPiece,
+        "سعر الشراء (كرتونة)": buyBox > 0 ? Number(buyBox.toFixed(1)) : 0,
+        "سعر الشراء (جركن)": buyPiece > 0 ? Number(buyPiece.toFixed(1)) : 0,
+        "متوسط البيع (كرتونة)": sellBox > 0 ? Number(sellBox.toFixed(1)) : 0,
+        "متوسط البيع (جركن)": sellPiece > 0 ? Number(sellPiece.toFixed(1)) : 0,
+        "إجمالي المشتريات (ج)": Number(d.totalCost.toFixed(2)),
+        "إجمالي المبيعات (ج)": Number(d.totalSales.toFixed(2)),
+        "ربح الصنف (ج)": Number(profit.toFixed(2)),
+        "نسبة الربح %": `${margin.toFixed(1)}%`
+      });
+    });
+
+    dayRows.sort((a, b) => b["ربح الصنف (ج)"] - a["ربح الصنف (ج)"]);
+
+    const grossProfit = totalGrossSales - totalGrossCost;
+    const netProfit = grossProfit - TOTAL_FIXED_EXPENSES;
+
+    dayRows.push({});
+    dayRows.push({
+      "الصنف": "إجمالي مبيعات اليوم",
+      "إجمالي المشتريات (ج)": Number(totalGrossCost.toFixed(2)),
+      "إجمالي المبيعات (ج)": Number(totalGrossSales.toFixed(2)),
+      "ربح الصنف (ج)": Number(grossProfit.toFixed(2))
+    });
+    dayRows.push({
+      "الصنف": "المصروفات اليومية الثابتة",
+      "ربح الصنف (ج)": -TOTAL_FIXED_EXPENSES
+    });
+    dayRows.push({
+      "الصنف": "صافي الربح النهائي اليومي",
+      "ربح الصنف (ج)": Number(netProfit.toFixed(2))
+    });
+
+    const workbook = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(dayRows);
+    XLSX.utils.book_append_sheet(workbook, ws, `مبيعات_${dateStr}`);
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+
+    zip.file(`تقرير_مبيعات_الزيادي_${dateStr}.xlsx`, excelBuffer);
+  });
+
+  try {
+    const content = await zip.generateAsync({ type: "blob" });
+    const todayStr = new Date().toISOString().slice(0, 10);
+    
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(content);
+    a.download = `تقارير_مبيعات_جميع_الأيام_الزيادي_${todayStr}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+
+    setAutoSaveStatus("saved", "تم تحميل ملف ZIP بجميع تقارير الأيام بنجاح.");
+  } catch (err) {
+    console.error(err);
+    alert("حدث خطأ أثناء ضغط الملفات.");
+  }
+}
+window.exportEachDayToZipFile = exportEachDayToZipFile;
 
 // ** دالة تصدير أرشيف الأرباح التراكمية إلى Excel **
 function exportArchiveToExcel() {
@@ -996,7 +1160,6 @@ function exportArchiveToExcel() {
 }
 window.exportArchiveToExcel = exportArchiveToExcel;
 
-// تشغيل الاستماع اللحظي لسجل الأرباح المؤرشفة وحساب المتوسطات تلقائياً
 function setupArchiveRealtime() {
   const tbody = document.getElementById("archiveTbody");
   onSnapshot(collection(db, "archived_profits"), (snap) => {
@@ -1070,7 +1233,6 @@ function setupArchiveRealtime() {
   });
 }
 
-// دالة الحفظ الفعلية إلى فايربيز
 async function autoSaveProfitToServer(summary) {
   if (!summary || !summary.date) return;
   if (autoSaveInFlight) return;
@@ -1101,9 +1263,6 @@ async function autoSaveProfitToServer(summary) {
   }
 }
 
-// دالة جدولة الحفظ التلقائي مع تأخير بسيط (debounce) لتجميع أي تحديثات متتالية سريعة
-// في طلب حفظ واحد بدل إرسال طلبات كثيرة لحظة بلحظة، مع تجاهل الحفظ فقط أثناء التحميل الأولي
-// (قبل اكتمال تحميل المخزون والفواتير من قاعدة البيانات) لمنع كتابة بيانات ناقصة بالخطأ.
 function scheduleAutoSave(summary) {
   if (!inventoryReady || !invoicesReady) {
     setAutoSaveStatus("loading", "جاري تحميل بيانات اليوم قبل بدء الحفظ التلقائي...");
@@ -1117,7 +1276,6 @@ function scheduleAutoSave(summary) {
 }
 window.scheduleAutoSave = scheduleAutoSave;
 
-// دالة الترحيل والحفظ اليدوية (حفظ فوري بدون انتظار، كخيار احتياطي فقط)
 async function triggerManualSave() {
   if (!currentDaySummary) {
     alert("برجاء الانتظار حتى اكتمال تحميل البيانات الحالية أولاً.");
@@ -1253,9 +1411,6 @@ function processCalculations() {
 
   renderTable("");
 
-  // فقط الأيام اللي عليها فواتير فعلية هي اللي بتتحفظ تلقائياً
-  // (نتحقق من وجود فواتير فعلية بدل التحقق من قيم المبيعات/التكلفة، حتى لا يفوت الحفظ
-  // يوماً حقيقياً بربح أو تكلفة صفر، ولا يُحفظ خطأً أثناء التحميل الأولي).
   const hasInvoicesForDate = globalInvoices.some(inv => parseDate(inv.date, inv.timestamp) === date);
   if (hasInvoicesForDate) {
     scheduleAutoSave(currentDaySummary);
