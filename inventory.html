@@ -172,14 +172,6 @@
         .zero-row .qty-total { background: rgba(225,29,72,0.05); color: var(--danger); }
         .low-row  .qty-total { background: rgba(217,119,6,0.06); color: var(--gold); }
 
-        .zero-divider {
-            grid-column: 1 / -1; padding: 10px 16px; background: #fff1f2;
-            border-radius: 12px; border: 1px dashed rgba(225,29,72,0.25);
-            font-size: 12px; font-weight: 800; color: var(--danger);
-            display: flex; align-items: center; gap: 8px; margin: 6px 0;
-        }
-        .zero-divider em { background: rgba(225,29,72,0.08); padding: 2px 10px; border-radius: 20px; font-style: normal; }
-
         .loading, .empty-state { grid-column: 1 / -1; text-align: center; padding: 50px 20px; color: var(--sub); }
         .spinner { width: 36px; height: 36px; border: 3.5px solid #edf2f7; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -236,7 +228,6 @@
         .tx-type.loss { background: var(--danger); }
         .tx-details { flex: 1; text-align: right; min-width: 0; }
         .tx-title { font-size: 13px; font-weight: 800; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tx-note { font-size: 10.5px; color: var(--sub); font-weight: 600; margin-top: 1px; }
         .tx-date { font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
         .tx-amount { font-size: 12.5px; font-weight: 900; text-align: left; direction: ltr; }
         .tx-amount.plus { color: #0284c7; }
@@ -333,7 +324,6 @@
 
     const app = initializeApp(firebaseConfig);
     
-    // تفعيل الكاش المحلي المتطور الذكي الخاص بالإصدار 10 لتوفير القراءات وتسريع الاستجابة
     const db = initializeFirestore(app, {
         localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager()
@@ -343,9 +333,8 @@
     let allItems = [];
     let rawDocsCache = null;       
     let cacheTimestamp = 0;        
-    const CACHE_TTL_MS = 10 * 60 * 1000; // زيادة وقت حفظ الكاش المحلي لـ 10 دقائق لتوفير القراءات
+    const CACHE_TTL_MS = 10 * 60 * 1000;
 
-    // عناصر DOM الشائعة
     const dom = {
         sTotal: document.getElementById('sTotal'),
         sOk: document.getElementById('sOk'),
@@ -357,7 +346,6 @@
         searchInput: document.getElementById('searchInput')
     };
 
-    // حماية الصفحة من التعليق في حال بطء الشبكة
     const loadTimeout = setTimeout(() => {
         if (dom.listBody.querySelector('.loading')) {
             dom.listBody.classList.add('full-width');
@@ -369,7 +357,18 @@
         }
     }, 7000);
 
-    // المتابعة الحية مع Firestore
+    // دالة تحديد أولوية الترتيب المطلوبة
+    function getItemPriority(item) {
+        const factor = Number(item.unitFactor || item.factor) || 1;
+        const totalPcs = Number(item.totalPcs) || 0;
+        const minPcs = (Number(item.min) || 0) * factor;
+
+        if (totalPcs < 0) return 1;                     // 1. الأصناف السالبة
+        if (totalPcs > 0 && totalPcs <= minPcs) return 2; // 2. الأصناف التي قربت تخلص
+        if (totalPcs > minPcs) return 3;                 // 3. الأصناف العادية والمتوفرة
+        return 4;                                        // 4. الأصناف التي رصيدها صفر
+    }
+
     onSnapshot(collection(db, "inventory"), snap => {
         clearTimeout(loadTimeout);
         allItems = [];
@@ -379,13 +378,19 @@
             if (data.isDeleted !== true) allItems.push({ id: d.id, ...data });
         });
 
+        // تطبيق ترتيب الأولويات الجديد
         allItems.sort((a, b) => {
-            const qa = Number(a.totalPcs) || 0;
-            const qb = Number(b.totalPcs) || 0;
-            if (qa <= 0 && qb <= 0) return (a.name||'').localeCompare(b.name||'', 'ar');
-            if (qa <= 0) return 1;
-            if (qb <= 0) return -1;
-            return qb - qa;
+            const pA = getItemPriority(a);
+            const pB = getItemPriority(b);
+            if (pA !== pB) return pA - pB;
+
+            const qA = Number(a.totalPcs) || 0;
+            const qB = Number(b.totalPcs) || 0;
+
+            if (pA === 1) return qA - qB; // السالبة: الأكثر سالبية أولاً
+            if (pA === 2) return qA - qB; // كمية منخفضة: الأقل رصيداً أولاً
+            if (pA === 3) return qB - qA; // العادية: الأكثر كمية أولاً
+            return (a.name || '').localeCompare(b.name || '', 'ar'); // الصفر: أبجدياً
         });
 
         updateStats();
@@ -466,20 +471,10 @@
         }
 
         dom.listBody.classList.remove('full-width');
-        const withQty = list.filter(i => (Number(i.totalPcs) || 0) > 0);
-        const zeroQty = list.filter(i => (Number(i.totalPcs) || 0) <= 0);
 
         let html = '';
         let n = 1;
-        withQty.forEach(item => { html += buildRow(item, n++); });
-
-        if (zeroQty.length > 0) {
-            html += `<div class="zero-divider">
-                        <i class="fas fa-triangle-exclamation"></i>
-                        <em>نفد المخزون أو بالسالب — عدد الأصناف ${zeroQty.length}</em>
-                     </div>`;
-            zeroQty.forEach(item => { html += buildRow(item, n++); });
-        }
+        list.forEach(item => { html += buildRow(item, n++); });
 
         dom.listBody.innerHTML = html;
     };
