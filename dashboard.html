@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>مطابقة أرصدة أول المدة - شركة الزيادي</title>
-    <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,16 +19,13 @@
             --surface-alt: #f6f8f7;
             --border: #e2e7e4;
             --border-soft: #edf1ef;
-
             --ink: #16241d;
             --ink-muted: #64766e;
             --ink-faint: #94a39c;
-
             --brand-900: #0a3a2c;
             --brand-700: #0f5c42;
             --brand-500: #1c7d57;
             --brand-tint: #e7f2ec;
-
             --gold: #ad7f2e;
             --gold-tint: #f6ecda;
             --teal: #0d8478;
@@ -40,12 +36,10 @@
             --blue-tint: #eaf0fc;
             --purple: #7451b8;
             --purple-tint: #f1ecfa;
-
             --success: #1f9a63;
             --success-tint: #e5f6ed;
             --danger: #d1483f;
             --danger-tint: #fbeae8;
-
             --radius-sm: 10px;
             --radius-md: 16px;
             --radius-lg: 22px;
@@ -410,7 +404,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -423,13 +417,13 @@
 
         const app = initializeApp(firebaseConfig);
         let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+        try {
+            db = initializeFirestore(app, {
+                localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+            });
+        } catch (e) {
+            db = getFirestore(app);
+        }
 
         /* ============ Helpers ============ */
 
@@ -466,71 +460,14 @@
             if (text) document.getElementById('loadingText').innerText = text;
         }
 
-        /* دالة جلب الرصيد الحقيقي الصحيح للمورد بنظام الحساب الموحد */
-        async function getSupplierRealBalance(supId, openingBal) {
-            const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
-                getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
-                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
-                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
-            ]);
-
-            let totalDebit = Number(openingBal || 0); // المدين (+)
-            let totalCredit = 0;                     // الدائن (-)
-
-            const processedTransIds = new Set();
-
-            // 1. حساب حركات السداد والصرف المستقلة من جدول transactions
-            const processTransDoc = (docSnap) => {
-                if (processedTransIds.has(docSnap.id)) return;
-                
-                const d = docSnap.data();
-                if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
-
-                processedTransIds.add(docSnap.id);
-                const amt = Number(d.amount) || 0;
-
-                if (d.type === "صرف" || d.type === "سداد") {
-                    totalCredit += amt;
-                } else if (d.type === "قبض") {
-                    totalDebit += amt;
-                }
-            };
-
-            snapTransParty.forEach(processTransDoc);
-            snapTransSup.forEach(processTransDoc);
-
-            // 2. حساب المشتريات والمرتجعات والمدفوع نقداً مع الفاتورة
-            snapItems.forEach(docSnap => {
-                const d = docSnap.data();
-                const totalAmt = Number(d.total) || Number(d.amount) || 0;
-
-                if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
-                    totalDebit += totalAmt; // إجمالي الفاتورة يزيد المديونية
-
-                    const paidAmt = Number(d.paid) || 
-                        (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
-                        (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
-
-                    if (paidAmt > 0) {
-                        totalCredit += paidAmt; // الخصم يتم مرة واحدة
-                    }
-                } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
-                    totalCredit += totalAmt; // المرتجع يقلل المديونية
-                }
-            });
-
-            // صافي رصيد المورد للمؤسسة
-            return totalDebit - totalCredit;
-        }
-
         /* ============ State ============ */
 
         let netCashFlow = 0, netWalletFlow = 0;
         let actualInv = 0, actualCust = 0, actualSup = 0;
 
         let analytics = {
-            cash: { sales: 0, purchases: 0, expenses: 0, manualIn: 0, manualOut: 0 },
-            wallet: { sales: 0, purchases: 0, expenses: 0, manualIn: 0, manualOut: 0 },
+            cash: { sales: 0, purchases: 0, expenses: 0, incoming: 0, outgoing: 0 },
+            wallet: { sales: 0, purchases: 0, expenses: 0, incoming: 0, outgoing: 0 },
             inventory: { totalSalesVal: 0, totalPurchasesVal: 0, totalReturnsVal: 0 },
             customers: { count: 0, totalDebt: 0 },
             suppliers: { count: 0, totalDebt: 0 }
@@ -575,15 +512,15 @@
             }
         };
 
-        /* ============ Load & Compute ============ */
+        /* ============ Optimized Load & Compute (In-Memory Processing to save Firestore reads) ============ */
 
         window.loadAllData = async function () {
             try {
                 setLoading(true, "جاري مزامنة الحسابات الفعلية...");
 
                 analytics = {
-                    cash: { sales: 0, purchases: 0, expenses: 0, manualIn: 0, manualOut: 0 },
-                    wallet: { sales: 0, purchases: 0, expenses: 0, manualIn: 0, manualOut: 0 },
+                    cash: { sales: 0, purchases: 0, expenses: 0, incoming: 0, outgoing: 0 },
+                    wallet: { sales: 0, purchases: 0, expenses: 0, incoming: 0, outgoing: 0 },
                     inventory: { totalSalesVal: 0, totalPurchasesVal: 0, totalReturnsVal: 0 },
                     customers: { count: 0, totalDebt: 0 },
                     suppliers: { count: 0, totalDebt: 0 }
@@ -604,6 +541,7 @@
                     document.getElementById(id).innerText = "حُفظ في: " + (initVals.savedAt || '—');
                 });
 
+                // جلب المجموعات دفعة واحدة لتوفير استهلاك القراءات تماماً
                 const [
                     inventorySnap, invoicesSnap,
                     customersSnap, suppliersSnap, cashLogsSnap, expensesSnap, supplierTransSnap, transactionsSnap
@@ -621,41 +559,49 @@
                 netCashFlow = 0;
                 netWalletFlow = 0;
 
-                /* ---- المبيعات ---- */
+                /* ---- 1. المبيعات ---- */
                 invoicesSnap.forEach(docItem => {
                     const data = docItem.data();
-                    netCashFlow += num(data.cashAmount);
-                    netWalletFlow += num(data.walletAmount);
-                    
-                    analytics.cash.sales += num(data.cashAmount);
-                    analytics.wallet.sales += num(data.walletAmount);
+                    const cAmt = num(data.cashAmount);
+                    const wAmt = num(data.walletAmount);
 
+                    netCashFlow += cAmt;
+                    netWalletFlow += wAmt;
+                    
+                    analytics.cash.sales += cAmt;
+                    analytics.wallet.sales += wAmt;
+
+                    const totalInvAmt = num(data.total || data.grandTotal);
                     if (data.type === 'مرتجع' || data.isReturn === true) {
-                        analytics.inventory.totalReturnsVal += num(data.total || data.grandTotal);
+                        analytics.inventory.totalReturnsVal += totalInvAmt;
                     } else {
-                        analytics.inventory.totalSalesVal += num(data.total || data.grandTotal);
+                        analytics.inventory.totalSalesVal += totalInvAmt;
                     }
                 });
 
-                /* ---- المشتريات والمدفوعات للموردين ---- */
+                /* ---- 2. المشتريات والمرتجعات عبر supplier_transactions ---- */
                 supplierTransSnap.forEach(docItem => {
                     const data = docItem.data();
-                    netCashFlow -= num(data.cashPaid);
-                    netWalletFlow -= num(data.walletPaid);
+                    const cPaid = num(data.cashPaid);
+                    const wPaid = num(data.walletPaid);
 
-                    analytics.cash.purchases += num(data.cashPaid);
-                    analytics.wallet.purchases += num(data.walletPaid);
+                    netCashFlow -= cPaid;
+                    netWalletFlow -= wPaid;
+
+                    analytics.cash.purchases += cPaid;
+                    analytics.wallet.purchases += wPaid;
                     
-                    if (data.type === 'مرتجع' || data.isReturn === true) {
-                        analytics.inventory.totalReturnsVal += num(data.total || data.amount);
+                    const totalSupAmt = num(data.total || data.amount);
+                    if (data.type === 'مرتجع شراء' || data.type === 'مرتجع' || data.isReturn === true) {
+                        analytics.inventory.totalReturnsVal += totalSupAmt;
                     } else {
-                        analytics.inventory.totalPurchasesVal += num(data.total || data.amount);
+                        analytics.inventory.totalPurchasesVal += totalSupAmt;
                     }
                 });
 
                 const processedMovements = new Set();
 
-                /* ---- حركات الصندوق اليدوية ---- */
+                /* ---- 3. حركات الصندوق اليدوية (cash_logs) ---- */
                 cashLogsSnap.forEach(docItem => {
                     const data = docItem.data();
                     if (data.invoiceId) return; 
@@ -670,15 +616,15 @@
                     const isOutgoing = ['out', 'صرف', 'مصروف'].includes(data.type);
 
                     if (isIncoming) {
-                        if (toWallet) { netWalletFlow += amt; analytics.wallet.manualIn += amt; } 
-                        else { netCashFlow += amt; analytics.cash.manualIn += amt; }
+                        if (toWallet) { netWalletFlow += amt; analytics.wallet.incoming += amt; } 
+                        else { netCashFlow += amt; analytics.cash.incoming += amt; }
                     } else if (isOutgoing) {
-                        if (toWallet) { netWalletFlow -= amt; analytics.wallet.manualOut += amt; } 
-                        else { netCashFlow -= amt; analytics.cash.manualOut += amt; }
+                        if (toWallet) { netWalletFlow -= amt; analytics.wallet.outgoing += amt; } 
+                        else { netCashFlow -= amt; analytics.cash.outgoing += amt; }
                     }
                 });
 
-                /* ---- سندات القبض والصرف اليدوية ---- */
+                /* ---- 4. سندات القبض والصرف اليدوية (transactions) ---- */
                 transactionsSnap.forEach(docItem => {
                     if (processedMovements.has(docItem.id)) return;
                     
@@ -692,25 +638,30 @@
                     const toWallet = isWalletMethod(methodText) || isWalletMethod(data.note);
 
                     if (data.type === 'قبض') {
-                        if (toWallet) { netWalletFlow += amt; analytics.wallet.manualIn += amt; } 
-                        else { netCashFlow += amt; analytics.cash.manualIn += amt; }
+                        if (toWallet) { netWalletFlow += amt; analytics.wallet.incoming += amt; } 
+                        else { netCashFlow += amt; analytics.cash.incoming += amt; }
                     } else if (data.type === 'صرف') {
-                        if (toWallet) { netWalletFlow -= amt; analytics.wallet.manualOut += amt; } 
-                        else { netCashFlow -= amt; analytics.cash.manualOut += amt; }
+                        if (toWallet) { netWalletFlow -= amt; analytics.wallet.outgoing += amt; } 
+                        else { netCashFlow -= amt; analytics.cash.outgoing += amt; }
                     }
                 });
 
-                /* ---- المصروفات ---- */
+                /* ---- 5. المصروفات ---- */
                 expensesSnap.forEach(docItem => {
                     const data = docItem.data();
                     const amt = num(data.amount || data.total);
                     const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
 
-                    if (toWallet) { netWalletFlow -= amt; analytics.wallet.expenses += amt; } 
-                    else { netCashFlow -= amt; analytics.cash.expenses += amt; }
+                    if (toWallet) {
+                        netWalletFlow -= amt;
+                        analytics.wallet.expenses += amt;
+                    } else {
+                        netCashFlow -= amt;
+                        analytics.cash.expenses += amt;
+                    }
                 });
 
-                /* ---- المخزون ---- */
+                /* ---- 6. المخزون ---- */
                 actualInv = 0;
                 inventorySnap.forEach(docItem => {
                     const data = docItem.data();
@@ -723,7 +674,7 @@
                     actualInv += (totalPcs / factor) * buyPrice;
                 });
 
-                /* ---- العملاء ---- */
+                /* ---- 7. العملاء ---- */
                 actualCust = 0;
                 customersSnap.forEach(docItem => {
                     const bal = num(docItem.data().currentBalance);
@@ -732,19 +683,61 @@
                     if(bal > 0) analytics.customers.count++;
                 });
 
-                /* ---- الموردين (التحديث المباشر للمطابقة الدقيقة) ---- */
-                actualSup = 0;
-                const supBalancePromises = suppliersSnap.docs.map(async (docItem) => {
-                    const data = docItem.data();
-                    const balance = await getSupplierRealBalance(docItem.id, data.openingBalance);
-                    return balance;
+                /* ---- 8. الموردين (المعالجة في الذاكرة لتفادي استعلامات N+1 وتوفير القراءات) ---- */
+                const transByParty = new Map();
+                transactionsSnap.forEach(docSnap => {
+                    const d = docSnap.data();
+                    const pId = d.partyId || d.supplierId;
+                    if (pId) {
+                        if (!transByParty.has(pId)) transByParty.set(pId, []);
+                        transByParty.get(pId).push({ id: docSnap.id, ...d });
+                    }
                 });
 
-                const supBalances = await Promise.all(supBalancePromises);
-                supBalances.forEach(bal => {
-                    actualSup += bal;
-                    analytics.suppliers.totalDebt += bal;
-                    if (bal > 0.1) analytics.suppliers.count++;
+                const supTransBySup = new Map();
+                supplierTransSnap.forEach(docSnap => {
+                    const d = docSnap.data();
+                    const sId = d.supplierId;
+                    if (sId) {
+                        if (!supTransBySup.has(sId)) supTransBySup.set(sId, []);
+                        supTransBySup.get(sId).push({ id: docSnap.id, ...d });
+                    }
+                });
+
+                actualSup = 0;
+                suppliersSnap.forEach(docItem => {
+                    const sId = docItem.id;
+                    const data = docItem.data();
+                    let totalDebit = num(data.openingBalance);
+                    let totalCredit = 0;
+                    const processedTransIds = new Set();
+
+                    const pTrans = transByParty.get(sId) || [];
+                    pTrans.forEach(d => {
+                        if (processedTransIds.has(d.id)) return;
+                        if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+                        processedTransIds.add(d.id);
+                        const amt = num(d.amount);
+                        if (d.type === "صرف" || d.type === "سداد") totalCredit += amt;
+                        else if (d.type === "قبض") totalDebit += amt;
+                    });
+
+                    const sTrans = supTransBySup.get(sId) || [];
+                    sTrans.forEach(d => {
+                        const totalAmt = num(d.total) || num(d.amount) || 0;
+                        if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                            totalDebit += totalAmt;
+                            const paidAmt = num(d.paid) || (num(d.cashPaid) + num(d.walletPaid)) || (num(d.cashAmount) + num(d.walletAmount)) || 0;
+                            if (paidAmt > 0) totalCredit += paidAmt;
+                        } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
+                            totalCredit += totalAmt;
+                        }
+                    });
+
+                    const balance = totalDebit - totalCredit;
+                    actualSup += balance;
+                    analytics.suppliers.totalDebt += balance;
+                    if (balance > 0.1) analytics.suppliers.count++;
                 });
 
                 window.calculateFinancialTotals();
@@ -817,26 +810,25 @@
             const fS = (v) => Math.abs(v).toLocaleString('en-US');
 
             document.getElementById('statsCash').innerHTML = `
-                <div><span>إجمالي المبيعات:</span> <span class="val text-success">${fS(analytics.cash.sales)}</span></div>
+                <div><span>مبيعات نقدية:</span> <span class="val text-success">${fS(analytics.cash.sales)}</span></div>
                 <div><span>مشتريات نقدية:</span> <span class="val text-danger">${fS(analytics.cash.purchases)}</span></div>
-                <div><span>مصروفات:</span> <span class="val text-danger">${fS(analytics.cash.expenses)}</span></div>
-                <div><span>إيداع يدوي:</span> <span class="val text-success">${fS(analytics.cash.manualIn)}</span></div>
-                <div><span>سحب يدوي:</span> <span class="val text-danger">${fS(analytics.cash.manualOut)}</span></div>
+                <div><span>مصروفات نقدية:</span> <span class="val text-danger">${fS(analytics.cash.expenses)}</span></div>
+                <div><span>سندات وارد نقدى:</span> <span class="val text-success">${fS(analytics.cash.incoming)}</span></div>
+                <div><span>سندات صادر نقدى:</span> <span class="val text-danger">${fS(analytics.cash.outgoing)}</span></div>
             `;
 
             document.getElementById('statsWallet').innerHTML = `
-                <div><span>إجمالي المبيعات:</span> <span class="val text-success">${fS(analytics.wallet.sales)}</span></div>
-                <div><span>مدفوعات فوري:</span> <span class="val text-danger">${fS(analytics.wallet.purchases)}</span></div>
-                <div><span>مصروفات:</span> <span class="val text-danger">${fS(analytics.wallet.expenses)}</span></div>
-                <div><span>شحن رصيد:</span> <span class="val text-success">${fS(analytics.wallet.manualIn)}</span></div>
-                <div><span>سحب رصيد:</span> <span class="val text-danger">${fS(analytics.wallet.manualOut)}</span></div>
+                <div><span>مبيعات محفظة:</span> <span class="val text-success">${fS(analytics.wallet.sales)}</span></div>
+                <div><span>مشتريات محفظة:</span> <span class="val text-danger">${fS(analytics.wallet.purchases)}</span></div>
+                <div><span>مصروفات محفظة:</span> <span class="val text-danger">${fS(analytics.wallet.expenses)}</span></div>
+                <div><span>سندات وارد محفظة:</span> <span class="val text-success">${fS(analytics.wallet.incoming)}</span></div>
+                <div><span>سندات صادر محفظة:</span> <span class="val text-danger">${fS(analytics.wallet.outgoing)}</span></div>
             `;
 
             document.getElementById('statsInv').innerHTML = `
-                <div><span>قيمة مبيعات المخزون (بسعر البيع):</span> <span class="val text-success">${fS(analytics.inventory.totalSalesVal)} ج.م</span></div>
-                <div><span>قيمة مشتريات المخزون (بسعر التكلفة):</span> <span class="val text-danger">${fS(analytics.inventory.totalPurchasesVal)} ج.م</span></div>
+                <div><span>مبيعات المخزون (بيع):</span> <span class="val text-success">${fS(analytics.inventory.totalSalesVal)} ج.م</span></div>
+                <div><span>مشتريات المخزون (تكلفة):</span> <span class="val text-danger">${fS(analytics.inventory.totalPurchasesVal)} ج.م</span></div>
                 <div class="full-width"><span>إجمالي المرتجعات المالية:</span> <span class="val text-warning">${fS(analytics.inventory.totalReturnsVal)} ج.م</span></div>
-                <div class="full-width" style="color: var(--ink-faint);">ملاحظة: أرقام إعلامية فقط (مبيعات بسعر البيع)، غير مستخدمة في حساب الانحراف</div>
             `;
 
             document.getElementById('statsCust').innerHTML = `
