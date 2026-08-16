@@ -541,7 +541,6 @@
                     document.getElementById(id).innerText = "حُفظ في: " + (initVals.savedAt || '—');
                 });
 
-                // جلب المجموعات دفعة واحدة لتوفير استهلاك القراءات تماماً
                 const [
                     inventorySnap, invoicesSnap,
                     customersSnap, suppliersSnap, cashLogsSnap, expensesSnap, supplierTransSnap, transactionsSnap
@@ -674,16 +673,27 @@
                     actualInv += (totalPcs / factor) * buyPrice;
                 });
 
-                /* ---- 7. العملاء ---- */
+                /* ---- 7. العملاء (محدث ليطابق شاشة كشف حساب العملاء بدقة 100%) ---- */
                 actualCust = 0;
-                customersSnap.forEach(docItem => {
-                    const bal = num(docItem.data().currentBalance);
-                    actualCust += bal;
-                    analytics.customers.totalDebt += bal;
-                    if(bal > 0) analytics.customers.count++;
-                });
+                let totalCustDebit = 0;
+                let totalCustCredit = 0;
+                analytics.customers.totalDebt = 0;
+                analytics.customers.count = 0;
 
-                /* ---- 8. الموردين (المعالجة في الذاكرة لتفادي استعلامات N+1 وتوفير القراءات) ---- */
+                customersSnap.forEach(docItem => {
+                    const data = docItem.data();
+                    const bal = num(data.currentBalance);
+                    if (bal > 0) {
+                        totalCustDebit += bal;
+                        analytics.customers.count++;
+                    } else if (bal < 0) {
+                        totalCustCredit += Math.abs(bal);
+                    }
+                    analytics.customers.totalDebt += bal;
+                });
+                actualCust = totalCustDebit - totalCustCredit;
+
+                /* ---- 8. الموردين ---- */
                 const transByParty = new Map();
                 transactionsSnap.forEach(docSnap => {
                     const d = docSnap.data();
