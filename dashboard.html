@@ -603,7 +603,8 @@
                 /* ---- 3. حركات الصندوق اليدوية (cash_logs) ---- */
                 cashLogsSnap.forEach(docItem => {
                     const data = docItem.data();
-                    if (data.invoiceId) return; 
+                    // استثناء الفواتير والمصروفات لمنع التكرار
+                    if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف') return; 
 
                     processedMovements.add(docItem.id);
 
@@ -612,7 +613,7 @@
                     const toWallet = isWalletMethod(methodText) || isWalletMethod(data.note);
 
                     const isIncoming = ['in', 'قبض', 'إيراد', 'ايراد'].includes(data.type);
-                    const isOutgoing = ['out', 'صرف', 'مصروف'].includes(data.type);
+                    const isOutgoing = ['out', 'صرف'].includes(data.type);
 
                     if (isIncoming) {
                         if (toWallet) { netWalletFlow += amt; analytics.wallet.incoming += amt; } 
@@ -628,7 +629,8 @@
                     if (processedMovements.has(docItem.id)) return;
                     
                     const data = docItem.data();
-                    if (data.isInvoicePayment || data.invoiceId) return;
+                    // استثناء سداد الفواتير والمصروفات لمنع التكرار
+                    if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف') return;
                     
                     processedMovements.add(docItem.id);
 
