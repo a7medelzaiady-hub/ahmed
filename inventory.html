@@ -194,7 +194,6 @@
         .close-modal { background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .modal-body { padding: 12px 16px 20px; overflow-y: auto; flex: 1; background: #f8fafc; }
         
-        /* تحسينات كروت الملخص لمنع الانكسار */
         .modal-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
         .mini-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 10px 8px; display: flex; align-items: center; gap: 8px; min-width: 0; }
         .mini-card i { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
@@ -416,7 +415,6 @@
             .replace(/ة/g, 'ه');
     }
 
-    // تنسيق وعرض الكميات بدقة
     function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
         totalPcs = parseInt(totalPcs) || 0;
         capacity = parseInt(capacity) || 1;
@@ -533,13 +531,14 @@
         </div>`;
     }
 
+    // تم تعديل هذه الدالة لاستبعاد مجموعة الطلبات orders لعدم إدراج حركاتها غير المنفذة
     async function getRawDocs(forceRefresh) {
         const now = Date.now();
         if (rawDocsCache && (now - cacheTimestamp) < CACHE_TTL_MS && !forceRefresh) {
             return rawDocsCache; 
         }
 
-        const targetCollections = ["orders", "transactions", "purchase_orders", "supplier_transactions", "sales", "invoice", "invoices"];
+        const targetCollections = ["transactions", "purchase_orders", "supplier_transactions", "sales", "invoice", "invoices"];
         const docs = [];
 
         await Promise.all(targetCollections.map(async (colName) => {
@@ -550,11 +549,7 @@
         }));
 
         try {
-            const [subOrders, subItems] = await Promise.all([
-                getDocs(collectionGroup(db, 'orders')),
-                getDocs(collectionGroup(db, 'items'))
-            ]);
-            subOrders.forEach(docSnap => docs.push({ id: docSnap.id, data: docSnap.data(), colName: 'orders_sub' }));
+            const subItems = await getDocs(collectionGroup(db, 'items'));
             subItems.forEach(docSnap => docs.push({ id: docSnap.id, data: docSnap.data(), colName: 'items_sub' }));
         } catch (e) {}
 
@@ -599,7 +594,6 @@
                 return { supp, cli };
             };
 
-            // الدالة المعدلة لمعالجة وتحويل أعداد الكراتين والجراكين بدقة
             const inspectObj = (obj) => {
                 let match = false;
                 let extractedQty = 0;
@@ -611,7 +605,6 @@
                 }
 
                 if (match) {
-                    // إذا كان إجمالي القطع مسجلاً صراحة بالمعاملة
                     if (obj.totalPieces !== undefined && obj.totalPieces !== null && obj.totalPieces !== '') {
                         extractedQty = parseFloat(obj.totalPieces) || 0;
                     } else if (obj.totalPcs !== undefined && obj.totalPcs !== null && obj.totalPcs !== '') {
@@ -628,7 +621,6 @@
                         } else if (isCartonUnit) {
                             extractedQty = rawVal * capacity;
                         } else {
-                            // إذا لم تُحدد الوحدة صراحة، وكانت سعة الكرتونة أكبر من 1 فالغالبية العظمى للمعاملات تُسجل بالكرتونة
                             if (obj.isCarton === true || capacity > 1) {
                                 extractedQty = rawVal * capacity;
                             } else {
