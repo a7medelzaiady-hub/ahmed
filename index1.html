@@ -581,18 +581,33 @@
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     // -------------------------------------------------------------
-    // نظام الحماية الصارم - منع الدخول العشوائي والتحقق الفوري من التوكن
+    // نظام الحماية والمرونة المعدل - يمنع الطرد التلقائي ويعالج نقص القيم
     // -------------------------------------------------------------
-    const authSessionToken = sessionStorage.getItem('authToken');
-    const currentUserId = sessionStorage.getItem('userId');
-    const userName = sessionStorage.getItem('username') || sessionStorage.getItem('user_name');
-    const userRole = sessionStorage.getItem('role');
+    const isLoggedIn = sessionStorage.getItem('isLoggedIn');
+    let userName = sessionStorage.getItem('username') || sessionStorage.getItem('user_name');
+    let userRole = sessionStorage.getItem('role') || 'restricted';
+    let currentUserId = sessionStorage.getItem('userId');
+    let authSessionToken = sessionStorage.getItem('authToken');
 
-    // طرد مباشر في حال محاولة فتح الصفحة بدون تسجيل دخول حقيقي
-    if (!authSessionToken || !currentUserId || !userName || !userRole) {
+    // طرد فقط إذا لم يسجل المستخدم الدخول مطلقاً
+    if (isLoggedIn !== 'true' && !userName) {
         sessionStorage.clear();
         window.location.href = "index.html";
     }
+
+    // إنشاء القيم التلقائية في حال عدم وجودها لمنع الخروج المفاجئ
+    if (!userName) userName = 'مستخدم';
+    if (!currentUserId) {
+        currentUserId = 'usr_' + userName.toLowerCase().replace(/\s+/g, '_');
+        sessionStorage.setItem('userId', currentUserId);
+    }
+    if (!authSessionToken) {
+        authSessionToken = 'tok_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        sessionStorage.setItem('authToken', authSessionToken);
+    }
+    sessionStorage.setItem('isLoggedIn', 'true');
+    sessionStorage.setItem('username', userName);
+    sessionStorage.setItem('role', userRole);
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -619,27 +634,26 @@
     async function initUserSession() {
         const sessionDocRef = doc(db, "sessions", currentUserId);
         
-        await setDoc(sessionDocRef, {
-            userId: currentUserId,
-            userName: userName,
-            role: userRole,
-            authToken: authSessionToken,
-            loginTime: serverTimestamp(),
-            lastActive: serverTimestamp(),
-            status: 'active'
-        }, { merge: true });
-
-        // تسجيل حدث الدخول في السجلات
         try {
+            await setDoc(sessionDocRef, {
+                userId: currentUserId,
+                userName: userName,
+                role: userRole,
+                authToken: authSessionToken,
+                loginTime: serverTimestamp(),
+                lastActive: serverTimestamp(),
+                status: 'active'
+            }, { merge: true });
+
             await addDoc(collection(db, "session_logs"), {
                 userId: currentUserId,
                 userName: userName,
                 action: 'LOGIN',
                 timestamp: serverTimestamp()
             });
-        } catch(e) { console.warn("Log write ignored", e); }
+        } catch(e) { console.warn("Session init warning", e); }
 
-        // نبض النشاط الدوري للظهور كـ "نشط" (الكَر)
+        // نبض النشاط الدوري للظهور كـ "نشط"
         heartbeatInterval = setInterval(async () => {
             try {
                 await updateDoc(sessionDocRef, {
@@ -648,16 +662,14 @@
             } catch(e) {}
         }, 20000);
 
-        // الاستماع المباشر لحالة الجلسة للطرد الفوري إذا ألغى الأدمن صلاحية المستخدم أو حظره
+        // الاستماع المباشر لحالة الجلسة للطرد الفوري عند الحظر المباشر من الأدمن
         onSnapshot(sessionDocRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
-                if (data.status === 'terminated' || data.status === 'kicked' || data.authToken !== authSessionToken) {
+                if (data.status === 'terminated' || data.status === 'kicked') {
                     alert('تم إنهاء الجلسة أو تعليق الحساب بواسطة الأدمن.');
                     handleLogout();
                 }
-            } else {
-                handleLogout();
             }
         });
     }
