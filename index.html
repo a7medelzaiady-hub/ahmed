@@ -196,6 +196,19 @@
     const loginContent = document.getElementById('loginContent');
     const CACHE_KEY_USERS = 'zaiady_users_credentials_cache';
 
+    // دالة مساعدة لحفظ بيانات الجلسة كاملة لحل مشكلة الطرد المباشر
+    function saveSessionData(username, role, userId = null) {
+        const generatedUserId = userId || ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
+        const token = 'token_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+        sessionStorage.setItem('isLoggedIn', 'true');
+        sessionStorage.setItem('username', username);
+        sessionStorage.setItem('user_name', username);
+        sessionStorage.setItem('role', role);
+        sessionStorage.setItem('userId', generatedUserId);
+        sessionStorage.setItem('authToken', token);
+    }
+
     window.showCustomUi = (options) => {  
         const modal = document.getElementById('customGlobalModal');  
         const title = document.getElementById('customModalTitle');  
@@ -267,7 +280,10 @@
         autoInitializeUser(); 
         
         const loggedUser = sessionStorage.getItem('isLoggedIn');
-        if (loggedUser === 'true') {
+        const authToken = sessionStorage.getItem('authToken');
+        
+        // التحقق المزدوج لتجنب التكرار والتحويل غير المكتمل
+        if (loggedUser === 'true' && authToken) {
             window.location.href = "index1.html";
         } else {
             setTimeout(() => {
@@ -302,9 +318,8 @@
 
                 if (cachedUser) {
                     if (String(cachedUser.pass).trim() === String(passVal).trim()) {
-                        sessionStorage.setItem('isLoggedIn', 'true');
-                        sessionStorage.setItem('username', userVal);
-                        sessionStorage.setItem('role', cachedUser.role || 'restricted'); 
+                        // حفظ التوكن وبيانات الجلسة للعمل بدون إنترنت
+                        saveSessionData(userVal, cachedUser.role || 'restricted');
                         window.location.href = "index1.html";
                     } else {
                         err.innerText = "❌ كلمة المرور غير صحيحة (فحص الكاش المحلي)";
@@ -341,9 +356,8 @@
                         localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
                     } catch(_) {}
 
-                    sessionStorage.setItem('isLoggedIn', 'true');
-                    sessionStorage.setItem('username', userVal);
-                    sessionStorage.setItem('role', userData.role || 'restricted'); 
+                    // حفظ كافة قيم الجلسة بما فيها authToken و userId
+                    saveSessionData(userVal, userData.role || 'restricted', userSnap.id);
                     window.location.href = "index1.html";
                 } else {
                     err.innerText = "❌ كلمة المرور المدخلة غير صحيحة";
