@@ -48,7 +48,7 @@
         .btn-back {
             background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
             color: #fff; width: 38px; height: 38px; border-radius: var(--radius-sm);
-            display: flex; align-items: center; justify-content: center; cursor: text; text-decoration: none;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none;
         }
 
         .container { max-width: 800px; margin: 20px auto; padding: 0 16px; }
@@ -168,40 +168,38 @@
     const sessionsContainer = document.getElementById('sessionsContainer');
     const activeCountBadge = document.getElementById('activeCountBadge');
 
-    // استماع لحظي لكل الجلسات المسجلة في قاعدة البيانات
+    // استماع لحظي للجلسات مع فلترة الأجهزة النشطة فقط خلال آخر دقيقتين
     onSnapshot(collection(db, "sessions"), (snapshot) => {
         sessionsContainer.innerHTML = '';
         let activeCount = 0;
         let docsArray = [];
+        const now = new Date();
 
         snapshot.forEach(docSnap => {
-            docsArray.push({ id: docSnap.id, ...docSnap.data() });
+            const data = docSnap.data();
+            
+            // التحقق من أن الجهاز يرسل نبضات نشاط خلال آخر 120 ثانية (دقيقتين)
+            if (data.lastActive && data.lastActive.toDate) {
+                const diffSeconds = (now - data.lastActive.toDate()) / 1000;
+                if (diffSeconds > 120) return; // استبعاد الجلسات غير المتصلة حالياً
+            }
+
+            if (data.status === 'active') {
+                docsArray.push({ id: docSnap.id, ...data });
+            }
         });
 
         if (docsArray.length === 0) {
-            sessionsContainer.innerHTML = `<div class="empty-state">لا توجد جلسات مسجلة حالياً</div>`;
+            sessionsContainer.innerHTML = `<div class="empty-state">لا توجد جلسات نشطة حالياً</div>`;
             activeCountBadge.textContent = '0';
             return;
         }
 
         docsArray.forEach(data => {
-            // اعتبر الجلسة نشطة إذا لم يتم تسجيل خروجها أو طردها
-            if (data.status === 'active') {
-                activeCount++;
-            }
-
+            activeCount++;
             const userName = data.userName || 'مستخدم غير معروف';
             const userRole = data.role === 'admin' ? 'مدير النظام' : 'موظف / مستخدم';
             const roleClass = data.role === 'admin' ? 'role-admin' : 'role-employee';
-            
-            // حساب وقت آخر نشاط إذا وجد
-            let lastActiveText = 'متصل الآن';
-            if (data.lastActive && data.lastActive.toDate) {
-                const diffSec = Math.floor((new Date() - data.lastActive.toDate()) / 1000);
-                if (diffSec > 60) {
-                    lastActiveText = `آخر نشاط منذ ${Math.floor(diffSec / 60)} دقيقة`;
-                }
-            }
 
             const item = document.createElement('div');
             item.className = 'session-item';
@@ -213,12 +211,11 @@
                         <span class="role-badge ${roleClass}">${userRole}</span>
                         <div class="session-meta">
                             <span class="status-dot"></span>
-                            <span>${lastActiveText}</span>
-                            <span>(الحالة: ${data.status || 'نشط'})</span>
+                            <span>متصل الآن</span>
                         </div>
                     </div>
                 </div>
-                <button class="btn-kick" onclick="window.terminateSession('${data.userId}')">
+                <button class="btn-kick" onclick="window.terminateSession('${data.id}')">
                     <i class="fa-solid fa-power-off"></i> إنهاء الجلسة وطرد
                 </button>
             `;
@@ -231,17 +228,17 @@
         sessionsContainer.innerHTML = `<div class="empty-state">حدث خطأ أثناء جلب الجلسات</div>`;
     });
 
-    // دالة طرد المستخدم بتغيير حالته في فايربيز إلى kicked
-    window.terminateSession = async function(targetUserId) {
+    // دالة طرد المستخدم باستخدام المعرف الصحيح للمستند
+    window.terminateSession = async function(docId) {
         if (confirm('هل أنت متأكد من رغبتك في طرد هذا المستخدم وإنهاء جلسته فوراً؟')) {
             try {
-                await updateDoc(doc(db, "sessions", targetUserId), {
+                await updateDoc(doc(db, "sessions", docId), {
                     status: 'kicked'
                 });
                 alert('تم طرد المستخدم بنجاح.');
             } catch (err) {
                 console.error("Error kicking user:", err);
-                alert('فشل في تنفيذ عملية الطرد.');
+                alert('فشل في تنفيذ عملية الطرد. تأكد من قواعد الأمان في Firebase.');
             }
         }
     };
