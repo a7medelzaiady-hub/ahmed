@@ -100,9 +100,10 @@
             display: flex; align-items: center; gap: 7px;
             font-size: 12px; font-weight: 800; text-decoration: none; font-family: 'Cairo', sans-serif;
             box-shadow: var(--shadow-sm);
+            cursor: pointer;
         }
 
-        /* لوحة الهيرو المتدرجة — بانر أخضر بعمق بصري، والكروت البيضاء عايمة فوقه */
+        /* لوحة الهيرو المتدرجة */
         .hero-panel {
             margin: 16px;
             border-radius: var(--radius-lg);
@@ -404,9 +405,9 @@
             <div class="sub">نظام إدارة المبيعات</div>
         </div>
     </div>
-    <a href="index.html" class="btn-logout" onclick="sessionStorage.clear();">
+    <button id="btnLogout" class="btn-logout">
         <i class="fas fa-power-off"></i> خروج
-    </a>
+    </button>
 </header>
 
 <div class="hero-panel" id="heroPanel">
@@ -475,9 +476,9 @@
             <div class="card-icon-wrap icon-black"><i class="fa-solid fa-boxes-packing"></i></div>
             <span class="card-label">المخزن</span>
         </a>
-        <a href="vouchers-hub.html" class="grid-card" id="cardVouchers">
+        <a href="vouchers-hub.html?type=client" class="grid-card" id="cardVouchers">
             <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-receipt"></i></div>
-            <span class="card-label">السندات</span>
+            <span class="card-label">سندات العملاء</span>
         </a>
         <a href="banknote.html" class="grid-card" id="cardBanknote">
             <div class="card-icon-wrap icon-teal"><i class="fa-solid fa-vault"></i></div>
@@ -511,12 +512,12 @@
 
 <div class="bottom-spacer"></div>
 
-<!-- الزر العائم على اليسار مع إعطاء أمر فتح صريح ومباشر للمتصفح -->
-<button class="fab-left-btn" type="button" onclick="window.location.href='required-items-summary.html';" title="تجميع الأصناف المطلوبة">
+<!-- الزر العائم على اليسار -->
+<button class="fab-left-btn" type="button" id="btnRequiredItems" onclick="window.location.href='required-items-summary.html';" title="تجميع الأصناف المطلوبة">
     <i class="fa-solid fa-boxes-stacked"></i>
 </button>
 
-<div class="fab-stack">
+<div class="fab-stack" id="fabStack">
     <div class="fab-card" id="fabTop">
         <button class="fab-btn black-fab" onclick="toggleFab(event,'fabTop')">
             <i class="fa-solid fa-circle-plus"></i>
@@ -552,13 +553,13 @@
 
 <div class="bottom-nav-wrap">
     <nav class="bottom-nav">
-        <a href="price-search.html" class="nav-item">
+        <a href="price-search.html" class="nav-item" id="navPriceSearch">
             <i class="fa-solid fa-magnifying-glass-dollar"></i><span>استعلام سعر</span>
         </a>
-        <a href="add-customer.html" class="nav-item">
+        <a href="add-customer.html" class="nav-item" id="navAddCustomer">
             <i class="fa-solid fa-user-plus"></i><span>إضافة عميل</span>
         </a>
-        <a href="sales-invoice.html" class="nav-item primary">
+        <a href="sales-invoice.html" class="nav-item primary" id="navQuickSale">
             <i class="fa-solid fa-bolt"></i><span>بيع سريع</span>
         </a>
         <a href="expenses.html" class="nav-item" id="navExpenses">
@@ -577,7 +578,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -598,6 +599,75 @@
         db = getFirestore(app);
     }
 
+    const currentUserId = sessionStorage.getItem('userId') || 'user_' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('userId', currentUserId);
+
+    // 1. تسجيل الجلسة في كولكشن sessions مع مراقبة أمر الطرد من الأدمن
+    async function initUserSession() {
+        const sessionDocRef = doc(db, "sessions", currentUserId);
+        
+        await setDoc(sessionDocRef, {
+            userId: currentUserId,
+            userName: sessionStorage.getItem('username') || 'موظف',
+            role: sessionStorage.getItem('role') || 'employee',
+            loginTime: serverTimestamp(),
+            lastActive: serverTimestamp(),
+            status: 'active'
+        }, { merge: true });
+
+        // تسجيل حدث الدخول
+        try {
+            await addDoc(collection(db, "sessions"), {
+                userId: currentUserId,
+                userName: sessionStorage.getItem('username') || 'موظف',
+                action: 'LOGIN',
+                timestamp: serverTimestamp()
+            });
+        } catch(e) { console.warn("Log write ignored", e); }
+
+        // الاستماع المباشر لحالة الجلسة للطرد الفوري إذا غيّر الأدمن status إلى terminated
+        onSnapshot(sessionDocRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                if (data.status === 'terminated' || data.status === 'kicked') {
+                    alert('تم إنهاء جلستك وإخراجك بواسطة الأدمن.');
+                    handleLogout();
+                }
+            }
+        });
+    }
+
+    // تسجيل الخروج رسميًا
+    async function handleLogout() {
+        try {
+            const sessionDocRef = doc(db, "sessions", currentUserId);
+            await setDoc(sessionDocRef, {
+                status: 'logged_out',
+                logoutTime: serverTimestamp()
+            }, { merge: true });
+
+            await addDoc(collection(db, "sessions"), {
+                userId: currentUserId,
+                userName: sessionStorage.getItem('username') || 'موظف',
+                action: 'LOGOUT',
+                timestamp: serverTimestamp()
+            });
+        } catch (err) {
+            console.error("Logout error:", err);
+        } finally {
+            sessionStorage.clear();
+            window.location.href = "index.html";
+        }
+    }
+
+    document.getElementById('btnLogout').addEventListener('click', (e) => {
+        e.preventDefault();
+        handleLogout();
+    });
+
+    initUserSession();
+
+    // 2. متابعة كولكشن orders والتنبيه بالصوت
     let toastTimer = null;
     let lastPendingCount = 0;
 
@@ -629,14 +699,12 @@
 
     onSnapshot(collection(db, "orders"), (snapshot) => {
         let pendingCount = 0;
-
         snapshot.forEach(docSnap => {
             const data = docSnap.data();
             if (data.status !== 'done') {
                 pendingCount++;
             }
         });
-
         updateOrderAlerts(pendingCount);
     }, (error) => {
         console.warn("خطأ في جلب الطلبات:", error);
@@ -668,7 +736,6 @@
             }
             if (toast) {
                 toast.classList.add('show');
-                
                 if (toastTimer) clearTimeout(toastTimer);
                 toastTimer = setTimeout(() => {
                     dismissToast();
@@ -709,36 +776,34 @@
     setStat('statStockVal', '—');
     setStat('statClientsVal', '—');
 
+    // 3. التقييد الصارم للصلاحيات (المبيعات - الجرد - العملاء - سندات العملاء)
     window.addEventListener('load', function () {
         const role = sessionStorage.getItem('role') || 'employee';
-        const savedPermissions = sessionStorage.getItem('permissions');
-        const userPermissions = savedPermissions
-            ? JSON.parse(savedPermissions)
-            : ['sales', 'clients', 'vouchers', 'reports2', 'quotation'];
 
-        const permMap = {
-            cardSales:     'sales',
-            cardPurchases: 'purchases',
-            cardClients:   'clients',
-            cardSuppliers: 'suppliers',
-            cardInventory: 'inventory_admin',
-            cardVouchers:  'vouchers',
-            cardBanknote:  'banknote',
-            cardReports:   'reports',
-            cardQuotation: 'quotation'
-        };
-        const groupMap = {
-            groupSalesOps:       ['cardSales', 'cardPurchases', 'cardClients', 'cardSuppliers'],
-            groupInventoryDocs:  ['cardInventory', 'cardVouchers', 'cardBanknote', 'cardShortages'],
-            groupReports:        ['cardReports', 'cardQuotation']
-        };
+        const allowedNonAdminPermissions = ['sales', 'quotation', 'customers', 'client_vouchers'];
 
-        const statsSection  = document.getElementById('statsSection');
-        const heroPanel     = document.getElementById('heroPanel');
-        const navExpenses   = document.getElementById('navExpenses');
+        const cardSales = document.getElementById('cardSales');
+        const cardPurchases = document.getElementById('cardPurchases');
+        const cardClients = document.getElementById('cardClients');
+        const cardSuppliers = document.getElementById('cardSuppliers');
+        const cardInventory = document.getElementById('cardInventory');
+        const cardVouchers = document.getElementById('cardVouchers');
+        const cardBanknote = document.getElementById('cardBanknote');
         const cardShortages = document.getElementById('cardShortages');
+        const cardReports = document.getElementById('cardReports');
+        const cardQuotation = document.getElementById('cardQuotation');
 
-        if (cardShortages) cardShortages.style.display = '';
+        const navExpenses = document.getElementById('navExpenses');
+        const btnRequiredItems = document.getElementById('btnRequiredItems');
+        const fabStack = document.getElementById('fabStack');
+        const statsSection = document.getElementById('statsSection');
+        const heroPanel = document.getElementById('heroPanel');
+
+        const groupMap = {
+            groupSalesOps: ['cardSales', 'cardPurchases', 'cardClients', 'cardSuppliers'],
+            groupInventoryDocs: ['cardInventory', 'cardVouchers', 'cardBanknote', 'cardShortages'],
+            groupReports: ['cardReports', 'cardQuotation']
+        };
 
         function refreshGroupVisibility() {
             Object.entries(groupMap).forEach(([groupId, cardIds]) => {
@@ -756,25 +821,32 @@
             if (statsSection) statsSection.style.display = 'none';
             if (heroPanel) heroPanel.style.display = 'none';
 
-            Object.keys(permMap).forEach(id => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.style.display = '';
+            [cardSales, cardPurchases, cardClients, cardSuppliers, cardInventory, cardVouchers, cardBanknote, cardShortages, cardReports, cardQuotation].forEach(el => {
+                if (el) el.style.display = '';
             });
 
             if (navExpenses) navExpenses.style.display = '';
+            if (btnRequiredItems) btnRequiredItems.style.display = '';
+            if (fabStack) fabStack.style.display = '';
 
         } else {
-            if (statsSection) statsSection.style.display = '';
             if (heroPanel) heroPanel.style.display = '';
+            if (statsSection) statsSection.style.display = '';
 
-            Object.keys(permMap).forEach(id => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.style.display = userPermissions.includes(permMap[id]) ? '' : 'none';
-            });
+            // إظهار المسموح فقط لغير الأدمن
+            if (cardSales) cardSales.style.display = allowedNonAdminPermissions.includes('sales') ? '' : 'none';
+            if (cardClients) cardClients.style.display = allowedNonAdminPermissions.includes('customers') ? '' : 'none';
+            if (cardVouchers) cardVouchers.style.display = allowedNonAdminPermissions.includes('client_vouchers') ? '' : 'none';
+            if (cardQuotation) cardQuotation.style.display = allowedNonAdminPermissions.includes('quotation') ? '' : 'none';
 
-            if (navExpenses) navExpenses.style.display = userPermissions.includes('expenses') ? '' : 'none';
+            // حظر وبقية الأقسام المباشرة
+            if (cardPurchases) cardPurchases.style.display = 'none';
+            if (cardSuppliers) cardSuppliers.style.display = 'none';
+            if (cardInventory) cardInventory.style.display = 'none';
+            if (cardBanknote) cardBanknote.style.display = 'none';
+            if (cardShortages) cardShortages.style.display = 'none';
+            if (cardReports) cardReports.style.display = 'none';
+            if (navExpenses) navExpenses.style.display = 'none';
         }
 
         refreshGroupVisibility();
