@@ -578,7 +578,21 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // -------------------------------------------------------------
+    // نظام الحماية الصارم - منع الدخول العشوائي والتحقق الفوري من التوكن
+    // -------------------------------------------------------------
+    const authSessionToken = sessionStorage.getItem('authToken');
+    const currentUserId = sessionStorage.getItem('userId');
+    const userName = sessionStorage.getItem('username') || sessionStorage.getItem('user_name');
+    const userRole = sessionStorage.getItem('role');
+
+    // طرد مباشر في حال محاولة فتح الصفحة بدون تسجيل دخول حقيقي
+    if (!authSessionToken || !currentUserId || !userName || !userRole) {
+        sessionStorage.clear();
+        window.location.href = "index.html";
+    }
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -599,56 +613,68 @@
         db = getFirestore(app);
     }
 
-    const currentUserId = sessionStorage.getItem('userId') || 'user_' + Math.random().toString(36).substr(2, 9);
-    sessionStorage.setItem('userId', currentUserId);
+    let heartbeatInterval = null;
 
-    // 1. تسجيل الجلسة في كولكشن sessions مع مراقبة أمر الطرد من الأدمن
+    // 1. تسجيل الجلسة الحي ومراقبة حظر الأدمن والطرد الفوري
     async function initUserSession() {
         const sessionDocRef = doc(db, "sessions", currentUserId);
         
         await setDoc(sessionDocRef, {
             userId: currentUserId,
-            userName: sessionStorage.getItem('username') || 'موظف',
-            role: sessionStorage.getItem('role') || 'employee',
+            userName: userName,
+            role: userRole,
+            authToken: authSessionToken,
             loginTime: serverTimestamp(),
             lastActive: serverTimestamp(),
             status: 'active'
         }, { merge: true });
 
-        // تسجيل حدث الدخول
+        // تسجيل حدث الدخول في السجلات
         try {
-            await addDoc(collection(db, "sessions"), {
+            await addDoc(collection(db, "session_logs"), {
                 userId: currentUserId,
-                userName: sessionStorage.getItem('username') || 'موظف',
+                userName: userName,
                 action: 'LOGIN',
                 timestamp: serverTimestamp()
             });
         } catch(e) { console.warn("Log write ignored", e); }
 
-        // الاستماع المباشر لحالة الجلسة للطرد الفوري إذا غيّر الأدمن status إلى terminated
+        // نبض النشاط الدوري للظهور كـ "نشط" (الكَر)
+        heartbeatInterval = setInterval(async () => {
+            try {
+                await updateDoc(sessionDocRef, {
+                    lastActive: serverTimestamp()
+                });
+            } catch(e) {}
+        }, 20000);
+
+        // الاستماع المباشر لحالة الجلسة للطرد الفوري إذا ألغى الأدمن صلاحية المستخدم أو حظره
         onSnapshot(sessionDocRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
-                if (data.status === 'terminated' || data.status === 'kicked') {
-                    alert('تم إنهاء جلستك وإخراجك بواسطة الأدمن.');
+                if (data.status === 'terminated' || data.status === 'kicked' || data.authToken !== authSessionToken) {
+                    alert('تم إنهاء الجلسة أو تعليق الحساب بواسطة الأدمن.');
                     handleLogout();
                 }
+            } else {
+                handleLogout();
             }
         });
     }
 
-    // تسجيل الخروج رسميًا
+    // تسجيل الخروج رسميًا ونظيفًا
     async function handleLogout() {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         try {
             const sessionDocRef = doc(db, "sessions", currentUserId);
-            await setDoc(sessionDocRef, {
+            await updateDoc(sessionDocRef, {
                 status: 'logged_out',
                 logoutTime: serverTimestamp()
-            }, { merge: true });
+            });
 
-            await addDoc(collection(db, "sessions"), {
+            await addDoc(collection(db, "session_logs"), {
                 userId: currentUserId,
-                userName: sessionStorage.getItem('username') || 'موظف',
+                userName: userName,
                 action: 'LOGOUT',
                 timestamp: serverTimestamp()
             });
@@ -776,11 +802,12 @@
     setStat('statStockVal', '—');
     setStat('statClientsVal', '—');
 
-    // 3. التقييد الصارم للصلاحيات (المبيعات - الجرد - العملاء - سندات العملاء)
+    // 3. التقييد الصارم للصلاحيات (المبيعات - الجرد - العملاء - سندات العملاء - النواقص)
     window.addEventListener('load', function () {
         const role = sessionStorage.getItem('role') || 'employee';
 
-        const allowedNonAdminPermissions = ['sales', 'quotation', 'customers', 'client_vouchers'];
+        // إضافة النواقص لغير الأدمن ضمن الصلاحيات المسموحة
+        const allowedNonAdminPermissions = ['sales', 'quotation', 'customers', 'client_vouchers', 'shortages'];
 
         const cardSales = document.getElementById('cardSales');
         const cardPurchases = document.getElementById('cardPurchases');
@@ -833,18 +860,18 @@
             if (heroPanel) heroPanel.style.display = '';
             if (statsSection) statsSection.style.display = '';
 
-            // إظهار المسموح فقط لغير الأدمن
+            // إظهار المسموح فقط لغير الأدمن (شاملة النواقص)
             if (cardSales) cardSales.style.display = allowedNonAdminPermissions.includes('sales') ? '' : 'none';
             if (cardClients) cardClients.style.display = allowedNonAdminPermissions.includes('customers') ? '' : 'none';
             if (cardVouchers) cardVouchers.style.display = allowedNonAdminPermissions.includes('client_vouchers') ? '' : 'none';
             if (cardQuotation) cardQuotation.style.display = allowedNonAdminPermissions.includes('quotation') ? '' : 'none';
+            if (cardShortages) cardShortages.style.display = allowedNonAdminPermissions.includes('shortages') ? '' : 'none';
 
             // حظر وبقية الأقسام المباشرة
             if (cardPurchases) cardPurchases.style.display = 'none';
             if (cardSuppliers) cardSuppliers.style.display = 'none';
             if (cardInventory) cardInventory.style.display = 'none';
             if (cardBanknote) cardBanknote.style.display = 'none';
-            if (cardShortages) cardShortages.style.display = 'none';
             if (cardReports) cardReports.style.display = 'none';
             if (navExpenses) navExpenses.style.display = 'none';
         }
