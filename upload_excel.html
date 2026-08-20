@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>استيراد بيانات شاملة - الزيادي لزيوت السيارات</title>
-    <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -146,8 +145,6 @@
         const collectionRef = collection(db, "inventory");
         const todayStr = new Date().toISOString().split('T')[0];
 
-        // تقسيم البيانات على مجموعات لحماية الـ Firestore Batch (حد أقصى 200 صنف لكل batch)
-        const CHUNK_SIZE = 200; 
         let currentBatch = writeBatch(db);
         let operationCount = 0;
 
@@ -156,8 +153,6 @@
                 const item = jsonData[i];
                 const factor = parseInt(item["المعامل"]) || 1;
                 const crates = parseFloat(item["كمية (كرتونه)"]) || 0;
-                
-                // 🟢 تصحيح جلب القطع الزائدة بالاسم الصحيح
                 const extraPcs = parseFloat(item["قطع زائدة"] || item["جركن"]) || 0;
                 
                 const totalPieces = Math.round((crates * factor) + extraPcs);
@@ -166,18 +161,16 @@
                 const buyPrice = parseFloat(item["سعر الشراء"]) || 0;
                 const sellPrice = parseFloat(item["سعر البيع 1"]) || 0;
 
-                // 1. مرجع مستند كارت الصنف الجديد
                 const newProductRef = doc(collectionRef);
                 const productId = newProductRef.id;
 
-                // إضافة الصنف للكارت الأساسي
                 currentBatch.set(newProductRef, {
                     name: item["الاسم"] || "صنف بدون اسم",
                     category: item["الفئة"] || "عام",
                     barcode: String(item["الباركود"] || ""),
                     qty: finalQty,
                     unitFactor: factor,
-                    pcsPerCarton: factor, // تثبيت المعامل
+                    pcsPerCarton: factor,
                     totalPcs: totalPieces,
                     min: parseFloat(item["حد الطلب"]) || 0,
                     buy: buyPrice,
@@ -189,13 +182,12 @@
                 });
                 operationCount++;
 
-                // 2. 🟢 إضافة حركة مخزون افتتاحية (لربط حركة الصنف المحاسبية)
                 if (totalPieces > 0) {
                     const transRef = doc(collection(db, "inventory_transactions"));
                     currentBatch.set(transRef, {
                         productId: productId,
                         productName: item["الاسم"] || "صنف بدون اسم",
-                        type: "opening_balance", // رصيد أول المودعة / استيراد افتتاحي
+                        type: "opening_balance",
                         quantityPcs: totalPieces,
                         unitPrice: factor > 0 ? (buyPrice / factor) : buyPrice,
                         totalAmount: factor > 0 ? ((buyPrice / factor) * totalPieces) : (buyPrice * totalPieces),
@@ -207,7 +199,6 @@
                     operationCount++;
                 }
 
-                // تنفيذ الـ Batch وتصفيره عند الوصول لـ 400 عملية
                 if (operationCount >= 400) {
                     await currentBatch.commit();
                     currentBatch = writeBatch(db);
@@ -215,7 +206,6 @@
                 }
             }
 
-            // تنفيذ ما تبقى من العمليات
             if (operationCount > 0) {
                 await currentBatch.commit();
             }
