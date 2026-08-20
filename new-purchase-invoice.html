@@ -3,233 +3,545 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>إضافة النواقص - شركة الزيادي</title>
+    <title>فاتورة شراء ومرتجع - الزيادي لزيوت السيارات</title>
+    <!-- Bootstrap 5 RTL -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Select2 CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.rtl.min.css">
     <style>
-        :root { 
-            --accent: #b58900; /* لون مميز للنواقص (برتقالي/ذهبي) ليختلف عن المشتريات */
-            --header-bg: #0b5e3d;
-            --bg-light: #f4f7f6;
-            --text-primary: #1b2e26;
-            --border: #dce3de;
-            --white: #ffffff;
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --bg-light: #f8f9fa;
         }
-
-        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
-        
-        .header { 
-            background: var(--header-bg); padding: 15px 20px; display: flex; 
-            align-items: center; justify-content: space-between; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: white;
-            position: sticky; top: 0; z-index: 1000;
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding-bottom: 60px;
         }
-
-        .glass-card { 
-            background: var(--white); border: 1px solid var(--border); 
-            border-radius: 20px; padding: 20px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; 
+        .card {
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: none;
+            margin-bottom: 20px;
         }
-
-        label { font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; color: var(--header-bg); }
-
-        input, select { 
-            background: var(--white) !important; border: 1px solid var(--border) !important; 
-            color: var(--text-primary) !important; border-radius: 12px !important; 
-            margin-bottom: 15px; padding: 12px !important; font-weight: 600;
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #eef2f5;
+            padding: 15px 20px;
+            font-weight: bold;
         }
-        input:focus, select:focus { border-color: var(--header-bg) !important; box-shadow: 0 0 8px rgba(11, 94, 61, 0.1) !important; }
-
-        .btn-add { 
-            background: var(--header-bg); color: #fff; border: none; 
-            width: 100%; padding: 12px; border-radius: 15px; 
-            font-weight: bold; font-size: 1.1rem; transition: 0.3s;
+        .table-custom th {
+            background-color: #eef2f7;
+            color: #495057;
+            font-weight: 600;
         }
-        .btn-add:active { transform: scale(0.98); }
-
-        .table-responsive { border-radius: 15px; overflow: hidden; border: 1px solid var(--border); }
-        .table th { background-color: #f0f6f3; color: var(--header-bg); font-weight: 700; text-align: center; }
-        .table td { text-align: center; vertical-align: middle; font-weight: 600; }
+        .summary-box {
+            background: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            border-right: 4px solid var(--primary-color);
+        }
+        .select2-container--bootstrap-5 .select2-selection {
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
 
-<!-- قائمة الأصناف للبحث التلقائي -->
-<datalist id="inventoryList"></datalist>
-
-<div class="header">
-    <a href="index.html" class="text-white"><i class="fas fa-arrow-right"></i></a>
-    <h6 class="m-0 fw-bold">دفتر تسجيل نواقص الزيوت والبضاعة</h6>
-    <span class="badge bg-warning text-dark fw-bold">نواقص يومية</span>
-</div>
-
-<div class="container mt-4">
-    <!-- كارت إضافة صنف ناقص جديد -->
-    <div class="glass-card">
-        <h5 class="mb-3 fw-bold text-success"><i class="fas fa-plus-circle me-1"></i> تسجيل صنف ناقص جديد</h5>
-        <form id="shortageForm" onsubmit="event.preventDefault(); window.saveShortage();">
-            <div class="row">
-                <div class="col-md-6 col-12">
-                    <label>اسم صنف الزيت / الفلتر</label>
-                    <input type="text" id="itemName" class="form-control" list="inventoryList" placeholder="ابحث أو اكتب اسم الصنف هنا..." required>
-                </div>
-                <div class="col-md-3 col-6">
-                    <label>الكمية المطلوبة</label>
-                    <input type="number" id="itemQty" class="form-control" placeholder="0" min="1" required>
-                </div>
-                <div class="col-md-3 col-6">
-                    <label>ملاحظة (اختياري)</label>
-                    <input type="text" id="itemNote" class="form-control" placeholder="مثال: زبون مستعجل..">
-                </div>
-            </div>
-            <button type="submit" class="btn-add mt-2" id="btnSubmit">
-                <i class="fas fa-save me-1"></i> إضافة لقائمة النواقص
-            </button>
-        </form>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-dark"><i class="fas fa-file-invoice-dollar text-primary me-2"></i> إدارة فواتير الشراء والمرتجعات</h3>
+        <div>
+            <button class="btn btn-outline-secondary me-2" onclick="resetForm()"><i class="fas fa-undo"></i> فاتورة جديدة</button>
+            <a href="index.html" class="btn btn-dark"><i class="fas fa-home"></i> الرئيسية</a>
+        </div>
     </div>
 
-    <!-- كارت عرض النواقص الحالية -->
-    <div class="glass-card">
-        <h5 class="mb-3 fw-bold text-danger"><i class="fas fa-exclamation-triangle me-1"></i> قائمة النواقص الحالية بالمحل</h5>
-        <div class="table-responsive">
-            <table class="table table-hover m-0">
-                <thead>
-                    <tr>
-                        <th>الصنف</th>
-                        <th>العدد المطلـوب</th>
-                        <th>تاريخ التسجيل</th>
-                        <th>ملاحظات</th>
-                        <th>إجراء</th>
-                    </tr>
-                </thead>
-                <tbody id="shortagesTableBody">
-                    <tr>
-                        <td colspan="5" class="text-muted p-4">جاري تحميل النواقص الحالية...</td>
-                    </tr>
-                </tbody>
-            </table>
+    <div class="row">
+        <!-- Form Column -->
+        <div class="col-lg-8">
+            <!-- Invoice Details Card -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>بيانات الفاتورة الرئيسية</span>
+                    <span id="docStatusBadge" class="badge bg-success">جديدة</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">رقم الفاتورة</label>
+                            <input type="text" id="invoiceNumber" class="form-control" placeholder="تلقائي" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">تاريخ الفاتورة</label>
+                            <input type="date" id="invoiceDate" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">نوع العملية</label>
+                            <select id="transactionType" class="form-select" onchange="toggleInvoiceMode()">
+                                <option value="purchase">فاتورة شراء (+ للمخزن)</option>
+                                <option value="purchase_return">مرتجع شراء (- من المخزن)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">المورد</label>
+                            <select id="supplierSelect" class="form-select select2"></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Items Card -->
+            <div class="card">
+                <div class="card-header">إضافة أصناف للفاتورة</div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-5">
+                            <label class="form-label">اختر الصنف من المخزن</label>
+                            <select id="productSelect" class="form-select select2" onchange="onProductSelect()"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">سعر الشراء (كرتونة)</label>
+                            <input type="number" id="itemCartonPrice" class="form-control" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">العدد (كرتونة)</label>
+                            <input type="number" id="itemCartonQty" class="form-control" min="0" value="1">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">قطع إضافية</label>
+                            <input type="number" id="itemPcsQty" class="form-control" min="0" value="0">
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" onclick="addItemToInvoice()"><i class="fas fa-plus"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Items Table -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-custom align-middle text-center" id="itemsTable">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>اسم الصنف</th>
+                                    <th>سعر الكرتونة</th>
+                                    <th>الكمية (كرتونة)</th>
+                                    <th>قطع إضافية</th>
+                                    <th>إجمالي القطع</th>
+                                    <th>الإجمالي</th>
+                                    <th>إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsTableBody">
+                                <!-- Dynamic Content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary & Actions Column -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">الحسابات والماليات</div>
+                <div class="card-body">
+                    <div class="summary-box mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>إجمالي الفاتورة:</span>
+                            <span id="subTotalVal" class="fw-bold">0.00 ج.م</span>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">الخصم المكتسب</label>
+                            <input type="number" id="discountVal" class="form-control" value="0" step="0.01" oninput="calculateTotals()">
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between text-primary h5 mb-0">
+                            <span>الصافي النهائي:</span>
+                            <span id="netTotalVal" class="fw-bold">0.00 ج.م</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">طريقة الدفع / السداد</label>
+                        <select id="paymentMethod" class="form-select" onchange="togglePaymentInputs()">
+                            <option value="cash">نقداً (كاش)</option>
+                            <option value="credit">آجل (على الحساب)</option>
+                            <option value="partial">مسدد جزئي</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3" id="paidAmountContainer">
+                        <label class="form-label">المبلغ المدفوع فعلياً</label>
+                        <input type="number" id="paidAmount" class="form-control" value="0" step="0.01" oninput="calculateTotals()">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">المتبقي (الآجل)</label>
+                        <input type="number" id="remainingAmount" class="form-control" value="0" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">ملاحظات / بيان</label>
+                        <textarea id="invoiceNotes" class="form-control" rows="2"></textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success btn-lg" id="btnSaveInvoice" onclick="saveInvoice()">
+                            <i class="fas fa-save me-1"></i> حفظ الفاتورة
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
+<!-- Firebase Modular SDK -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { 
+        getFirestore, collection, doc, getDocs, getDoc, setDoc, updateDoc, 
+        writeBatch, increment, serverTimestamp, query, where, orderBy 
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+    // ⚙️ Firebase Configuration
     const firebaseConfig = {
-        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-        authDomain: "ahmedelzaiady.firebaseapp.com",
-        projectId: "ahmedelzaiady",
-        storageBucket: "ahmedelzaiady.firebasestorage.app",
-        messagingSenderId: "300306825071",
-        appId: "1:300306825071:web:0426ddde56280fa090329a",
-        measurementId: "G-WE04GK5XZZ"
+        // ضع إعدادات Firebase الخاصة بك هنا
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // تحميل الأصناف في الـ Datalist للبحث التلقائي
+    // Application State
+    let inventory = [];
+    let suppliers = [];
+    let invoiceItems = [];
+    let editingInvoiceId = null;
+    let originalInvoiceData = null;
+
+    // Initialize Page
+    document.addEventListener("DOMContentLoaded", async () => {
+        document.getElementById('invoiceDate').valueAsDate = new Date();
+        await loadInventory();
+        await loadSuppliers();
+        initSelect2();
+    });
+
+    // 1. Load Inventory Items (Strict Matching via Stock ID)
     async function loadInventory() {
-        try {
-            const datalist = document.getElementById('inventoryList');
-            const invSnap = await getDocs(collection(db, "inventory"));
-            let options = "";
-            invSnap.forEach(doc => {
-                const data = doc.data();
-                const name = data.name || data.itemName;
-                if(name) options += `<option value="${name}">`;
-            });
-            datalist.innerHTML = options;
-        } catch (e) {
-            console.error("خطأ في جلب المخزون:", e);
-        }
-    }
+        const querySnapshot = await getDocs(collection(db, "inventory"));
+        inventory = [];
+        const productSelect = document.getElementById("productSelect");
+        productSelect.innerHTML = '<option value="">-- اختر الصنف --</option>';
 
-    // الاستماع المباشر (Realtime) لجدول النواقص
-    function listenToShortages() {
-        const q = query(collection(db, "shortages"), orderBy("createdAt", "desc"));
-        onSnapshot(q, (snapshot) => {
-            const tbody = document.getElementById('shortagesTableBody');
-            let html = "";
-            
-            if(snapshot.empty) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-success p-4">كل الأصناف متوفرة ولا توجد نواقص حالياً الحمد لله 👍</td></tr>`;
-                return;
-            }
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const item = {
+                id: docSnap.id, // stockId
+                name: data.name || "صنف بدون اسم",
+                buyPrice: data.buy || 0,
+                pcsPerCarton: data.pcsPerCarton || 1,
+                totalPcs: data.totalPcs || 0
+            };
+            inventory.push(item);
 
-            snapshot.forEach(docSnap => {
-                const data = docSnap.data();
-                const id = docSnap.id;
-                const dateStr = data.date ? data.date : "غير محدد";
-                
-                html += `
-                    <tr id="row_${id}">
-                        <td class="text-end text-danger">${data.name}</td>
-                        <td><span class="badge bg-secondary p-2 fs-6">${data.qty}</span></td>
-                        <td><small class="text-muted">${dateStr}</small></td>
-                        <td><small>${data.note || '-'}</small></td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-success" onclick="window.deleteShortage('${id}')" title="تم توفير الصنف وحذفه">
-                                <i class="fas fa-check-circle"></i> تم التوفير
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-            tbody.innerHTML = html;
+            const opt = document.createElement("option");
+            opt.value = item.id;
+            opt.textContent = `${item.name} (المتاح: ${item.totalPcs} قطعة)`;
+            productSelect.appendChild(opt);
         });
     }
 
-    // دالة حفظ النقص الجديد
-    window.saveShortage = async () => {
-        const nameInput = document.getElementById('itemName');
-        const qtyInput = document.getElementById('itemQty');
-        const noteInput = document.getElementById('itemNote');
-        const btn = document.getElementById('btnSubmit');
+    // 2. Load Suppliers List
+    async function loadSuppliers() {
+        const querySnapshot = await getDocs(collection(db, "suppliers"));
+        suppliers = [];
+        const supplierSelect = document.getElementById("supplierSelect");
+        supplierSelect.innerHTML = '<option value="">-- اختر المورد --</option>';
 
-        if(!nameInput.value || !qtyInput.value) return;
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            suppliers.push({ id: docSnap.id, name: data.name });
 
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري الحفظ...';
+            const opt = document.createElement("option");
+            opt.value = docSnap.id;
+            opt.textContent = data.name;
+            supplierSelect.appendChild(opt);
+        });
+    }
+
+    function initSelect2() {
+        $('.select2').select2({
+            theme: 'bootstrap-5',
+            dir: 'rtl'
+        });
+    }
+
+    window.onProductSelect = function() {
+        const stockId = document.getElementById("productSelect").value;
+        const product = inventory.find(p => p.id === stockId);
+        if (product) {
+            document.getElementById("itemCartonPrice").value = product.buyPrice;
+        }
+    };
+
+    window.addItemToInvoice = function() {
+        const stockId = document.getElementById("productSelect").value;
+        const cartonPrice = parseFloat(document.getElementById("itemCartonPrice").value) || 0;
+        const cartonQty = parseInt(document.getElementById("itemCartonQty").value) || 0;
+        const pcsQty = parseInt(document.getElementById("itemPcsQty").value) || 0;
+
+        if (!stockId) {
+            alert("يرجى اختيار الصنف أولاً!");
+            return;
+        }
+
+        const product = inventory.find(p => p.id === stockId);
+        if (!product) return;
+
+        const totalPieces = (cartonQty * product.pcsPerCarton) + pcsQty;
+        if (totalPieces <= 0) {
+            alert("يرجى إدخال كمية صحيحة!");
+            return;
+        }
+
+        const piecePrice = cartonPrice / product.pcsPerCarton;
+        const totalAmount = totalPieces * piecePrice;
+
+        const itemIndex = invoiceItems.findIndex(i => i.stockId === stockId);
+        if (itemIndex > -1) {
+            invoiceItems[itemIndex].cartonQty += cartonQty;
+            invoiceItems[itemIndex].pcsQty += pcsQty;
+            invoiceItems[itemIndex].totalPieces += totalPieces;
+            invoiceItems[itemIndex].totalAmount += totalAmount;
+        } else {
+            invoiceItems.push({
+                stockId: product.id, // تثبيت ID الصنف حصرياً
+                name: product.name,
+                pcsPerCarton: product.pcsPerCarton,
+                baseCartonPrice: cartonPrice,
+                piecePrice: piecePrice,
+                cartonQty: cartonQty,
+                pcsQty: pcsQty,
+                totalPieces: totalPieces,
+                totalAmount: totalAmount
+            });
+        }
+
+        renderItemsTable();
+        calculateTotals();
+    };
+
+    function renderItemsTable() {
+        const tbody = document.getElementById("itemsTableBody");
+        tbody.innerHTML = "";
+
+        invoiceItems.forEach((item, index) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${index + 1}</td>
+                <td class="fw-bold">${item.name}</td>
+                <td>${item.baseCartonPrice.toFixed(2)}</td>
+                <td>${item.cartonQty}</td>
+                <td>${item.pcsQty}</td>
+                <td><span class="badge bg-info text-dark">${item.totalPieces} قطعة</span></td>
+                <td class="fw-bold">${item.totalAmount.toFixed(2)} ج.م</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeItem(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    window.removeItem = function(index) {
+        invoiceItems.splice(index, 1);
+        renderItemsTable();
+        calculateTotals();
+    };
+
+    window.calculateTotals = function() {
+        const subTotal = invoiceItems.reduce((sum, item) => sum + item.totalAmount, 0);
+        const discount = parseFloat(document.getElementById("discountVal").value) || 0;
+        const netTotal = Math.max(0, subTotal - discount);
+
+        document.getElementById("subTotalVal").textContent = subTotal.toFixed(2) + " ج.م";
+        document.getElementById("netTotalVal").textContent = netTotal.toFixed(2) + " ج.م";
+
+        const paymentMethod = document.getElementById("paymentMethod").value;
+        let paid = 0;
+
+        if (paymentMethod === "cash") {
+            paid = netTotal;
+            document.getElementById("paidAmount").value = paid.toFixed(2);
+        } else if (paymentMethod === "credit") {
+            paid = 0;
+            document.getElementById("paidAmount").value = "0.00";
+        } else {
+            paid = parseFloat(document.getElementById("paidAmount").value) || 0;
+        }
+
+        const remaining = netTotal - paid;
+        document.getElementById("remainingAmount").value = remaining.toFixed(2);
+    };
+
+    window.togglePaymentInputs = function() {
+        const method = document.getElementById("paymentMethod").value;
+        const paidInput = document.getElementById("paidAmount");
+        if (method === "cash") {
+            paidInput.readOnly = true;
+        } else if (method === "credit") {
+            paidInput.readOnly = true;
+        } else {
+            paidInput.readOnly = false;
+        }
+        calculateTotals();
+    };
+
+    // 🟢 CORE FUNCTION: Save Invoice & Record Inventory Transactions
+    window.saveInvoice = async function() {
+        if (invoiceItems.length === 0) {
+            alert("لا يمكن حفظ فاتورة فارغة!");
+            return;
+        }
+
+        const supplierId = document.getElementById("supplierSelect").value;
+        const supplierName = $("#supplierSelect option:selected").text();
+        const transactionType = document.getElementById("transactionType").value; // purchase / purchase_return
+        const isReturn = (transactionType === "purchase_return");
+
+        if (!supplierId) {
+            alert("يرجى اختيار المورد!");
+            return;
+        }
+
+        const btnSave = document.getElementById("btnSaveInvoice");
+        btnSave.disabled = true;
+        btnSave.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> جاري الحفظ...`;
 
         try {
-            await addDoc(collection(db, "shortages"), {
-                name: nameInput.value,
-                qty: Number(qtyInput.value),
-                note: noteInput.value,
-                createdAt: serverTimestamp(),
-                date: new Date().toLocaleDateString('ar-EG', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
-            });
+            const batch = writeBatch(db);
+            const invoiceDate = document.getElementById("invoiceDate").value;
+            const discount = parseFloat(document.getElementById("discountVal").value) || 0;
+            const subTotal = invoiceItems.reduce((sum, item) => sum + item.totalAmount, 0);
+            const netTotal = Math.max(0, subTotal - discount);
+            const paidAmount = parseFloat(document.getElementById("paidAmount").value) || 0;
+            const remainingAmount = netTotal - paidAmount;
+            const notes = document.getElementById("invoiceNotes").value;
 
-            // إعادة تعيين الخانات
-            nameInput.value = "";
-            qtyInput.value = "";
-            noteInput.value = "";
-        } catch (e) {
-            console.error(e);
-            alert("حدث خطأ أثناء الحفظ");
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-save me-1"></i> إضافة لقائمة النواقص';
-        }
-    };
-
-    // دالة حذف النقص (عند الضغط على تم التوفير)
-    window.deleteShortage = async (id) => {
-        if(confirm("هل تم شراء وتوفير هذا الصنف بالفعل ليتم إزالته من النواقص؟")) {
-            try {
-                await deleteDoc(doc(db, "shortages", id));
-            } catch (e) {
-                alert("فشل في حذف الصنف");
+            let invoiceRef;
+            if (editingInvoiceId) {
+                invoiceRef = doc(db, "purchases", editingInvoiceId);
+                // 1️⃣ Rollback old stock adjustments strictly using stockId
+                if (originalInvoiceData && originalInvoiceData.items) {
+                    for (const oldItem of originalInvoiceData.items) {
+                        if (oldItem.stockId) {
+                            const oldStoreRef = doc(db, "inventory", oldItem.stockId);
+                            // Reverse previous stock increment
+                            const reverseQty = originalInvoiceData.isReturn ? oldItem.totalPieces : -oldItem.totalPieces;
+                            batch.update(oldStoreRef, { totalPcs: increment(reverseQty) });
+                        }
+                    }
+                }
+            } else {
+                invoiceRef = doc(collection(db, "purchases"));
             }
+
+            const currentDocId = invoiceRef.id;
+
+            // 2️⃣ Apply New Stock Update & Register Historical Inventory Transaction
+            for (const item of invoiceItems) {
+                if (item.stockId) {
+                    const storeDocRef = doc(db, "inventory", item.stockId);
+                    // Quantity multiplier (+ for purchase, - for return)
+                    const stockIncrement = isReturn ? -item.totalPieces : item.totalPieces;
+
+                    // Update main inventory card balance
+                    batch.update(storeDocRef, {
+                        totalPcs: increment(stockIncrement),
+                        buy: item.baseCartonPrice,
+                        lastUpdate: serverTimestamp()
+                    });
+
+                    // 🟢 Add transaction record for "Product Movement Ledger"
+                    const invTransRef = doc(collection(db, "inventory_transactions"));
+                    batch.set(invTransRef, {
+                        productId: item.stockId, // Strict stock ID
+                        productName: item.name,
+                        type: transactionType, // purchase or purchase_return
+                        quantityPcs: item.totalPieces,
+                        unitPrice: item.piecePrice,
+                        totalAmount: item.totalAmount,
+                        invoiceId: currentDocId,
+                        supplierId: supplierId,
+                        supplierName: supplierName,
+                        date: invoiceDate,
+                        timestamp: serverTimestamp()
+                    });
+                }
+            }
+
+            // 3️⃣ Save Purchase Invoice Document
+            batch.set(invoiceRef, {
+                invoiceNumber: editingInvoiceId ? originalInvoiceData.invoiceNumber : "PUR-" + Date.now().toString().slice(-6),
+                date: invoiceDate,
+                type: transactionType,
+                isReturn: isReturn,
+                supplierId: supplierId,
+                supplierName: supplierName,
+                items: invoiceItems,
+                subTotal: subTotal,
+                discount: discount,
+                netTotal: netTotal,
+                paidAmount: paidAmount,
+                remainingAmount: remainingAmount,
+                notes: notes,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            // Execute All Operations Atomically
+            await batch.commit();
+
+            alert("تم حفظ الفاتورة وتحديث حركة المخزون بنجاح!");
+            resetForm();
+            await loadInventory();
+
+        } catch (error) {
+            console.error("خطأ أثناء حفظ الفاتورة:", error);
+            alert("حدث خطأ أثناء الحفظ: " + error.message);
+        } finally {
+            btnSave.disabled = false;
+            btnSave.innerHTML = `<i class="fas fa-save me-1"></i> حفظ الفاتورة`;
         }
     };
 
-    // تشغيل الدوال عند تحميل الصفحة
-    loadInventory();
-    listenToShortages();
+    window.resetForm = function() {
+        invoiceItems = [];
+        editingInvoiceId = null;
+        originalInvoiceData = null;
+        document.getElementById("itemsTableBody").innerHTML = "";
+        document.getElementById("discountVal").value = "0";
+        document.getElementById("paidAmount").value = "0";
+        document.getElementById("remainingAmount").value = "0";
+        document.getElementById("invoiceNotes").value = "";
+        document.getElementById("docStatusBadge").className = "badge bg-success";
+        document.getElementById("docStatusBadge").textContent = "جديدة";
+        $('#supplierSelect').val('').trigger('change');
+        $('#productSelect').val('').trigger('change');
+        calculateTotals();
+    };
 </script>
+
+<!-- jQuery & Select2 JS -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 </body>
 </html>
