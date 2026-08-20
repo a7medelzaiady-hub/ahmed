@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-       :root {
+        :root {
             --accent: #0b5e3d;
             --accent-light: #0e7a4f;
             --header-bg: #0b5e3d;
@@ -25,12 +25,14 @@
             --white: #ffffff;
             --danger: #d90429;
             --success: #2d6a4f;
+            --warning: #e69500;
+            --purple: #6f42c1;
             --card-radius: 18px;
             --input-radius: 12px;
             --shadow-sm: 0 1px 3px rgba(11,94,61,0.06);
         }
         * { box-sizing: border-box; }
-        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 80px; }
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 80px; direction: rtl; }
         .header-nav { background: linear-gradient(135deg, var(--header-bg), #08432b); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 3px 12px rgba(0,0,0,0.15); color: white; position: sticky; top: 0; z-index: 1000; }
         .header-top-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
         .header-buttons-row { display: flex; gap: 6px; width: 100%; }
@@ -39,11 +41,13 @@
         .btn-nav-home { background: #ffb703; color: #1b2e26 !important; border: none; }
         .invoice-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 16px; margin-top: 14px; box-shadow: var(--shadow-sm); }
         .product-row { background: #f8faf9; border-radius: var(--input-radius); padding: 12px; margin-bottom: 14px; border: 1px solid var(--border); position: relative; }
+        .product-row.is-return-row { background: #fff0f1; border-color: #ffccd0; }
         .btn-remove { position: absolute; left: -8px; top: -8px; color: var(--danger); background: white; border-radius: 50%; font-size: 1.4rem; cursor: pointer; z-index: 10; }
         .search-results { position: absolute; width: 100%; background: white; border: 1px solid var(--border); border-radius: 10px; z-index: 100; max-height: 220px; overflow-y: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.1); display: none; margin-top: 5px; }
         .search-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f1f1f1; font-size: 0.85rem; text-align: right; }
         .total-box { background: linear-gradient(135deg, var(--header-bg), #08432b); color: white; border-radius: var(--card-radius); padding: 16px; margin-top: 14px; }
         .btn-save { background: linear-gradient(135deg, var(--accent), var(--accent-light)); border: none; border-radius: var(--input-radius); padding: 13px; width: 100%; font-weight: 700; color: white; margin-top: 16px; font-size: 1rem; }
+        .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
         .sub-lbl { font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 3px; display: block; font-weight: 700; text-align: center; }
     </style>
 </head>
@@ -74,7 +78,7 @@
             </div>
             <div class="col-5">
                 <label class="sub-lbl" style="text-align:right;"><i class="fas fa-calendar-alt me-1"></i> التاريخ والوقت</label>
-                <input type="text" id="invTime" class="form-control" style="font-size: 0.75rem;">
+                <input type="text" id="invTime" class="form-control" style="font-size: 0.75rem;" readonly>
             </div>
         </div>
 
@@ -87,7 +91,7 @@
         <div class="total-box">
             <div class="d-flex justify-content-between h6 text-white mb-2">
                 <span>صافي الفاتورة:</span>
-                <span id="displayTotal" class="fw-bold">0 ج.م</span>
+                <span id="displayTotal" class="fw-bold">0.00 ج.م</span>
             </div>
         </div>
 
@@ -121,13 +125,35 @@
     });
 
     async function loadInitialData() {
-        const [cSnap, iSnap] = await Promise.all([
-            getDocs(collection(db, "customers")),
-            getDocs(collection(db, "inventory"))
-        ]);
-        customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try {
+            const [cSnap, iSnap] = await Promise.all([
+                getDocs(collection(db, "customers")),
+                getDocs(collection(db, "inventory"))
+            ]);
+            customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch(e) {
+            console.error("خطأ في تحميل البيانات الأولية:", e);
+        }
     }
+
+    window.searchCustomer = (input) => {
+        const term = input.value.toLowerCase().trim();
+        const resDiv = document.getElementById('customerResults');
+        if (!term) { resDiv.style.display = 'none'; return; }
+        const filtered = customers.filter(c => (c.name || '').toLowerCase().includes(term) || (c.phone || '').includes(term));
+        resDiv.innerHTML = filtered.map(c => `
+            <div class="search-item" onclick="selectCustomer('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}')">
+                <b>${c.name || 'بدون اسم'}</b> ${c.phone ? `(${c.phone})` : ''}
+            </div>`).join('');
+        resDiv.style.display = filtered.length ? 'block' : 'none';
+    };
+
+    window.selectCustomer = (cid, cname) => {
+        document.getElementById('customerSearch').value = cname;
+        document.getElementById('customerSelect').value = cid;
+        document.getElementById('customerResults').style.display = 'none';
+    };
 
     window.addNewRow = () => {
         const id = 'row_' + Math.random().toString(36).substr(2, 5);
@@ -160,7 +186,7 @@
                     </div>
                     <div class="col-5 px-1">
                         <span class="sub-lbl">الإجمالي</span>
-                        <input type="text" class="form-control p-subtotal px-1 fw-bold" readonly value="0">
+                        <input type="text" class="form-control p-subtotal px-1 fw-bold" readonly value="0.00">
                     </div>
                 </div>
             </div>`;
@@ -171,10 +197,10 @@
         const term = input.value.toLowerCase().trim();
         const resDiv = input.parentElement.querySelector('.search-results');
         if (!term) { resDiv.style.display = 'none'; return; }
-        const filtered = inventory.filter(i => i.name.toLowerCase().includes(term));
+        const filtered = inventory.filter(i => (i.name || '').toLowerCase().includes(term) || (i.barcode || '').toLowerCase().includes(term));
         resDiv.innerHTML = filtered.map(p => `
-            <div class="search-item" onclick="selectProduct('${input.closest('.product-row').id}', '${p.id}', '${p.name.replace(/'/g, "\\'")}', ${p.sell || 0})">
-                <b>${p.name}</b> (المتاح: ${p.totalPcs} قطعة)
+            <div class="search-item" onclick="selectProduct('${input.closest('.product-row').id}', '${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', ${p.sell || 0})">
+                <b>${p.name || 'بدون اسم'}</b> (المتاح: ${p.totalPcs || 0} قطعة)
             </div>`).join('');
         resDiv.style.display = filtered.length ? 'block' : 'none';
     };
@@ -201,60 +227,85 @@
     };
 
     window.saveInvoice = async () => {
+        const saveBtn = document.getElementById('saveBtn');
         const customerId = document.getElementById('customerSelect').value;
-        const customerName = document.getElementById('customerSearch').value;
+        const customerName = document.getElementById('customerSearch').value.trim();
         const rows = document.querySelectorAll('.product-row');
         
-        if (rows.length === 0) return alert("يرجى إضافة أصناف للفاتورة!");
+        let validRowsCount = 0;
+        rows.forEach(r => {
+            if (r.querySelector('.p-select').value) validRowsCount++;
+        });
 
-        const batch = writeBatch(db);
-        const invoiceRef = doc(collection(db, "invoices"));
-        const invoiceId = invoiceRef.id;
-        const items = [];
+        if (validRowsCount === 0) return alert("يرجى إضافة أصناف صالحة للفاتورة!");
 
-        for (const r of rows) {
-            const stockId = r.querySelector('.p-select').value;
-            const name = r.querySelector('.p-search').value;
-            const unit = r.querySelector('.p-unit').value;
-            const qty = parseFloat(r.querySelector('.p-qty').value) || 0;
-            const price = parseFloat(r.querySelector('.p-price').value) || 0;
+        saveBtn.disabled = true;
+        saveBtn.innerText = "جاري الحفظ والخصم...";
 
-            if (!stockId) continue;
+        try {
+            const batch = writeBatch(db);
+            const invoiceRef = doc(collection(db, "invoices"));
+            const invoiceId = invoiceRef.id;
+            const items = [];
+            let grandTotal = 0;
 
-            const product = inventory.find(p => p.id === stockId);
-            const factor = product ? (Number(product.unitFactor) || 1) : 1;
-            const totalPieces = unit === 'box' ? (qty * factor) : qty;
+            for (const r of rows) {
+                const stockId = r.querySelector('.p-select').value;
+                const name = r.querySelector('.p-search').value;
+                const unit = r.querySelector('.p-unit').value;
+                const qty = parseFloat(r.querySelector('.p-qty').value) || 0;
+                const price = parseFloat(r.querySelector('.p-price').value) || 0;
 
-            items.push({ stockId, name, unit, qty, price, totalPieces });
+                if (!stockId || qty <= 0) continue;
 
-            const storeRef = doc(db, "inventory", stockId);
-            batch.update(storeRef, { totalPcs: increment(-totalPieces) });
+                const product = inventory.find(p => p.id === stockId);
+                const factor = product ? (Number(product.unitFactor || product.factor) || 1) : 1;
+                const totalPieces = unit === 'box' ? (qty * factor) : qty;
+                const rowTotal = qty * price;
+                grandTotal += rowTotal;
 
-            const transRef = doc(collection(db, "inventory_transactions"));
-            batch.set(transRef, {
-                productId: stockId,
-                productName: name,
-                type: "sale",
-                quantityPcs: totalPieces,
-                unitPrice: price,
-                invoiceId: invoiceId,
+                items.push({ stockId, name, unit, qty, price, totalPieces, rowTotal });
+
+                // 1. خصم الكمية المباشرة من رصيد المخزن
+                const storeRef = doc(db, "inventory", stockId);
+                batch.update(storeRef, { totalPcs: increment(-totalPieces) });
+
+                // 2. تسجيل حركة المخزون التاريخية
+                const transRef = doc(collection(db, "inventory_transactions"));
+                batch.set(transRef, {
+                    productId: stockId,
+                    productName: name,
+                    type: "sale",
+                    quantityPcs: totalPieces,
+                    unitPrice: price,
+                    invoiceId: invoiceId,
+                    customerId: customerId || "cash",
+                    customerName: customerName || "عميل نقدي",
+                    date: document.getElementById('invTime').value,
+                    timestamp: serverTimestamp()
+                });
+            }
+
+            // 3. حفظ مستند الفاتورة الرئيسي
+            batch.set(invoiceRef, {
                 customerId: customerId || "cash",
                 customerName: customerName || "عميل نقدي",
+                items: items,
+                totalAmount: grandTotal,
                 date: document.getElementById('invTime').value,
                 timestamp: serverTimestamp()
             });
+
+            await batch.commit();
+            alert("تم حفظ الفاتورة وتحديث المخزون بنجاح!");
+            location.reload();
+
+        } catch (error) {
+            console.error("خطأ حفظ الفاتورة:", error);
+            alert("حدث خطأ أثناء الحفظ: " + error.message);
+            saveBtn.disabled = false;
+            saveBtn.innerText = "حفظ وتحديث المخزون";
         }
-
-        batch.set(invoiceRef, {
-            customerName: customerName || "عميل نقدي",
-            items: items,
-            date: document.getElementById('invTime').value,
-            timestamp: serverTimestamp()
-        });
-
-        await batch.commit();
-        alert("تم حفظ الفاتورة وتحديث حركة المخزون بنجاح!");
-        location.reload();
     };
 </script>
 </body>
