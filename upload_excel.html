@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>استيراد بيانات شاملة - الزيادي لزيوت السيارات</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,7 +16,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root { --bg-dark: #0d1117; --glass: rgba(255,255,255,0.05); --neon: #58a6ff; }
-        body { background: var(--bg-dark); font-family: 'Cairo', sans-serif; color: #c9d1d9; padding: 10px; }
+        body { background: var(--bg-dark); font-family: 'Cairo', sans-serif; color: #c9d1d9; padding: 10px; direction: rtl; }
         .import-card { background: var(--glass); border: 2px dashed rgba(88, 166, 255, 0.3); border-radius: 20px; padding: 40px; text-align: center; cursor: pointer; }
         .preview-container { background: var(--glass); border-radius: 15px; margin-top: 20px; max-height: 400px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); }
         .table { color: white !important; font-size: 0.75rem; white-space: nowrap; }
@@ -113,10 +114,15 @@
         document.getElementById('loadingText').innerText = "جارٍ قراءة الملف...";
         const reader = new FileReader();
         reader.onload = (evt) => {
-            const workbook = XLSX.read(evt.target.result, { type: 'binary' });
-            jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            displayPreview(jsonData);
-            document.getElementById('loading').style.display = 'none';
+            try {
+                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                displayPreview(jsonData);
+            } catch (err) {
+                alert("خطأ في قراءة ملف الإكسيل: " + err.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
         };
         reader.readAsBinaryString(file);
     }
@@ -151,8 +157,9 @@
         try {
             for (let i = 0; i < jsonData.length; i++) {
                 const item = jsonData[i];
-                const factor = parseInt(item["المعامل"]) || 1;
+                const factor = Math.max(1, parseInt(item["المعامل"]) || 1);
                 const crates = parseFloat(item["كمية (كرتونه)"]) || 0;
+                
                 const extraPcs = parseFloat(item["قطع زائدة"] || item["جركن"]) || 0;
                 
                 const totalPieces = Math.round((crates * factor) + extraPcs);
@@ -165,9 +172,9 @@
                 const productId = newProductRef.id;
 
                 currentBatch.set(newProductRef, {
-                    name: item["الاسم"] || "صنف بدون اسم",
-                    category: item["الفئة"] || "عام",
-                    barcode: String(item["الباركود"] || ""),
+                    name: String(item["الاسم"] || "صنف بدون اسم").trim(),
+                    category: String(item["الفئة"] || "عام").trim(),
+                    barcode: String(item["الباركود"] || "").trim(),
                     qty: finalQty,
                     unitFactor: factor,
                     pcsPerCarton: factor,
@@ -176,7 +183,7 @@
                     buy: buyPrice,
                     sell: sellPrice,
                     minPrice: minPriceVal,
-                    unitName: item["اسم الوحدة"] || "قطعة",
+                    unitName: String(item["اسم الوحدة"] || "قطعة").trim(),
                     isDeleted: false,
                     timestamp: serverTimestamp()
                 });
@@ -186,7 +193,7 @@
                     const transRef = doc(collection(db, "inventory_transactions"));
                     currentBatch.set(transRef, {
                         productId: productId,
-                        productName: item["الاسم"] || "صنف بدون اسم",
+                        productName: String(item["الاسم"] || "صنف بدون اسم").trim(),
                         type: "opening_balance",
                         quantityPcs: totalPieces,
                         unitPrice: factor > 0 ? (buyPrice / factor) : buyPrice,
@@ -199,7 +206,7 @@
                     operationCount++;
                 }
 
-                if (operationCount >= 400) {
+                if (operationCount >= 380) {
                     await currentBatch.commit();
                     currentBatch = writeBatch(db);
                     operationCount = 0;
@@ -211,7 +218,7 @@
             }
 
             alert("تم استيراد الأصناف وتسجيل الحركات الافتتاحية بنجاح!");
-            window.location.href = "inventory-list.html";
+            window.location.href = "inventory.html";
 
         } catch (e) {
             console.error("خطأ أثناء الاستيراد:", e);
