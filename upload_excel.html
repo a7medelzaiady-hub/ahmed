@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>استيراد بيانات شاملة - شركة الزيادي</title>
+    <title>استيراد بيانات شاملة - الزيادي لزيوت السيارات</title>
     <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
@@ -39,9 +39,9 @@
     <div class="instruction-box">
         <strong><i class="fas fa-check-double me-1"></i> طريقة الإدخال الجديدة:</strong>
         <p class="mb-0 small">لديك طريقتين لتعبئة الرصيد في الإكسيل:</p>
-        <ul class="small">
-            <li><b>مثال 1:</b> 10 كرتونه و 5 قطع (المعامل 12) -> اكتب 10 في عمود الكرتونه و 5 في عمود القطع.</li>
-            <li><b>مثال 2:</b> لو الصنف بالقطعة فقط -> اكتب الكمية في عمود القطع واجعل "المعامل" 1.</li>
+        <ul class="small mb-0">
+            <li><b>مثال 1:</b> 10 كرتونه و 5 قطع (المعامل 12) -> اكتب 10 في عمود الكرتونه و 5 في عمود قطع زائدة.</li>
+            <li><b>مثال 2:</b> لو الصنف بالقطعة فقط -> اكتب الكمية في عمود قطع زائدة واجعل "المعامل" 1.</li>
         </ul>
     </div>
 
@@ -57,7 +57,7 @@
     </div>
 
     <div id="loading" class="text-center mt-3 loading-overlay">
-        <div class="spinner-border spinner-border-sm"></div> جارٍ المعالجة الحسابية للقطع...
+        <div class="spinner-border spinner-border-sm"></div> <span id="loadingText">جارٍ المعالجة الحسابية للقطع...</span>
     </div>
 
     <div id="previewArea" style="display: none;">
@@ -67,7 +67,7 @@
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
-        <button class="btn btn-primary w-100 mt-3 p-3 fw-bold" onclick="uploadToFirebase()">تأكيد الاستيراد النهائي</button>
+        <button class="btn btn-primary w-100 mt-3 p-3 fw-bold" id="btnConfirmUpload" onclick="uploadToFirebase()">تأكيد الاستيراد النهائي</button>
     </div>
 </div>
 
@@ -75,15 +75,16 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, writeBatch, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-   const firebaseConfig = {
-  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-  authDomain: "ahmedelzaiady.firebaseapp.com",
-  projectId: "ahmedelzaiady",
-  storageBucket: "ahmedelzaiady.firebasestorage.app",
-  messagingSenderId: "300306825071",
-  appId: "1:300306825071:web:0426ddde56280fa090329a",
-  measurementId: "G-WE04GK5XZZ"
-};
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
     const app = initializeApp(firebaseConfig);
     let db;
     try {
@@ -110,6 +111,7 @@
         const file = e.target.files[0];
         if (!file) return;
         document.getElementById('loading').style.display = 'block';
+        document.getElementById('loadingText').innerText = "جارٍ قراءة الملف...";
         const reader = new FileReader();
         reader.onload = (evt) => {
             const workbook = XLSX.read(evt.target.result, { type: 'binary' });
@@ -121,61 +123,114 @@
     }
 
     function displayPreview(data) {
-        if (data.length === 0) return;
+        if (!data || data.length === 0) return;
         const head = document.getElementById('tableHead');
         const body = document.getElementById('tableBody');
         head.innerHTML = ''; body.innerHTML = '';
         const keys = Object.keys(data[0]);
         head.innerHTML = '<tr>' + keys.map(k => `<th>${k}</th>`).join('') + '</tr>';
         data.slice(0, 5).forEach(row => {
-            body.innerHTML += '<tr>' + keys.map(k => `<td>${row[k] || 0}</td>`).join('') + '</tr>';
+            body.innerHTML += '<tr>' + keys.map(k => `<td>${row[k] !== undefined ? row[k] : 0}</td>`).join('') + '</tr>';
         });
         document.getElementById('previewArea').style.display = 'block';
     }
 
     window.uploadToFirebase = async function() {
         if (jsonData.length === 0) return;
+
+        const btnConfirm = document.getElementById('btnConfirmUpload');
+        btnConfirm.disabled = true;
         document.getElementById('loading').style.display = 'block';
-        const batch = writeBatch(db);
+        document.getElementById('loadingText').innerText = "جارٍ رفع الأصناف وتسجيل حركات المخزون الافتتاحية...";
+
         const collectionRef = collection(db, "inventory");
+        const todayStr = new Date().toISOString().split('T')[0];
 
-        jsonData.forEach((item) => {
-            const factor = parseInt(item["المعامل"]) || 1;
-            const crates = parseFloat(item["كمية (كرتونه)"]) || 0;
-            const extraPcs = parseFloat(item["جركن"]) || 0;
-            
-            // العملية الحسابية المكتملة
-            const totalPieces = Math.round((crates * factor) + extraPcs);
-            // إعادة حساب عمود الـ qty ككسر لضمان توافق العرض (مثلاً 10.5 كرتونه)
-            const finalQty = crates + (extraPcs / factor);
-
-            // الحد الأدنى المسموح ببيع الكرتونة (يتوافق مع نفس حقل minPrice المستخدم في صفحة الفاتورة وصفحة إضافة/تعديل الصنف)
-            const minPriceVal = parseFloat(item["السعر الأدنى"]) || 0;
-
-            batch.set(doc(collectionRef), {
-                name: item["الاسم"] || "صنف بدون اسم",
-                category: item["الفئة"] || "عام",
-                barcode: String(item["الباركود"] || ""),
-                qty: finalQty, // الكمية الإجمالية بنظام الكرتونه
-                unitFactor: factor,
-                totalPcs: totalPieces, // إجمالي القطع الفعلي للجرد
-                min: parseFloat(item["حد الطلب"]) || 0,
-                buy: parseFloat(item["سعر الشراء"]) || 0,
-                sell: parseFloat(item["سعر البيع 1"]) || 0,
-                minPrice: minPriceVal,
-                unitName: item["اسم الوحدة"] || "قطعة",
-                isDeleted: false,
-                timestamp: serverTimestamp()
-            });
-        });
+        // تقسيم البيانات على مجموعات لحماية الـ Firestore Batch (حد أقصى 200 صنف لكل batch)
+        const CHUNK_SIZE = 200; 
+        let currentBatch = writeBatch(db);
+        let operationCount = 0;
 
         try {
-            await batch.commit();
-            alert("تم الاستيراد بنجاح! تم دمج الكراتين والقطع في رصيد واحد.");
+            for (let i = 0; i < jsonData.length; i++) {
+                const item = jsonData[i];
+                const factor = parseInt(item["المعامل"]) || 1;
+                const crates = parseFloat(item["كمية (كرتونه)"]) || 0;
+                
+                // 🟢 تصحيح جلب القطع الزائدة بالاسم الصحيح
+                const extraPcs = parseFloat(item["قطع زائدة"] || item["جركن"]) || 0;
+                
+                const totalPieces = Math.round((crates * factor) + extraPcs);
+                const finalQty = crates + (extraPcs / factor);
+                const minPriceVal = parseFloat(item["السعر الأدنى"]) || 0;
+                const buyPrice = parseFloat(item["سعر الشراء"]) || 0;
+                const sellPrice = parseFloat(item["سعر البيع 1"]) || 0;
+
+                // 1. مرجع مستند كارت الصنف الجديد
+                const newProductRef = doc(collectionRef);
+                const productId = newProductRef.id;
+
+                // إضافة الصنف للكارت الأساسي
+                currentBatch.set(newProductRef, {
+                    name: item["الاسم"] || "صنف بدون اسم",
+                    category: item["الفئة"] || "عام",
+                    barcode: String(item["الباركود"] || ""),
+                    qty: finalQty,
+                    unitFactor: factor,
+                    pcsPerCarton: factor, // تثبيت المعامل
+                    totalPcs: totalPieces,
+                    min: parseFloat(item["حد الطلب"]) || 0,
+                    buy: buyPrice,
+                    sell: sellPrice,
+                    minPrice: minPriceVal,
+                    unitName: item["اسم الوحدة"] || "قطعة",
+                    isDeleted: false,
+                    timestamp: serverTimestamp()
+                });
+                operationCount++;
+
+                // 2. 🟢 إضافة حركة مخزون افتتاحية (لربط حركة الصنف المحاسبية)
+                if (totalPieces > 0) {
+                    const transRef = doc(collection(db, "inventory_transactions"));
+                    currentBatch.set(transRef, {
+                        productId: productId,
+                        productName: item["الاسم"] || "صنف بدون اسم",
+                        type: "opening_balance", // رصيد أول المودعة / استيراد افتتاحي
+                        quantityPcs: totalPieces,
+                        unitPrice: factor > 0 ? (buyPrice / factor) : buyPrice,
+                        totalAmount: factor > 0 ? ((buyPrice / factor) * totalPieces) : (buyPrice * totalPieces),
+                        invoiceId: "EXCEL_IMPORT",
+                        notes: "رصيد افتتاحي عبر ملف إكسيل",
+                        date: todayStr,
+                        timestamp: serverTimestamp()
+                    });
+                    operationCount++;
+                }
+
+                // تنفيذ الـ Batch وتصفيره عند الوصول لـ 400 عملية
+                if (operationCount >= 400) {
+                    await currentBatch.commit();
+                    currentBatch = writeBatch(db);
+                    operationCount = 0;
+                }
+            }
+
+            // تنفيذ ما تبقى من العمليات
+            if (operationCount > 0) {
+                await currentBatch.commit();
+            }
+
+            alert("تم استيراد الأصناف وتسجيل الحركات الافتتاحية بنجاح!");
             window.location.href = "inventory-list.html";
-        } catch (e) { alert("حدث خطأ في الرفع"); }
-        document.getElementById('loading').style.display = 'none';
-    }
+
+        } catch (e) {
+            console.error("خطأ أثناء الاستيراد:", e);
+            alert("حدث خطأ أثناء الرفع: " + e.message);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+            btnConfirm.disabled = false;
+        }
+    };
 </script>
 <script>
 if ("serviceWorker" in navigator) {
