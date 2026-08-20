@@ -34,6 +34,7 @@
             color: var(--text-deep);
             min-height: 100vh;
             padding-bottom: 40px;
+            direction: rtl;
         }
 
         .header {
@@ -146,7 +147,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // 🔴 حماية الصفحة: يسمح بالدخول للأدمن فقط
+    // 🔴 حماية الصفحة: يسمح بالدخول للأدمن فقط[cite: 15]
     const userRole = sessionStorage.getItem('role') || 'employee';
     if (userRole !== 'admin') {
         alert('عذراً، هذه الشاشة مخصصة لمدير النظام فقط.');
@@ -175,7 +176,22 @@
     const sessionsContainer = document.getElementById('sessionsContainer');
     const activeCountBadge = document.getElementById('activeCountBadge');
 
-    // استماع لحظي للجلسات مع فلترة الأجهزة النشطة خلال آخر دقيقتين
+    // 🟢 تحديث نبض الجلسة الحالية الخاصة بالأدمن نفسه كل 45 ثانية كي لا يختفي هو الآخر
+    const currentSessionId = sessionStorage.getItem('sessionId');
+    if (currentSessionId) {
+        setInterval(async () => {
+            try {
+                await updateDoc(doc(db, "sessions", currentSessionId), {
+                    lastActive: serverTimestamp(),
+                    status: 'active'
+                });
+            } catch (err) {
+                console.log("Heartbeat sync error:", err);
+            }
+        }, 45000);
+    }
+
+    // استماع لحظي للجلسات مع فلترة مرنة للجلسات النشطة[cite: 15]
     onSnapshot(collection(db, "sessions"), (snapshot) => {
         sessionsContainer.innerHTML = '';
         let docsArray = [];
@@ -184,21 +200,25 @@
         snapshot.forEach(docSnap => {
             const data = docSnap.data();
             
-            // تحقق مرن من تاريخ أخر نشاط (سواء كان Timestamp أو Date)
-            let lastActiveDate = null;
-            if (data.lastActive && data.lastActive.toDate) {
-                lastActiveDate = data.lastActive.toDate();
-            } else if (data.lastActive) {
-                lastActiveDate = new Date(data.lastActive);
-            }
-
-            if (lastActiveDate) {
-                const diffSeconds = (now - lastActiveDate) / 1000;
-                if (diffSeconds > 120) return; // استبعاد الجلسات الخاملة أكثر من دقيقتين
-            }
-
+            // الفحص يشمل فقط الجلسات التي حالتها active بوضوح
             if (data.status === 'active') {
-                docsArray.push({ id: docSnap.id, ...data });
+                let lastActiveDate = null;
+                if (data.lastActive && data.lastActive.toDate) {
+                    lastActiveDate = data.lastActive.toDate();
+                } else if (data.lastActive) {
+                    lastActiveDate = new Date(data.lastActive);
+                }
+
+                // رفع مهلة الخمول إلى 5 دقائق (300 ثانية) لتفادي الاختفاء المفاجئ للأجهزة النشطة[cite: 15]
+                if (lastActiveDate) {
+                    const diffSeconds = (now - lastActiveDate) / 1000;
+                    if (diffSeconds <= 300) {
+                        docsArray.push({ id: docSnap.id, ...data });
+                    }
+                } else {
+                    // إذا كان المستند حديثاً ولم يسجل lastActive بعد
+                    docsArray.push({ id: docSnap.id, ...data });
+                }
             }
         });
 
@@ -240,7 +260,7 @@
         sessionsContainer.innerHTML = `<div class="empty-state">حدث خطأ أثناء جلب الجلسات</div>`;
     });
 
-    // دالة طرد المستخدم وإنهاء جلسته
+    // دالة طرد المستخدم وإنهاء جلسته[cite: 15]
     window.terminateSession = async function(docId, targetUserName) {
         if (confirm(`هل أنت متأكد من رغبتك في طرد المستخدم (${targetUserName}) وإنهاء جلسته فوراً؟`)) {
             try {
