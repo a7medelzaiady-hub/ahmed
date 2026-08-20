@@ -25,8 +25,6 @@
             --white: #ffffff;
             --danger: #d90429;
             --success: #2d6a4f;
-            --warning: #e69500;
-            --purple: #6f42c1;
             --card-radius: 18px;
             --input-radius: 12px;
             --shadow-sm: 0 1px 3px rgba(11,94,61,0.06);
@@ -41,7 +39,6 @@
         .btn-nav-home { background: #ffb703; color: #1b2e26 !important; border: none; }
         .invoice-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 16px; margin-top: 14px; box-shadow: var(--shadow-sm); }
         .product-row { background: #f8faf9; border-radius: var(--input-radius); padding: 12px; margin-bottom: 14px; border: 1px solid var(--border); position: relative; }
-        .product-row.is-return-row { background: #fff0f1; border-color: #ffccd0; }
         .btn-remove { position: absolute; left: -8px; top: -8px; color: var(--danger); background: white; border-radius: 50%; font-size: 1.4rem; cursor: pointer; z-index: 10; }
         .search-results { position: absolute; width: 100%; background: white; border: 1px solid var(--border); border-radius: 10px; z-index: 100; max-height: 220px; overflow-y: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.1); display: none; margin-top: 5px; }
         .search-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f1f1f1; font-size: 0.85rem; text-align: right; }
@@ -100,7 +97,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, getDocs, doc, getDoc, serverTimestamp, increment, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, getDocs, doc, serverTimestamp, increment, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -230,16 +227,14 @@
 
             items.push({ stockId, name, unit, qty, price, totalPieces });
 
-            // 1. خصم الكمية من المخزون المباشر
             const storeRef = doc(db, "inventory", stockId);
             batch.update(storeRef, { totalPcs: increment(-totalPieces) });
 
-            // 2. 🟢 تسليح سجل الحركة التراكمية التاريخية (inventory_transactions)
             const transRef = doc(collection(db, "inventory_transactions"));
             batch.set(transRef, {
                 productId: stockId,
                 productName: name,
-                type: "sale", // نوع الحركة: بيع
+                type: "sale",
                 quantityPcs: totalPieces,
                 unitPrice: price,
                 invoiceId: invoiceId,
@@ -250,7 +245,6 @@
             });
         }
 
-        // 3. حفظ الفاتورة نفسها
         batch.set(invoiceRef, {
             customerName: customerName || "عميل نقدي",
             items: items,
