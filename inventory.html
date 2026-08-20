@@ -190,8 +190,8 @@
         }
         @keyframes modalFade { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .modal-header { background: var(--accent); color: #fff; padding: 16px; display: flex; align-items: center; justify-content: space-between; }
-        .modal-header h4 { font-size: 15px; font-weight: 800; }
-        .close-modal { background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .modal-header h4 { font-size: 15px; font-weight: 800; width: 100%; }
+        .close-modal { background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .modal-body { padding: 12px 16px 20px; overflow-y: auto; flex: 1; background: #f8fafc; }
         
         .modal-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -249,7 +249,7 @@
 
 <header>
     <div>
-        <button class="pdf-btn" onclick="exportInventoryPDF()">
+        <button class="pdf-btn" id="btnExportPDF">
             <i class="fas fa-file-pdf"></i> تصدير PDF
         </button>
     </div>
@@ -274,7 +274,7 @@
 <div class="search-wrap">
     <div class="search-inner">
         <i class="fas fa-magnifying-glass"></i>
-        <input type="text" id="searchInput" placeholder="ابحث بالاسم أو الباركود..." oninput="renderList()">
+        <input type="text" id="searchInput" placeholder="ابحث بالاسم أو الباركود...">
     </div>
 </div>
 
@@ -290,11 +290,11 @@
     </div>
 </div>
 
-<div class="modal-overlay" id="historyModal" onclick="closeHistoryModal()">
-    <div class="modal-card" onclick="event.stopPropagation()">
+<div class="modal-overlay" id="historyModal">
+    <div class="modal-card">
         <div class="modal-header">
             <h4 id="modalItemName">سجل الحركات</h4>
-            <button class="close-modal" onclick="closeHistoryModal()"><i class="fas fa-times"></i></button>
+            <button class="close-modal" id="btnCloseModal"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body" id="modalBody"></div>
     </div>
@@ -335,6 +335,8 @@
     let rawDocsCache = null;       
     let cacheTimestamp = 0;        
     const CACHE_TTL_MS = 10 * 60 * 1000;
+    let currentActiveItemId = null;
+    let currentActiveItemName = "";
 
     const dom = {
         sTotal: document.getElementById('sTotal'),
@@ -344,7 +346,12 @@
         syncTime: document.getElementById('syncTime'),
         listBody: document.getElementById('listBody'),
         countBadge: document.getElementById('countBadge'),
-        searchInput: document.getElementById('searchInput')
+        searchInput: document.getElementById('searchInput'),
+        historyModal: document.getElementById('historyModal'),
+        modalItemName: document.getElementById('modalItemName'),
+        modalBody: document.getElementById('modalBody'),
+        btnCloseModal: document.getElementById('btnCloseModal'),
+        btnExportPDF: document.getElementById('btnExportPDF')
     };
 
     const loadTimeout = setTimeout(() => {
@@ -352,7 +359,7 @@
             dom.listBody.classList.add('full-width');
             dom.listBody.innerHTML = `
                 <div class="err-box">
-                    <i class="fas fa-wifi"></i>الاتصال يستغرق وقتاً أطول من المعتاد<br>
+                    <i class="fas fa-wifi"></i> الاتصال يستغرق وقتاً أطول من المعتاد<br>
                     <small style="opacity:0.8">تأكد من الاتصال بالإنترنت، جاري الاستعادة من الكاش المحلي...</small>
                 </div>`;
         }
@@ -366,7 +373,7 @@
         if (totalPcs < 0) return 1;                     
         if (totalPcs > 0 && totalPcs <= minPcs) return 2; 
         if (totalPcs > minPcs) return 3;                 
-        return 4;                                        
+        return 4;                                       
     }
 
     onSnapshot(collection(db, "inventory"), snap => {
@@ -455,7 +462,7 @@
         dom.sZero.textContent  = zero;
     }
 
-    window.renderList = function() {
+    function renderList() {
         const term = dom.searchInput.value.trim().toLowerCase();
         const list = term
             ? allItems.filter(i => (i.name||'').toLowerCase().includes(term) || (i.barcode||'').toLowerCase().includes(term))
@@ -476,7 +483,7 @@
         list.forEach(item => { html += buildRow(item, n++); });
 
         dom.listBody.innerHTML = html;
-    };
+    }
 
     function buildRow(item, num) {
         const totalPcs = Number(item.totalPcs) || 0;
@@ -500,10 +507,8 @@
             ? `<span class="price-tag"><i class="fas fa-tag"></i>${Number(item.sell).toLocaleString()} ج.م</span>`
             : `<span class="price-tag no-price"><i class="fas fa-tag"></i>السعر غير محدد</span>`;
 
-        const safeName = (item.name || 'بدون اسم').replace(/'/g, "\\'");
-
         return `
-        <div class="item-card${status==='zero' ? ' zero-row' : status==='low' ? ' low-row' : ''}" onclick="showItemHistory('${item.id}', '${safeName}', false)">
+        <div class="item-card${status==='zero' ? ' zero-row' : status==='low' ? ' low-row' : ''}" data-item-id="${item.id}">
             <span class="status-dot ${status}"></span>
             <div class="card-top">
                 <div class="row-info">
@@ -531,7 +536,6 @@
         </div>`;
     }
 
-    // تم تعديل هذه الدالة لاستبعاد مجموعة الطلبات orders لعدم إدراج حركاتها غير المنفذة
     async function getRawDocs(forceRefresh) {
         const now = Date.now();
         if (rawDocsCache && (now - cacheTimestamp) < CACHE_TTL_MS && !forceRefresh) {
@@ -558,25 +562,23 @@
         return docs;
     }
 
-    window.showItemHistory = async function(itemId, itemName, forceRefresh) {
-        const modal = document.getElementById('historyModal');
-        const modalTitle = document.getElementById('modalItemName');
-        const modalBody = document.getElementById('modalBody');
-        const safeItemName = itemName.replace(/'/g, "\\'");
+    async function showItemHistory(itemId, itemName, forceRefresh) {
+        currentActiveItemId = itemId;
+        currentActiveItemName = itemName;
 
-        modalTitle.innerHTML = `
+        dom.modalItemName.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
                 <div><span style="color:#ffce31; font-weight:800; display:block; font-size:11px;">تفاصيل الصنف:</span> ${itemName}</div>
                 <div style="display:flex; gap:6px; align-items:center;">
-                    <button onclick="event.stopPropagation(); exportModalPDF('${safeItemName}')" style="background:#d97706; border:none; color:#fff; padding:4px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer;">
+                    <button id="btnExportModalPDF" style="background:#d97706; border:none; color:#fff; padding:4px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer;">
                         <i class="fas fa-file-pdf"></i> PDF
                     </button>
-                    <i class="fas fa-rotate" style="font-size:13px; cursor:pointer; opacity:.9; background:rgba(255,255,255,0.15); padding:6px; border-radius:50%;" onclick="event.stopPropagation(); window.showItemHistory('${itemId}', '${safeItemName}', true)"></i>
+                    <i class="fas fa-rotate" id="btnRefreshModal" style="font-size:13px; cursor:pointer; opacity:.9; background:rgba(255,255,255,0.15); padding:6px; border-radius:50%;"></i>
                 </div>
             </div>`;
         
-        modalBody.innerHTML = `<div class="loading"><div class="spinner"></div><p>جاري تحليل البيانات...</p></div>`;
-        modal.style.display = 'flex';
+        dom.modalBody.innerHTML = `<div class="loading"><div class="spinner"></div><p>جاري تحليل البيانات...</p></div>`;
+        dom.historyModal.style.display = 'flex';
 
         try {
             const currentItemObj = allItems.find(i => i.id === itemId) || {};
@@ -683,8 +685,9 @@
 
             uniqueTransactions.sort((a, b) => {
                 const parseDate = (item) => {
-                    const fDate = item.date || item.createdAt || item.timestamp;
-                    return fDate?.toDate ? fDate.toDate().getTime() : (new Date(fDate).getTime() || 0);
+                    const fDate = item ? (item.date || item.createdAt || item.timestamp) : null;
+                    if (!fDate) return 0;
+                    return fDate.toDate ? fDate.toDate().getTime() : (new Date(fDate).getTime() || 0);
                 };
                 return parseDate(b) - parseDate(a); 
             });
@@ -732,16 +735,27 @@
                 });
                 html += '</div>';
             }
-            modalBody.innerHTML = html;
+            dom.modalBody.innerHTML = html;
+
+            document.getElementById('btnExportModalPDF')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                exportModalPDF(currentActiveItemName);
+            });
+            document.getElementById('btnRefreshModal')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showItemHistory(currentActiveItemId, currentActiveItemName, true);
+            });
 
         } catch (err) {
-            modalBody.innerHTML = `<div class="err-box"><i class="fas fa-exclamation-triangle"></i>فشل في بناء لوحة التحليل<br><small>${err.message}</small></div>`;
+            dom.modalBody.innerHTML = `<div class="err-box"><i class="fas fa-exclamation-triangle"></i>فشل في بناء لوحة التحليل<br><small>${err.message}</small></div>`;
         }
-    };
+    }
 
-    window.closeHistoryModal = () => document.getElementById('historyModal').style.display = 'none';
+    function closeHistoryModal() {
+        dom.historyModal.style.display = 'none';
+    }
 
-    window.exportInventoryPDF = function() {
+    function exportInventoryPDF() {
         if (!allItems.length) return alert('لا توجد أصناف لتصديرها!');
         const dateStr = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
         
@@ -790,20 +804,21 @@
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(template).save().then(() => { template.style.display = 'none'; });
-    };
+    }
 
-    window.exportModalPDF = function(itemName) {
-        const modalBody = document.getElementById('modalBody');
-        if (!modalBody) return;
+    function exportModalPDF(itemName) {
+        if (!dom.modalBody) return;
         const template = document.getElementById('pdfExportTemplate');
         
+        const contentClone = dom.modalBody.cloneNode(true);
+
         template.style.display = 'block';
         template.innerHTML = `
             <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0b5e3d; padding-bottom: 10px;">
                 <h2 style="color: #0b5e3d;">شركة الزيادى لزيوت السيارات</h2>
                 <h3 style="color: #d97706;">تقرير حركة الصنف: ${itemName}</h3>
-            </div>
-            ${modalBody.innerHTML}`;
+            </div>`;
+        template.appendChild(contentClone);
 
         html2pdf().set({
             margin: 10,
@@ -812,7 +827,29 @@
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(template).save().then(() => { template.style.display = 'none'; });
-    };
+    }
+
+    // Event Listeners Safe Delegation
+    dom.searchInput.addEventListener('input', renderList);
+
+    dom.listBody.addEventListener('click', (e) => {
+        const card = e.target.closest('.item-card');
+        if (card) {
+            const itemId = card.getAttribute('data-item-id');
+            const itemObj = allItems.find(i => i.id === itemId);
+            if (itemObj) {
+                showItemHistory(itemObj.id, itemObj.name || 'بدون اسم', false);
+            }
+        }
+    });
+
+    dom.btnCloseModal.addEventListener('click', closeHistoryModal);
+
+    dom.historyModal.addEventListener('click', (e) => {
+        if (e.target === dom.historyModal) closeHistoryModal();
+    });
+
+    dom.btnExportPDF.addEventListener('click', exportInventoryPDF);
 </script>
 </body>
 </html>
