@@ -54,6 +54,11 @@
         .table-logs { font-size: 0.8rem; text-align: center; vertical-align: middle; }
         .table-logs th { background: #f9fafb; font-weight: 800; color: #4b5563; }
         
+        .badge-event-login { background-color: #10b981; color: white; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 0.75rem; }
+        .badge-event-logout { background-color: #ef4444; color: white; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 0.75rem; }
+        
+        .device-tag { background: #e2e8f0; color: #1e293b; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+        
         .empty-box { text-align: center; padding: 30px 10px; color: #9ca3af; font-weight: 700; }
         .empty-box i { font-size: 2.2rem; display: block; margin-bottom: 8px; color: #d1d5db; }
     </style>
@@ -91,7 +96,7 @@
         <div class="card-header-title">
             <div class="d-flex align-items-center gap-2">
                 <i class="fas fa-history text-primary"></i>
-                <span>سجل الدخول والخروج الأخير</span>
+                <span>سجل الدخول والخروج العملي</span>
             </div>
             <button class="btn btn-sm btn-dark fw-bold px-3" style="font-size:0.75rem; border-radius:8px;" onclick="loadSessionLogs()">
                 <i class="fas fa-sync-alt me-1"></i> تحديث السجل
@@ -103,9 +108,9 @@
                 <thead>
                     <tr>
                         <th>المستخدم</th>
-                        <th>الحدث</th>
+                        <th>نوع الحركة</th>
                         <th>التاريخ والوقت</th>
-                        <th>الجهاز / المنفذ</th>
+                        <th>الجهاز والنظام</th>
                     </tr>
                 </thead>
                 <tbody id="logsTableBody">
@@ -131,6 +136,16 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    // دالة اكتشاف جهاز المستخدم الحالي لتسجيله تلقائياً
+    function getDeviceDetails(uaString) {
+        const ua = uaString || navigator.userAgent;
+        if (/android/i.test(ua)) return { name: "هاتف أندرويد (Android)", icon: "fa-mobile-alt" };
+        if (/iPhone|iPad|iPod/i.test(ua)) return { name: "آيفون / آيباد (iOS)", icon: "fa-mobile-alt" };
+        if (/Windows/i.test(ua)) return { name: "كمبيوتر (Windows)", icon: "fa-laptop" };
+        if (/Macintosh/i.test(ua)) return { name: "جهاز ماك (Mac)", icon: "fa-laptop" };
+        return { name: "جهاز غير معروف", icon: "fa-desktop" };
+    }
+
     function formatTime(timestamp) {
         if (!timestamp) return "غير محدد";
         let date;
@@ -139,7 +154,7 @@
         return date.toLocaleString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'numeric', year: 'numeric' });
     }
 
-    // 1. القراءة من جدول users لقراءة الأونلاين
+    // 1. مراقبة المتصلين أونلاين
     function listenToOnlineUsers() {
         const container = document.getElementById('onlineUsersContainer');
         const countBadge = document.getElementById('onlineCount');
@@ -151,7 +166,6 @@
                 const u = doc.data();
                 const userName = u.userName || u.name || u.username || doc.id;
                 
-                // فحص إذا كان أونلاين أو آخر نشاط له خلال آخر 10 دقائق
                 let isRecentlyActive = false;
                 if (u.lastActive) {
                     const lastTimeMs = u.lastActive.seconds ? (u.lastActive.seconds * 1000) : new Date(u.lastActive).getTime();
@@ -161,7 +175,8 @@
                 }
 
                 if (u.isOnline === true || isRecentlyActive) {
-                    activeList.push({ id: doc.id, name: userName, ...u });
+                    const devInfo = getDeviceDetails(u.device || u.userAgent);
+                    activeList.push({ id: doc.id, name: userName, devInfo, ...u });
                 }
             });
 
@@ -171,7 +186,7 @@
                 container.innerHTML = `
                     <div class="empty-box">
                         <i class="fas fa-user-slash"></i>
-                        <span>لا يوجد مستخدمون مسجلون حالياً.</span>
+                        <span>لا يوجد مستخدمون متصلون حالياً.</span>
                     </div>`;
                 return;
             }
@@ -183,23 +198,20 @@
                         <span>${u.name}</span>
                         ${u.role ? `<span class="badge bg-secondary ms-2" style="font-size:0.65rem;">${u.role}</span>` : ''}
                     </div>
-                    <div class="text-muted" style="font-size:0.75rem;">
-                        <i class="far fa-clock me-1"></i> آخر نشاط: ${formatTime(u.lastActive || u.lastLogin)}
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="device-tag"><i class="fas ${u.devInfo.icon}"></i> ${u.devInfo.name}</span>
+                        <span class="text-muted" style="font-size:0.72rem;"><i class="far fa-clock ms-1"></i>${formatTime(u.lastActive || u.lastLogin)}</span>
                     </div>
                 </div>
             `).join('');
-        }, (err) => {
-            console.error("خطأ القراءة من users:", err);
-            container.innerHTML = `<div class="text-danger text-center p-3">حدث خطأ في تحميل بيانات المتصلين.</div>`;
         });
     }
 
-    // 2. القراءة من جدول session_logs الموضح بالصور
-    async function loadSessionLogs() {
+    // 2. جلب وتحديث سجل session_logs الموضح فيه "دخول" و "خروج"
+    function loadSessionLogs() {
         const tbody = document.getElementById('logsTableBody');
-        try {
-            const snap = await db.collection("session_logs").orderBy("timestamp", "desc").limit(25).get();
 
+        db.collection("session_logs").orderBy("timestamp", "desc").limit(30).onSnapshot((snap) => {
             if (snap.empty) {
                 tbody.innerHTML = `
                     <tr>
@@ -211,28 +223,38 @@
             let html = "";
             snap.forEach(doc => {
                 const log = doc.data();
-                const actionText = log.action || log.event || 'دخول/خروج';
+                const actionRaw = (log.action || log.event || '').toLowerCase();
                 
-                let badgeClass = 'bg-primary';
-                if (actionText.includes('دخول') || actionText.includes('login')) badgeClass = 'bg-success';
-                else if (actionText.includes('خروج') || actionText.includes('logout')) badgeClass = 'bg-danger';
+                let isLogin = actionRaw.includes('login') || actionRaw.includes('دخول') || actionRaw.includes('دخل');
+                let isLogout = actionRaw.includes('logout') || actionRaw.includes('خروج') || actionRaw.includes('خرج');
+
+                let eventBadge = `<span class="badge-event-login"><i class="fas fa-sign-in-alt me-1"></i> تسجيل دخول</span>`;
+                if (isLogout) {
+                    eventBadge = `<span class="badge-event-logout"><i class="fas fa-sign-out-alt me-1"></i> تسجيل خروج</span>`;
+                }
+
+                // تحديد الجهاز
+                const devInfo = getDeviceDetails(log.device || log.userAgent || log.source);
 
                 html += `
                     <tr>
-                        <td class="fw-bold">${log.userName || log.userId || 'مستخدم'}</td>
-                        <td><span class="badge ${badgeClass}">${actionText}</span></td>
+                        <td class="fw-bold text-dark">${log.userName || log.userId || 'مستخدم'}</td>
+                        <td>${eventBadge}</td>
                         <td dir="ltr" class="fw-bold">${formatTime(log.timestamp)}</td>
-                        <td>${log.device || log.source || 'النظام'}</td>
+                        <td>
+                            <span class="device-tag">
+                                <i class="fas ${devInfo.icon}"></i> ${log.device || devInfo.name}
+                            </span>
+                        </td>
                     </tr>
                 `;
             });
 
             tbody.innerHTML = html;
-
-        } catch (e) {
-            console.error("خطأ القراءة من session_logs:", e);
-            tbody.innerHTML = `<tr><td colspan="4" class="text-danger py-3">تعذر جلب سجلات session_logs.</td></tr>`;
-        }
+        }, (err) => {
+            console.error("خطأ القراءة من session_logs:", err);
+            tbody.innerHTML = `<tr><td colspan="4" class="text-danger py-3">تعذر جلب البيانات. يرجى مراجعة الصلاحيات.</td></tr>`;
+        });
     }
 
     window.addEventListener('load', () => {
