@@ -374,7 +374,7 @@
 
     <div class="invoice-card">
         <div class="row g-2 mb-3">
-            <div class="col-7 position-relative">
+            <div class="col-6 position-relative">
                 <label class="sub-lbl" style="text-align:right;"><i class="fas fa-user me-1"></i> العميل</label>
                 <div class="d-flex gap-1">
                     <input type="text" id="customerSearch" class="form-control text-start" placeholder="ابحث عن عميل..." oninput="searchCustomer(this)" autocomplete="off">
@@ -394,7 +394,17 @@
                     </div>
                 </div>
             </div>
-            <div class="col-5">
+            
+            <!-- إضافة اختيار منفذ البيع -->
+            <div class="col-3">
+                <label class="sub-lbl" style="text-align:right;"><i class="fas fa-store me-1"></i> منفذ البيع</label>
+                <select id="invoiceSource" class="form-select" style="font-size: 0.75rem; padding: 8px 2px;">
+                    <option value="main_store" selected>المخزن الرئيسي</option>
+                    <option value="van_sales">سيارة المندوب</option>
+                </select>
+            </div>
+
+            <div class="col-3">
                 <label class="sub-lbl" style="text-align:right;"><i class="fas fa-calendar-alt me-1"></i> التاريخ والوقت</label>
                 <input type="text" id="invTime" class="form-control" style="font-size: 0.75rem;" oninput="handleInput()">
             </div>
@@ -648,8 +658,6 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    // تفعيل التخزين الدائم (Offline Persistence) — يخزن البيانات على الجهاز
-    // ويسمح بالقراءة والكتابة حتى لو انقطع الإنترنت، مع مزامنة تلقائية عند رجوع الاتصال
     let db;
     try {
         db = initializeFirestore(app, {
@@ -730,6 +738,7 @@
         });
 
         return {
+            source: document.getElementById('invoiceSource').value || 'main_store',
             customerId: document.getElementById('customerSelect').value,
             customerName: document.getElementById('customerSearch').value,
             invTime: document.getElementById('invTime').value,
@@ -757,6 +766,7 @@
     };
 
     function restoreDraftPayload(payload) {
+        if (payload.source) document.getElementById('invoiceSource').value = payload.source;
         document.getElementById('customerSearch').value = payload.customerName || '';
         document.getElementById('customerSelect').value = payload.customerId || '';
         document.getElementById('invTime').value = payload.invTime || '';
@@ -916,13 +926,6 @@
             return Math.max(minBuyPrice, minAllowedPrice);
         }
         return minBuyPrice !== null ? minBuyPrice : minAllowedPrice;
-    }
-
-    function getBuyPriceForUnit(product, selectedUnit) {
-        if (!product) return 0;
-        const buyBox = Number(product.buy !== undefined ? product.buy : product.cost) || 0;
-        const factor = Number(product.unitFactor) || 1;
-        return selectedUnit === 'box' ? buyBox : (buyBox / factor);
     }
 
     window.addEventListener('beforeunload', (e) => {
@@ -1261,7 +1264,6 @@
             return;
         }
 
-        // السعر بياخد من كارت الصنف في المخزون مباشرة (سعر البيع) بدون البحث في تاريخ الفواتير
         const storePrice = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
         const finalPrice = storePrice;
 
@@ -1554,7 +1556,13 @@
                 });
             }
 
+            // تحديد اسم اليوزر الحالى ومصدر الفاتورة
+            const currentUser = localStorage.getItem('username') || "أحمد محمود الزيادي";
+            const invoiceSource = document.getElementById('invoiceSource').value || 'main_store';
+
             const baseInvoiceData = {
+                source: invoiceSource,
+                createdBy: currentUser,
                 customerId, customerName,
                 itemsTotal: Number(itemsTotal) || 0,
                 discount: Number(discount) || 0,
@@ -1640,10 +1648,6 @@
                 }
             }
 
-            // مع تفعيل التخزين الدائم، الكتابة بتتسجل فورًا في نسخة الجهاز المحلية
-            // لكن الـ Promise بتاعة commit() ما بترجعش (resolve) إلا بعد تأكيد السيرفر
-            // فلو انتظرناها (await) هنا، الحفظ هيفضل "معلّق" لحد ما النت يرجع.
-            // الحل: نكمل واجهة الاستخدام فورًا (حفظ محلي فوري)، ونتابع تأكيد السيرفر في الخلفية.
             const wasOffline = !navigator.onLine;
             const commitPromise = batch.commit();
 
@@ -1942,9 +1946,6 @@
                 }
 
                 document.getElementById("itemsContainer").innerHTML = "";
-                // نثبّت سعر كل صنف جاي من الطلبية كما هو (نعتبره "سعر معدَّل")
-                // عشان البرنامج ميرجعش يجيب سعر البيع الحالي من كارت الصنف في المخزون
-                // ولو غيّرت الوحدة (كرتونة/جركن) هيتحسب السعر تناسبيًا من نفس سعر الطلبية فقط
                 paramItems.forEach(item => {
                     const fixedItem = { ...item, isEditedPrice: true, defaultPrice: item.price };
                     window.addNewRow(fixedItem);
@@ -1960,6 +1961,10 @@
                     const data = invDoc.data();
                     
                     originalInvoiceDataForLogs = JSON.parse(JSON.stringify(data));
+
+                    if (data.source) {
+                        document.getElementById('invoiceSource').value = data.source;
+                    }
 
                     document.getElementById('customerSelect').value = data.customerId || "";
                     document.getElementById('customerSearch').value = data.customerName || 'عميل نقدي';
