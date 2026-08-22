@@ -228,20 +228,20 @@
         }
         .vouchers-divider::after { content: ""; flex: 1; height: 1.5px; background: var(--border); }
 
-        .meta-container { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .meta-container { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
         .detail-badge {
-            font-size: 0.74rem;
-            padding: 5px 10px; 
+            font-size: 0.72rem;
+            padding: 4px 8px; 
             border-radius: 8px; 
             font-weight: 700;
             background: #f1f5f9; 
             color: #475569;
             display: inline-flex; 
             align-items: center; 
-            gap: 5px; 
+            gap: 4px; 
             direction: ltr;
         }
-        .pay-badge { font-size: 0.7rem; font-weight: 800; padding: 5px 11px; border-radius: 8px; color: white !important; }
+        .pay-badge { font-size: 0.7rem; font-weight: 800; padding: 4px 9px; border-radius: 8px; color: white !important; }
 
         .modification-log-box {
             background: #fffdf5;
@@ -400,7 +400,17 @@
                     <i class="fas fa-sync-alt"></i> تحديث
                 </button>
             </div>
-            <!-- زر تصفير النظام ومسح المبيعات للآدمن -->
+
+            <!-- شريط فلترة منفذ البيع (المخزن الرئيسي / السيارة) -->
+            <div class="d-flex align-items-center justify-content-between gap-2 p-2 rounded bg-light border">
+                <span class="fw-bold" style="font-size: 0.78rem; white-space: nowrap;"><i class="fas fa-filter text-dark me-1"></i> منفذ البيع:</span>
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-sm btn-dark active fw-bold" id="btnSourceAll" onclick="filterBySource('all')">الكل</button>
+                    <button type="button" class="btn btn-sm btn-outline-dark fw-bold" id="btnSourceMain" onclick="filterBySource('main_store')"><i class="fas fa-warehouse me-1"></i> المخزن</button>
+                    <button type="button" class="btn btn-sm btn-outline-dark fw-bold" id="btnSourceVan" onclick="filterBySource('van_sales')"><i class="fas fa-truck me-1"></i> السيارة</button>
+                </div>
+            </div>
+
             <button class="panel-btn btn-reset-danger" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
                 <i class="fas fa-trash-can"></i> تصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
@@ -463,7 +473,7 @@
         <div class="filter-row">
             <div class="search-date-group">
                 <div>
-                    <input type="text" id="searchInput" class="form-control search-box" placeholder="بحث باسم العميل..." oninput="filterInvoices()">
+                    <input type="text" id="searchInput" class="form-control search-box" placeholder="بحث باسم العميل أو اليوزر..." oninput="filterInvoices()">
                 </div>
                 <div>
                     <input type="date" id="dateFilterInput" class="form-control" onchange="window.handleDateFilterChange()">
@@ -514,12 +524,12 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // كلمة سر الأدمن
     const ADMIN_PASSWORD = "123";
 
     let allInvoices = [];
     let customersData = {};
     let currentFilterType = null;
+    let currentSourceFilter = 'all'; // 'all' | 'main_store' | 'van_sales'
     let currentRenderedInvoices = [];
     let allReceiptVouchers = [];
     let rawTransactionsList = [];
@@ -772,6 +782,16 @@
         });
     }
 
+    window.filterBySource = (sourceType) => {
+        currentSourceFilter = sourceType;
+        
+        document.getElementById('btnSourceAll').className = sourceType === 'all' ? 'btn btn-sm btn-dark active fw-bold' : 'btn btn-sm btn-outline-dark fw-bold';
+        document.getElementById('btnSourceMain').className = sourceType === 'main_store' ? 'btn btn-sm btn-dark active fw-bold' : 'btn btn-sm btn-outline-dark fw-bold';
+        document.getElementById('btnSourceVan').className = sourceType === 'van_sales' ? 'btn btn-sm btn-dark active fw-bold' : 'btn btn-sm btn-outline-dark fw-bold';
+        
+        applyCurrentView();
+    };
+
     window.renderInvoices = (invoices, vouchers = []) => {
         currentRenderedInvoices = invoices;
         const container = document.getElementById('invoicesList');
@@ -789,6 +809,14 @@
             if (inv.paymentMethod === "سداد نقدى" || inv.paymentMethod === "كاش" || inv.paymentMethod === "نقدى") methodBadgeColor = "bg-dark";
             else if (inv.paymentMethod === "سداد مرئية" || inv.paymentMethod === "سداد محفظه" || inv.paymentMethod === "محفظه") methodBadgeColor = "bg-primary";
             else if (inv.paymentMethod === "آجل") methodBadgeColor = "bg-danger";
+
+            // شارة المصدر (المخزن الرئيسي أم السيارة)
+            const sourceBadge = (inv.source === 'van_sales') 
+                ? `<span class="badge bg-warning text-dark me-1" style="font-size:0.68rem;"><i class="fas fa-truck me-1"></i> سيارة</span>` 
+                : `<span class="badge bg-dark text-white me-1" style="font-size:0.68rem;"><i class="fas fa-warehouse me-1"></i> المخزن</span>`;
+
+            // شارة اسم اليوزر المسؤول عن إنشاء الفاتورة
+            const userBadge = `<span class="detail-badge" style="background:#e2e8f0; color:#1e293b;"><i class="fas fa-user-tag me-1"></i> ${inv.createdBy || 'أحمد محمود الزيادي'}</span>`;
 
             const totalPaid = inv.calculatedCash + inv.calculatedWallet;
             const displayTime = formatInvoiceTime(inv.time, inv.date);
@@ -817,6 +845,8 @@
                         <div>
                             <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.95rem;">${inv.customerName || 'عميل نقدى'}</h6>
                             <div class="meta-container">
+                                ${sourceBadge}
+                                ${userBadge}
                                 <span class="pay-badge ${methodBadgeColor}">${inv.paymentMethod || 'غير محدد'}</span>
                                 <span class="detail-badge"><i class="far fa-clock"></i> ${shortDate} ${displayTime}</span>
                             </div>
@@ -890,7 +920,7 @@
         container.innerHTML = invoicesHtml + dividerHtml + vouchersHtml;
     };
 
-    function calculateStats() {
+    function calculateStats(invoicesList = allInvoices) {
         let invoiceCash = 0, voucherCash = 0;
         let invoiceWallet = 0, voucherWallet = 0;
         let todayRemaining = 0, todaySales = 0;
@@ -900,7 +930,7 @@
         const statsTitle = document.getElementById('todayStatsTitle');
         if (statsTitle) { statsTitle.innerHTML = `<i class="fas fa-calendar-day"></i> إحصائيات يوم (${targetDateStr})`; }
         
-        allInvoices.forEach(inv => {
+        invoicesList.forEach(inv => {
             const invDateStr = parseInvoiceDate(inv);
             if (invDateStr === targetDateStr) {
                 invoiceCash += Number(inv.calculatedCash) || 0;
@@ -988,15 +1018,23 @@
     };
 
     function applyCurrentView() {
-        calculateStats();
+        let sourceFilteredInvoices = allInvoices;
+        if (currentSourceFilter !== 'all') {
+            sourceFilteredInvoices = allInvoices.filter(inv => {
+                const src = inv.source || 'main_store';
+                return src === currentSourceFilter;
+            });
+        }
+
+        calculateStats(sourceFilteredInvoices);
+
+        const filterInput = document.getElementById('dateFilterInput')?.value;
+        const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
+
         if (currentFilterType) {
-            const filterInput = document.getElementById('dateFilterInput')?.value;
-            const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
-            executeFilterLogic(currentFilterType, targetDate);
+            executeFilterLogic(currentFilterType, targetDate, sourceFilteredInvoices);
         } else {
-            const filterInput = document.getElementById('dateFilterInput')?.value;
-            const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
-            const todayInvoices = allInvoices.filter(inv => parseInvoiceDate(inv) === targetDate);
+            const todayInvoices = sourceFilteredInvoices.filter(inv => parseInvoiceDate(inv) === targetDate);
             const todayVouchers = allReceiptVouchers.filter(v => parseVoucherDate(v) === targetDate);
             window.renderInvoices(todayInvoices, todayVouchers);
         }
@@ -1174,7 +1212,6 @@
         loadData(true, false, filterInput || null);
     };
 
-    // دالة تصفير السجل للآدمن
     window.clearAllSalesAdmin = () => {
         window.showCustomUi({
             title: "🔒 صلاحية الآدمن فقط",
@@ -1203,7 +1240,6 @@
                             const batch = db.batch();
                             let count = 0;
 
-                            // 1. نقل الفواتير
                             allInvoices.forEach(inv => {
                                 const ref = db.collection("invoices").doc(inv.id);
                                 batch.update(ref, {
@@ -1213,7 +1249,6 @@
                                 count++;
                             });
 
-                            // 2. نقل السندات والمعاملات
                             rawTransactionsList.forEach(tr => {
                                 const ref = db.collection("transactions").doc(tr.id);
                                 batch.update(ref, {
@@ -1286,6 +1321,7 @@
                 </div>
                 <div style="font-size:11px; border-bottom:1px dashed #000; padding-bottom:6px; margin-bottom:8px; line-height:1.5;">
                     <div><b>العميل:</b> ${inv.customerName || 'عميل نقدى'}</div>
+                    <div><b>المستخدم:</b> ${inv.createdBy || 'أحمد محمود الزيادي'}</div>
                     <div><b>التاريخ:</b> ${invDate} | ${displayTime}</div>
                     <div><b>طريقة السداد:</b> ${inv.paymentMethod || 'غير محدد'}</div>
                 </div>
@@ -1545,7 +1581,7 @@
                     invoicesDetailsHtml += `
                         <div style="font-size:10.5px; border-bottom:1px solid #eee; padding:6px 0; line-height:1.4;">
                             <div style="display:flex; justify-content:space-between;">
-                                <span><b>${i+1}. ${name}</b></span>
+                                <span><b>${i+1}. ${name}</b> (اليوزر: ${inv.createdBy || 'أحمد محمود الزيادي'})</span>
                                 <span class="num" style="font-weight:bold;">${invTotal.toFixed(1)} EGP</span>
                             </div>
                             <div style="display:flex; gap:10px; color:#555; font-size:9.5px;">
@@ -1653,12 +1689,17 @@
         currentFilterType = type;
         const filterInput = document.getElementById('dateFilterInput')?.value;
         const todayStr = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
-        executeFilterLogic(type, todayStr);
+        
+        let sourceFiltered = allInvoices;
+        if (currentSourceFilter !== 'all') {
+            sourceFiltered = allInvoices.filter(i => (i.source || 'main_store') === currentSourceFilter);
+        }
+        executeFilterLogic(type, todayStr, sourceFiltered);
     };
 
-    function executeFilterLogic(type, dateStr) {
+    function executeFilterLogic(type, dateStr, invoicesList = allInvoices) {
         let filtered = []; let statusLabel = "";
-        filtered = allInvoices.filter(inv => {
+        filtered = invoicesList.filter(inv => {
             const invDateStr = parseInvoiceDate(inv);
             const isToday = (invDateStr === dateStr);
             switch (type) {
@@ -1695,17 +1736,23 @@
 
     window.filterInvoices = () => {
         const query = document.getElementById('searchInput').value.toLowerCase().trim();
+        let sourceFiltered = allInvoices;
+        if (currentSourceFilter !== 'all') {
+            sourceFiltered = allInvoices.filter(i => (i.source || 'main_store') === currentSourceFilter);
+        }
+
         if (!query) {
             const filterInput = document.getElementById('dateFilterInput').value;
             const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
-            const filtered = allInvoices.filter(inv => parseInvoiceDate(inv) === targetDate);
+            const filtered = sourceFiltered.filter(inv => parseInvoiceDate(inv) === targetDate);
             const matchingVouchers = allReceiptVouchers.filter(v => parseVoucherDate(v) === targetDate);
             window.renderInvoices(filtered, matchingVouchers);
             return;
         }
 
-        const filtered = allInvoices.filter(inv =>
+        const filtered = sourceFiltered.filter(inv =>
             (inv.customerName && inv.customerName.toLowerCase().includes(query)) ||
+            (inv.createdBy && inv.createdBy.toLowerCase().includes(query)) ||
             (inv.paymentMethod && inv.paymentMethod.toLowerCase().includes(query))
         );
         const matchingVouchers = allReceiptVouchers.filter(v =>
@@ -1823,6 +1870,8 @@
                 const invDateRaw = parseInvoiceDate(invObj);
                 const invDateFormatted = formatArabicDayMonth(invDateRaw);
                 const customerName = invObj.customerName || 'النقدى';
+                const createdBy = invObj.createdBy || "أحمد محمود الزيادي";
+                const sourceText = invObj.source === 'van_sales' ? 'سيارة المندوب' : 'المخزن الرئيسي';
 
                 if (invObj.items && invObj.items.length > 0) {
                     invObj.items.forEach(itm => {
@@ -1842,9 +1891,16 @@
                         else { qtyJarkan = rawQty; priceJarkan = rawPrice; }
 
                         excelRows.push({
-                            "التاريخ": invDateFormatted, "الحركة": movementType, "اسم العميل": customerName,
-                            "الصنف": itemName, "عدد الجركن": qtyJarkan, "عدد الكرتونة": qtyCarton,
-                            "سعر الجركن": priceJarkan, "سعر الكرتونة": priceCarton
+                            "التاريخ": invDateFormatted,
+                            "المستخدم": createdBy,
+                            "منفذ البيع": sourceText,
+                            "الحركة": movementType,
+                            "اسم العميل": customerName,
+                            "الصنف": itemName,
+                            "عدد الجركن": qtyJarkan,
+                            "عدد الكرتونة": qtyCarton,
+                            "سعر الجركن": priceJarkan,
+                            "سعر الكرتونة": priceCarton
                         });
                     });
                 }
@@ -1854,14 +1910,16 @@
 
                 if (cashPaid > 0) {
                     excelRows.push({
-                        "التاريخ": invDateFormatted, "الحركة": "سداد منه نقدى", "اسم العميل": customerName,
+                        "التاريخ": invDateFormatted, "المستخدم": createdBy, "منفذ البيع": sourceText,
+                        "الحركة": "سداد منه نقدى", "اسم العميل": customerName,
                         "الصنف": "سداد نقدى", "عدد الجركن": "", "عدد الكرتونة": 1,
                         "سعر الجركن": "", "سعر الكرتونة": cashPaid
                     });
                 }
                 if (walletPaid > 0) {
                     excelRows.push({
-                        "التاريخ": invDateFormatted, "الحركة": "سداد منه محفظه", "اسم العميل": customerName,
+                        "التاريخ": invDateFormatted, "المستخدم": createdBy, "منفذ البيع": sourceText,
+                        "الحركة": "سداد منه محفظه", "اسم العميل": customerName,
                         "الصنف": "سداد نقدى", "عدد الجركن": "", "عدد الكرتونة": 1,
                         "سعر الجركن": "", "سعر الكرتونة": walletPaid
                     });
