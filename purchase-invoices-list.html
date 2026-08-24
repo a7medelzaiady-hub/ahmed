@@ -74,9 +74,7 @@
             font-family: 'Montserrat', 'Cairo', sans-serif !important;
         }
 
-        /* ============================================================
-           HEADER
-           ============================================================ */
+        /* HEADER */
         .header { 
             background: var(--primary-gradient); 
             padding: 0 16px;
@@ -156,9 +154,7 @@
         }
         .hdr-home-link:hover { background: rgba(255, 255, 255, 0.2); color: #fff; text-decoration: none !important; }
 
-        /* ============================================================
-           TOOLBAR
-           ============================================================ */
+        /* TOOLBAR */
         .action-toolbar {
             display: flex;
             align-items: center;
@@ -211,9 +207,7 @@
         }
         .fab-btn-add:active { transform: scale(0.9); }
 
-        /* ============================================================
-           STATS CARD
-           ============================================================ */
+        /* STATS CARD */
         .stats-grid { 
             display: grid; 
             grid-template-columns: repeat(3, 1fr); 
@@ -250,9 +244,7 @@
             display: block;
         }
 
-        /* ============================================================
-           SEARCH BOX
-           ============================================================ */
+        /* SEARCH BOX */
         .search-box { position: relative; margin-bottom: 16px; }
         .search-box input { 
             background: var(--white); 
@@ -273,9 +265,7 @@
         }
         .search-box i { position: absolute; right: 14px; top: 14px; color: var(--text-muted); font-size: 0.85rem; }
 
-        /* ============================================================
-           INVOICE CARD
-           ============================================================ */
+        /* INVOICE CARD */
         .invoice-card { 
             background: var(--white); 
             border: 1px solid rgba(0, 0, 0, 0.05); 
@@ -748,8 +738,9 @@
         }).join('');
     }
 
+    // تم التعديل والتصحيح بالكامل هنا لربط التعديل بكولكشن المخزن inventory بدقة
     window.deleteSingleInvoice = async function(invoiceId) {
-        if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم تعديل كميات الأصناف في المخزن تلقائياً ولا يمكن التراجع عن هذا الإجراء.')) return;
+        if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم خصم/تعديل كميات الأصناف من المخزن تلقائياً ولا يمكن التراجع عن هذا الإجراء.')) return;
         
         const inv = allInvoices.find(i => i.id === invoiceId);
         if (!inv) {
@@ -763,30 +754,38 @@
                     for (const item of inv.items) {
                         if (!item.id) continue;
                         
-                        const productRef = doc(db, "products", item.id);
+                        // التصحيح الأساسي: الاستعلام عن المستند في كولكشن inventory
+                        const productRef = doc(db, "inventory", item.id);
                         const productSnap = await transaction.get(productRef);
                         
                         if (productSnap.exists()) {
                             const productData = productSnap.data();
-                            const qtyToModify = item.qty || item.returnQty || 0;
-                            const isReturn = inv.isReturn || inv.type === "مرتجع شراء";
                             
-                            const modifier = isReturn ? qtyToModify : -qtyToModify;
+                            // حساب معامل التحويل (عدد القطع بالكرتونة)
+                            const factor = Math.max(1, Number(productData.unitFactor || productData.pcsPerCarton || productData.factor) || 1);
+                            
+                            const enteredQty = Number(item.qty || item.returnQty || 0);
                             const unitName = item.unitName || "كرتونة";
-                            let currentQty = 0;
-                            let updateData = {};
 
-                            if (unitName === "جركن" || unitName === "قطعة") {
-                                currentQty = Number(productData.jerrycan || productData.pieces || 0);
-                                const newQty = Math.max(0, currentQty + modifier);
-                                updateData = { jerrycan: newQty };
-                            } else {
-                                currentQty = Number(productData.carton || 0);
-                                const newQty = Math.max(0, currentQty + modifier);
-                                updateData = { carton: newQty };
+                            // إيجاد إجمالي القطع المطلوب خصمها أو إعادتها
+                            let totalPcsToModify = enteredQty;
+                            if (unitName === "كرتونة") {
+                                totalPcsToModify = enteredQty * factor;
                             }
 
-                            transaction.update(productRef, updateData);
+                            const isReturn = inv.isReturn || inv.type === "مرتجع شراء";
+                            
+                            // إن كانت شراء، عند الحذف نخصم من المخزن (-). وإن كانت مرتجع، عند الحذف نعيدها للمخزن (+)
+                            const pcsModifier = isReturn ? totalPcsToModify : -totalPcsToModify;
+
+                            const currentTotalPcs = Number(productData.totalPcs !== undefined ? productData.totalPcs : (productData.qty || 0));
+                            const newTotalPcs = currentTotalPcs + pcsModifier;
+
+                            // تحديث قيم المخزن بـ Firestore
+                            transaction.update(productRef, { 
+                                totalPcs: newTotalPcs,
+                                qty: newTotalPcs
+                            });
                         }
                     }
                 }
@@ -805,10 +804,10 @@
             
             allInvoices = allInvoices.filter(i => i.id !== invoiceId);
             recalcStats();
-            alert("تم حذف الفاتورة وتعديل كميات المخزن بنجاح ✅");
+            alert("تم حذف الفاتورة وتعديل كميات الأصناف بالمخزن بنجاح ✅");
 
         } catch (e) {
-            console.error("Error deleting invoice and updating stock:", e);
+            console.error("Error deleting invoice and updating inventory stock:", e);
             alert('حدث خطأ أثناء الحذف وتعديل المخزن: ' + e.message);
         }
     };
