@@ -199,7 +199,7 @@
 <body>
 
 <div class="top-nav">
-    <i class="fas fa-sync-alt" onclick="location.reload()"></i>
+    <i class="fas fa-sync-alt" onclick="window.location.reload(true)"></i>
     <span class="fw-bold">الأصناف والمخزون</span>
     <i class="fas fa-chevron-left" onclick="history.back()"></i>
 </div>
@@ -254,12 +254,23 @@
     }
     let allData = [];
 
+    // التثبيت والإصلاح الرئيسي: جلب التغييرات الحية مع قراءة أولوية totalPcs لعدم الالتصاق بالـ Cache القديم
     onSnapshot(collection(db, "inventory"), (snap) => {
         allData = [];
         snap.forEach(doc => {
             const data = doc.data();
             if (!data.isDeleted) {
-                allData.push({ id: doc.id, ...data });
+                // التأكد من توحيد قراءة إجمالي القطع بغض النظر عن اختلاف المسميات (totalPcs أو qty)
+                const realPcs = (data.totalPcs !== undefined && data.totalPcs !== null) 
+                    ? Number(data.totalPcs) 
+                    : Number(data.qty || 0);
+
+                allData.push({ 
+                    id: doc.id, 
+                    ...data,
+                    totalPcs: realPcs,
+                    qty: realPcs
+                });
             }
         });
         renderItems();
