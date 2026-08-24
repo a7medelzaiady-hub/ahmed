@@ -477,7 +477,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, deleteDoc, doc, runTransaction, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, deleteDoc, doc, getDoc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -738,7 +738,7 @@
         }).join('');
     }
 
-    // === إصلاح دالة الحذف وتجاوز التعارض والـ Transaction ===
+    // === دالة الحذف وتخصيم/إعادة الكميات للمخزن بكل دقة ===
     window.deleteSingleInvoice = async function(invoiceId) {
         if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم خصم/تعديل كميات الأصناف من المخزن تلقائياً ولا يمكن التراجع عن هذا الإجراء.')) return;
         
@@ -752,30 +752,30 @@
             // 1) تعديل كميات الأصناف بالمخزن
             if (Array.isArray(inv.items) && inv.items.length > 0) {
                 for (const item of inv.items) {
-                    if (!item.id) continue;
-                    const productRef = doc(db, "inventory", item.id);
+                    const itemId = item.stockId || item.id;
+                    if (!itemId) continue;
+
+                    const productRef = doc(db, "inventory", itemId);
                     const productSnap = await getDoc(productRef);
 
                     if (productSnap.exists()) {
                         const productData = productSnap.data();
-                        const factor = Math.max(1, Number(productData.unitFactor || productData.pcsPerCarton || productData.factor) || 1);
-                        const enteredQty = Number(item.qty || item.returnQty || 0);
-                        const unitName = item.unitName || "كرتونة";
-
-                        let totalPcsToModify = enteredQty;
-                        if (unitName === "كرتونة") {
-                            totalPcsToModify = enteredQty * factor;
+                        const factor = Math.max(1, Number(productData.unitFactor || productData.factor || item.unitFactor) || 1);
+                        
+                        let totalPcsToModify = Number(item.totalPieces) || 0;
+                        if (!totalPcsToModify) {
+                            const enteredQty = Number(item.qty || item.returnQty || 0);
+                            const unitName = item.unitName || item.unit || "كرتونة";
+                            totalPcsToModify = (unitName === "كرتونة" || unitName === "box") ? (enteredQty * factor) : enteredQty;
                         }
 
-                        const isReturn = inv.isReturn || inv.type === "مرتجع شراء";
+                        const isReturn = inv.isReturn || inv.type === "مرتجع شراء" || item.isReturn === true;
+                        // إذا كانت الفاتورة شراء وتم حذفها -> يخصم من المخزن. إذا كانت مرتجع وتم حذفها -> يضاف للمخزن.
                         const pcsModifier = isReturn ? totalPcsToModify : -totalPcsToModify;
 
-                        const currentTotalPcs = Number(productData.totalPcs !== undefined ? productData.totalPcs : (productData.qty || 0));
-                        const newTotalPcs = currentTotalPcs + pcsModifier;
-
                         await updateDoc(productRef, {
-                            totalPcs: newTotalPcs,
-                            qty: newTotalPcs
+                            totalPcs: increment(pcsModifier),
+                            qty: increment(pcsModifier)
                         });
                     }
                 }
@@ -795,7 +795,7 @@
             
             allInvoices = allInvoices.filter(i => i.id !== invoiceId);
             recalcStats();
-            alert("تم حذف الفاتورة وتعديل كميات الأصناف بالمخزن بنجاح ✅");
+            alert("تم حذف الفاتورة وتعديل وتحديث المخزن بنجاح ✅");
 
         } catch (e) {
             console.error("Error deleting invoice:", e);
