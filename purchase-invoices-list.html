@@ -477,7 +477,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, deleteDoc, doc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, deleteDoc, doc, runTransaction, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -738,14 +738,7 @@
         }).join('');
     }
 
-    // === تم إصلاح دالة الحذف بالكامل ===
-    // السبب الأصلي للمشكلة: كانت الدالة تنفذ get() و update() بالتبادل داخل نفس اللوب،
-    // وهذا يخالف قاعدة أساسية في Firestore transactions وهي وجوب تنفيذ كل عمليات
-    // القراءة (get) قبل أي عملية كتابة (update/delete) داخل نفس الـ transaction.
-    // النتيجة كانت فشل الـ transaction بالكامل (خصوصاً في الفواتير متعددة الأصناف) 
-    // دون أن يتم تحديث المخزن فعلياً.
-    // الحل: فصل كل عمليات القراءة أولاً، ثم حساب صافي التعديل لكل صنف (مع تجميع 
-    // الكميات لو تكرر نفس الصنف بأكثر من سطر بالفاتورة)، ثم تنفيذ كل عمليات الكتابة.
+    // === إصلاح دالة الحذف وتجاوز التعارض والـ Transaction ===
     window.deleteSingleInvoice = async function(invoiceId) {
         if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم خصم/تعديل كميات الأصناف من المخزن تلقائياً ولا يمكن التراجع عن هذا الإجراء.')) return;
         
@@ -756,67 +749,42 @@
         }
 
         try {
-            await runTransaction(db, async (transaction) => {
-                const productRefs = {};
-                const productSnaps = {};
+            // 1) تعديل كميات الأصناف بالمخزن
+            if (Array.isArray(inv.items) && inv.items.length > 0) {
+                for (const item of inv.items) {
+                    if (!item.id) continue;
+                    const productRef = doc(db, "inventory", item.id);
+                    const productSnap = await getDoc(productRef);
 
-                // 1) كل عمليات القراءة أولاً (مرة واحدة فقط لكل صنف حتى لو تكرر بالفاتورة)
-                if (Array.isArray(inv.items) && inv.items.length > 0) {
-                    for (const item of inv.items) {
-                        if (!item.id || productRefs[item.id]) continue;
-                        const productRef = doc(db, "inventory", item.id);
-                        productRefs[item.id] = productRef;
-                        productSnaps[item.id] = await transaction.get(productRef);
-                    }
-                }
-
-                // 2) حساب صافي التعديل (بالقطعة) لكل صنف بعد تجميع كل الأسطر الخاصة به
-                const pcsModifiers = {};
-                if (Array.isArray(inv.items) && inv.items.length > 0) {
-                    for (const item of inv.items) {
-                        if (!item.id) continue;
-                        const productSnap = productSnaps[item.id];
-                        if (!productSnap || !productSnap.exists()) continue;
-
+                    if (productSnap.exists()) {
                         const productData = productSnap.data();
-
-                        // حساب معامل التحويل (عدد القطع بالكرتونة)
                         const factor = Math.max(1, Number(productData.unitFactor || productData.pcsPerCarton || productData.factor) || 1);
-
                         const enteredQty = Number(item.qty || item.returnQty || 0);
                         const unitName = item.unitName || "كرتونة";
 
-                        // إيجاد إجمالي القطع المطلوب خصمها أو إعادتها
                         let totalPcsToModify = enteredQty;
                         if (unitName === "كرتونة") {
                             totalPcsToModify = enteredQty * factor;
                         }
 
                         const isReturn = inv.isReturn || inv.type === "مرتجع شراء";
-
-                        // إن كانت شراء، عند الحذف نخصم من المخزن (-). وإن كانت مرتجع، عند الحذف نعيدها للمخزن (+)
                         const pcsModifier = isReturn ? totalPcsToModify : -totalPcsToModify;
 
-                        pcsModifiers[item.id] = (pcsModifiers[item.id] || 0) + pcsModifier;
+                        const currentTotalPcs = Number(productData.totalPcs !== undefined ? productData.totalPcs : (productData.qty || 0));
+                        const newTotalPcs = currentTotalPcs + pcsModifier;
+
+                        await updateDoc(productRef, {
+                            totalPcs: newTotalPcs,
+                            qty: newTotalPcs
+                        });
                     }
                 }
+            }
 
-                // 3) تنفيذ كل عمليات الكتابة بعد الانتهاء من كل القراءات والحسابات
-                for (const id in pcsModifiers) {
-                    const productData = productSnaps[id].data();
-                    const currentTotalPcs = Number(productData.totalPcs !== undefined ? productData.totalPcs : (productData.qty || 0));
-                    const newTotalPcs = currentTotalPcs + pcsModifiers[id];
+            // 2) حذف الفاتورة من Firestore
+            await deleteDoc(doc(db, "supplier_transactions", invoiceId));
 
-                    transaction.update(productRefs[id], {
-                        totalPcs: newTotalPcs,
-                        qty: newTotalPcs
-                    });
-                }
-
-                const invoiceRef = doc(db, "supplier_transactions", invoiceId);
-                transaction.delete(invoiceRef);
-            });
-
+            // 3) إزالة العنصر من الواجهة فوراً
             const card = document.getElementById('card-' + invoiceId);
             if (card) {
                 card.style.transition = 'opacity 0.3s, transform 0.3s';
@@ -830,8 +798,8 @@
             alert("تم حذف الفاتورة وتعديل كميات الأصناف بالمخزن بنجاح ✅");
 
         } catch (e) {
-            console.error("Error deleting invoice and updating inventory stock:", e);
-            alert('حدث خطأ أثناء الحذف وتعديل المخزن: ' + e.message);
+            console.error("Error deleting invoice:", e);
+            alert('حدث خطأ أثناء الحذف: ' + e.message);
         }
     };
 
