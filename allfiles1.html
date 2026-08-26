@@ -425,7 +425,7 @@
         }
     }
 
-    // ================= السندات (من الأقدم إلى الأحدث) =================
+    // ================= السندات (مطابق لصورة الهيكل المطلوب) =================
     async function fetchVouchersSheet() {
         setStatus('statusVouchers', 'جاري السحب من قاعدة البيانات...');
         try {
@@ -459,17 +459,14 @@
                 let savedName = d.customerName || d.partyName || d.supplierName || d.clientName || d.name || "";
                 
                 let resolvedName = "غير مسجل";
-                let resolvedPartyType = d.partyType || (d.supplierId ? 'مورد' : 'عميل');
 
                 if (actualPartyId && partiesMap[actualPartyId]) {
                     resolvedName = partiesMap[actualPartyId].name;
-                    resolvedPartyType = partiesMap[actualPartyId].type;
                 } else if (savedName && savedName.trim() !== "") {
                     const normalizedSaved = normalizeName(savedName);
                     const matchedId = nameIndex[normalizedSaved];
                     if (matchedId) {
                         resolvedName = partiesMap[matchedId].name;
-                        resolvedPartyType = partiesMap[matchedId].type;
                     } else {
                         resolvedName = savedName;
                     }
@@ -482,22 +479,23 @@
                 if (isValidVoucherType && !isInvoicePayment) {
                     validCount++;
                     const method = d.method || d.paymentMethod || 'نقدى';
+                    
                     let movementLabel = '';
                     if (d.type === 'قبض') {
-                        movementLabel = method === 'محفظة' ? 'سداد منه محفظه' : 'سداد منه نقدى';
+                        movementLabel = (method === 'محفظة' || method === 'محفظه') ? 'سداد منه محفظه' : 'سداد منه نقدى';
                     } else {
-                        movementLabel = method === 'محفظة' ? 'سداد له محفظه' : 'سداد له نقدى';
+                        movementLabel = (method === 'محفظة' || method === 'محفظه') ? 'سداد له محفظه' : 'سداد له نقدى';
                     }
 
                     rows.push({
-                        'التاريخ': d.date || "",
-                        'نوع السند': d.type,
-                        'حساب الطرف': resolvedPartyType,
-                        'اسم الشخص / الشركة': resolvedName,
-                        'الحركة': movementLabel,
-                        'طريقة السداد': method,
-                        'المبلغ': Number(d.amount || d.total || 0),
-                        'البيان والتفاصيل': d.note || d.notes || ""
+                        "التاريخ": d.date || "",
+                        "الحركة": movementLabel,
+                        "اسم العميل": resolvedName,
+                        "نوع السداد": "سداد نقدى",
+                        "عدد جركن": 0,
+                        "عدد كرتونة": 1,
+                        "سعر جركن": 0,
+                        "سعر كرتونة": Number(d.amount || d.total || 0)
                     });
                 }
             });
