@@ -463,6 +463,11 @@
                     </div>
                 </div>
             </div>
+
+            <!-- زر ترحيل النقدية والآجل وإغلاق اليوم -->
+            <button class="btn btn-dark w-100 mt-3 fw-bold" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem;">
+                <i class="fas fa-file-export me-1" style="color: var(--germany-gold);"></i> ترحيل إغلاق اليوم إلى سجل النقدية
+            </button>
         </div>
 
         <div class="filter-status-bar" id="filterStatusBar" style="display: none;">
@@ -810,12 +815,10 @@
             else if (inv.paymentMethod === "سداد مرئية" || inv.paymentMethod === "سداد محفظه" || inv.paymentMethod === "محفظه") methodBadgeColor = "bg-primary";
             else if (inv.paymentMethod === "آجل") methodBadgeColor = "bg-danger";
 
-            // شارة المصدر (المخزن الرئيسي أم السيارة)
             const sourceBadge = (inv.source === 'van_sales') 
                 ? `<span class="badge bg-warning text-dark me-1" style="font-size:0.68rem;"><i class="fas fa-truck me-1"></i> سيارة</span>` 
                 : `<span class="badge bg-dark text-white me-1" style="font-size:0.68rem;"><i class="fas fa-warehouse me-1"></i> المخزن</span>`;
 
-            // شارة اسم اليوزر المسؤول عن إنشاء الفاتورة
             const userBadge = `<span class="detail-badge" style="background:#e2e8f0; color:#1e293b;"><i class="fas fa-user-tag me-1"></i> ${inv.createdBy || 'أحمد محمود الزيادي'}</span>`;
 
             const totalPaid = inv.calculatedCash + inv.calculatedWallet;
@@ -1017,6 +1020,69 @@
         }
     };
 
+    window.saveDailyCashRegister = async () => {
+        const filterInput = document.getElementById('dateFilterInput')?.value;
+        const targetDate = filterInput ? filterInput : new Date().toLocaleDateString('en-CA');
+
+        const todayCash = parseFloat(document.getElementById('todayCash')?.innerText || 0);
+        const todayWallet = parseFloat(document.getElementById('todayWallet')?.innerText || 0);
+        const todayRemaining = parseFloat(document.getElementById('todayRemaining')?.innerText || 0);
+        const todayTotalSales = parseFloat(document.getElementById('todayTotalSales')?.innerText || 0);
+        const actualCashInput = document.getElementById('actualCashInput')?.value.trim();
+
+        let actualCash = 0;
+        if (actualCashInput) {
+            let sanitized = convertToEnglishNumbers(actualCashInput).replace(/\+/g, ' ');
+            sanitized.split(/\s+/).forEach(part => {
+                const num = parseFloat(part);
+                if (!isNaN(num)) actualCash += num;
+            });
+        }
+
+        const diff = actualCash - todayCash;
+
+        window.showCustomUi({
+            title: "تأكيد ترحيل النقدية",
+            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate}) بالبيانات التالية؟\n\n` +
+                     `• نقدية المبيعات والتسليمات المتوقعة: ${todayCash.toFixed(1)} ج.م\n` +
+                     `• الجرد الفعلي المسجل: ${actualCash.toFixed(1)} ج.م (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})\n` +
+                     `• إجمالي المحفظة: ${todayWallet.toFixed(1)} ج.م\n` +
+                     `• إجمالي الآجل: ${todayRemaining.toFixed(1)} ج.م\n` +
+                     `• إجمالي المبيعات: ${todayTotalSales.toFixed(1)} ج.م`,
+            type: "confirm",
+            icon: "info",
+            onConfirm: async () => {
+                try {
+                    await db.collection("daily_cash_register").doc(targetDate).set({
+                        date: targetDate,
+                        expectedCash: todayCash,
+                        actualCash: actualCash,
+                        difference: diff,
+                        walletTotal: todayWallet,
+                        remainingTotal: todayRemaining,
+                        totalSales: todayTotalSales,
+                        sourceFilter: currentSourceFilter,
+                        closedBy: "أحمد محمود الزيادي",
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    window.showCustomUi({
+                        title: "تم الترحيل بنجاح",
+                        message: `✅ تم حفظ وإغلاق سجل النقدية ليوم ${targetDate} بنجاح.`,
+                        icon: "success"
+                    });
+                } catch (err) {
+                    console.error("خطأ الترحيل:", err);
+                    window.showCustomUi({
+                        title: "خطأ في الترحيل",
+                        message: "تعذر حفظ بيانات سجل النقدية: " + err.message,
+                        icon: "danger"
+                    });
+                }
+            }
+        });
+    };
+
     function applyCurrentView() {
         let sourceFilteredInvoices = allInvoices;
         if (currentSourceFilter !== 'all') {
@@ -1184,7 +1250,6 @@
 
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
             
-            // تطبيق زر الفلترة الحالي على الواجهة ليكون على "السيارة" عند الفتح الأول
             filterBySource(currentSourceFilter);
 
         } catch (e) {
