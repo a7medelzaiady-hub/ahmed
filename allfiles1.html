@@ -27,7 +27,7 @@
             --danger-light: #fee2e2;
             --success: #10b981;
             --info: #0284c7;
-            --warning: #f59e0b;
+            --purple: #8b5cf6;
             --card-shadow: 0 10px 25px -5px rgba(0,0,0,.06), 0 8px 10px -6px rgba(0,0,0,.05);
             --radius-lg: 24px;
             --radius-md: 16px;
@@ -83,7 +83,6 @@
         .icon-expenses { background: var(--danger); }
         .icon-sales { background: var(--primary); }
         .icon-purchases { background: var(--info); }
-        .icon-vouchers { background: var(--warning); }
         .source-info { flex: 1; min-width: 0; }
         .source-title { font-weight: 800; font-size: .9rem; color: var(--text-dark); }
         .source-status { font-size: .72rem; color: var(--text-muted); font-weight: 700; margin-top: 2px; }
@@ -96,7 +95,6 @@
             box-shadow: 0 4px 15px rgba(11,94,61,.3);
             display: flex; align-items: center; justify-content: center; gap: 10px;
             transition: .2s;
-            cursor: pointer;
         }
         .btn-export-all:active { transform: scale(.97); }
         .btn-export-all:disabled { opacity: .6; }
@@ -131,7 +129,7 @@
 
     <div class="card-custom">
         <p class="text-muted fw-bold" style="font-size:.85rem;">
-            بضغطة واحدة، هيتم سحب كل بيانات <b>المصروفات</b>، <b>المبيعات</b>، <b>المشتريات</b>، و<b>السندات</b> من قاعدة البيانات، وتصديرها في ملف إكسل واحد بـ 4 شيتات منفصلة.
+            بضغطة واحدة، هيتم سحب كل بيانات <b>المصروفات</b> و<b>المبيعات</b> و<b>المشتريات</b> من قاعدة البيانات، وتصديرها في ملف إكسل واحد، كل قسم في شيت منفصل.
         </p>
 
         <div class="sources-list">
@@ -159,14 +157,6 @@
                 </div>
                 <div class="source-count num" id="countPurchases">-</div>
             </div>
-            <div class="source-row">
-                <div class="source-icon icon-vouchers"><i class="fas fa-file-invoice-dollar"></i></div>
-                <div class="source-info">
-                    <div class="source-title">السندات اليدوية</div>
-                    <div class="source-status" id="statusVouchers">بانتظار التصدير</div>
-                </div>
-                <div class="source-count num" id="countVouchers">-</div>
-            </div>
         </div>
 
         <button class="btn-export-all" id="btnExportAll" onclick="exportEverything()">
@@ -182,7 +172,7 @@
 
         <div class="note-box">
             <i class="fas fa-info-circle me-1"></i>
-            الملف الناتج هيكون فيه 4 شيتات: <b>مصروفات</b>، <b>مبيعات</b>، <b>مشتريات</b>، و<b>السندات</b>. لو أي قسم فاضي، هيتصدّر الشيت بتاعه بدون بيانات بدل ما يوقف باقي العملية.
+            الملف الناتج هيكون فيه 3 شيتات: <b>مصروفات</b>، <b>مبيعات</b>، <b>مشتريات</b>. لو أي قسم فاضي، هيتصدّر الشيت بتاعه بدون بيانات بدل ما يوقف باقي العملية.
         </div>
     </div>
 </div>
@@ -220,17 +210,6 @@
         m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
         if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
         return dateStr;
-    }
-
-    function normalizeName(str) {
-        return String(str || '')
-            .trim()
-            .replace(/\s+/g, ' ')
-            .replace(/[\u064B-\u0652]/g, '')
-            .replace(/[إأآا]/g, 'ا')
-            .replace(/ى/g, 'ي')
-            .replace(/ة/g, 'ه')
-            .toLowerCase();
     }
 
     function setStatus(id, text, ok) {
@@ -393,18 +372,23 @@
                 const cashPaid = Number(invObj.cashAmount ?? invObj.cashPaid ?? invObj.paid) || 0;
                 const walletPaid = Number(invObj.walletAmount ?? invObj.walletPaid) || 0;
 
+                // تحديد هل المعاملة قبض أم صرف بناءً على نوع الفاتورة أو القيمة
+                const isExpensePayment = invObj.type === "صرف" || invObj.isExpense === true;
+
                 if (cashPaid > 0) {
+                    const cashMotion = isExpensePayment ? "سداد له نقدى" : "سداد منه نقدى";
                     rows.push({
                         "التاريخ": invDateFormatted, "المستخدم": createdBy, "منفذ البيع": sourceText,
-                        "الحركة": "سداد منه نقدى", "اسم العميل": customerName,
+                        "الحركة": cashMotion, "اسم العميل": customerName,
                         "الصنف": "سداد نقدى", "عدد الجركن": 0, "عدد الكرتونة": 1,
                         "سعر الجركن": 0, "سعر الكرتونة": cashPaid
                     });
                 }
                 if (walletPaid > 0) {
+                    const walletMotion = isExpensePayment ? "سداد له محفظه" : "سداد منه محفظه";
                     rows.push({
                         "التاريخ": invDateFormatted, "المستخدم": createdBy, "منفذ البيع": sourceText,
-                        "الحركة": "سداد منه محفظه", "اسم العميل": customerName,
+                        "الحركة": walletMotion, "اسم العميل": customerName,
                         "الصنف": "سداد نقدى", "عدد الجركن": 0, "عدد الكرتونة": 1,
                         "سعر الجركن": 0, "سعر الكرتونة": walletPaid
                     });
@@ -418,94 +402,6 @@
             console.error(e);
             setStatus('statusSales', 'فشل السحب: ' + e.message, false);
             setCount('countSales', 0);
-            return [];
-        }
-    }
-
-    // ================= السندات (من الأقدم إلى الأحدث) =================
-    async function fetchVouchersSheet() {
-        setStatus('statusVouchers', 'جاري السحب من قاعدة البيانات...');
-        try {
-            const [supSnap, custSnap, vSnap] = await Promise.all([
-                db.collection("suppliers").get(),
-                db.collection("customers").get(),
-                db.collection("transactions").orderBy("date", "asc").get()
-            ]);
-
-            const partiesMap = {};
-            const nameIndex = {};
-            supSnap.forEach(doc => {
-                const data = doc.data();
-                partiesMap[doc.id] = { name: data.name, type: 'مورد' };
-                const key = normalizeName(data.name);
-                if (key && !(key in nameIndex)) nameIndex[key] = doc.id;
-            });
-            custSnap.forEach(doc => {
-                const data = doc.data();
-                partiesMap[doc.id] = { name: data.name, type: 'عميل' };
-                const key = normalizeName(data.name);
-                if (key && !(key in nameIndex)) nameIndex[key] = doc.id;
-            });
-
-            const rows = [];
-            let validCount = 0;
-
-            vSnap.forEach(doc => {
-                const d = doc.data();
-                let actualPartyId = d.partyId || d.customerId || d.supplierId || d.clientId || d.party_id || d.custId || d.client_id || d.accountId || d.account_id || "";
-                let savedName = d.customerName || d.partyName || d.supplierName || d.clientName || d.name || "";
-                
-                let resolvedName = "غير مسجل";
-                let resolvedPartyType = d.partyType || (d.supplierId ? 'مورد' : 'عميل');
-
-                if (actualPartyId && partiesMap[actualPartyId]) {
-                    resolvedName = partiesMap[actualPartyId].name;
-                    resolvedPartyType = partiesMap[actualPartyId].type;
-                } else if (savedName && savedName.trim() !== "") {
-                    const normalizedSaved = normalizeName(savedName);
-                    const matchedId = nameIndex[normalizedSaved];
-                    if (matchedId) {
-                        resolvedName = partiesMap[matchedId].name;
-                        resolvedPartyType = partiesMap[matchedId].type;
-                    } else {
-                        resolvedName = savedName;
-                    }
-                }
-
-                const isValidVoucherType = (d.type === 'قبض' || d.type === 'صرف');
-                const isInvoicePayment = d.invoiceId || d.purchaseId || d.billId || d.isInvoicePayment || 
-                                         (d.note && (d.note.includes('فاتورة') || d.note.includes('فواتير')));
-
-                if (isValidVoucherType && !isInvoicePayment) {
-                    validCount++;
-                    const method = d.method || d.paymentMethod || 'نقدى';
-                    let movementLabel = '';
-                    if (d.type === 'قبض') {
-                        movementLabel = method === 'محفظة' ? 'سداد منه محفظه' : 'سداد منه نقدى';
-                    } else {
-                        movementLabel = method === 'محفظة' ? 'سداد له محفظه' : 'سداد له نقدى';
-                    }
-
-                    rows.push({
-                        'التاريخ': d.date || "",
-                        'نوع السند': d.type,
-                        'حساب الطرف': resolvedPartyType,
-                        'اسم الشخص / الشركة': resolvedName,
-                        'الحركة': movementLabel,
-                        'طريقة السداد': method,
-                        'المبلغ': Number(d.amount || d.total || 0),
-                        'البيان والتفاصيل': d.note || d.notes || ""
-                    });
-                }
-            });
-
-            setStatus('statusVouchers', 'تم التصدير بنجاح ✅', true);
-            setCount('countVouchers', validCount);
-            return rows;
-        } catch (e) {
-            console.error(e);
-            setStatus('statusVouchers', 'فشل السحب: ' + e.message, false);
-            setCount('countVouchers', 0);
             return [];
         }
     }
@@ -524,14 +420,11 @@
             setProgress(15, 'جاري سحب بيانات المصروفات...');
             const expensesRows = await fetchExpensesSheet();
 
-            setProgress(35, 'جاري سحب بيانات المبيعات...');
+            setProgress(45, 'جاري سحب بيانات المبيعات...');
             const salesRows = await fetchSalesSheet();
 
-            setProgress(55, 'جاري سحب بيانات المشتريات...');
+            setProgress(75, 'جاري سحب بيانات المشتريات...');
             const purchasesRows = await fetchPurchasesSheet();
-
-            setProgress(75, 'جاري سحب بيانات السندات...');
-            const vouchersRows = await fetchVouchersSheet();
 
             setProgress(92, 'جاري بناء ملف الإكسل...');
 
@@ -549,17 +442,13 @@
             wsPurchases['!dir'] = "rtl";
             XLSX.utils.book_append_sheet(workbook, wsPurchases, "مشتريات");
 
-            const wsVouchers = XLSX.utils.json_to_sheet(vouchersRows.length ? vouchersRows : [{ "لا توجد بيانات": "" }]);
-            wsVouchers['!dir'] = "rtl";
-            XLSX.utils.book_append_sheet(workbook, wsVouchers, "السندات");
-
             const today = new Date().toISOString().slice(0, 10);
             XLSX.writeFile(workbook, `التقرير_الشامل_شركة_الزيادي_${today}.xlsx`);
 
             setProgress(100, 'تم الانتهاء ✅');
             resultBox.className = 'result-box result-success';
             resultBox.style.display = 'block';
-            resultBox.innerHTML = `<i class="fas fa-check-circle me-1"></i> تم إنشاء الملف بنجاح ويحتوي على ${expensesRows.length} صف مصروفات، ${salesRows.length} صف مبيعات، ${purchasesRows.length} صف مشتريات، و ${vouchersRows.length} سند قبض/صرف.`;
+            resultBox.innerHTML = `<i class="fas fa-check-circle me-1"></i> تم إنشاء الملف بنجاح ويحتوي على ${expensesRows.length} صف مصروفات، ${salesRows.length} صف مبيعات، ${purchasesRows.length} صف مشتريات.`;
 
         } catch (e) {
             console.error(e);
