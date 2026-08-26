@@ -254,13 +254,11 @@
     }
     let allData = [];
 
-    // التثبيت والإصلاح الرئيسي: جلب التغييرات الحية مع قراءة أولوية totalPcs لعدم الالتصاق بالـ Cache القديم
     onSnapshot(collection(db, "inventory"), (snap) => {
         allData = [];
         snap.forEach(doc => {
             const data = doc.data();
             if (!data.isDeleted) {
-                // التأكد من توحيد قراءة إجمالي القطع بغض النظر عن اختلاف المسميات (totalPcs أو qty)
                 const realPcs = (data.totalPcs !== undefined && data.totalPcs !== null) 
                     ? Number(data.totalPcs) 
                     : Number(data.qty || 0);
@@ -289,16 +287,17 @@
             (i.barcode && String(i.barcode).includes(term))
         );
 
-        // تحديد أولوية الترتيب حسب الشروط المطلوبة
+        // تحديد الأولوية الجديدة للترتيب حسب الطلب:
+        // 1. بالسالب | 2. قربت تخلص | 3. العدد طبيعي | 4. أخيرًا الصفر
         const getPriority = (item) => {
             const qty = Number(item.totalPcs !== undefined && item.totalPcs !== null ? item.totalPcs : (item.qty || 0));
-            const price = Number(item.sell || 0);
+            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
+            const minAllowed = (Number(item.min) || 0) * factor;
 
-            if (qty > 0 && price === 0) return 1;  // له عدد وبدون سعر
-            if (qty > 0 && price > 0) return 2;   // له عدد وله سعر
-            if (qty < 0) return 3;                // عدد بالسالب
-            if (qty === 0 && price > 0) return 4; // بدون عدد وله سعر
-            return 5;                             // بدون عدد وبدون سعر
+            if (qty < 0) return 1;                        // 1. البضاعة التي بالسالب
+            if (qty > 0 && qty <= minAllowed) return 2;   // 2. قربت تخلص (أقل من أو تساوي الحد الأدنى)
+            if (qty > minAllowed) return 3;               // 3. العدد طبيعي (أكبر من الحد الأدنى)
+            return 4;                                     // 4. أخيرًا الصفر (qty === 0)
         };
 
         filtered.sort((a, b) => {
