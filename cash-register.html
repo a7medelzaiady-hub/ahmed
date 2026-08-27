@@ -96,6 +96,7 @@
             box-shadow: var(--shadow-sm);
             border-right: 5px solid var(--accent);
             transition: all 0.2s ease;
+            position: relative;
         }
         .register-card.has-deficit { border-right-color: var(--germany-red); }
         .register-card.has-surplus { border-right-color: #3b82f6; }
@@ -113,6 +114,26 @@
         .badge-matched { background: #dcfce7; color: #15803d; }
         .badge-surplus { background: #dbeafe; color: #1e40af; }
         .badge-deficit { background: #fee2e2; color: #b91c1c; }
+
+        .btn-delete-card {
+            background: #fff1f2;
+            color: var(--germany-red);
+            border: 1px solid rgba(255, 0, 0, 0.2);
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .btn-delete-card:active {
+            transform: scale(0.9);
+            background: var(--germany-red);
+            color: white;
+        }
 
         .financial-grid {
             display: grid;
@@ -145,6 +166,27 @@
         }
 
         .empty-state { text-align: center; padding: 60px 10px; color: var(--text-secondary); }
+
+        .custom-popup-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6); 
+            z-index: 10000; 
+            display: flex;
+            align-items: center;  
+            justify-content: center; 
+            backdrop-filter: blur(4px);
+        }
+        .custom-popup-box {
+            background: white;
+            width: 90%; 
+            max-width: 400px; 
+            padding: 26px;
+            border-radius: 24px; 
+            text-align: center; 
+            font-family: 'Cairo';
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 <body>
@@ -178,6 +220,15 @@
     </div>
 </div>
 
+<div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">
+    <div class="custom-popup-box">
+        <div id="customModalIcon" style="width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;"></div>
+        <h6 class="fw-bold mb-2" id="customModalTitle" style="font-size: 1.05rem;">تنبيه النظام</h6>
+        <div id="customModalBody" style="font-size: 0.85rem; color: #475569; margin-bottom: 20px; text-align: right; white-space: pre-line; line-height: 1.7; max-height: 300px; overflow-y: auto; padding: 5px;"></div>
+        <div class="d-flex gap-2 justify-content-center" id="customModalActions"></div>
+    </div>
+</div>
+
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -193,6 +244,65 @@
     const db = firebase.firestore();
 
     let allRegisterRecords = [];
+
+    window.showCustomUi = (options) => {
+        const modal = document.getElementById('customGlobalModal');
+        const title = document.getElementById('customModalTitle');
+        const body = document.getElementById('customModalBody');
+        const iconContainer = document.getElementById('customModalIcon');
+        const actions = document.getElementById('customModalActions');
+
+        title.innerText = options.title || "تنبيه النظام";
+        body.innerHTML = options.message || "";
+
+        if (options.icon === "success") {
+            iconContainer.style.background = "#f0fdf4";
+            iconContainer.innerHTML = `<i class="fas fa-check-circle" style="color: #000000; font-size: 1.7rem;"></i>`;
+        } else if (options.icon === "danger") {
+            iconContainer.style.background = "#fff1f2";
+            iconContainer.innerHTML = `<i class="fas fa-exclamation-triangle" style="color: var(--germany-red); font-size: 1.7rem;"></i>`;
+        } else {
+            iconContainer.style.background = "#f1f5f9";
+            iconContainer.innerHTML = `<i class="fas fa-info-circle" style="color: var(--accent); font-size: 1.7rem;"></i>`;
+        }
+
+        actions.innerHTML = "";
+
+        if (options.type === "confirm") {
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = "btn btn-sm btn-danger px-4 fw-bold";
+            confirmBtn.style.fontFamily = "Cairo";
+            confirmBtn.style.borderRadius = "10px";
+            confirmBtn.innerText = options.confirmText || "حذف";
+            confirmBtn.onclick = () => {
+                modal.style.display = 'none';
+                if (options.onConfirm) options.onConfirm();
+            };
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = "btn btn-sm btn-light text-dark px-4 fw-bold";
+            cancelBtn.style.fontFamily = "Cairo";
+            cancelBtn.style.borderRadius = "10px";
+            cancelBtn.innerText = "إلغاء";
+            cancelBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+            actions.appendChild(confirmBtn);
+            actions.appendChild(cancelBtn);
+        } else {
+            const closeBtn = document.createElement('button');
+            closeBtn.className = "btn btn-sm btn-dark px-5 fw-bold";
+            closeBtn.style.fontFamily = "Cairo";
+            closeBtn.style.borderRadius = "10px";
+            closeBtn.innerText = "موافق";
+            closeBtn.onclick = () => {
+                modal.style.display = 'none';
+                if (options.onConfirm) options.onConfirm();
+            };
+            actions.appendChild(closeBtn);
+        }
+        modal.style.display = 'flex';
+    };
 
     async function loadCashRegisterData() {
         const container = document.getElementById('registerList');
@@ -259,6 +369,8 @@
             const totalSales = Number(item.totalSales || 0).toFixed(1);
             const walletTotal = Number(item.walletTotal || 0).toFixed(1);
             const remainingTotal = Number(item.remainingTotal || 0).toFixed(1);
+            const docId = item.id;
+            const recordDate = item.date || item.id;
 
             let formattedTime = "";
             if (item.timestamp && item.timestamp.seconds) {
@@ -267,13 +379,18 @@
             }
 
             return `
-                <div class="register-card ${cardClass}">
+                <div class="register-card ${cardClass}" id="card_${docId}">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div>
-                            <h6 class="fw-bold mb-0 text-dark"><i class="far fa-calendar-alt me-1"></i> يوم: ${item.date || item.id}</h6>
+                            <h6 class="fw-bold mb-0 text-dark"><i class="far fa-calendar-alt me-1"></i> يوم: ${recordDate}</h6>
                             <span class="meta-text"><i class="fas fa-user-check me-1"></i> بوسطة: ${item.closedBy || 'أحمد محمود الزيادي'} ${formattedTime ? '| ' + formattedTime : ''}</span>
                         </div>
-                        <div>${statusBadge}</div>
+                        <div class="d-flex align-items-center gap-2">
+                            ${statusBadge}
+                            <button class="btn-delete-card" onclick="deleteRegisterRecord('${docId}', '${recordDate}')" title="حذف سجل اليوم">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="financial-grid">
@@ -286,6 +403,38 @@
                 </div>
             `;
         }).join('');
+    }
+
+    function deleteRegisterRecord(docId, dateDisplay) {
+        window.showCustomUi({
+            title: "تأكيد حذف السجل",
+            message: `هل أنت متأكد من حذف سجل النقدية المُرَحَّل ليوم (${dateDisplay}) نهائياً؟`,
+            type: "confirm",
+            icon: "danger",
+            confirmText: "نعم، إحذف",
+            onConfirm: async () => {
+                try {
+                    await db.collection("daily_cash_register").doc(docId).delete();
+                    
+                    // تحديث المصفوفة المحلية
+                    allRegisterRecords = allRegisterRecords.filter(r => r.id !== docId);
+                    filterRegister();
+
+                    window.showCustomUi({
+                        title: "تم الحذف",
+                        message: `✅ تم حذف سجل النقدية الخاص بيوم ${dateDisplay} بنجاح.`,
+                        icon: "success"
+                    });
+                } catch (err) {
+                    console.error("خطأ الحذف:", err);
+                    window.showCustomUi({
+                        title: "خطأ في الحذف",
+                        message: "حدث خطأ أثناء محاولة حذف السجل: " + err.message,
+                        icon: "danger"
+                    });
+                }
+            }
+        });
     }
 
     function filterRegister() {
