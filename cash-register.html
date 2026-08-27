@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل النقدية وإغلاق اليوم - الزيادي لزيوت السيارات</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Firebase SDKS -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --accent: #000000;
+            --header-bg: linear-gradient(135deg, #000000, #252525 80%);
+            --bg-light: #f5f6f6;
+            --text-primary: #000000;
+            --text-secondary: #4a4a4a;
+            --border: #dcdcdc;
+            --white: #ffffff;
+            --germany-red: #FF0000;
+            --germany-gold: #FFCC00;
+            --purple: #5b21b6;
+            --card-radius: 20px;
+            --input-radius: 14px;
+            --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--text-primary);
+            padding-bottom: 60px;
+            font-size: 0.88rem;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .num { 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: 700; 
+            letter-spacing: -0.5px; 
+        }
+
+        .header-nav {
+            background: var(--header-bg);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-md);
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            border-bottom: 4px solid var(--germany-red);
+        }
+        .header-nav h6 { 
+            font-weight: 900; 
+            font-size: 1.05rem;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .add-btn {
+            background: rgba(255, 255, 255, 0.15);
+            width: 38px; 
+            height: 38px;
+            border-radius: 12px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            color: white; 
+            text-decoration: none; 
+            font-size: 0.95rem;
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+            transition: all 0.2s ease;
+        }
+        .add-btn:active { transform: scale(0.92); }
+
+        .register-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: var(--shadow-sm);
+            border-right: 5px solid var(--accent);
+            transition: all 0.2s ease;
+        }
+        .register-card.has-deficit { border-right-color: var(--germany-red); }
+        .register-card.has-surplus { border-right-color: #3b82f6; }
+        .register-card.matched { border-right-color: #22c55e; }
+
+        .status-badge {
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .badge-matched { background: #dcfce7; color: #15803d; }
+        .badge-surplus { background: #dbeafe; color: #1e40af; }
+        .badge-deficit { background: #fee2e2; color: #b91c1c; }
+
+        .financial-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 10px;
+            background: #f8fafc; 
+            padding: 12px; 
+            border-radius: 14px;
+            margin-top: 12px; 
+            border: 1px dashed var(--border);
+        }
+        .fin-box { font-size: 0.75rem; font-weight: 800; color: var(--text-secondary); }
+        .fin-box span { display: block; font-size: 0.98rem; margin-top: 2px; font-weight: 800; color: var(--text-primary); }
+
+        .meta-text {
+            font-size: 0.73rem;
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .filter-input {
+            border: 1px solid var(--border);
+            border-radius: var(--input-radius);
+            padding: 10px 14px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            font-family: 'Cairo', sans-serif;
+            background: var(--white);
+            width: 100%;
+        }
+
+        .empty-state { text-align: center; padding: 60px 10px; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
+    <h6 class="m-0"><i class="fas fa-cash-register me-1"></i> سجل النقدية المُرَحَّلة</h6>
+    <a href="sales-archive.html" class="add-btn" title="سجل المبيعات"><i class="fas fa-history"></i></a>
+</div>
+
+<div class="container px-2 mt-3">
+
+    <!-- شريط البحث والفلترة -->
+    <div class="row g-2 mb-3">
+        <div class="col-8">
+            <input type="date" id="registerDateFilter" class="form-control filter-input" onchange="filterRegister()">
+        </div>
+        <div class="col-4">
+            <button class="btn btn-dark w-100 fw-bold h-100" style="border-radius: var(--input-radius); font-size:0.8rem;" onclick="resetRegisterFilter()">
+                عرض الكل
+            </button>
+        </div>
+    </div>
+
+    <!-- القائمة الرئيسية للكروت -->
+    <div id="registerList">
+        <div class="empty-state">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p class="mt-3 fw-bold">جاري تحميل سجلات النقدية...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let allRegisterRecords = [];
+
+    async function loadCashRegisterData() {
+        const container = document.getElementById('registerList');
+        try {
+            const snap = await db.collection("daily_cash_register")
+                .orderBy("timestamp", "desc")
+                .get();
+
+            if (snap.empty) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-box-open fa-2x mb-2"></i>
+                        <p class="fw-bold">لا توجد سجلات نقدية مُرَحَّلة حتى الآن.</p>
+                    </div>`;
+                return;
+            }
+
+            allRegisterRecords = [];
+            snap.forEach(doc => {
+                allRegisterRecords.push({ id: doc.id, ...doc.data() });
+            });
+
+            renderRegisterCards(allRegisterRecords);
+
+        } catch (e) {
+            console.error("خطأ في تحميل البيانات:", e);
+            container.innerHTML = `
+                <div class="alert alert-danger text-center p-3" style="border-radius:14px;">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2 d-block"></i>
+                    حدث خطأ أثناء تحميل سجل النقدية: ${e.message}
+                </div>`;
+        }
+    }
+
+    function renderRegisterCards(records) {
+        const container = document.getElementById('registerList');
+        if (!records || records.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search fa-2x mb-2"></i>
+                    <p class="fw-bold">لا توجد نتائج مطابقة لفلتر التاريخ المختار.</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = records.map(item => {
+            const diff = Number(item.difference || 0);
+            let statusBadge = "";
+            let cardClass = "matched";
+
+            if (Math.abs(diff) < 0.1) {
+                statusBadge = `<span class="status-badge badge-matched"><i class="fas fa-check-circle"></i> مطابق (0.00)</span>`;
+                cardClass = "matched";
+            } else if (diff > 0) {
+                statusBadge = `<span class="status-badge badge-surplus"><i class="fas fa-plus-circle"></i> زيادة (+${diff.toFixed(1)})</span>`;
+                cardClass = "has-surplus";
+            } else {
+                statusBadge = `<span class="status-badge badge-deficit"><i class="fas fa-minus-circle"></i> عجز (${diff.toFixed(1)})</span>`;
+                cardClass = "has-deficit";
+            }
+
+            const expectedCash = Number(item.expectedCash || 0).toFixed(1);
+            const actualCash = Number(item.actualCash || 0).toFixed(1);
+            const totalSales = Number(item.totalSales || 0).toFixed(1);
+            const walletTotal = Number(item.walletTotal || 0).toFixed(1);
+            const remainingTotal = Number(item.remainingTotal || 0).toFixed(1);
+
+            let formattedTime = "";
+            if (item.timestamp && item.timestamp.seconds) {
+                const dateObj = new Date(item.timestamp.seconds * 1000);
+                formattedTime = dateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            return `
+                <div class="register-card ${cardClass}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h6 class="fw-bold mb-0 text-dark"><i class="far fa-calendar-alt me-1"></i> يوم: ${item.date || item.id}</h6>
+                            <span class="meta-text"><i class="fas fa-user-check me-1"></i> بوسطة: ${item.closedBy || 'أحمد محمود الزيادي'} ${formattedTime ? '| ' + formattedTime : ''}</span>
+                        </div>
+                        <div>${statusBadge}</div>
+                    </div>
+
+                    <div class="financial-grid">
+                        <div class="fin-box text-dark">كاش المبيعات والسندات <span class="num">${expectedCash} ج.م</span></div>
+                        <div class="fin-box text-primary">الكاش الفعلي المسجل <span class="num">${actualCash} ج.م</span></div>
+                        <div class="fin-box text-dark">إجمالي المبيعات <span class="num">${totalSales} ج.م</span></div>
+                        <div class="fin-box" style="color:var(--purple);">المحفظة الإلكترونية <span class="num">${walletTotal} ج.م</span></div>
+                        <div class="fin-box text-danger" style="grid-column: span 2;">إجمالي الآجل الجديد <span class="num">${remainingTotal} ج.م</span></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function filterRegister() {
+        const filterDate = document.getElementById('registerDateFilter').value;
+        if (!filterDate) {
+            renderRegisterCards(allRegisterRecords);
+            return;
+        }
+
+        const filtered = allRegisterRecords.filter(item => item.date === filterDate || item.id === filterDate);
+        renderRegisterCards(filtered);
+    }
+
+    function resetRegisterFilter() {
+        document.getElementById('registerDateFilter').value = "";
+        renderRegisterCards(allRegisterRecords);
+    }
+
+    // بدء التحميل عند فتح الصفحة
+    loadCashRegisterData();
+</script>
+</body>
+</html>
