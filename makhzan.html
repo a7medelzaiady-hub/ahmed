@@ -219,7 +219,11 @@
     <div>جركن</div>
 </div>
 
-<div id="itemsContainer"></div>
+<div id="itemsContainer">
+    <div class="text-center text-muted mt-5 fw-bold">
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري حساب الأرصدة الحية للأصناف...
+    </div>
+</div>
 
 <div class="bottom-summary">
     <i class="fas fa-boxes me-2"></i> إجمالي الأصناف: <span id="totalCount" class="ms-2">0</span>
@@ -231,7 +235,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -254,29 +258,85 @@
     }
     let allData = [];
 
-    onSnapshot(collection(db, "inventory"), (snap) => {
-        allData = [];
-        snap.forEach(doc => {
-            const data = doc.data();
-            if (!data.isDeleted) {
-                const realPcs = (data.totalPcs !== undefined && data.totalPcs !== null) 
-                    ? Number(data.totalPcs) 
-                    : Number(data.qty || 0);
+    async function loadLiveInventory() {
+        try {
+            // جلب حركة المبيعات والمشتريات لحساب الصافي التراكمي
+            const [invoicesSnap, supplierSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions"))
+            ]);
 
-                allData.push({ 
-                    id: doc.id, 
-                    ...data,
-                    totalPcs: realPcs,
-                    qty: realPcs
+            let salesMap = {};
+            let purchasesMap = {};
+
+            invoicesSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                data.items?.forEach(item => {
+                    const id = item.stockId;
+                    if (id) {
+                        if (!salesMap[id]) salesMap[id] = 0;
+                        let pcs = Number(item.qty) || 0;
+                        if (item.isReturn) {
+                            salesMap[id] -= pcs;
+                        } else {
+                            salesMap[id] += pcs;
+                        }
+                    }
                 });
-            }
-        });
-        renderItems();
-    }, (error) => {
-        console.error("خطأ في جلب البيانات: ", error);
-        document.getElementById('itemsContainer').innerHTML = 
-            `<div class="text-center text-danger mt-4 fw-bold">حدث خطأ أثناء جلب البيانات، يرجى التأكد من اتصالك بالإنترنت.</div>`;
-    });
+            });
+
+            supplierSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                data.items?.forEach(item => {
+                    const id = item.stockId;
+                    if (id) {
+                        if (!purchasesMap[id]) purchasesMap[id] = 0;
+                        let pcs = Number(item.qty) || 0;
+                        if (item.isReturn) {
+                            purchasesMap[id] -= pcs;
+                        } else {
+                            purchasesMap[id] += pcs;
+                        }
+                    }
+                });
+            });
+
+            onSnapshot(collection(db, "inventory"), (snap) => {
+                allData = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.isDeleted) {
+                        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                        
+                        // 1. تحديد رصيد أول المدة
+                        let openingTotalPcs = 0;
+                        if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
+                            openingTotalPcs = Number(data.openingTotalPcs);
+                        } else if (data.openingQty !== undefined && data.openingQty !== null) {
+                            openingTotalPcs = Math.round(Number(data.openingQty) * factor);
+                        }
+
+                        // 2. المعادلة الحسابية الحية
+                        const salesPcs = salesMap[doc.id] || 0;
+                        const purchasesPcs = purchasesMap[doc.id] || 0;
+
+                        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+                        allData.push({ 
+                            id: doc.id, 
+                            ...data,
+                            totalPcs: calculatedRealPcs,
+                            qty: calculatedRealPcs
+                        });
+                    }
+                });
+                renderItems();
+            });
+
+        } catch (e) {
+            console.error("خطأ أثناء تجميع معادلات المخزن الحية:", e);
+        }
+    }
 
     window.renderItems = function() {
         const term = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -287,17 +347,15 @@
             (i.barcode && String(i.barcode).includes(term))
         );
 
-        // تحديد الأولوية الجديدة للترتيب حسب الطلب:
-        // 1. بالسالب | 2. قربت تخلص | 3. العدد طبيعي | 4. أخيرًا الصفر
         const getPriority = (item) => {
-            const qty = Number(item.totalPcs !== undefined && item.totalPcs !== null ? item.totalPcs : (item.qty || 0));
+            const qty = Number(item.totalPcs);
             const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
             const minAllowed = (Number(item.min) || 0) * factor;
 
-            if (qty < 0) return 1;                        // 1. البضاعة التي بالسالب
-            if (qty > 0 && qty <= minAllowed) return 2;   // 2. قربت تخلص (أقل من أو تساوي الحد الأدنى)
-            if (qty > minAllowed) return 3;               // 3. العدد طبيعي (أكبر من الحد الأدنى)
-            return 4;                                     // 4. أخيرًا الصفر (qty === 0)
+            if (qty < 0) return 1;                        
+            if (qty > 0 && qty <= minAllowed) return 2;   
+            if (qty > minAllowed) return 3;               
+            return 4;                                     
         };
 
         filtered.sort((a, b) => {
@@ -313,7 +371,7 @@
         let html = '';
         filtered.forEach(item => {
             const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1); 
-            const total = Number(item.totalPcs !== undefined && item.totalPcs !== null ? item.totalPcs : (item.qty || 0));
+            const total = Number(item.totalPcs);
             
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
@@ -362,12 +420,12 @@
     window.goToDetails = function(id) {
         window.location.href = `product-details.html?id=${id}`;
     };
+
+    loadLiveInventory();
 </script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js")
-    .then(() => console.log("SW Registered Successfully"))
-    .catch((err) => console.log("SW Registration Failed", err));
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
 }
 </script>
 </body>
