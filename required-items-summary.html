@@ -327,8 +327,19 @@ html, body {
 </head>
 <body>
 
+<script>
+    // كود حماية الجلسة والتحقق المباشر
+    (function checkLoginGuard() {
+        const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
+        const isLoggedIn = sessionStorage.getItem("isLoggedIn") || localStorage.getItem("isLoggedIn");
+        if (!loggedUser && isLoggedIn !== "true") {
+            window.location.replace("login.html");
+        }
+    })();
+</script>
+
 <div class="header-nav">
-  <a href="all-orders.html" class="nav-btn">
+  <a href="index.html" class="nav-btn">
     <i class="fas fa-arrow-right"></i>
   </a>
   <h6 class="m-0 fw-bold d-flex align-items-center gap-2" style="font-size: 0.82rem;">
@@ -387,13 +398,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+try {
+    db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
+} catch (e) {
+    db = getFirestore(app);
+}
 
 let groupedItems = [];
 
@@ -414,6 +425,7 @@ function cleanItemName(str) {
   if (!str) return "";
   return str.trim()
             .toLowerCase()
+            .replace(/[\u064B-\u0652]/g, '') // إزالة التشكيل
             .replace(/\s+/g, ' ')
             .replace(/[أإآ]/g, 'ا')
             .replace(/ة/g, 'ه')
@@ -422,7 +434,7 @@ function cleanItemName(str) {
 
 function isCarton(item) {
   const u = (item.unit || "").trim().toLowerCase();
-  if (u === "box" || u === "كرتونة" || u === "كرتونه") return true;
+  if (u === "box" || u === "carton" || u === "كرتونة" || u === "كرتونه") return true;
   if (u === "pcs" || u === "قطعة" || u === "جركن") return false;
   const un = (item.unitName || "").trim().toLowerCase();
   return un === "كرتونة" || un === "كرتونه";
@@ -445,7 +457,7 @@ function formatQuantityDetailed(totalPcs, capacity, unit) {
     const loose = absPcs % capacity;
     
     if (cartons > 0 && loose > 0) { 
-      result = `${cartons}ك و ${loose}${unit}`; 
+      result = `${cartons} كرتونة و ${loose} ${unit}`; 
     } else if (cartons > 0) { 
       result = `${cartons} كرتونة`; 
     } else { 
@@ -456,13 +468,14 @@ function formatQuantityDetailed(totalPcs, capacity, unit) {
   return isNegative ? `-${result}` : result;
 }
 
-// دالة التاريخ النسبية بدون وقت
 function formatOrderDateRelativeOnly(dateVal) {
   if (!dateVal) return '';
   try {
     let d;
     if (typeof dateVal.toDate === 'function') {
       d = dateVal.toDate();
+    } else if (dateVal.seconds) {
+      d = new Date(dateVal.seconds * 1000);
     } else {
       d = new Date(dateVal);
     }
@@ -492,17 +505,17 @@ async function loadAndCalculateData() {
   container.innerHTML = `
     <div class="loading-state">
       <div class="spinner"></div>
-      <p style="color: #94a3b8; font-size: 0.78rem; font-weight: 700;">جاري جلب بيانات العربية والمخزن...</p>
+      <p style="color: #94a3b8; font-size: 0.78rem; font-weight: 700;">جاري جلب ودراسة الأعداد بدقة...</p>
     </div>`;
 
   try {
     const targetDate = document.getElementById('selectedDate').value || defaultDateStr;
 
-    // 1. كميات التحميل للعربية
+    // 1. تحميل حمولة العربية المخزنة محلياً
     const loadedInSession = JSON.parse(localStorage.getItem('loadedInSession_' + targetDate) || '{}');
     const cartItems = JSON.parse(localStorage.getItem('cartItems_' + targetDate) || '{}');
 
-    // 2. كميات المخزن الرئيسي والمعاملات
+    // 2. جلب المخزن الرئيسي من قاعدة البيانات
     const inventorySnap = await getDocs(collection(db, "inventory"));
     const inventoryMap = {};
     const nameToInventoryMap = {};
@@ -515,7 +528,7 @@ async function loadAndCalculateData() {
       const itemObj = {
         id: docSnap.id,
         name: rawName,
-        capacity: Number(data.unitFactor) || 1,
+        capacity: Number(data.pcsPerCarton || data.unitFactor || data.cartonSize) || 1,
         unit: data.unit || '',
         stockPcs: Number(data.totalPcs || 0)
       };
@@ -524,15 +537,15 @@ async function loadAndCalculateData() {
       nameToInventoryMap[cleanedKey] = itemObj;
     });
 
-    // 3. احتساب تفاصيل العملاء والتاريخ المترجم بدون وقت
+    // 3. جلب طلبات العملاء المعلقة ومقاطعتها مع المخزن والأصناف
     const ordersSnap = await getDocs(query(collection(db, "orders"), where("status", "==", "pending")));
 
     const requiredMap = {};
     ordersSnap.forEach(docSnap => {
       const order = docSnap.data();
       const clientName = order.clientName || order.customerName || 'عميل غير محدد';
-      const orderNum = order.orderNo || order.id || '';
-      const orderDateRelative = formatOrderDateRelativeOnly(order.createdAt || order.date);
+      const orderNum = order.orderNo || order.id || docSnap.id;
+      const orderDateRelative = formatOrderDateRelativeOnly(order.createdAt || order.date || order.timestamp);
 
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
@@ -541,9 +554,10 @@ async function loadAndCalculateData() {
           const rawQty = Number(item.quantity || item.qty || 0);
 
           const invMatch = nameToInventoryMap[cleanedKey];
-          const cap = invMatch ? invMatch.capacity : 1;
+          const cap = invMatch ? invMatch.capacity : (Number(item.unitFactor) || 1);
           const isItemCarton = isCarton(item);
 
+          // إجمالي الأعداد بالقطع الصريحة
           const totalPcs = isItemCarton ? (rawQty * cap) : rawQty;
 
           if (!requiredMap[cleanedKey]) {
@@ -564,6 +578,7 @@ async function loadAndCalculateData() {
       }
     });
 
+    // 4. بناء دمج متكامل لجميع المفاتيح المسجلة
     const itemKeys = new Set();
     Object.keys(loadedInSession).forEach(id => itemKeys.add(id));
 
@@ -602,13 +617,14 @@ async function loadAndCalculateData() {
       };
     });
 
+    // ترتيب الأصناف بحيث يظهر العجز والاحتياج في البداية
     groupedItems.sort((a, b) => a.carDiffPcs - b.carDiffPcs);
 
     document.getElementById('totalTypesBadge').innerText = groupedItems.length;
     renderSummary();
 
   } catch (e) {
-    console.error("خطأ أثناء المطابقة:", e);
+    console.error("خطأ أثناء المطابقة والجلب:", e);
     container.innerHTML = `<div class="empty-state"><h6>حدث خطأ أثناء تحميل الحسابات</h6></div>`;
   }
 }
