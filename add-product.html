@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>إضافة/تعديل صنف - شركة الزيادى</title>
-    <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,9 +14,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root { 
-            --accent: #0b5e3d;         /* الأخضر الغامق */
+            --accent: #0b5e3d;
             --header-bg: #0b5e3d;
-            --gold: #f2ca30;           /* الذهبي للتمييز */
+            --gold: #f2ca30;
             --bg-light: #f4f7f6;
             --text-primary: #1b2e26;
             --border: #dce3de;
@@ -54,27 +53,11 @@
             padding: 10px; 
             transition: 0.3s;
         }
-        .form-control:focus {
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.1);
-        }
 
-        input[type="number"].form-control {
-            color: var(--accent) !important;
-            font-weight: bold;
-        }
+        input[type="number"].form-control { color: var(--accent) !important; font-weight: bold; }
 
         label { margin-bottom: 8px; font-size: 0.85rem; font-weight: 600; opacity: 0.9; }
         .price-tag { font-size: 0.75rem; color: var(--accent); display: block; margin-bottom: 8px; font-weight: 700; }
-
-        .min-price-field input[type="number"].form-control {
-            color: #d9364f !important;
-        }
-        .min-price-field .form-control:focus {
-            border-color: #d9364f !important;
-            box-shadow: 0 0 0 3px rgba(217, 54, 79, 0.12);
-        }
-        .min-price-hint { font-size: 0.7rem; color: #8a5b00; margin-top: 6px; display: block; }
         
         .btn-save { 
             background: var(--accent) !important; 
@@ -83,17 +66,9 @@
             padding: 15px; 
             border-radius: 15px; 
             font-weight: 700;
-            box-shadow: 0 4px 15px rgba(11, 94, 61, 0.2);
         }
 
-        .btn-outline-light { border-color: rgba(255,255,255,0.5); }
-        .btn-outline-info { color: var(--accent); border-color: var(--accent); }
-        .btn-outline-info:hover { background: var(--accent); color: white; }
-        
-        .opening-box {
-            background-color: #f0fdf4 !important;
-            border-color: #bbf7d0 !important;
-        }
+        .opening-box { background-color: #f0fdf4 !important; border-color: #bbf7d0 !important; }
     </style>
 </head>
 <body>
@@ -126,7 +101,7 @@
         </div>
     </div>
 
-    <!-- قسم رصيد أول المدة مع استعلام تلقائي من حركات الإكسيل -->
+    <!-- قسم رصيد أول المدة الافتتاحي -->
     <div class="glass-card">
         <div class="section-title text-primary"><i class="fas fa-history"></i> رصيد أول المدة (الافتتاحي من الإكسيل)</div>
         <div class="row g-3">
@@ -170,8 +145,7 @@
             </div>
             <div class="col-md-6 min-price-field">
                 <label class="price-tag" style="color:#d9364f"><i class="fas fa-shield-halved me-1"></i> الحد الأدنى المسموح ببيع الكرتونة</label>
-                <input type="number" id="pMinPrice" class="form-control" placeholder="اتركه فارغًا لعدم تفعيل حد أدنى" oninput="isChanged=true">
-                <small class="min-price-hint">لو حددت رقم هنا، مش هيقبل النظام إدخال سعر بيع أقل منه في فاتورة المبيعات لهذا الصنف. اتركه فارغًا أو صفر لتعطيل الميزة.</small>
+                <input type="number" id="pMinPrice" class="form-control" placeholder="اتركه فارغًا" oninput="isChanged=true">
             </div>
         </div>
     </div>
@@ -245,10 +219,10 @@
     window.confirmBack = () => {
         if (window.isChanged) {
             if (confirm("لم يتم حفظ بيانات الصنف، هل تريد الرجوع؟")) {
-                window.location.href = "inventory-menu.html";
+                window.location.href = "makhzan.html";
             }
         } else {
-            window.location.href = "inventory-menu.html";
+            window.location.href = "makhzan.html";
         }
     };
 
@@ -292,21 +266,18 @@
                 let foundOpeningTotalPcs = 0;
                 let foundOpeningQty = 0;
 
-                // 1. إذا كانت القيمة مسجلة مسبقاً داخل الصنف
                 if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
                     foundOpeningTotalPcs = data.openingTotalPcs;
                     foundOpeningQty = data.openingQty !== undefined ? data.openingQty : (foundOpeningTotalPcs / factor);
                 } else {
-                    // 2. إذا كان الصنف قديم، يتم استعلام سجل حركات الإكسيل مباشرة لافتراض الرصيد المستورد الحقيقي
                     try {
                         const q = query(collection(db, "inventory_transactions"), where("productId", "==", editId), where("type", "==", "opening_balance"));
                         const transSnap = await getDocs(q);
                         if (!transSnap.empty) {
-                            const transData = transSnap.docs[0].data();
-                            foundOpeningTotalPcs = transData.quantityPcs || 0;
+                            foundOpeningTotalPcs = transSnap.docs[0].data().quantityPcs || 0;
                             foundOpeningQty = foundOpeningTotalPcs / factor;
                         }
-                    } catch(err) { console.log("خطأ استعلام حركة الرصيد الافتتاحي:", err); }
+                    } catch(err) {}
                 }
 
                 document.getElementById('pOpeningQty').value = foundOpeningQty;
@@ -333,32 +304,39 @@
         const id = document.getElementById('editId').value;
         const name = document.getElementById('pName').value;
         const cat = document.getElementById('pCategoryNew').value;
-        const newQtyInput = parseFloat(document.getElementById('pQty').value) || 0;
+        const inputQtyInCrates = parseFloat(document.getElementById('pQty').value) || 0;
         const factor = parseInt(document.getElementById('pFactor').value) || 1;
 
         if(!name || !cat) { alert("برجاء إدخال الاسم والفئة"); return; }
 
-        const minPriceVal = parseFloat(document.getElementById('pMinPrice').value) || 0;
-        const sellVal = parseFloat(document.getElementById('pSell').value) || 0;
-        if (minPriceVal > 0 && sellVal > 0 && minPriceVal > sellVal) {
-            if (!confirm("تنبيه: الحد الأدنى للسعر أكبر من سعر البيع القطاعي نفسه، هل تريد المتابعة على أي حال؟")) return;
+        const openingQtyVal = parseFloat(document.getElementById('pOpeningQty').value) || 0;
+        const openingTotalPcsVal = parseFloat(document.getElementById('pOpeningTotalPcs').value) || Math.round(openingQtyVal * factor);
+
+        // تعديل المعادلة التراكمية الصحيحة للمخزون
+        let calculatedTotalPcs = 0;
+        if (inputQtyInCrates < 0) {
+            // تصحيح الرصيد السالب بعد جمع رصيد أول المدة المستورد
+            calculatedTotalPcs = openingTotalPcsVal + Math.round(inputQtyInCrates * factor);
+        } else {
+            calculatedTotalPcs = Math.round(inputQtyInCrates * factor);
         }
 
-        let finalTotalPcs = (id && newQtyInput === originalQtyInCrates) ? originalTotalPcs : Math.round(newQtyInput * factor);
-
-        const openingQtyVal = parseFloat(document.getElementById('pOpeningQty').value) || 0;
-        const openingTotalPcsVal = parseFloat(document.getElementById('pOpeningTotalPcs').value) || 0;
+        const finalCratesQty = calculatedTotalPcs / factor;
 
         const itemData = { 
-            name, category: cat, qty: newQtyInput, unitFactor: factor, totalPcs: finalTotalPcs, 
+            name, 
+            category: cat, 
+            qty: finalCratesQty, 
+            unitFactor: factor, 
+            totalPcs: calculatedTotalPcs, 
             openingQty: openingQtyVal,
             openingTotalPcs: openingTotalPcsVal,
             min: parseInt(document.getElementById('pMin').value) || 0, 
             buy: parseFloat(document.getElementById('pBuy').value) || 0, 
-            sell: sellVal, 
+            sell: parseFloat(document.getElementById('pSell').value) || 0, 
             sell2: parseFloat(document.getElementById('pSell2').value) || 0,
             sell3: parseFloat(document.getElementById('pSell3').value) || 0,
-            minPrice: minPriceVal,
+            minPrice: parseFloat(document.getElementById('pMinPrice').value) || 0,
             barcode: document.getElementById('pBarcode').value,
             unitName: document.getElementById('pUnitName').value || 'قطعة',
             lastUpdate: serverTimestamp() 
@@ -367,7 +345,7 @@
         try {
             if(id) {
                 await updateDoc(doc(db, "inventory", id), itemData);
-                alert("تم التحديث وحفظ رصيد أول المدة الحقيقي بنجاح ✅");
+                alert("تم تحديث وحساب الرصيد التراكمي الصحيح بنجاح ✅");
             } else {
                 await addDoc(collection(db, "inventory"), { ...itemData, timestamp: serverTimestamp() });
                 alert("تم الحفظ بنجاح ✅");
@@ -392,9 +370,7 @@
 </script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js")
-    .then(() => console.log("SW Registered Successfully"))
-    .catch((err) => console.log("SW Registration Failed", err));
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
 }
 </script>
 </body>
