@@ -48,8 +48,14 @@
             box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
         }
 
-        .top-nav i { cursor: pointer; font-size: 1.2rem; transition: 0.2s; }
-        .top-nav i:active { transform: scale(0.9); }
+        .top-nav .nav-icon { 
+            cursor: pointer; 
+            font-size: 1.2rem; 
+            transition: 0.2s; 
+            color: white;
+            text-decoration: none;
+        }
+        .top-nav .nav-icon:active { transform: scale(0.9); }
 
         .search-section {
             padding: 20px;
@@ -199,9 +205,14 @@
 <body>
 
 <div class="top-nav">
-    <i class="fas fa-sync-alt" onclick="window.location.reload(true)"></i>
+    <div class="d-flex align-items-center gap-3">
+        <a href="index.html" class="nav-icon" title="الصفحة الرئيسية">
+            <i class="fas fa-home"></i>
+        </a>
+        <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
+    </div>
     <span class="fw-bold">الأصناف والمخزون</span>
-    <i class="fas fa-chevron-left" onclick="history.back()"></i>
+    <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
 </div>
 
 <div class="search-section">
@@ -221,7 +232,7 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري إعادة حساب أرقام المخزن بالكامل...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري ترتيب الأصناف بالمخزن...
     </div>
 </div>
 
@@ -253,7 +264,6 @@
 
     async function loadLiveInventory() {
         try {
-            // جلب الفواتير والمشتريات وحركات أول المدة لضمان دقة الرصيد
             const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
@@ -274,7 +284,6 @@
             let purchasesMap = {};
             let openingMap = {};
 
-            // 1. تجميع أرصدة أول المدة من السجلات القديمة
             transSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 if (data.productId) {
@@ -282,7 +291,6 @@
                 }
             });
 
-            // 2. حساب المبيعات ومرتجعات البيع بالقطع
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
@@ -291,7 +299,6 @@
                         if (!salesMap[id]) salesMap[id] = 0;
                         const factor = factorsMap[id] || 1;
                         let rawQty = Number(item.qty) || 0;
-                        
                         let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
                         
                         if (item.isReturn) {
@@ -303,7 +310,6 @@
                 });
             });
 
-            // 3. حساب المشتريات ومرتجعات الشراء بالقطع
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
@@ -313,7 +319,6 @@
                         const factor = factorsMap[id] || 1;
                         const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
                         let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        
                         let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
 
                         if (isReturn) {
@@ -325,7 +330,6 @@
                 });
             });
 
-            // 4. قراءة البيانات وحساب الرصيد الفعلي التراكمي
             onSnapshot(collection(db, "inventory"), (snap) => {
                 allData = [];
                 snap.forEach(doc => {
@@ -339,13 +343,11 @@
                         } else if (data.openingQty !== undefined && data.openingQty !== null) {
                             openingTotalPcs = Math.round(Number(data.openingQty) * factor);
                         } else if (openingMap[doc.id]) {
-                            openingTotalPcs = openingMap[doc.id]; // الاعتماد على السجلات القديمة إن وجدت
+                            openingTotalPcs = openingMap[doc.id];
                         }
 
                         const salesPcs = salesMap[doc.id] || 0;
                         const purchasesPcs = purchasesMap[doc.id] || 0;
-
-                        // المعادلة التراكمية الحقيقية: رصيد أول المدة + المشتريات - المبيعات
                         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
                         allData.push({ 
@@ -373,24 +375,27 @@
             (i.barcode && String(i.barcode).includes(term))
         );
 
-        const getPriority = (item) => {
-            const qty = Number(item.totalPcs);
-            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
-            const minAllowed = (Number(item.min) || 0) * factor;
-
-            if (qty < 0) return 1;                        
-            if (qty > 0 && qty <= minAllowed) return 2;   
-            if (qty > minAllowed) return 3;               
-            return 4;                                     
+        const getPriorityGroup = (qty) => {
+            if (qty < 0) return 1;  // السالب أولاً
+            if (qty > 0) return 2;  // الموجب (الأقل فالأكبر)
+            return 3;               // الصفر أخيرًا
         };
 
         filtered.sort((a, b) => {
-            const priorityA = getPriority(a);
-            const priorityB = getPriority(b);
-            
-            if (priorityA !== priorityB) {
-                return priorityA - priorityB;
+            const qtyA = Number(a.totalPcs || 0);
+            const qtyB = Number(b.totalPcs || 0);
+
+            const groupA = getPriorityGroup(qtyA);
+            const groupB = getPriorityGroup(qtyB);
+
+            if (groupA !== groupB) {
+                return groupA - groupB;
             }
+
+            if (qtyA !== qtyB) {
+                return qtyA - qtyB;
+            }
+
             return (a.name || '').localeCompare(b.name || '', 'ar');
         });
 
@@ -402,7 +407,6 @@
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
 
-            // تفكيك الرصيد إلى كراتين وجراكن دقيقة
             const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
             const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
 
