@@ -126,9 +126,9 @@
         </div>
     </div>
 
-    <!-- قسم رصيد أول المدة القابل للتعديل والتصحيح -->
+    <!-- قسم رصيد أول المدة الشامل الاستعلام التلقائي -->
     <div class="glass-card">
-        <div class="section-title text-primary"><i class="fas fa-history"></i> رصيد أول المدة (الافتتاحي الحقيقي)</div>
+        <div class="section-title text-primary"><i class="fas fa-history"></i> رصيد أول المدة (الافتتاحي من الإكسيل)</div>
         <div class="row g-3">
             <div class="col-md-6">
                 <label>رصيد أول المدة (كرتونة)</label>
@@ -206,7 +206,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDoc, getDocs, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDoc, getDocs, updateDoc, doc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -289,9 +289,28 @@
                 originalTotalPcs = data.totalPcs || 0;
                 originalQtyInCrates = originalTotalPcs / factor;
 
-                // إظهار رصيد أول المدة المخزن، أو كتابة 0 إذا لم يكن موجوداً من قبل
-                document.getElementById('pOpeningQty').value = data.openingQty !== undefined ? data.openingQty : 0;
-                document.getElementById('pOpeningTotalPcs').value = data.openingTotalPcs !== undefined ? data.openingTotalPcs : 0;
+                let foundOpeningTotalPcs = 0;
+                let foundOpeningQty = 0;
+
+                // 1. إذا كانت القيمة مخزنة مسبقاً في بيانات الصنف
+                if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
+                    foundOpeningTotalPcs = data.openingTotalPcs;
+                    foundOpeningQty = data.openingQty !== undefined ? data.openingQty : (foundOpeningTotalPcs / factor);
+                } else {
+                    // 2. إذا كان الصنف قديم، يتم البحث عن الحركة الافتتاحية المسجلة من الإكسيل في inventory_transactions
+                    try {
+                        const q = query(collection(db, "inventory_transactions"), where("productId", "==", editId), where("type", "==", "opening_balance"));
+                        const transSnap = await getDocs(q);
+                        if (!transSnap.empty) {
+                            const transData = transSnap.docs[0].data();
+                            foundOpeningTotalPcs = transData.quantityPcs || 0;
+                            foundOpeningQty = foundOpeningTotalPcs / factor;
+                        }
+                    } catch(err) { console.log("خطأ استعلام حركة الرصيد الافتتاحي:", err); }
+                }
+
+                document.getElementById('pOpeningQty').value = foundOpeningQty;
+                document.getElementById('pOpeningTotalPcs').value = foundOpeningTotalPcs;
 
                 document.getElementById('pName').value = data.name || '';
                 document.getElementById('pBarcode').value = data.barcode || '';
@@ -327,7 +346,6 @@
 
         let finalTotalPcs = (id && newQtyInput === originalQtyInCrates) ? originalTotalPcs : Math.round(newQtyInput * factor);
 
-        // قراءة قيمة رصيد أول المدة المكتوبة في الشاشة
         const openingQtyVal = parseFloat(document.getElementById('pOpeningQty').value) || 0;
         const openingTotalPcsVal = parseFloat(document.getElementById('pOpeningTotalPcs').value) || 0;
 
