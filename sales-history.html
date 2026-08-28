@@ -384,7 +384,8 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <a href="trashi.html" class="add-btn trash-nav-btn" title="فتح سلة المحذوفات" style="display:flex;"><i class="fas fa-trash-alt"></i></a>
+            <!-- زر سلة المحذوفات محمي للآدمن فقط -->
+            <a href="trashi.html" class="add-btn trash-nav-btn admin-only-element" id="trashNavBtn" title="فتح سلة المحذوفات" style="display:none;"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
         </div>
@@ -411,7 +412,8 @@
                 </div>
             </div>
 
-            <button class="panel-btn btn-reset-danger" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
+            <!-- زر تصفير النظام محمي للآدمن فقط -->
+            <button class="panel-btn btn-reset-danger admin-only-element" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()" style="display:none;">
                 <i class="fas fa-trash-can"></i> تصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
         </div>
@@ -464,9 +466,9 @@
                 </div>
             </div>
 
-            <!-- زر ترحيل النقدية والآجل وإغلاق اليوم -->
-            <button class="btn btn-dark w-100 mt-3 fw-bold" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem;">
-                <i class="fas fa-file-export me-1" style="color: var(--germany-gold);"></i> ترحيل إغلاق اليوم إلى سجل النقدية
+            <!-- زر ترحيل النقدية والآجل وإغلاق اليوم (محمي للآدمن فقط) -->
+            <button class="btn btn-dark w-100 mt-3 fw-bold admin-only-element" id="saveDailyRegisterBtn" onclick="checkAdminBeforeAction(saveDailyCashRegister)" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem; display:none;">
+                <i class="fas fa-file-export me-1" style="color: var(--germany-gold);"></i> ترحيل إغلاق اليوم إلى سجل النقدية (للآدمن فقط)
             </button>
         </div>
 
@@ -530,6 +532,7 @@
     const db = firebase.firestore();
 
     const ADMIN_PASSWORD = "123";
+    let isAdminVerified = false; // التحقق من حالة الأدمن في الجلسة الحالية
 
     let allInvoices = [];
     let customersData = {};
@@ -541,6 +544,37 @@
     let loadedScope = null;
 
     window.globalExpectedTodayCash = 0;
+
+    // دالة التحقق من الأدمن قبل تنفيذ أي عملية حساسة أو إظهار الأزرار
+    function checkAdminBeforeAction(callback) {
+        if (isAdminVerified) {
+            callback();
+            return;
+        }
+
+        window.showCustomUi({
+            title: "🔒 صلاحية الآدمن فقط",
+            message: "يرجى إدخال كلمة سر الأدمن للمتابعة:",
+            type: "prompt",
+            inputType: "password",
+            inputPlaceholder: "كلمة المرور...",
+            confirmText: "دخول",
+            onConfirm: (enteredPassword) => {
+                if (enteredPassword === ADMIN_PASSWORD) {
+                    isAdminVerified = true;
+                    // إظهار العناصر المحمية بعد نجاح التحقق
+                    document.querySelectorAll('.admin-only-element').forEach(el => el.style.display = 'flex');
+                    callback();
+                } else {
+                    window.showCustomUi({
+                        title: "خطأ",
+                        message: "❌ كلمة المرور غير صحيحة!",
+                        icon: "danger"
+                    });
+                }
+            }
+        });
+    }
 
     function normalizeName(str) {
         return String(str || '')
@@ -1280,77 +1314,60 @@
     };
 
     window.clearAllSalesAdmin = () => {
-        window.showCustomUi({
-            title: "🔒 صلاحية الآدمن فقط",
-            message: "يرجى إدخال كلمة سر الأدمن لتصفير نظام المبيعات ونقل جميع السجلات الحالية لسلة المحذوفات:",
-            type: "prompt",
-            inputType: "password",
-            inputPlaceholder: "كلمة المرور...",
-            confirmText: "تحقق ومسح",
-            onConfirm: async (enteredPassword) => {
-                if (enteredPassword !== ADMIN_PASSWORD) {
-                    window.showCustomUi({
-                        title: "خطأ",
-                        message: "❌ كلمة المرور غير صحيحة! تم إلغاء العملية.",
-                        icon: "danger"
-                    });
-                    return;
-                }
+        checkAdminBeforeAction(() => {
+            window.showCustomUi({
+                title: "تأكيد مسح وتصفير السجل",
+                message: "⚠️ هل أنت متأكد تماماً من نقل جميع الفواتير والسندات المعروضة إلى سلة المحذوفات؟",
+                type: "confirm",
+                icon: "danger",
+                onConfirm: async () => {
+                    try {
+                        const batch = db.batch();
+                        let count = 0;
 
-                window.showCustomUi({
-                    title: "تأكيد مسح وتصفير السجل",
-                    message: "⚠️ هل أنت متأكد تماماً من نقل جميع الفواتير والسندات المعروضة إلى سلة المحذوفات؟",
-                    type: "confirm",
-                    icon: "danger",
-                    onConfirm: async () => {
-                        try {
-                            const batch = db.batch();
-                            let count = 0;
-
-                            allInvoices.forEach(inv => {
-                                const ref = db.collection("invoices").doc(inv.id);
-                                batch.update(ref, {
-                                    isDeleted: true,
-                                    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-                                });
-                                count++;
+                        allInvoices.forEach(inv => {
+                            const ref = db.collection("invoices").doc(inv.id);
+                            batch.update(ref, {
+                                isDeleted: true,
+                                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                             });
+                            count++;
+                        });
 
-                            rawTransactionsList.forEach(tr => {
-                                const ref = db.collection("transactions").doc(tr.id);
-                                batch.update(ref, {
-                                    isDeleted: true,
-                                    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-                                });
-                                count++;
+                        rawTransactionsList.forEach(tr => {
+                            const ref = db.collection("transactions").doc(tr.id);
+                            batch.update(ref, {
+                                isDeleted: true,
+                                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                             });
+                            count++;
+                        });
 
-                            if (count === 0) {
-                                window.showCustomUi({ title: "تنبيه", message: "لا توجد سجلات حالية لتصفيرها.", icon: "info" });
-                                return;
-                            }
-
-                            await batch.commit();
-
-                            window.showCustomUi({
-                                title: "تم التصفير",
-                                message: "✅ تم نقل جميع الفواتير والمعاملات المالية المعروضة إلى سلة المحذوفات بنجاح.",
-                                icon: "success",
-                                onConfirm: () => {
-                                    loadData(true, loadedScope === 'ARCHIVE');
-                                }
-                            });
-                        } catch (err) {
-                            console.error(err);
-                            window.showCustomUi({
-                                title: "خطأ",
-                                message: "حدث خطأ أثناء تصفير النظام: " + err.message,
-                                icon: "danger"
-                            });
+                        if (count === 0) {
+                            window.showCustomUi({ title: "تنبيه", message: "لا توجد سجلات حالية لتصفيرها.", icon: "info" });
+                            return;
                         }
+
+                        await batch.commit();
+
+                        window.showCustomUi({
+                            title: "تم التصفير",
+                            message: "✅ تم نقل جميع الفواتير والمعاملات المالية المعروضة إلى سلة المحذوفات بنجاح.",
+                            icon: "success",
+                            onConfirm: () => {
+                                loadData(true, loadedScope === 'ARCHIVE');
+                            }
+                        });
+                    } catch (err) {
+                        console.error(err);
+                        window.showCustomUi({
+                            title: "خطأ",
+                            message: "حدث خطأ أثناء تصفير النظام: " + err.message,
+                            icon: "danger"
+                        });
                     }
-                });
-            }
+                }
+            });
         });
     };
 
