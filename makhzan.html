@@ -260,22 +260,35 @@
 
     async function loadLiveInventory() {
         try {
-            // جلب حركة المبيعات والمشتريات لحساب الصافي التراكمي
-            const [invoicesSnap, supplierSnap] = await Promise.all([
+            const [invoicesSnap, supplierSnap, inventorySnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
-                getDocs(collection(db, "supplier_transactions"))
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(collection(db, "inventory"))
             ]);
+
+            // إنشاء قاموس تعيين للمعامل (عدد القطع/الجراكن بالكرتونة) لكل صنف
+            let factorsMap = {};
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                factorsMap[d.id] = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+            });
 
             let salesMap = {};
             let purchasesMap = {};
 
+            // 1. حساب المبيعات ومرتجعات البيع بالقطع الفعلية دقيقاً
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
                     const id = item.stockId;
                     if (id) {
                         if (!salesMap[id]) salesMap[id] = 0;
-                        let pcs = Number(item.qty) || 0;
+                        const factor = factorsMap[id] || 1;
+                        let rawQty = Number(item.qty) || 0;
+                        
+                        // التحقق مما إذا كانت المباعة كرتونة أم قطعة
+                        let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
+                        
                         if (item.isReturn) {
                             salesMap[id] -= pcs;
                         } else {
@@ -285,14 +298,20 @@
                 });
             });
 
+            // 2. حساب المشتريات ومرتجعات الشراء بالقطع الفعلية
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
                     const id = item.stockId;
                     if (id) {
                         if (!purchasesMap[id]) purchasesMap[id] = 0;
-                        let pcs = Number(item.qty) || 0;
-                        if (item.isReturn) {
+                        const factor = factorsMap[id] || 1;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        
+                        let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
+
+                        if (isReturn) {
                             purchasesMap[id] -= pcs;
                         } else {
                             purchasesMap[id] += pcs;
@@ -301,6 +320,7 @@
                 });
             });
 
+            // 3. المزامنة المباشرة وحساب التجميع التراكمي
             onSnapshot(collection(db, "inventory"), (snap) => {
                 allData = [];
                 snap.forEach(doc => {
@@ -308,7 +328,7 @@
                     if (!data.isDeleted) {
                         const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                         
-                        // 1. تحديد رصيد أول المدة
+                        // رصيد أول المدة بالقطع
                         let openingTotalPcs = 0;
                         if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
                             openingTotalPcs = Number(data.openingTotalPcs);
@@ -316,10 +336,10 @@
                             openingTotalPcs = Math.round(Number(data.openingQty) * factor);
                         }
 
-                        // 2. المعادلة الحسابية الحية
                         const salesPcs = salesMap[doc.id] || 0;
                         const purchasesPcs = purchasesMap[doc.id] || 0;
 
+                        // المعادلة التراكمية الحقيقية: (أول المدة + المشتريات - المبيعات)
                         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
                         allData.push({ 
@@ -334,7 +354,7 @@
             });
 
         } catch (e) {
-            console.error("خطأ أثناء تجميع معادلات المخزن الحية:", e);
+            console.error("خطأ في حساب المخزن الحقيقي:", e);
         }
     }
 
@@ -376,6 +396,7 @@
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
 
+            // تفكيك الرصيد إلى كراتين وجراكن دقيقة
             const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
             const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
 
