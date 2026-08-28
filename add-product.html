@@ -26,7 +26,6 @@
         
         body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
         
-        /* --- Header المعدل --- */
         .header-nav {
             position: sticky; top: 0; z-index: 1000; 
             background: var(--header-bg); padding: 12px 15px; 
@@ -60,7 +59,6 @@
             box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.1);
         }
 
-        /* تمييز حقول الأرقام والأسعار بالأخضر الداكن */
         input[type="number"].form-control {
             color: var(--accent) !important;
             font-weight: bold;
@@ -91,6 +89,12 @@
         .btn-outline-light { border-color: rgba(255,255,255,0.5); }
         .btn-outline-info { color: var(--accent); border-color: var(--accent); }
         .btn-outline-info:hover { background: var(--accent); color: white; }
+        
+        .readonly-highlight {
+            background-color: #e9ecef !important;
+            color: #495057 !important;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -123,11 +127,26 @@
         </div>
     </div>
 
+    <!-- قسم رصيد أول المدة المستورد / المسجل -->
     <div class="glass-card">
-        <div class="section-title"><i class="fas fa-hand-holding-usd"></i> التسعير والمخزون</div>
+        <div class="section-title text-primary"><i class="fas fa-history"></i> رصيد أول المدة (الافتتاحي)</div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label>رصيد أول المدة (كرتونة)</label>
+                <input type="number" id="pOpeningQty" class="form-control readonly-highlight" readonly placeholder="0">
+            </div>
+            <div class="col-md-6">
+                <label>إجمالي قطع أول المدة</label>
+                <input type="number" id="pOpeningTotalPcs" class="form-control readonly-highlight" readonly placeholder="0">
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <div class="section-title"><i class="fas fa-hand-holding-usd"></i> التسعير والمخزون الحالي</div>
         <div class="row g-3">
             <div class="col-md-3">
-                <label>الكمية (كرتونة)</label>
+                <label>الرصيد الحالي (كرتونة)</label>
                 <input type="number" id="pQty" class="form-control" step="0.01" value="0" oninput="isChanged=true">
             </div>
             <div class="col-md-3">
@@ -211,7 +230,9 @@
     }
 
     let originalTotalPcs = 0; 
-    let originalQtyInCrates = 0; 
+    let originalQtyInCrates = 0;
+    let storedOpeningQty = 0;
+    let storedOpeningTotalPcs = 0;
     window.isChanged = false;
 
     window.onbeforeunload = function() {
@@ -265,6 +286,13 @@
                 originalTotalPcs = data.totalPcs || 0;
                 originalQtyInCrates = originalTotalPcs / factor;
 
+                // رصيد أول المدة المسجل
+                storedOpeningQty = data.openingQty !== undefined ? data.openingQty : originalQtyInCrates;
+                storedOpeningTotalPcs = data.openingTotalPcs !== undefined ? data.openingTotalPcs : originalTotalPcs;
+
+                document.getElementById('pOpeningQty').value = storedOpeningQty;
+                document.getElementById('pOpeningTotalPcs').value = storedOpeningTotalPcs;
+
                 document.getElementById('pName').value = data.name || '';
                 document.getElementById('pBarcode').value = data.barcode || '';
                 document.getElementById('pQty').value = originalQtyInCrates; 
@@ -299,8 +327,14 @@
 
         let finalTotalPcs = (id && newQtyInput === originalQtyInCrates) ? originalTotalPcs : Math.round(newQtyInput * factor);
 
+        // عند الإضافة لأول مرة يدويًا بدون إكسيل، يعتبر الرصيد المكتوب هو رصيد أول المدة
+        const openingQtyVal = id ? storedOpeningQty : newQtyInput;
+        const openingTotalPcsVal = id ? storedOpeningTotalPcs : finalTotalPcs;
+
         const itemData = { 
             name, category: cat, qty: newQtyInput, unitFactor: factor, totalPcs: finalTotalPcs, 
+            openingQty: openingQtyVal,
+            openingTotalPcs: openingTotalPcsVal,
             min: parseInt(document.getElementById('pMin').value) || 0, 
             buy: parseFloat(document.getElementById('pBuy').value) || 0, 
             sell: sellVal, 
