@@ -369,9 +369,26 @@
         .empty-state { text-align: center; padding: 60px 10px; color: var(--text-secondary); }
         .empty-state i { color: #cbd5e1; }
 
-        /* الأزرار تظهر بشكل افتراضي في حالة دخول الأدمن، وتختفي تلقائياً للمستخدم العادي */
-        .admin-only-element { display: flex !important; }
-        .admin-only-element-block { display: block !important; }
+        /* =========================================
+           نظام إخفاء وإظهار أزرار الأدمن بشكل احترافي
+           ========================================= */
+        
+        /* 1. إخفاء جميع الأزرار الخاصة بالآدمن للجميع افتراضياً */
+        .admin-item { 
+            display: none !important; 
+        }
+
+        /* 2. في حال اكتشاف النظام لتسجيل دخول الآدمن، سيتم إضافة كلاس "admin-mode" للبودي 
+              وبالتالي تظهر الأزرار بتنسيقها الصحيح */
+        body.admin-mode .admin-item.add-btn { 
+            display: flex !important; 
+        }
+        body.admin-mode .admin-item.panel-btn { 
+            display: inline-flex !important; 
+        }
+        body.admin-mode .admin-item.block-btn { 
+            display: block !important; 
+        }
 
         #thermalPrintSection { display: none; }
         @media print {
@@ -388,8 +405,8 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <!-- زر سلة المحذوفات يظهر طالما الصفحة مفتوحة للآدمن -->
-            <a href="trashi.html" class="add-btn trash-nav-btn admin-only-element" id="trashNavBtn" title="فتح سلة المحذوفات"><i class="fas fa-trash-alt"></i></a>
+            <!-- زر سلة المحذوفات للآدمن -->
+            <a href="trashi.html" class="add-btn trash-nav-btn admin-item" id="trashNavBtn" title="فتح سلة المحذوفات"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
         </div>
@@ -406,7 +423,7 @@
                 </button>
             </div>
 
-            <!-- شريط فلترة منفذ البيع (المخزن الرئيسي / السيارة) - السيارة مفعلة افتراضياً -->
+            <!-- شريط فلترة منفذ البيع -->
             <div class="d-flex align-items-center justify-content-between gap-2 p-2 rounded bg-light border">
                 <span class="fw-bold" style="font-size: 0.78rem; white-space: nowrap;"><i class="fas fa-filter text-dark me-1"></i> منفذ البيع:</span>
                 <div class="btn-group w-100" role="group">
@@ -416,8 +433,8 @@
                 </div>
             </div>
 
-            <!-- زر تصفير النظام يظهر طالما الصفحة مفتوحة للآدمن -->
-            <button class="panel-btn btn-reset-danger admin-only-element-block" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
+            <!-- زر تصفير النظام للآدمن -->
+            <button class="panel-btn btn-reset-danger admin-item" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
                 <i class="fas fa-trash-can"></i> تصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
         </div>
@@ -470,8 +487,8 @@
                 </div>
             </div>
 
-            <!-- زر ترحيل إغلاق اليوم يظهر طالما الصفحة مفتوحة للآدمن -->
-            <button class="btn btn-dark w-100 mt-3 fw-bold admin-only-element-block" id="saveDailyRegisterBtn" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem;">
+            <!-- زر ترحيل إغلاق اليوم للآدمن -->
+            <button class="btn btn-dark w-100 mt-3 fw-bold admin-item block-btn" id="saveDailyRegisterBtn" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem;">
                 <i class="fas fa-file-export me-1" style="color: var(--germany-gold);"></i> ترحيل إغلاق اليوم إلى سجل النقدية (للآدمن فقط)
             </button>
         </div>
@@ -545,6 +562,24 @@
     let loadedScope = null;
 
     window.globalExpectedTodayCash = 0;
+
+    // دالة فحص الآدمن (تتم قراءتها من الـ LocalStorage)
+    function checkAdminPermissions() {
+        try {
+            const username = localStorage.getItem("username") || sessionStorage.getItem("username") || localStorage.getItem("currentUser") || "";
+            const role = localStorage.getItem("role") || sessionStorage.getItem("role") || "";
+            
+            // تحقق مما إذا كانت الجلسة الحالية تخص الآدمن
+            const isAdmin = (role === "admin" || username === "admin" || username.includes("أحمد") || localStorage.getItem("isAdmin") === "true");
+
+            if (isAdmin) {
+                // تفعيل وضع الأدمن لإظهار الأزرار المخفية
+                document.body.classList.add("admin-mode");
+            }
+        } catch (e) {
+            console.error("خطأ في التحقق من الصلاحيات:", e);
+        }
+    }
 
     function normalizeName(str) {
         return String(str || '')
@@ -1994,7 +2029,8 @@
         }
     };
     
-    // بدء تحميل البيانات
+    // عند فتح الصفحة نقوم بالتحقق من الصلاحيات ثم تحميل البيانات
+    checkAdminPermissions();
     loadData(true, false);
 </script>
 </body>
