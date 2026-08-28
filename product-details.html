@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تفاصيل الصنف - النظام الذكي</title>
+    <title>تفاصيل الصنف - شركة الزيادي</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -50,7 +51,6 @@
 
         .details-container { padding: 15px; }
 
-        /* كروت الإحصائيات الشاملة */
         .stat-card {
             background: white;
             border-radius: 16px;
@@ -67,16 +67,16 @@
             margin-bottom: 4px;
         }
         .stat-value {
-            font-size: 1.3rem;
-            font-weight: 800;
+            font-size: 1.4rem;
+            font-weight: 900;
             color: var(--text-dark);
         }
         .stat-badge {
             display: inline-block;
             margin-top: 4px;
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            padding: 2px 8px;
+            padding: 3px 8px;
             border-radius: 6px;
             background: #f1f5f9;
             color: var(--text-muted);
@@ -151,41 +151,41 @@
 
 <div class="container-fluid details-container">
     
-    <!-- كارت الرصيد الحالي بالمعادلة الشاملة -->
+    <!-- الرصيد الحالي الفعلي مقاس بالكرتونة -->
     <div class="current-stock-card">
-        <div style="font-size: 0.85rem; opacity: 0.9; font-weight: 700;">الرصيد الحالي الفعلي (المحسوب)</div>
-        <div style="font-size: 2.2rem; font-weight: 900; margin: 4px 0;" id="calcCurrentStock">0</div>
-        <div style="font-size: 0.8rem; opacity: 0.95; font-weight: 700;" id="calcCartonsSplit">0 كرتونة</div>
+        <div style="font-size: 0.85rem; opacity: 0.9; font-weight: 700;">الرصيد الحالي الفعلي (بالكرتونة)</div>
+        <div style="font-size: 2.2rem; font-weight: 900; margin: 4px 0;" id="calcCurrentStockCartons">0 كرتونة</div>
+        <div style="font-size: 0.85rem; opacity: 0.95; font-weight: 700;" id="calcCurrentStockPcs">0 قطعة / جركن</div>
     </div>
 
-    <!-- شبكة الإحصائيات (رصيد أول المدة + المشتريات + المبيعات + المرتجعات) -->
+    <!-- شبكة الإحصائيات بالكرتونة أساساً -->
     <div class="row g-2">
         <div class="col-6 col-md-3">
             <div class="stat-card">
                 <div class="stat-title"><i class="fas fa-hourglass-start text-primary me-1"></i> رصيد أول المدة</div>
-                <div class="stat-value text-primary" id="statOpeningPcs">0</div>
-                <span class="stat-badge" id="statOpeningCartons">0 كرتونة</span>
+                <div class="stat-value text-primary" id="statOpeningCartons">0</div>
+                <span class="stat-badge" id="statOpeningPcs">0 قطعة</span>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
                 <div class="stat-title"><i class="fas fa-boxes-stacked text-success me-1"></i> إجمالي المشتريات</div>
-                <div class="stat-value text-success" id="statPurchases">0</div>
-                <span class="stat-badge">قطع/جركن</span>
+                <div class="stat-value text-success" id="statPurchasesCartons">0</div>
+                <span class="stat-badge" id="statPurchasesPcs">0 قطعة</span>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
                 <div class="stat-title"><i class="fas fa-shopping-cart text-danger me-1"></i> إجمالي المبيعات</div>
-                <div class="stat-value text-danger" id="statSales">0</div>
-                <span class="stat-badge">قطع/جركن</span>
+                <div class="stat-value text-danger" id="statSalesCartons">0</div>
+                <span class="stat-badge" id="statSalesPcs">0 قطعة</span>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
                 <div class="stat-title"><i class="fas fa-rotate-left text-warning me-1"></i> إجمالي المرتجعات</div>
-                <div class="stat-value text-warning" id="statReturns">0</div>
-                <span class="stat-badge">صافي المرتجع</span>
+                <div class="stat-value text-warning" id="statReturnsCartons">0</div>
+                <span class="stat-badge" id="statReturnsPcs">0 قطعة</span>
             </div>
         </div>
     </div>
@@ -249,7 +249,7 @@
         <div id="movementsArea">
             <div class="text-center text-muted py-4">
                 <i class="fas fa-spinner fa-spin fa-2x mb-2 text-primary"></i>
-                <br>جاري تجميع حركات الصنف وحساب المعادلات...
+                <br>جاري تجميع حركات الصنف بالكرتونه...
             </div>
         </div>
     </div>
@@ -289,12 +289,30 @@
 
     document.getElementById('editProductBtn').href = `add-product.html?edit=${productId}`;
 
-    function formatQtyDisplay(totalPcs, factor) {
-        const cartons = Math.floor(totalPcs / factor);
-        const loose = totalPcs % factor;
-        if (cartons > 0 && loose > 0) return `${cartons} ك و ${loose} قطع`;
-        if (cartons > 0) return `${cartons} كرتونة`;
-        return `${loose} قطع`;
+    // دالة تحويل إجمالي القطع إلى كراتين وجراكن دقيقة
+    function convertToCartonsAndPcs(totalPcs, factor) {
+        const isNeg = totalPcs < 0;
+        const absPcs = Math.abs(totalPcs);
+        const cartons = Math.floor(absPcs / factor);
+        const loosePcs = absPcs % factor;
+
+        let cartonText = (isNeg ? '-' : '') + cartons + ' كرتونة';
+        let detailText = '';
+
+        if (cartons > 0 && loosePcs > 0) {
+            detailText = `${isNeg ? '-' : ''}${cartons} ك و ${loosePcs} قطع`;
+        } else if (cartons > 0) {
+            detailText = `${isNeg ? '-' : ''}${cartons} كرتونة صافي`;
+        } else {
+            detailText = `${isNeg ? '-' : ''}${loosePcs} قطع/جراكن`;
+        }
+
+        return {
+            cartonsVal: (isNeg ? '-' : '') + (absPcs / factor).toFixed(2) + ' كرتونة',
+            cartonsMain: (isNeg ? '-' : '') + cartons,
+            loosePcsVal: detailText,
+            totalPcsVal: (isNeg ? '-' : '') + absPcs + ' قطعة'
+        };
     }
 
     async function loadProductDetails() {
@@ -307,7 +325,7 @@
 
             const product = productDoc.data();
             const productName = product.name;
-            const factor = Number(product.unitFactor || product.pcsPerCarton) || 1;
+            const factor = Math.max(1, Number(product.unitFactor || product.pcsPerCarton) || 1);
 
             document.getElementById('headerProductName').innerText = productName;
             document.getElementById('unitFactorText').innerText = `معدل التحويل: تحتوي الكرتونة على ${factor} قطعة/جركن`;
@@ -316,14 +334,13 @@
             document.getElementById('priceGomla').innerText = Number(product.sell2 || product.sellGomla || 0).toFixed(2);
             document.getElementById('priceHalfGomla').innerText = Number(product.sell3 || product.sellHalfGomla || 0).toFixed(2);
 
-            // 1. تحديد رصيد أول المدة الحقيقي
+            // 1. حساب رصيد أول المدة
             let openingTotalPcs = 0;
-            if (product.openingTotalPcs !== undefined) {
+            if (product.openingTotalPcs !== undefined && product.openingTotalPcs !== null) {
                 openingTotalPcs = Number(product.openingTotalPcs);
-            } else if (product.openingQty !== undefined) {
+            } else if (product.openingQty !== undefined && product.openingQty !== null) {
                 openingTotalPcs = Math.round(Number(product.openingQty) * factor);
             } else {
-                // البحث في حركات الإكسيل المستوردة
                 try {
                     const qTrans = query(collection(db, "inventory_transactions"), where("productId", "==", productId), where("type", "==", "opening_balance"));
                     const snapTrans = await getDocs(qTrans);
@@ -333,9 +350,9 @@
                 } catch(e) {}
             }
 
-            const openingCartons = openingTotalPcs / factor;
-            document.getElementById('statOpeningPcs').innerText = openingTotalPcs;
-            document.getElementById('statOpeningCartons').innerText = `${openingCartons} كرتونة`;
+            const openingFormatted = convertToCartonsAndPcs(openingTotalPcs, factor);
+            document.getElementById('statOpeningCartons').innerText = openingFormatted.cartonsVal;
+            document.getElementById('statOpeningPcs').innerText = openingFormatted.totalPcsVal;
 
             let totalPurchasesPcs = 0;
             let totalSalesPcs = 0;
@@ -348,7 +365,7 @@
 
             let movements = [];
 
-            // 2. تجميع حركات فواتير البيع ومرتجعات المبيعات
+            // 2. المبيعات ومرتجعات البيع
             const salesSnap = await getDocs(collection(db, "invoices"));
             salesSnap.forEach(docSnap => {
                 const data = docSnap.data();
@@ -372,8 +389,8 @@
                         type: isReturn ? "مرتجع بيع ↩" : "بيع 🛒",
                         badgeClass: isReturn ? "bg-warning text-dark" : "bg-danger",
                         party: data.customerName || "عميل نقدي",
-                        qty: matchedItem.qty,
-                        unit: matchedItem.unit === 'box' ? 'كرتونة' : 'جركن',
+                        qtyPcs: pcs,
+                        unit: 'كرتونة',
                         price: matchedItem.price,
                         total: matchedItem.qty * matchedItem.price,
                         docLink: `sales-invoice.html?edit=${docSnap.id}`
@@ -381,7 +398,7 @@
                 }
             });
 
-            // 3. تجميع حركات المشتريات ومرتجعات الشراء
+            // 3. المشتريات ومرتجعات الشراء
             const purchasesSnap = await getDocs(collection(db, "supplier_transactions"));
             purchasesSnap.forEach(docSnap => {
                 const data = docSnap.data();
@@ -406,8 +423,8 @@
                         type: isReturn ? "مرتجع شراء ↩" : "شراء 📦",
                         badgeClass: isReturn ? "bg-warning text-dark" : "bg-success",
                         party: suppliersBase[data.supplierId] || "مورد",
-                        qty: qty,
-                        unit: matchedItem.unitName || 'كرتونة',
+                        qtyPcs: pcs,
+                        unit: 'كرتونة',
                         price: matchedItem.buy,
                         total: qty * matchedItem.buy,
                         docLink: `new-purchase-invoice.html?edit=${docSnap.id}`
@@ -415,16 +432,26 @@
                 }
             });
 
-            // 4. تطبيق معادلة الرصيد الحالي الفعلي الحقيقية
-            // الرصيد الحالي = (أول المدة + المشتريات + مرتجع البيع) - (المبيعات + مرتجع الشراء)
+            // 4. معادلة الرصيد الحالي التراكمي الفعلي
             const finalCalculatedCurrentPcs = (openingTotalPcs + totalPurchasesPcs + totalSalesReturnsPcs) - (totalSalesPcs + totalPurchaseReturnsPcs);
 
-            document.getElementById('statPurchases').innerText = totalPurchasesPcs;
-            document.getElementById('statSales').innerText = totalSalesPcs;
-            document.getElementById('statReturns').innerText = (totalSalesReturnsPcs + totalPurchaseReturnsPcs);
+            // تحويل كل الحقول لعرض الكراتين كأساس
+            const purchasesFormatted = convertToCartonsAndPcs(totalPurchasesPcs, factor);
+            const salesFormatted = convertToCartonsAndPcs(totalSalesPcs, factor);
+            const returnsFormatted = convertToCartonsAndPcs(totalSalesReturnsPcs + totalPurchaseReturnsPcs, factor);
+            const currentFormatted = convertToCartonsAndPcs(finalCalculatedCurrentPcs, factor);
 
-            document.getElementById('calcCurrentStock').innerText = finalCalculatedCurrentPcs;
-            document.getElementById('calcCartonsSplit').innerText = formatQtyDisplay(finalCalculatedCurrentPcs, factor);
+            document.getElementById('statPurchasesCartons').innerText = purchasesFormatted.cartonsVal;
+            document.getElementById('statPurchasesPcs').innerText = purchasesFormatted.totalPcsVal;
+
+            document.getElementById('statSalesCartons').innerText = salesFormatted.cartonsVal;
+            document.getElementById('statSalesPcs').innerText = salesFormatted.totalPcsVal;
+
+            document.getElementById('statReturnsCartons').innerText = returnsFormatted.cartonsVal;
+            document.getElementById('statReturnsPcs').innerText = returnsFormatted.totalPcsVal;
+
+            document.getElementById('calcCurrentStockCartons').innerText = currentFormatted.cartonsVal;
+            document.getElementById('calcCurrentStockPcs').innerText = currentFormatted.loosePcsVal;
 
             movements.sort((a, b) => b.date - a.date);
 
@@ -445,7 +472,7 @@
                                 <th>التاريخ</th>
                                 <th>نوع الحركة</th>
                                 <th>الطرف المستحق</th>
-                                <th>الكمية</th>
+                                <th>الكمية (بالكرتونة)</th>
                                 <th>السعر</th>
                                 <th>الإجمالي</th>
                                 <th>عرض</th>
@@ -454,12 +481,13 @@
                         <tbody>`;
 
             movements.forEach(m => {
+                const moveFormat = convertToCartonsAndPcs(m.qtyPcs, factor);
                 tableHtml += `
                     <tr>
                         <td style="font-size: 0.8rem; white-space: nowrap;">${m.dateStr}</td>
                         <td><span class="badge badge-type ${m.badgeClass}">${m.type}</span></td>
                         <td class="fw-bold text-dark">${m.party}</td>
-                        <td class="text-primary fw-bold">${m.qty} ${m.unit}</td>
+                        <td class="text-primary fw-bold">${moveFormat.cartonsVal}</td>
                         <td>${Number(m.price).toFixed(2)}</td>
                         <td class="text-success fw-bold">${Number(m.total).toFixed(2)}</td>
                         <td>
@@ -486,9 +514,7 @@
 </script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js")
-    .then(() => console.log("SW Registered Successfully"))
-    .catch((err) => console.log("SW Registration Failed", err));
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
 }
 </script>
 </body>
