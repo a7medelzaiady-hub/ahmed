@@ -221,7 +221,7 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري حساب الأرصدة الحية للأصناف...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري إعادة حساب أرقام المخزن بالكامل...
     </div>
 </div>
 
@@ -235,7 +235,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -248,14 +248,7 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+    const db = getFirestore(app);
     let allData = [];
 
     async function loadLiveInventory() {
@@ -266,27 +259,28 @@
                 getDocs(collection(db, "inventory"))
             ]);
 
-            // إنشاء قاموس تعيين للمعامل (عدد القطع/الجراكن بالكرتونة) لكل صنف
             let factorsMap = {};
+            let namesMap = {};
             inventorySnap.forEach(d => {
                 const data = d.data();
-                factorsMap[d.id] = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                factorsMap[d.id] = f;
+                if (data.name) namesMap[data.name.trim()] = d.id;
             });
 
             let salesMap = {};
             let purchasesMap = {};
 
-            // 1. حساب المبيعات ومرتجعات البيع بالقطع الفعلية دقيقاً
+            // 1. حساب المبيعات ومرتجعات البيع بالقطع
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
-                    const id = item.stockId;
+                    const id = item.stockId || namesMap[item.name?.trim()];
                     if (id) {
                         if (!salesMap[id]) salesMap[id] = 0;
                         const factor = factorsMap[id] || 1;
                         let rawQty = Number(item.qty) || 0;
                         
-                        // التحقق مما إذا كانت المباعة كرتونة أم قطعة
                         let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
                         
                         if (item.isReturn) {
@@ -298,11 +292,11 @@
                 });
             });
 
-            // 2. حساب المشتريات ومرتجعات الشراء بالقطع الفعلية
+            // 2. حساب المشتريات ومرتجعات الشراء بالقطع
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
-                    const id = item.stockId;
+                    const id = item.stockId || namesMap[item.name?.trim()];
                     if (id) {
                         if (!purchasesMap[id]) purchasesMap[id] = 0;
                         const factor = factorsMap[id] || 1;
@@ -320,7 +314,7 @@
                 });
             });
 
-            // 3. المزامنة المباشرة وحساب التجميع التراكمي
+            // 3. قراءة البيانات وحساب الرصيد الفعلي التراكمي
             onSnapshot(collection(db, "inventory"), (snap) => {
                 allData = [];
                 snap.forEach(doc => {
@@ -328,7 +322,7 @@
                     if (!data.isDeleted) {
                         const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                         
-                        // رصيد أول المدة بالقطع
+                        // قراءة رصيد أول المدة المستورد
                         let openingTotalPcs = 0;
                         if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
                             openingTotalPcs = Number(data.openingTotalPcs);
@@ -339,7 +333,7 @@
                         const salesPcs = salesMap[doc.id] || 0;
                         const purchasesPcs = purchasesMap[doc.id] || 0;
 
-                        // المعادلة التراكمية الحقيقية: (أول المدة + المشتريات - المبيعات)
+                        // المعادلة التراكمية الصحيحة: رصيد أول المدة + المشتريات - المبيعات
                         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
                         allData.push({ 
@@ -354,7 +348,7 @@
             });
 
         } catch (e) {
-            console.error("خطأ في حساب المخزن الحقيقي:", e);
+            console.error("خطأ في تجميع البيانات:", e);
         }
     }
 
@@ -396,7 +390,7 @@
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
 
-            // تفكيك الرصيد إلى كراتين وجراكن دقيقة
+            // تحويل دقيق إلى عدد الكراتين والقطع المتبقية
             const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
             const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
 
