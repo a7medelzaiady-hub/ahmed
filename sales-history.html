@@ -384,7 +384,7 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <!-- زر سلة المحذوفات محمي ومخفي افتراضياً للمستخدمين -->
+            <!-- زر سلة المحذوفات: يظهر للأدمن فقط بناءً على المتغير isAdmin -->
             <a href="trashi.html" class="add-btn trash-nav-btn admin-only-element" id="trashNavBtn" title="فتح سلة المحذوفات" style="display:none;"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
@@ -412,7 +412,7 @@
                 </div>
             </div>
 
-            <!-- زر تصفير النظام محمي ومخفي افتراضياً للمستخدمين -->
+            <!-- زر تصفير النظام: يظهر للأدمن فقط -->
             <button class="panel-btn btn-reset-danger admin-only-element" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()" style="display:none;">
                 <i class="fas fa-trash-can"></i> تصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
@@ -466,8 +466,8 @@
                 </div>
             </div>
 
-            <!-- زر ترحيل النقدية والآجل وإغلاق اليوم (محمي ومخفي افتراضياً للمستخدمين) -->
-            <button class="btn btn-dark w-100 mt-3 fw-bold admin-only-element" id="saveDailyRegisterBtn" onclick="checkAdminBeforeAction(saveDailyCashRegister)" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem; display:none;">
+            <!-- زر ترحيل النقدية وإغلاق اليوم: يظهر للأدمن فقط -->
+            <button class="btn btn-dark w-100 mt-3 fw-bold admin-only-element" id="saveDailyRegisterBtn" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem; display:none;">
                 <i class="fas fa-file-export me-1" style="color: var(--germany-gold);"></i> ترحيل إغلاق اليوم إلى سجل النقدية (للآدمن فقط)
             </button>
         </div>
@@ -490,7 +490,7 @@
                 <button class="btn btn-outline-dark" onclick="downloadInvoicesImagesByDate()" title="تحميل كل الفواتير مقسمة حسب اليوم">
                     <i class="fas fa-images"></i> صور كل الفواتير ZIP
                 </button>
-                <button class="btn btn-dark text-white" onclick="printDailyComprehensiveReport()" title="تقرير مالي شامل لكل الأيام">
+                <button class="btn btn-dark text-white" onclick="printDailyComprehensiveReport()" title="تقرير مالي شامل لكل الأ أيام">
                     <i class="fas fa-file-invoice"></i> تقرير كل الأيام
                 </button>
             </div>
@@ -531,8 +531,9 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const ADMIN_PASSWORD = "123";
-    let isAdminVerified = false; // التحقق من الجلسة الحالية للآدمن
+    // ضع هنا اسم أو يوزر الأدمن الخاص بك، أو يمكنك تعديل الشرط حسب رغبتك
+    const CURRENT_USER = localStorage.getItem("currentUser") || "أحمد محمود الزيادي"; 
+    const ADMIN_NAME = "أحمد محمود الزيادي"; // اسم الأدمن المصرح له برؤية الأزرار
 
     let allInvoices = [];
     let customersData = {};
@@ -545,35 +546,16 @@
 
     window.globalExpectedTodayCash = 0;
 
-    // دالة للتحقق من كلمة مرور الآدمن وإظهار العناصر المحمية في حال الصحة
-    function checkAdminBeforeAction(callback) {
-        if (isAdminVerified) {
-            callback();
-            return;
-        }
+    // فحص صلاحية الأدمن عند فتح الصفحة وإظهار الأزرار المخفية تلقائياً لو كنت أنت الأدمن
+    function checkAndApplyAdminPermissions() {
+        // يمكنك تعديل الشرط أدناه ليطابق طريقة معرفة المستخدم لديك (مثلاً بالاسم أو اليوزر)
+        const isAdmin = (CURRENT_USER === ADMIN_NAME); 
 
-        window.showCustomUi({
-            title: "🔒 صلاحية الآدمن فقط",
-            message: "يرجى إدخال كلمة سر الأدمن للمتابعة:",
-            type: "prompt",
-            inputType: "password",
-            inputPlaceholder: "كلمة المرور...",
-            confirmText: "دخول",
-            onConfirm: (enteredPassword) => {
-                if (enteredPassword === ADMIN_PASSWORD) {
-                    isAdminVerified = true;
-                    // إظهار الأزرار المخفية للآدمن فور نجاح التحقق
-                    document.querySelectorAll('.admin-only-element').forEach(el => el.style.display = 'flex');
-                    callback();
-                } else {
-                    window.showCustomUi({
-                        title: "خطأ",
-                        message: "❌ كلمة المرور غير صحيحة!",
-                        icon: "danger"
-                    });
-                }
-            }
-        });
+        if (isAdmin) {
+            document.querySelectorAll('.admin-only-element').forEach(el => {
+                el.style.display = 'flex'; // أو inline-flex حسب نوع الزر
+            });
+        }
     }
 
     function normalizeName(str) {
@@ -597,10 +579,7 @@
 
         title.innerText = options.title || "تنبيه النظام";
         body.innerHTML = options.message || "";
-        inputField.value = "";
-        inputField.type = options.inputType || "password";
-        inputField.placeholder = options.inputPlaceholder || "اكتب كلمة التأكيد هنا...";
-        inputField.style.display = options.type === "prompt" ? "block" : "none";
+        inputField.style.display = "none";
 
         if (options.icon === "success") {
             iconContainer.style.background = "#f0fdf4";
@@ -615,7 +594,7 @@
 
         actions.innerHTML = "";
 
-        if (options.type === "confirm" || options.type === "prompt") {
+        if (options.type === "confirm") {
             const confirmBtn = document.createElement('button');
             confirmBtn.className = "btn btn-sm btn-dark px-4 fw-bold";
             confirmBtn.style.fontFamily = "Cairo";
@@ -623,7 +602,7 @@
             confirmBtn.innerText = options.confirmText || "تأكيد";
             confirmBtn.onclick = () => {
                 modal.style.display = 'none';
-                if (options.onConfirm) options.onConfirm(options.type === "prompt" ? inputField.value : true);
+                if (options.onConfirm) options.onConfirm(true);
             };
 
             const cancelBtn = document.createElement('button');
@@ -1096,7 +1075,7 @@
                         remainingTotal: todayRemaining,
                         totalSales: todayTotalSales,
                         sourceFilter: currentSourceFilter,
-                        closedBy: "أحمد محمود الزيادي",
+                        closedBy: CURRENT_USER,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
 
@@ -1314,60 +1293,58 @@
     };
 
     window.clearAllSalesAdmin = () => {
-        checkAdminBeforeAction(() => {
-            window.showCustomUi({
-                title: "تأكيد مسح وتصفير السجل",
-                message: "⚠️ هل أنت متأكد تماماً من نقل جميع الفواتير والسندات المعروضة إلى سلة المحذوفات؟",
-                type: "confirm",
-                icon: "danger",
-                onConfirm: async () => {
-                    try {
-                        const batch = db.batch();
-                        let count = 0;
+        window.showCustomUi({
+            title: "تأكيد مسح وتصفير السجل",
+            message: "⚠️ هل أنت متأكد تماماً من نقل جميع الفواتير والسندات المعروضة إلى سلة المحذوفات؟",
+            type: "confirm",
+            icon: "danger",
+            onConfirm: async () => {
+                try {
+                    const batch = db.batch();
+                    let count = 0;
 
-                        allInvoices.forEach(inv => {
-                            const ref = db.collection("invoices").doc(inv.id);
-                            batch.update(ref, {
-                                isDeleted: true,
-                                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-                            });
-                            count++;
+                    allInvoices.forEach(inv => {
+                        const ref = db.collection("invoices").doc(inv.id);
+                        batch.update(ref, {
+                            isDeleted: true,
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
+                        count++;
+                    });
 
-                        rawTransactionsList.forEach(tr => {
-                            const ref = db.collection("transactions").doc(tr.id);
-                            batch.update(ref, {
-                                isDeleted: true,
-                                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-                            });
-                            count++;
+                    rawTransactionsList.forEach(tr => {
+                        const ref = db.collection("transactions").doc(tr.id);
+                        batch.update(ref, {
+                            isDeleted: true,
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
+                        count++;
+                    });
 
-                        if (count === 0) {
-                            window.showCustomUi({ title: "تنبيه", message: "لا توجد سجلات حالية لتصفيرها.", icon: "info" });
-                            return;
-                        }
-
-                        await batch.commit();
-
-                        window.showCustomUi({
-                            title: "تم التصفير",
-                            message: "✅ تم نقل جميع الفواتير والمعاملات المالية المعروضة إلى سلة المحذوفات بنجاح.",
-                            icon: "success",
-                            onConfirm: () => {
-                                loadData(true, loadedScope === 'ARCHIVE');
-                            }
-                        });
-                    } catch (err) {
-                        console.error(err);
-                        window.showCustomUi({
-                            title: "خطأ",
-                            message: "حدث خطأ أثناء تصفير النظام: " + err.message,
-                            icon: "danger"
-                        });
+                    if (count === 0) {
+                        window.showCustomUi({ title: "تنبيه", message: "لا توجد سجلات حالية لتصفيرها.", icon: "info" });
+                        return;
                     }
+
+                    await batch.commit();
+
+                    window.showCustomUi({
+                        title: "تم التصفير",
+                        message: "✅ تم نقل جميع الفواتير والمعاملات المالية المعروضة إلى سلة المحذوفات بنجاح.",
+                        icon: "success",
+                        onConfirm: () => {
+                            loadData(true, loadedScope === 'ARCHIVE');
+                        }
+                    });
+                } catch (err) {
+                    console.error(err);
+                    window.showCustomUi({
+                        title: "خطأ",
+                        message: "حدث خطأ أثناء تصفير النظام: " + err.message,
+                        icon: "danger"
+                    });
                 }
-            });
+            }
         });
     };
 
@@ -2029,6 +2006,8 @@
         }
     };
     
+    // تنفيذ الفحص عند التحميل
+    checkAndApplyAdminPermissions();
     loadData(true, false);
 </script>
 </body>
