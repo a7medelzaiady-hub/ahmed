@@ -424,6 +424,17 @@
 </head>
 <body>
 
+<!-- كود حماية الصفحة وتأكيد تسجيل الدخول (Route Guard) -->
+<script>
+    (function checkLoginGuard() {
+        const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
+        const isLoggedIn = sessionStorage.getItem("isLoggedIn") || localStorage.getItem("isLoggedIn");
+        if (!loggedUser && isLoggedIn !== "true") {
+            window.location.replace("login.html");
+        }
+    })();
+</script>
+
 <header class="header">
     <button class="btn-icon" id="btnMenu" type="button" aria-label="القائمة">
         <i class="fas fa-bars"></i>
@@ -440,7 +451,7 @@
     </button>
 </header>
 
-<!-- عناصر القائمة الجانبية المضافة -->
+<!-- عناصر القائمة الجانبية -->
 <div class="drawer-overlay" id="drawerOverlay"></div>
 <div class="drawer-menu" id="drawerMenu">
     <div class="drawer-header">
@@ -570,6 +581,7 @@
 
 <div class="bottom-spacer"></div>
 
+<!-- زر تجميع الأصناف المطلوبة المتواجد أسفل اليسار بدون أي تغيير -->
 <button class="fab-left-btn" type="button" id="btnRequiredItems" onclick="window.location.href='required-items-summary.html';" title="تجميع الأصناف المطلوبة">
     <i class="fa-solid fa-boxes-stacked"></i>
 </button>
@@ -637,15 +649,15 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    const isLoggedIn = sessionStorage.getItem('isLoggedIn');
-    let userName = sessionStorage.getItem('username') || sessionStorage.getItem('user_name');
-    let userRole = sessionStorage.getItem('role') || 'restricted';
-    let currentUserId = sessionStorage.getItem('userId');
+    const isLoggedIn = sessionStorage.getItem('isLoggedIn') || localStorage.getItem('isLoggedIn');
+    let userName = sessionStorage.getItem('username') || sessionStorage.getItem('user_name') || localStorage.getItem('username') || localStorage.getItem('currentUser');
+    let userRole = sessionStorage.getItem('role') || localStorage.getItem('role') || 'restricted';
+    let currentUserId = sessionStorage.getItem('userId') || localStorage.getItem('userId');
     let authSessionToken = sessionStorage.getItem('authToken');
 
     if (isLoggedIn !== 'true' && !userName) {
         sessionStorage.clear();
-        window.location.href = "index.html";
+        window.location.href = "login.html";
     }
 
     if (!userName) userName = 'مستخدم';
@@ -742,7 +754,10 @@
             console.error("Logout error:", err);
         } finally {
             sessionStorage.clear();
-            window.location.href = "index.html";
+            localStorage.removeItem("currentUser");
+            localStorage.removeItem("username");
+            localStorage.removeItem("isLoggedIn");
+            window.location.href = "login.html";
         }
     }
 
@@ -875,7 +890,7 @@
 
     // 🟢 الحماية البرمجية القاطعة للروابط والتفاعل (Rerouting Security Interceptor)
     document.addEventListener('click', function (e) {
-        const role = sessionStorage.getItem('role') || 'employee';
+        const role = sessionStorage.getItem('role') || localStorage.getItem('role') || 'employee';
         if (role === 'admin') return; // الأدمن يملك صلاحية كاملة
 
         const link = e.target.closest('a[data-perm="admin_only"]');
@@ -887,7 +902,7 @@
     }, true);
 
     window.addEventListener('load', function () {
-        const role = sessionStorage.getItem('role') || 'employee';
+        const role = sessionStorage.getItem('role') || localStorage.getItem('role') || 'employee';
         const allowedNonAdminPermissions = ['sales', 'quotation', 'customers', 'client_vouchers', 'shortages'];
 
         const elementsWithPerms = document.querySelectorAll('[data-perm]');
