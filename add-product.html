@@ -90,10 +90,9 @@
         .btn-outline-info { color: var(--accent); border-color: var(--accent); }
         .btn-outline-info:hover { background: var(--accent); color: white; }
         
-        .readonly-highlight {
-            background-color: #e9ecef !important;
-            color: #495057 !important;
-            font-weight: bold;
+        .opening-box {
+            background-color: #f0fdf4 !important;
+            border-color: #bbf7d0 !important;
         }
     </style>
 </head>
@@ -127,17 +126,17 @@
         </div>
     </div>
 
-    <!-- قسم رصيد أول المدة الحقيقي -->
+    <!-- قسم رصيد أول المدة القابل للتعديل والتصحيح -->
     <div class="glass-card">
         <div class="section-title text-primary"><i class="fas fa-history"></i> رصيد أول المدة (الافتتاحي الحقيقي)</div>
         <div class="row g-3">
             <div class="col-md-6">
                 <label>رصيد أول المدة (كرتونة)</label>
-                <input type="number" id="pOpeningQty" class="form-control readonly-highlight" readonly placeholder="0">
+                <input type="number" id="pOpeningQty" class="form-control opening-box" placeholder="0" oninput="calculateOpeningTotal(); isChanged=true">
             </div>
             <div class="col-md-6">
                 <label>إجمالي قطع أول المدة</label>
-                <input type="number" id="pOpeningTotalPcs" class="form-control readonly-highlight" readonly placeholder="0">
+                <input type="number" id="pOpeningTotalPcs" class="form-control opening-box" placeholder="0" oninput="isChanged=true">
             </div>
         </div>
     </div>
@@ -193,7 +192,7 @@
             </div>
             <div class="col-md-4">
                 <label>المعامل (كم قطعة بالكرتونة؟)</label>
-                <input type="number" id="pFactor" class="form-control" value="1" oninput="isChanged=true">
+                <input type="number" id="pFactor" class="form-control" value="1" oninput="calculateOpeningTotal(); isChanged=true">
             </div>
         </div>
     </div>
@@ -231,9 +230,13 @@
 
     let originalTotalPcs = 0; 
     let originalQtyInCrates = 0;
-    let storedOpeningQty = 0;
-    let storedOpeningTotalPcs = 0;
     window.isChanged = false;
+
+    window.calculateOpeningTotal = function() {
+        const crates = parseFloat(document.getElementById('pOpeningQty').value) || 0;
+        const factor = parseInt(document.getElementById('pFactor').value) || 1;
+        document.getElementById('pOpeningTotalPcs').value = Math.round(crates * factor);
+    }
 
     window.onbeforeunload = function() {
         if (window.isChanged) return "هل أنت متأكد من الخروج؟ هناك بيانات لم تحفظ.";
@@ -286,11 +289,9 @@
                 originalTotalPcs = data.totalPcs || 0;
                 originalQtyInCrates = originalTotalPcs / factor;
 
-                storedOpeningQty = data.openingQty !== undefined ? data.openingQty : originalQtyInCrates;
-                storedOpeningTotalPcs = data.openingTotalPcs !== undefined ? data.openingTotalPcs : originalTotalPcs;
-
-                document.getElementById('pOpeningQty').value = storedOpeningQty;
-                document.getElementById('pOpeningTotalPcs').value = storedOpeningTotalPcs;
+                // إظهار رصيد أول المدة المخزن، أو كتابة 0 إذا لم يكن موجوداً من قبل
+                document.getElementById('pOpeningQty').value = data.openingQty !== undefined ? data.openingQty : 0;
+                document.getElementById('pOpeningTotalPcs').value = data.openingTotalPcs !== undefined ? data.openingTotalPcs : 0;
 
                 document.getElementById('pName').value = data.name || '';
                 document.getElementById('pBarcode').value = data.barcode || '';
@@ -326,8 +327,9 @@
 
         let finalTotalPcs = (id && newQtyInput === originalQtyInCrates) ? originalTotalPcs : Math.round(newQtyInput * factor);
 
-        const openingQtyVal = id ? storedOpeningQty : newQtyInput;
-        const openingTotalPcsVal = id ? storedOpeningTotalPcs : finalTotalPcs;
+        // قراءة قيمة رصيد أول المدة المكتوبة في الشاشة
+        const openingQtyVal = parseFloat(document.getElementById('pOpeningQty').value) || 0;
+        const openingTotalPcsVal = parseFloat(document.getElementById('pOpeningTotalPcs').value) || 0;
 
         const itemData = { 
             name, category: cat, qty: newQtyInput, unitFactor: factor, totalPcs: finalTotalPcs, 
@@ -347,7 +349,7 @@
         try {
             if(id) {
                 await updateDoc(doc(db, "inventory", id), itemData);
-                alert("تم التحديث بنجاح ✅");
+                alert("تم التحديث وحفظ رصيد أول المدة الحقيقي بنجاح ✅");
             } else {
                 await addDoc(collection(db, "inventory"), { ...itemData, timestamp: serverTimestamp() });
                 alert("تم الحفظ بنجاح ✅");
