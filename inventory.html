@@ -684,16 +684,20 @@
                 else totalSalesPcs += qty;
             });
 
-            // إصلاح رصيد أول المدة ليكون قيمة ثابتة من الداتابيز دون التأثر بالمشتريات والبيع
+            // تحديث قراءة رصيد أول المدة: الأولوية للحقل المسجل افتتاحيًا عبر الإكسيل أو صفحة الإضافة
             let initialStockPcs = 0;
-            if (currentItemObj.initQty !== undefined && currentItemObj.initQty !== null) {
+            if (currentItemObj.openingTotalPcs !== undefined && currentItemObj.openingTotalPcs !== null) {
+                initialStockPcs = Number(currentItemObj.openingTotalPcs);
+            } else if (currentItemObj.openingQty !== undefined && currentItemObj.openingQty !== null) {
+                initialStockPcs = Math.round(Number(currentItemObj.openingQty) * capacity);
+            } else if (currentItemObj.initQty !== undefined && currentItemObj.initQty !== null) {
                 initialStockPcs = Number(currentItemObj.initQty);
             } else if (currentItemObj.initialQty !== undefined && currentItemObj.initialQty !== null) {
                 initialStockPcs = Number(currentItemObj.initialQty);
             } else if (currentItemObj.openingBalance !== undefined && currentItemObj.openingBalance !== null) {
                 initialStockPcs = Number(currentItemObj.openingBalance);
             } else {
-                // المعادلة العكسية الدقيقة للوصول لرصيد أول المدة الصافي
+                // المعادلة العكسية الاحتياطية للأصناف القديمة
                 initialStockPcs = currentStockPcs + totalSalesPcs + totalLossesPcs - totalPurchasesPcs - totalReturnsPcs;
             }
 
