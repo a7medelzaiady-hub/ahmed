@@ -369,6 +369,9 @@
         .empty-state { text-align: center; padding: 60px 10px; color: var(--text-secondary); }
         .empty-state i { color: #cbd5e1; }
 
+        /* الأزرار الخاصة بالآدمن مخفية تماماً بافتراض أن المستخدم العادي هو من يفتح الصفحة */
+        .admin-only-element { display: none !important; }
+
         #thermalPrintSection { display: none; }
         @media print {
             body { background: white; color: black; padding: 0; margin: 0; }
@@ -384,8 +387,8 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <!-- زر سلة المحذوفات: يظهر للأدمن فقط بناءً على المتغير isAdmin -->
-            <a href="trashi.html" class="add-btn trash-nav-btn admin-only-element" id="trashNavBtn" title="فتح سلة المحذوفات" style="display:none;"><i class="fas fa-trash-alt"></i></a>
+            <!-- زر سلة المحذوفات مخفي افتراضياً ولا يظهر إلا للآدمن -->
+            <a href="trashi.html" class="add-btn trash-nav-btn admin-only-element" id="trashNavBtn" title="فتح سلة المحذوفات"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
         </div>
@@ -412,8 +415,8 @@
                 </div>
             </div>
 
-            <!-- زر تصفير النظام: يظهر للأدمن فقط -->
-            <button class="panel-btn btn-reset-danger admin-only-element" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()" style="display:none;">
+            <!-- زر تصفير النظام مخفي افتراضياً ولا يظهر إلا للآدمن -->
+            <button class="panel-btn btn-reset-danger admin-only-element" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
                 <i class="fas fa-trash-can"></i> تصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
         </div>
@@ -466,8 +469,8 @@
                 </div>
             </div>
 
-            <!-- زر ترحيل النقدية وإغلاق اليوم: يظهر للأدمن فقط -->
-            <button class="btn btn-dark w-100 mt-3 fw-bold admin-only-element" id="saveDailyRegisterBtn" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem; display:none;">
+            <!-- زر ترحيل إغلاق اليوم مخفي افتراضياً ولا يظهر إلا للآدمن -->
+            <button class="btn btn-dark w-100 mt-3 fw-bold admin-only-element" id="saveDailyRegisterBtn" onclick="saveDailyCashRegister()" style="font-family: 'Cairo'; border-radius: 12px; font-size: 0.85rem;">
                 <i class="fas fa-file-export me-1" style="color: var(--germany-gold);"></i> ترحيل إغلاق اليوم إلى سجل النقدية (للآدمن فقط)
             </button>
         </div>
@@ -490,7 +493,7 @@
                 <button class="btn btn-outline-dark" onclick="downloadInvoicesImagesByDate()" title="تحميل كل الفواتير مقسمة حسب اليوم">
                     <i class="fas fa-images"></i> صور كل الفواتير ZIP
                 </button>
-                <button class="btn btn-dark text-white" onclick="printDailyComprehensiveReport()" title="تقرير مالي شامل لكل الأ أيام">
+                <button class="btn btn-dark text-white" onclick="printDailyComprehensiveReport()" title="تقرير مالي شامل لكل الأيام">
                     <i class="fas fa-file-invoice"></i> تقرير كل الأيام
                 </button>
             </div>
@@ -531,14 +534,10 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // ضع هنا اسم أو يوزر الأدمن الخاص بك، أو يمكنك تعديل الشرط حسب رغبتك
-    const CURRENT_USER = localStorage.getItem("currentUser") || "أحمد محمود الزيادي"; 
-    const ADMIN_NAME = "أحمد محمود الزيادي"; // اسم الأدمن المصرح له برؤية الأزرار
-
     let allInvoices = [];
     let customersData = {};
     let currentFilterType = null;
-    let currentSourceFilter = 'van_sales'; // تم الضبط افتراضياً على السيارة 'van_sales'
+    let currentSourceFilter = 'van_sales'; 
     let currentRenderedInvoices = [];
     let allReceiptVouchers = [];
     let rawTransactionsList = [];
@@ -546,15 +545,23 @@
 
     window.globalExpectedTodayCash = 0;
 
-    // فحص صلاحية الأدمن عند فتح الصفحة وإظهار الأزرار المخفية تلقائياً لو كنت أنت الأدمن
-    function checkAndApplyAdminPermissions() {
-        // يمكنك تعديل الشرط أدناه ليطابق طريقة معرفة المستخدم لديك (مثلاً بالاسم أو اليوزر)
-        const isAdmin = (CURRENT_USER === ADMIN_NAME); 
+    // دالة للتحقق مما إذا كان المستخدم الحالي هو الآدمن الفعلي (من خلال التخزين أو اليوزر المسجل)
+    async function checkAdminPermissions() {
+        try {
+            // تحقق من الـ localStorage أو sessionStorage أو بيانات تسجيل الدخول الخاصة بـ أحمد محمود الزيادي
+            const storedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || "";
+            
+            // إذا كان اسم المستخدم هو أحمد محمود الزيادي أو تم حفظ صلاحية آدمن
+            const isAdmin = storedUser.includes("أحمد محمود الزيادي") || localStorage.getItem("isAdmin") === "true";
 
-        if (isAdmin) {
-            document.querySelectorAll('.admin-only-element').forEach(el => {
-                el.style.display = 'flex'; // أو inline-flex حسب نوع الزر
-            });
+            // يمكنك أيضاً قراءة صلاحية المستخدم من مجموعة users في فايربيس بناءً على الجلسة الحالية إذا وجدت
+            if (isAdmin) {
+                document.querySelectorAll('.admin-only-element').forEach(el => {
+                    el.style.display = 'flex'; // إظهار الأزرار حصرياً للآدمن
+                });
+            }
+        } catch (e) {
+            console.error("خطأ في التحقق من الصلاحيات:", e);
         }
     }
 
@@ -1075,7 +1082,7 @@
                         remainingTotal: todayRemaining,
                         totalSales: todayTotalSales,
                         sourceFilter: currentSourceFilter,
-                        closedBy: CURRENT_USER,
+                        closedBy: "أحمد محمود الزيادي",
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
 
@@ -2006,8 +2013,8 @@
         }
     };
     
-    // تنفيذ الفحص عند التحميل
-    checkAndApplyAdminPermissions();
+    // تشغيل التحقق من الصلاحيات وجلب البيانات عند فتح الصفحة
+    checkAdminPermissions();
     loadData(true, false);
 </script>
 </body>
