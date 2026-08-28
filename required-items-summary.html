@@ -505,39 +505,128 @@ async function loadAndCalculateData() {
   container.innerHTML = `
     <div class="loading-state">
       <div class="spinner"></div>
-      <p style="color: #94a3b8; font-size: 0.78rem; font-weight: 700;">جاري جلب ودراسة الأعداد بدقة...</p>
+      <p style="color: #94a3b8; font-size: 0.78rem; font-weight: 700;">جاري احتساب أرصدة المخزن الحية والمطابقة...</p>
     </div>`;
 
   try {
     const targetDate = document.getElementById('selectedDate').value || defaultDateStr;
 
-    // 1. تحميل حمولة العربية المخزنة محلياً
+    // 1. حمولة العربية المخزنة محلياً
     const loadedInSession = JSON.parse(localStorage.getItem('loadedInSession_' + targetDate) || '{}');
     const cartItems = JSON.parse(localStorage.getItem('cartItems_' + targetDate) || '{}');
 
-    // 2. جلب المخزن الرئيسي من قاعدة البيانات
-    const inventorySnap = await getDocs(collection(db, "inventory"));
+    // 2. تطبيق نفس آلية جلب رصيد المخزن المباشر والحقيقي من ملف inventory.html
+    const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
+        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "supplier_transactions")),
+        getDocs(collection(db, "inventory")),
+        getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+    ]);
+
+    let factorsMap = {};
+    let namesMap = {};
     const inventoryMap = {};
     const nameToInventoryMap = {};
 
-    inventorySnap.forEach(docSnap => {
-      const data = docSnap.data();
-      const rawName = (data.name || '').trim();
-      const cleanedKey = cleanItemName(rawName);
+    inventorySnap.forEach(d => {
+        const data = d.data();
+        if (!data.isDeleted) {
+            const rawName = (data.name || '').trim();
+            const cleanedKey = cleanItemName(rawName);
+            const factor = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor || data.cartonSize) || 1);
+            
+            factorsMap[d.id] = factor;
+            if (rawName) namesMap[rawName] = d.id;
 
-      const itemObj = {
-        id: docSnap.id,
-        name: rawName,
-        capacity: Number(data.pcsPerCarton || data.unitFactor || data.cartonSize) || 1,
-        unit: data.unit || '',
-        stockPcs: Number(data.totalPcs || 0)
-      };
+            const itemObj = {
+                id: d.id,
+                name: rawName,
+                capacity: factor,
+                unit: data.unit || '',
+                openingTotalPcs: data.openingTotalPcs,
+                openingQty: data.openingQty,
+                calculatedRealPcs: 0
+            };
 
-      inventoryMap[docSnap.id] = itemObj;
-      nameToInventoryMap[cleanedKey] = itemObj;
+            inventoryMap[d.id] = itemObj;
+            nameToInventoryMap[cleanedKey] = itemObj;
+        }
     });
 
-    // 3. جلب طلبات العملاء المعلقة ومقاطعتها مع المخزن والأصناف
+    let salesMap = {};
+    let purchasesMap = {};
+    let openingMap = {};
+
+    transSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.productId) {
+            openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
+        }
+    });
+
+    // احتساب حركة المبيعات بالقطع
+    invoicesSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        data.items?.forEach(item => {
+            const id = item.stockId || namesMap[item.name?.trim()];
+            if (id) {
+                if (!salesMap[id]) salesMap[id] = 0;
+                const factor = factorsMap[id] || 1;
+                let rawQty = Number(item.qty) || 0;
+                let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
+                
+                if (item.isReturn) {
+                    salesMap[id] -= pcs;
+                } else {
+                    salesMap[id] += pcs;
+                }
+            }
+        });
+    });
+
+    // احتساب حركة المشتريات بالقطع
+    supplierSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        data.items?.forEach(item => {
+            const id = item.stockId || namesMap[item.name?.trim()];
+            if (id) {
+                if (!purchasesMap[id]) purchasesMap[id] = 0;
+                const factor = factorsMap[id] || 1;
+                const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
+
+                if (isReturn) {
+                    purchasesMap[id] -= pcs;
+                } else {
+                    purchasesMap[id] += pcs;
+                }
+            }
+        });
+    });
+
+    // بناء الأرصدة الحقيقية الصريحة للأصناف
+    Object.keys(inventoryMap).forEach(id => {
+        const item = inventoryMap[id];
+        const factor = item.capacity;
+        
+        let openingTotalPcs = 0;
+        if (item.openingTotalPcs !== undefined && item.openingTotalPcs !== null) {
+            openingTotalPcs = Number(item.openingTotalPcs);
+        } else if (item.openingQty !== undefined && item.openingQty !== null) {
+            openingTotalPcs = Math.round(Number(item.openingQty) * factor);
+        } else if (openingMap[id]) {
+            openingTotalPcs = openingMap[id];
+        }
+
+        const salesPcs = salesMap[id] || 0;
+        const purchasesPcs = purchasesMap[id] || 0;
+        
+        // المعادلة الرسمية لرصيد المخزن المباشر
+        item.calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+    });
+
+    // 3. جلب طلبات العملاء المعلقة ومقاطعتها مع المخزن
     const ordersSnap = await getDocs(query(collection(db, "orders"), where("status", "==", "pending")));
 
     const requiredMap = {};
@@ -557,7 +646,6 @@ async function loadAndCalculateData() {
           const cap = invMatch ? invMatch.capacity : (Number(item.unitFactor) || 1);
           const isItemCarton = isCarton(item);
 
-          // إجمالي الأعداد بالقطع الصريحة
           const totalPcs = isItemCarton ? (rawQty * cap) : rawQty;
 
           if (!requiredMap[cleanedKey]) {
@@ -578,7 +666,7 @@ async function loadAndCalculateData() {
       }
     });
 
-    // 4. بناء دمج متكامل لجميع المفاتيح المسجلة
+    // 4. تجميع المفاتيح وعرض النتائج
     const itemKeys = new Set();
     Object.keys(loadedInSession).forEach(id => itemKeys.add(id));
 
@@ -593,7 +681,7 @@ async function loadAndCalculateData() {
       const invItem = inventoryMap[id] || { 
         name: cartItems[id]?.name || 'صنف غير معروف', 
         capacity: cartItems[id]?.capacity || 1,
-        stockPcs: 0
+        calculatedRealPcs: 0
       };
       const sess = loadedInSession[id] || { cartons: 0, loose: 0 };
       
@@ -602,6 +690,7 @@ async function loadAndCalculateData() {
       const reqObj = requiredMap[cleanedKey];
       const requiredPcs = reqObj ? reqObj.requiredPcs : 0;
       const clientDetails = reqObj ? reqObj.clientDetails : [];
+      const stockPcs = invItem.calculatedRealPcs;
       
       return {
         id: id,
@@ -609,15 +698,14 @@ async function loadAndCalculateData() {
         capacity: invItem.capacity,
         unit: getUnitName(invItem.name),
         loadedPcs: loadedPcs,
-        stockPcs: invItem.stockPcs,
+        stockPcs: stockPcs,
         requiredPcs: requiredPcs,
         carDiffPcs: loadedPcs - requiredPcs,
-        stockDiffPcs: invItem.stockPcs - requiredPcs,
+        stockDiffPcs: stockPcs - requiredPcs,
         clientDetails: clientDetails
       };
     });
 
-    // ترتيب الأصناف بحيث يظهر العجز والاحتياج في البداية
     groupedItems.sort((a, b) => a.carDiffPcs - b.carDiffPcs);
 
     document.getElementById('totalTypesBadge').innerText = groupedItems.length;
@@ -625,7 +713,7 @@ async function loadAndCalculateData() {
 
   } catch (e) {
     console.error("خطأ أثناء المطابقة والجلب:", e);
-    container.innerHTML = `<div class="empty-state"><h6>حدث خطأ أثناء تحميل الحسابات</h6></div>`;
+    container.innerHTML = `<div class="empty-state"><h6>حدث خطأ أثناء تحميل حسابات المخزن</h6></div>`;
   }
 }
 
