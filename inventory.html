@@ -378,7 +378,6 @@
         return 4;                                       
     }
 
-    // الدالة الرئيسية لحساب المعادلة التراكمية الحية (أول المدة + المشتريات - المبيعات)
     async function loadLiveInventory() {
         try {
             const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
@@ -401,7 +400,6 @@
             let purchasesMap = {};
             let openingMap = {};
 
-            // 1. تجميع أول المدة
             transSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 if (data.productId) {
@@ -409,7 +407,6 @@
                 }
             });
 
-            // 2. تجميع المبيعات
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
@@ -425,7 +422,6 @@
                 });
             });
 
-            // 3. تجميع المشتريات
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 data.items?.forEach(item => {
@@ -442,7 +438,6 @@
                 });
             });
 
-            // بدء المراقبة الحية وبناء قائمة الأصناف بالأرصدة الدقيقة
             onSnapshot(collection(db, "inventory"), snap => {
                 clearTimeout(loadTimeout);
                 allItems = [];
@@ -464,7 +459,6 @@
                         const salesPcs = salesMap[d.id] || 0;
                         const purchasesPcs = purchasesMap[d.id] || 0;
                         
-                        // المعادلة التراكمية (الرصيد الفعلي الحقيقي)
                         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
                         allItems.push({ id: d.id, ...data, totalPcs: calculatedRealPcs });
@@ -507,7 +501,6 @@
         }
     }
 
-    // تشغيل دالة التجميع التراكمي
     loadLiveInventory();
 
     function normalizeAr(s) {
@@ -780,6 +773,7 @@
                 else totalSalesPcs += qty;
             });
 
+            // جلب رصيد أول المدة بدقة من كارت الصنف أو سجلات الحركات الافتتاحية
             let initialStockPcs = 0;
             if (currentItemObj.openingTotalPcs !== undefined && currentItemObj.openingTotalPcs !== null) {
                 initialStockPcs = Number(currentItemObj.openingTotalPcs);
@@ -792,7 +786,13 @@
             } else if (currentItemObj.openingBalance !== undefined && currentItemObj.openingBalance !== null) {
                 initialStockPcs = Number(currentItemObj.openingBalance);
             } else {
-                initialStockPcs = 0;
+                try {
+                    const qTrans = query(collection(db, "inventory_transactions"), where("productId", "==", itemId), where("type", "==", "opening_balance"));
+                    const snapTrans = await getDocs(qTrans);
+                    if (!snapTrans.empty) {
+                        initialStockPcs = Number(snapTrans.docs[0].data().quantityPcs) || 0;
+                    }
+                } catch(e) {}
             }
 
             uniqueTransactions.sort((a, b) => {
@@ -941,7 +941,6 @@
         }).from(template).save().then(() => { template.style.display = 'none'; });
     }
 
-    // Event Listeners Safe Delegation
     dom.searchInput.addEventListener('input', renderList);
 
     dom.listBody.addEventListener('click', (e) => {
