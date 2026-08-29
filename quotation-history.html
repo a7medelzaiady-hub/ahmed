@@ -58,12 +58,6 @@ nav button, nav a.nav-btn {
   padding: 15px 10px; cursor: pointer; border-bottom: 3px solid transparent; transition: .2s; font-weight: 600; display: inline-block; text-decoration: none;
 }
 nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-bottom-color: #6ee7b7; }
-nav .btn-back {
-  background: rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 6px 12px; color: #fff; font-size: 11px;
-  border-bottom: none; margin-right: auto; display: flex; align-items: center; gap: 4px;
-}
-nav .btn-back:hover { background: rgba(255, 255, 255, 0.25); }
-nav .btn-logout { background: var(--red); color: #fff; border-radius: 8px; padding: 6px 12px; margin-right: 5px; font-size: 11px; }
 
 /* PAGES */
 .page{display:none;padding:20px 14px;max-width:1100px;margin:auto;}
@@ -234,7 +228,6 @@ table select:focus { border-color: var(--brand); }
 <div id="app-content">
   <nav>
     <span class="logo">🛢️ الزيادي</span>
-    <!-- زر الانتقال إلى index1.html في شريط التنقل العلوي -->
     <a href="index1.html" class="nav-btn" style="display:flex; align-items:center; gap:4px;">🏠 الصفحة الرئيسية</a>
     <button class="active" onclick="showPage('pg-items',this)">📦 أصناف المخزن</button>
     <button onclick="showPage('pg-load',this)">⬆️ التحميل</button>
@@ -269,11 +262,9 @@ table select:focus { border-color: var(--brand); }
         <p>سجّل كمية التحميل الحالية لكل صنف لربطها بالمبيعات</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap: wrap;">
-        <!-- زر الانتقال المباشر إلى الصفحة الرئيسية index1.html -->
         <a href="index1.html" class="btn btn-primary btn-sm" style="background:var(--brand-d); color:#fff; display:flex; align-items:center; gap:5px; height:38px;">
           🏠 الصفحة الرئيسية
         </a>
-        <!-- زر الانتقال السريع لصفحة الجرد والحركة -->
         <button class="btn btn-primary btn-sm" onclick="showPage('pg-summary', document.querySelectorAll('nav button')[2])" style="background:var(--blue); color:#fff; display:flex; align-items:center; gap:5px; height:38px;">
           📊 الجرد والحركة
         </button>
@@ -384,7 +375,7 @@ table select:focus { border-color: var(--brand); }
   <div class="page" id="pg-archive">
     <div class="ph">
       <h2>🗄️ أرشيف الأيام السابقة</h2>
-      <p>استعراض حمولة وجرد الأيام التي تم إغلاقها نهائياً</p>
+      <p>استعراض حمولة وجرد الأيام التي تم إغلاقها نهائياً أو حفظها</p>
     </div>
     
     <div class="tools-row">
@@ -1003,13 +994,22 @@ window.archiveLoad = async function() {
   
   try {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
-    window.toast('⏳ جاري ترحيل الحمولة...');
+    window.toast('⏳ جاري ترحيل الحمولة وتحديث الأرشيف...');
+    
     await setDoc(doc(db, 'archived_loads', d), {
-      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'Unknown',
-      loadedInSession: loadedInSession, cartItems: cartItems
+      date: d,
+      timestamp: new Date().toISOString(),
+      user: loggedUser.username || 'أحمد محمود الزيادي',
+      isClosed: false,
+      loadedInSession: loadedInSession,
+      cartItems: cartItems
     });
-    window.toast('✅ تم ترحيل الحمولة بنجاح!');
-  } catch (e) { console.error(e); window.toast('❌ حدث خطأ أثناء الترحيل!'); }
+    
+    window.toast('✅ تم حفظ الحمولة في الأرشيف بنجاح!');
+  } catch (e) { 
+    console.error(e); 
+    window.toast('❌ حدث خطأ أثناء الترحيل!'); 
+  }
 };
 
 window.archiveInventory = async function() {
@@ -1024,7 +1024,7 @@ window.archiveInventory = async function() {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري إغلاق اليوم...');
     await setDoc(doc(db, 'archived_inventory', d), {
-      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'Unknown', inventoryData: exportData
+      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
     });
     
     localStorage.removeItem('cartItems_' + d);
@@ -1044,25 +1044,81 @@ window.fetchArchive = async function() {
   container.innerHTML = '<div class="spin"></div>';
   try {
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
-    const invDoc = await getDoc(doc(db, 'archived_inventory', d));
-    let html = `<h3 style="color:var(--brand); margin-bottom:15px;">تقرير يوم: ${d}</h3>`;
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    let html = `<h3 style="color:var(--brand); margin-bottom:15px;">📊 تقرير حركة يوم: ${d}</h3>`;
     
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       html += `
-        <h4 style="margin:15px 0 10px; color:var(--text); font-weight:800;">📊 الجرد النهائي المُرَحّل</h4>
+        <div style="padding:10px 14px; background:var(--green-lt); color:var(--green); border-radius:10px; font-weight:800; margin-bottom:15px; border:1px solid #b7dfc7;">
+          🔒 تم إغلاق وترحيل هذا اليوم نهائياً.
+        </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th style="text-align:right;">اسم الصنف</th><th>المحمل</th><th>المباع</th><th>الراجع</th><th>الحالة</th></tr></thead>
+            <thead>
+              <tr>
+                <th style="text-align:right;">اسم الصنف</th>
+                <th>المحمل</th>
+                <th>المباع</th>
+                <th>الراجع</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
             <tbody>
-              ${data.map(r => `<tr><td style="text-align:right; font-weight:bold; color:var(--brand-d);">${r.name}</td><td>${r.loaded}</td><td style="color:var(--red); font-weight:bold;">${r.sold}</td><td style="font-weight:bold;">${r.returnedManual}</td><td style="color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--text)'}; font-weight:bold;">${r.status}</td></tr>`).join('')}
+              ${data.map(r => `
+                <tr>
+                  <td style="text-align:right; font-weight:bold; color:var(--brand-d);">${r.name}</td>
+                  <td>${r.loaded}</td>
+                  <td style="color:var(--red); font-weight:bold;">${r.sold}</td>
+                  <td style="font-weight:bold;">${r.returnedManual}</td>
+                  <td style="color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--text)'}; font-weight:bold;">${r.status}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </div>`;
-    } else if (loadDoc.exists()) { html += `<div style="padding:15px; background:var(--amber-lt); color:var(--amber); border-radius:10px; font-weight:700;">⚠️ تم ترحيل الحمولة لهذا اليوم، ولكن لم يتم ترحيل وإغلاق الجرد النهائي بعد.</div>`; } 
-    else { html += `<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة لهذا التاريخ.</div>`; }
+    } 
+    else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
+      const itemsList = Object.values(loadData);
+
+      html += `
+        <div style="padding:12px 14px; background:var(--amber-lt); color:#8a5b00; border-radius:10px; font-weight:800; margin-bottom:15px; border:1px solid #ffe599;">
+          ⚠️ ملحوظة: لم يتم إغلاق هذا اليوم نهائياً، وهذه هي البيانات المحفوظة حتى آخر تحميل/جرد.
+        </div>
+        <h4 style="margin:12px 0 8px; color:var(--brand-d); font-size:14px;">📦 أصناف الحمولة والجرد المسجلة:</h4>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:right;">اسم الصنف</th>
+                <th>الكراتين المحملة</th>
+                <th>القطع المنفردة</th>
+                <th>آخر تعديل</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsList.map(item => `
+                <tr>
+                  <td style="text-align:right; font-weight:bold; color:var(--text);">${item.name || '—'}</td>
+                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0}</td>
+                  <td>${item.loadedLoose || 0}</td>
+                  <td style="font-size:11px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } 
+    else { 
+      html += `<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة لهذا التاريخ.</div>`; 
+    }
+
     container.innerHTML = html;
-  } catch (e) { console.error(e); container.innerHTML = `<div class="empty"><span class="em">❌</span>خطأ في جلب البيانات</div>`; }
+  } catch (e) { 
+    console.error(e); 
+    container.innerHTML = `<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب البيانات</div>`; 
+  }
 };
 
 window.exportPDF = async function(mode = 'all') {
