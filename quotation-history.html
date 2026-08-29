@@ -44,9 +44,7 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;background:var(--surface);color:var(--text);min-height:100vh;padding-bottom:30px;scroll-behavior: smooth;}
 
-/* شاشة الحماية */
-#auth-screen { position:fixed; top:0; left:0; right:0; bottom:0; background:var(--surface); z-index:99999; display:flex; align-items:center; justify-content:center; }
-#app-content { display: none; } /* مخفي افتراضياً لحين تسجيل الدخول */
+#app-content { display: none; } /* مخفي افتراضياً لحين التحقق من الجلسة */
 
 /* NAV */
 nav {
@@ -232,22 +230,7 @@ table select:focus { border-color: var(--brand); }
 </head>
 <body>
 
-<!-- شاشة الحماية وتسجيل الدخول -->
-<div id="auth-screen">
-  <div class="card" style="width:90%; max-width:380px; text-align:center; padding:30px 20px;">
-    <h2 style="color:var(--brand); margin-bottom:8px; font-weight:900;">🛢️ الزيادي لزيوت السيارات</h2>
-    <p style="color:var(--gray); font-size:13px; margin-bottom:24px;">يرجى تسجيل الدخول للوصول إلى النظام</p>
-    
-    <input type="text" id="auth-username" placeholder="اسم المستخدم" style="width:100%; padding:14px; margin-bottom:12px; border-radius:12px; border:2px solid var(--border); font-family:inherit; outline:none; text-align:center;" dir="ltr" autocomplete="off">
-    
-    <input type="password" id="auth-pass" placeholder="كلمة المرور" style="width:100%; padding:14px; margin-bottom:24px; border-radius:12px; border:2px solid var(--border); font-family:inherit; outline:none; text-align:center;" dir="ltr" onkeydown="if(event.key==='Enter') window.login()">
-    
-    <button class="btn btn-primary" style="width:100%; font-size:16px; padding:12px;" onclick="window.login()">تسجيل الدخول 🔒</button>
-    <p id="auth-error" style="color:var(--red); font-size:12px; font-weight:bold; margin-top:12px; display:none;"></p>
-  </div>
-</div>
-
-<!-- المحتوى الرئيسي (مخفي حتى تسجيل الدخول) -->
+<!-- المحتوى الرئيسي (مخفي حتى يتم التحقق من الجلسة) -->
 <div id="app-content">
   <nav>
     <span class="logo">🛢️ الزيادي</span>
@@ -463,96 +446,103 @@ try {
 }
 
 // ----------------------------------------------------
-// 1. نظام الحماية والصلاحيات المخصص (Custom Auth)
+// 1. نظام الحماية بالجلسات (Session-based Auth)
 // ----------------------------------------------------
-function checkLoginState() {
-  const savedUser = localStorage.getItem('loggedUser');
-  if (savedUser) {
-    const user = JSON.parse(savedUser);
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-content').style.display = 'block';
-    
-    // نظام الصلاحيات: إذا لم يكن admin، أخفِ أزرار الأرشيف والترحيل
-    if (user.role !== 'admin') { 
-      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-    } else {
-      document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
-    }
+// صفحة تسجيل الدخول أصبحت ملفاً منفصلاً: login.html
+// هذا الملف لا يعرض أي نموذج دخول؛ فقط يتحقق من صلاحية الجلسة الحالية
+// ويحوّل المستخدم لصفحة الدخول لو:
+//   - مفيش جلسة محفوظة أصلاً (أول مرة / جاي من رابط خارجي على جهاز جديد)
+//   - الجلسة قديمة ومفيش نشاط منذ فترة طويلة (افتراضياً 24 ساعة)
+//   - الصفحة اتفتحت بإحالة (referrer) من دومين خارجي غريب عن الموقع نفسه
+const LOGIN_PAGE = 'index.html';
+const SESSION_MAX_IDLE_MS = 24 * 60 * 60 * 1000; // يوم كامل من عدم النشاط يُبطل الجلسة
 
-    if (!isInventoryLoadedOnce) window.fetchInventoryFresh(); 
-  } else {
-    document.getElementById('auth-screen').style.display = 'flex';
-    document.getElementById('app-content').style.display = 'none';
-  }
+function goToLogin() {
+  // نحفظ الصفحة الحالية عشان بعد الدخول نرجّع المستخدم لمكانه
+  try { sessionStorage.setItem('postLoginRedirect', location.pathname + location.search); } catch(e) {}
+  location.href = LOGIN_PAGE;
 }
 
-window.login = async function() {
-  const username = document.getElementById('auth-username').value.trim();
-  const pw = document.getElementById('auth-pass').value;
-  const errEl = document.getElementById('auth-error');
-
-  if (!username || !pw) {
-    errEl.textContent = "يرجى إدخال اسم المستخدم وكلمة المرور!";
-    errEl.style.display = 'block';
-    return;
-  }
-
-  errEl.style.display = 'none';
-  window.toast('⏳ جاري التحقق من البيانات...');
-
+function isExternalReferrer() {
+  if (!document.referrer) return false; // فتح مباشر (بوكماركة / PWA) مش هنعتبره خارجي
   try {
-    const userDocRef = doc(db, "users", username);
-    const userDoc = await getDoc(userDocRef);
+    const refHost = new URL(document.referrer).hostname;
+    return refHost && refHost !== location.hostname;
+  } catch(e) { return false; }
+}
 
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      
-      if (userData.pass === pw) {
-        // حفظ بيانات الدخول محلياً
-        localStorage.setItem('loggedUser', JSON.stringify({
-          username: username,
-          role: userData.role || 'user'
-        }));
-        
-        // تحديث حالة الاتصال ووقت الدخول في قاعدة البيانات
-        try {
-          await updateDoc(userDocRef, {
-            isOnline: true,
-            lastLogin: new Date().toISOString()
-          });
-        } catch(e) { console.log("ملاحظة: تعذر تحديث حالة الاتصال", e); }
-        
-        document.getElementById('auth-username').value = '';
-        document.getElementById('auth-pass').value = '';
-        
-        checkLoginState();
-        window.toast(`✅ أهلاً بك يا ${username}`);
-      } else {
-        errEl.textContent = "كلمة المرور غير صحيحة!";
-        errEl.style.display = 'block';
-      }
-    } else {
-      errEl.textContent = "اسم المستخدم غير موجود في النظام!";
-      errEl.style.display = 'block';
-    }
-  } catch (error) {
-    console.error(error);
-    errEl.textContent = "حدث خطأ أثناء الاتصال بقاعدة البيانات!";
-    errEl.style.display = 'block';
+function getSavedSession() {
+  const raw = localStorage.getItem('loggedUser');
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch(e) { return null; }
+}
+
+function touchSessionActivity(user) {
+  user.lastActive = new Date().toISOString();
+  localStorage.setItem('loggedUser', JSON.stringify(user));
+}
+
+function checkLoginState() {
+  const user = getSavedSession();
+
+  if (!user) { goToLogin(); return; }
+
+  const lastActiveTime = user.lastActive ? new Date(user.lastActive).getTime() : 0;
+  const idleFor = Date.now() - lastActiveTime;
+
+  if (idleFor > SESSION_MAX_IDLE_MS) { goToLogin(); return; }
+
+  if (isExternalReferrer()) { goToLogin(); return; }
+
+  // الجلسة سليمة: نفعّل الجلسة ونحدّث وقت آخر نشاط
+  touchSessionActivity(user);
+
+  document.getElementById('app-content').style.display = 'block';
+
+  // نظام الصلاحيات: إذا لم يكن admin، أخفِ أزرار الأرشيف والترحيل
+  if (user.role !== 'admin') {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+  } else {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
   }
-};
+
+  if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
+
+  startActivityHeartbeat();
+}
+
+// نحافظ على الجلسة حية طول ما المستخدم شغال بالتطبيق فعلياً
+let heartbeatStarted = false;
+function startActivityHeartbeat() {
+  if (heartbeatStarted) return;
+  heartbeatStarted = true;
+
+  const refresh = () => {
+    const user = getSavedSession();
+    if (user) touchSessionActivity(user);
+  };
+
+  // تحديث دوري كل 5 دقايق طول ما الصفحة مفتوحة ونشطة
+  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 5 * 60 * 1000);
+
+  // تحديث عند أي تفاعل حقيقي من المستخدم
+  ['click', 'keydown', 'touchstart'].forEach(evt => {
+    document.addEventListener(evt, refresh, { passive: true });
+  });
+
+  // تحديث عند الرجوع للتاب بعد غياب
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+}
 
 window.logout = async function() {
-  const savedUser = localStorage.getItem('loggedUser');
-  if (savedUser) {
-    const user = JSON.parse(savedUser);
+  const user = getSavedSession();
+  if (user) {
     try {
-      // محاولة تسجيل الخروج في قاعدة البيانات (تغيير isOnline إلى false)
       await updateDoc(doc(db, "users", user.username), { isOnline: false });
     } catch(e) {}
   }
   localStorage.removeItem('loggedUser');
-  location.reload(); 
+  location.href = LOGIN_PAGE;
 };
 
 // ----------------------------------------------------
@@ -1242,7 +1232,7 @@ window.toast = function(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 };
 
-// تشغيل الفحص المبدئي للصلاحيات
+// تشغيل الفحص المبدئي للجلسة
 checkLoginState();
 </script>
 <script>
