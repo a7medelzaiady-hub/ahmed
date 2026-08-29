@@ -44,7 +44,7 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;background:var(--surface);color:var(--text);min-height:100vh;padding-bottom:30px;scroll-behavior: smooth;}
 
-#app-content { display: none; } /* مخفي افتراضياً لحين التحقق من الجلسة */
+#app-content { display: none; }
 
 /* NAV */
 nav {
@@ -109,11 +109,26 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .btn{padding:10px 18px;border:none;border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:.2s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;}
 .btn-primary{background:var(--brand);color:#fff; box-shadow: 0 4px 6px rgba(11,94,61,0.25);}
 .btn-success{background:var(--green);color:#fff; box-shadow: 0 4px 6px rgba(45,106,79,0.25);}
+.btn-danger{background:var(--red);color:#fff; box-shadow: 0 4px 6px rgba(217,4,41,0.25);}
 .btn-sm{padding:8px 12px;font-size:12px;}
 .btn:active { transform: scale(0.95); }
 
 /* SUMMARY CARD */
 .summary-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-3d); border: 1px solid var(--border); padding: 12px 10px; margin-bottom: 18px; }
+
+/* ARCHIVE CARD DESIGN */
+.archive-card {
+  background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px;
+  border: 1px solid var(--border); box-shadow: var(--shadow-3d); transition: all 0.25s ease;
+  cursor: pointer; position: relative;
+}
+.archive-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-3d-active); }
+.archive-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+.archive-card-title { font-size: 16px; font-weight: 800; color: var(--brand-d); display: flex; align-items: center; gap: 6px; }
+.archive-status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
+.archive-status-badge.closed { background: var(--green-lt); color: var(--green); }
+.archive-status-badge.pending { background: var(--amber-lt); color: #8a5b00; }
+.archive-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
 
 /* كارد الجرد */
 .inv-item-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-3d); transition: opacity 0.3s ease, transform 0.3s ease; }
@@ -375,19 +390,19 @@ table select:focus { border-color: var(--brand); }
   <div class="page" id="pg-archive">
     <div class="ph">
       <h2>🗄️ أرشيف الأيام السابقة</h2>
-      <p>استعراض حمولة وجرد الأيام التي تم إغلاقها نهائياً أو حفظها</p>
+      <p>استعراض حمولة وجرد الأيام المسجلة، تصدير التقارير، أو المسح</p>
     </div>
     
     <div class="tools-row">
       <div class="date-filter-wrap">
-        <label>📅 اختر يوماً:</label>
+        <label>📅 اختر يوماً للفلترة:</label>
         <input type="date" id="archiveDate" onchange="window.fetchArchive()">
       </div>
-      <button class="btn btn-primary" onclick="window.fetchArchive()">🔍 بحث في الأرشيف</button>
+      <button class="btn btn-primary" onclick="window.fetchArchive()">🔍 بحث واستعرض</button>
     </div>
 
-    <div class="card" id="archiveContent">
-      <div class="empty"><span class="em">📅</span>يرجى تحديد تاريخ لعرض بياناته المُرَحلة</div>
+    <div id="archiveContent">
+      <div class="empty"><span class="em">📅</span>يرجى تحديد تاريخ أو البحث لاستعراض الكروت</div>
     </div>
   </div>
 
@@ -424,7 +439,7 @@ table select:focus { border-color: var(--brand); }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -1036,33 +1051,104 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
+// ----------------------------------------------------
+// نظام الأرشيف الجديد (الكروت، الفلترة، المسح، التصدير)
+// ----------------------------------------------------
 window.fetchArchive = async function() {
-  const d = document.getElementById('archiveDate').value;
+  const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
-  if(!d) return;
-
   container.innerHTML = '<div class="spin"></div>';
+
   try {
-    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+    let datesToFetch = [];
+    if (selectedDate) {
+      datesToFetch.push(selectedDate);
+    } else {
+      // جلب آخر التواريخ إذا لم يحدد يوم
+      const loadSnap = await getDocs(collection(db, 'archived_loads'));
+      const invSnap  = await getDocs(collection(db, 'archived_inventory'));
+      const set = new Set();
+      loadSnap.forEach(d => set.add(d.id));
+      invSnap.forEach(d => set.add(d.id));
+      datesToFetch = Array.from(set).sort().reverse();
+    }
+
+    if (!datesToFetch.length) {
+      container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
+      return;
+    }
+
+    let cardsHtml = '';
+    for (const d of datesToFetch) {
+      const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+      const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+
+      if (!loadDoc.exists() && !invDoc.exists()) continue;
+
+      const isClosed = invDoc.exists();
+      const user = (invDoc.exists() ? invDoc.data().user : loadDoc.data()?.user) || 'أحمد محمود الزيادي';
+
+      cardsHtml += `
+        <div class="archive-card" id="arch-card-${d}">
+          <div class="archive-card-header" onclick="window.toggleArchiveDetails('${d}')">
+            <div class="archive-card-title">📅 يوم: ${d}</div>
+            <span class="archive-status-badge ${isClosed ? 'closed' : 'pending'}">
+              ${isClosed ? '🔒 مغلق نهائياً' : '⚠️ غير مغلق'}
+            </span>
+          </div>
+
+          <div style="font-size:12px; color:var(--gray); margin-bottom:8px;">
+            👤 بواسطة: <b>${user}</b>
+          </div>
+
+          <div class="archive-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-primary btn-sm" onclick="window.toggleArchiveDetails('${d}')">
+              👁️ عرض التفاصيل
+            </button>
+            <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
+              📄 تحميل PDF
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="window.deleteArchiveDate('${d}')">
+              🗑️ مسح
+            </button>
+          </div>
+
+          <div id="arch-details-${d}" style="display:none; margin-top:14px; padding-top:12px; border-top:1.5px dashed var(--border);"></div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = cardsHtml || '<div class="empty"><span class="em">📭</span>لا توجد سجلات مطابقة</div>';
+  } catch (e) {
+    console.error(e);
+    container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
+  }
+};
+
+window.toggleArchiveDetails = async function(d) {
+  const detailsEl = document.getElementById(`arch-details-${d}`);
+  if (!detailsEl) return;
+
+  if (detailsEl.style.display === 'block') {
+    detailsEl.style.display = 'none';
+    return;
+  }
+
+  detailsEl.style.display = 'block';
+  detailsEl.innerHTML = '<div class="spin" style="width:22px;height:22px;"></div>';
+
+  try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
-    let html = `<h3 style="color:var(--brand); margin-bottom:15px;">📊 تقرير حركة يوم: ${d}</h3>`;
-    
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+
+    let html = '';
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
-      html += `
-        <div style="padding:10px 14px; background:var(--green-lt); color:var(--green); border-radius:10px; font-weight:800; margin-bottom:15px; border:1px solid #b7dfc7;">
-          🔒 تم إغلاق وترحيل هذا اليوم نهائياً.
-        </div>
+      html = `
         <div class="tbl-wrap">
           <table>
             <thead>
-              <tr>
-                <th style="text-align:right;">اسم الصنف</th>
-                <th>المحمل</th>
-                <th>المباع</th>
-                <th>الراجع</th>
-                <th>الحالة</th>
-              </tr>
+              <tr><th style="text-align:right;">اسم الصنف</th><th>المحمل</th><th>المباع</th><th>الراجع</th><th>الحالة</th></tr>
             </thead>
             <tbody>
               ${data.map(r => `
@@ -1077,30 +1163,20 @@ window.fetchArchive = async function() {
             </tbody>
           </table>
         </div>`;
-    } 
-    else if (loadDoc.exists()) {
+    } else if (loadDoc.exists()) {
       const loadData = loadDoc.data().cartItems || {};
       const itemsList = Object.values(loadData);
-
-      html += `
-        <div style="padding:12px 14px; background:var(--amber-lt); color:#8a5b00; border-radius:10px; font-weight:800; margin-bottom:15px; border:1px solid #ffe599;">
-          ⚠️ ملحوظة: لم يتم إغلاق هذا اليوم نهائياً، وهذه هي البيانات المحفوظة حتى آخر تحميل/جرد.
-        </div>
-        <h4 style="margin:12px 0 8px; color:var(--brand-d); font-size:14px;">📦 أصناف الحمولة والجرد المسجلة:</h4>
+      html = `
+        <div style="font-size:12px; color:#8a5b00; font-weight:bold; margin-bottom:8px;">⚠️ بيانات الحمولة المسجلة (لم يُغلق اليوم نهائياً):</div>
         <div class="tbl-wrap">
           <table>
             <thead>
-              <tr>
-                <th style="text-align:right;">اسم الصنف</th>
-                <th>الكراتين المحملة</th>
-                <th>القطع المنفردة</th>
-                <th>آخر تعديل</th>
-              </tr>
+              <tr><th style="text-align:right;">اسم الصنف</th><th>الكراتين</th><th>القطع</th><th>آخر تعديل</th></tr>
             </thead>
             <tbody>
               ${itemsList.map(item => `
                 <tr>
-                  <td style="text-align:right; font-weight:bold; color:var(--text);">${item.name || '—'}</td>
+                  <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
                   <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0}</td>
                   <td>${item.loadedLoose || 0}</td>
                   <td style="font-size:11px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
@@ -1109,15 +1185,98 @@ window.fetchArchive = async function() {
             </tbody>
           </table>
         </div>`;
-    } 
-    else { 
-      html += `<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة لهذا التاريخ.</div>`; 
+    }
+    detailsEl.innerHTML = html;
+  } catch (e) {
+    console.error(e);
+    detailsEl.innerHTML = '<div style="color:var(--red); font-size:12px;">❌ خطأ في تحميل التفاصيل</div>';
+  }
+};
+
+window.deleteArchiveDate = async function(d) {
+  if (!confirm(`⚠️ هل أنت متأكد نهائياً من مسح سجل يوم ${d} من الأرشيف؟`)) return;
+  try {
+    window.toast('⏳ جاري مسح السجل...');
+    await deleteDoc(doc(db, 'archived_loads', d));
+    await deleteDoc(doc(db, 'archived_inventory', d));
+    const card = document.getElementById(`arch-card-${d}`);
+    if (card) card.remove();
+    window.toast('✅ تم مسح سجل اليوم بنجاح');
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء مسح السجل');
+  }
+};
+
+window.exportArchivePDF = async function(d) {
+  window.toast('⏳ جاري إعداد ملف الـ PDF...');
+  try {
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+
+    let tbody = '';
+    let titleText = `تقرير حركة وجرد يوم: ${d}`;
+
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
+      data.forEach(r => {
+        tbody += `
+          <tr>
+            <td style="padding:10px; border:1px solid #ccc; text-align:right; font-weight:bold;">${r.name}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${r.loaded}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center; color:#d90429;">${r.sold}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${r.returnedManual}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center; font-weight:bold;">${r.status}</td>
+          </tr>`;
+      });
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
+      Object.values(loadData).forEach(r => {
+        tbody += `
+          <tr>
+            <td style="padding:10px; border:1px solid #ccc; text-align:right; font-weight:bold;">${r.name}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${r.loadedCartons || 0} كرتونة</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${r.loadedLoose || 0} قطعة</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center;" colspan="2">${r.lastEditedAt || '—'}</td>
+          </tr>`;
+      });
     }
 
+    const html = `
+      <div id="arch-pdf-area" style="padding:40px; direction:rtl; font-family:Tahoma, sans-serif; background:#fff; width:1123px;">
+        <h2 style="text-align:center; color:#0b5e3d; margin-bottom:5px;">الزيادي لزيوت السيارات</h2>
+        <h3 style="text-align:center; color:#475569; margin-bottom:20px;">${titleText}</h3>
+        <table style="width:100%; border-collapse:collapse; font-size:14px; border:1px solid #0b5e3d;">
+          <thead>
+            <tr style="background:#0b5e3d; color:#fff;">
+              <th style="padding:10px; text-align:right;">الصنف</th>
+              <th style="padding:10px; text-align:center;">المحمل</th>
+              <th style="padding:10px; text-align:center;">المباع / القطع</th>
+              <th style="padding:10px; text-align:center;">الراجع</th>
+              <th style="padding:10px; text-align:center;">الحالة / التاريخ</th>
+            </tr>
+          </thead>
+          <tbody>${tbody}</tbody>
+        </table>
+        <div style="display:flex; justify-content:space-between; margin-top:40px; font-weight:bold;">
+          <div>المحاسب المسؤول: أحمد محمود الزيادي</div>
+          <div>توقيع المسؤول: .........................</div>
+        </div>
+      </div>`;
+
+    const container = document.createElement('div');
     container.innerHTML = html;
-  } catch (e) { 
-    console.error(e); 
-    container.innerHTML = `<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب البيانات</div>`; 
+    container.style.position = 'absolute'; container.style.left = '-9999px';
+    document.body.appendChild(container);
+
+    const opt = { margin:0, filename: `تقرير_أرشيف_${d}.pdf`, image:{ type:'jpeg', quality:0.98 }, html2canvas:{ scale:2, useCORS:true }, jsPDF:{ unit:'in', format:'a4', orientation:'landscape' } };
+    html2pdf().set(opt).from(container.querySelector('#arch-pdf-area')).save().then(() => {
+      document.body.removeChild(container);
+      window.toast('✅ تم تصدير ملف PDF بنجاح');
+    });
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء التصدير');
   }
 };
 
