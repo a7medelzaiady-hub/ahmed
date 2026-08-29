@@ -123,7 +123,7 @@ nav .btn-logout { background: var(--red); color: #fff; border-radius: 8px; paddi
 /* SUMMARY CARD */
 .summary-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-3d); border: 1px solid var(--border); padding: 12px 10px; margin-bottom: 18px; }
 
-/* كارد الجرد المتميز والمجسم */
+/* كارد الجرد */
 .inv-item-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-3d); transition: opacity 0.3s ease, transform 0.3s ease; }
 .inv-item-card:active { transform: translateY(2px); }
 .inv-item-card.completed-card { background: #f8faf9; border-color: #c3e6cb; }
@@ -238,7 +238,7 @@ table select:focus { border-color: var(--brand); }
     <h2 style="color:var(--brand); margin-bottom:8px; font-weight:900;">🛢️ الزيادي لزيوت السيارات</h2>
     <p style="color:var(--gray); font-size:13px; margin-bottom:24px;">يرجى تسجيل الدخول للوصول إلى النظام</p>
     
-    <input type="email" id="auth-email" placeholder="البريد الإلكتروني" style="width:100%; padding:14px; margin-bottom:12px; border-radius:12px; border:2px solid var(--border); font-family:inherit; outline:none; text-align:center;" dir="ltr">
+    <input type="text" id="auth-username" placeholder="اسم المستخدم" style="width:100%; padding:14px; margin-bottom:12px; border-radius:12px; border:2px solid var(--border); font-family:inherit; outline:none; text-align:center;" dir="ltr" autocomplete="off">
     
     <input type="password" id="auth-pass" placeholder="كلمة المرور" style="width:100%; padding:14px; margin-bottom:24px; border-radius:12px; border:2px solid var(--border); font-family:inherit; outline:none; text-align:center;" dir="ltr" onkeydown="if(event.key==='Enter') window.login()">
     
@@ -254,7 +254,7 @@ table select:focus { border-color: var(--brand); }
     <button class="active" onclick="showPage('pg-items',this)">📦 أصناف المخزن</button>
     <button onclick="showPage('pg-load',this)">⬆️ التحميل</button>
     <button onclick="showPage('pg-summary',this)">📊 الجرد والحركة</button>
-    <button onclick="showPage('pg-archive',this)">🗄️ الأرشيف</button>
+    <button class="admin-only" onclick="showPage('pg-archive',this)">🗄️ الأرشيف</button>
     <button class="btn-logout" style="margin-right: auto;" onclick="window.logout()">خروج 🔒</button>
   </nav>
 
@@ -285,7 +285,7 @@ table select:focus { border-color: var(--brand); }
         <p>سجّل كمية التحميل الحالية لكل صنف لربطها بالمبيعات</p>
       </div>
       <div style="display:flex; gap:8px;">
-        <button class="btn btn-primary btn-sm" onclick="window.archiveLoad()" style="height: 38px;">💾 اعتماد الحمولة</button>
+        <button class="btn btn-primary btn-sm admin-only" onclick="window.archiveLoad()" style="height: 38px;">💾 اعتماد الحمولة</button>
         <button class="btn btn-success btn-sm" onclick="window.exportLoadPDF()" style="background:var(--red); color:#fff; display:flex; align-items:center; gap:5px; height: 38px;">
           📄 إذن PDF
         </button>
@@ -348,7 +348,7 @@ table select:focus { border-color: var(--brand); }
         🔄 تحديث المبيعات
       </button>
       <div style="display:flex; gap:8px; margin-right:auto; flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" onclick="window.archiveInventory()" style="background:#0a4a31;">🔒 إغلاق وترحيل اليوم</button>
+        <button class="btn btn-primary btn-sm admin-only" onclick="window.archiveInventory()" style="background:#0a4a31;">🔒 إغلاق وترحيل اليوم</button>
         <button class="btn btn-success btn-sm" onclick="window.exportPDF('completed')" style="display:flex; align-items:center; gap:5px; background:var(--brand); color:#fff;">
           📄 PDF الأصناف المكتملة
         </button>
@@ -441,8 +441,7 @@ table select:focus { border-color: var(--brand); }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -462,39 +461,98 @@ try {
 } catch (e) {
     db = getFirestore(app);
 }
-const auth = getAuth(app);
 
 // ----------------------------------------------------
-// 1. نظام المصادقة والحماية (Authentication)
+// 1. نظام الحماية والصلاحيات المخصص (Custom Auth)
 // ----------------------------------------------------
-onAuthStateChanged(auth, user => {
-  if (user) {
-    // إذا كان مسجل دخول، اخفِ شاشة الحماية واعرض التطبيق
+function checkLoginState() {
+  const savedUser = localStorage.getItem('loggedUser');
+  if (savedUser) {
+    const user = JSON.parse(savedUser);
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-content').style.display = 'block';
+    
+    // نظام الصلاحيات: إذا لم يكن admin، أخفِ أزرار الأرشيف والترحيل
+    if (user.role !== 'admin') { 
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    } else {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    }
+
     if (!isInventoryLoadedOnce) window.fetchInventoryFresh(); 
   } else {
-    // إذا لم يكن مسجل دخول، أظهر شاشة الحماية واخفِ التطبيق
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app-content').style.display = 'none';
   }
-});
+}
 
 window.login = async function() {
-  const em = document.getElementById('auth-email').value;
+  const username = document.getElementById('auth-username').value.trim();
   const pw = document.getElementById('auth-pass').value;
   const errEl = document.getElementById('auth-error');
+
+  if (!username || !pw) {
+    errEl.textContent = "يرجى إدخال اسم المستخدم وكلمة المرور!";
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  window.toast('⏳ جاري التحقق من البيانات...');
+
   try {
-    await signInWithEmailAndPassword(auth, em, pw);
-    errEl.style.display = 'none';
+    const userDocRef = doc(db, "users", username);
+    const userDoc = await getDoc(userDocRef);
+
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      
+      if (userData.pass === pw) {
+        // حفظ بيانات الدخول محلياً
+        localStorage.setItem('loggedUser', JSON.stringify({
+          username: username,
+          role: userData.role || 'user'
+        }));
+        
+        // تحديث حالة الاتصال ووقت الدخول في قاعدة البيانات
+        try {
+          await updateDoc(userDocRef, {
+            isOnline: true,
+            lastLogin: new Date().toISOString()
+          });
+        } catch(e) { console.log("ملاحظة: تعذر تحديث حالة الاتصال", e); }
+        
+        document.getElementById('auth-username').value = '';
+        document.getElementById('auth-pass').value = '';
+        
+        checkLoginState();
+        window.toast(`✅ أهلاً بك يا ${username}`);
+      } else {
+        errEl.textContent = "كلمة المرور غير صحيحة!";
+        errEl.style.display = 'block';
+      }
+    } else {
+      errEl.textContent = "اسم المستخدم غير موجود في النظام!";
+      errEl.style.display = 'block';
+    }
   } catch (error) {
-    errEl.textContent = "بيانات الدخول غير صحيحة!";
+    console.error(error);
+    errEl.textContent = "حدث خطأ أثناء الاتصال بقاعدة البيانات!";
     errEl.style.display = 'block';
   }
 };
 
-window.logout = function() {
-  signOut(auth);
+window.logout = async function() {
+  const savedUser = localStorage.getItem('loggedUser');
+  if (savedUser) {
+    const user = JSON.parse(savedUser);
+    try {
+      // محاولة تسجيل الخروج في قاعدة البيانات (تغيير isOnline إلى false)
+      await updateDoc(doc(db, "users", user.username), { isOnline: false });
+    } catch(e) {}
+  }
+  localStorage.removeItem('loggedUser');
+  location.reload(); 
 };
 
 // ----------------------------------------------------
@@ -613,15 +671,10 @@ window.showPage = function(id, btn) {
 
   if (id === 'pg-load')    initLoadFlow();
   if (id === 'pg-summary') window.refreshSummaryData(false);
-  if (id === 'pg-archive') window.fetchArchive(); // جلب الأرشيف التلقائي عند فتح الصفحة
+  if (id === 'pg-archive') window.fetchArchive();
 };
 
-// ... (نفس باقي دوال البحث، fetchInventoryFresh، renderItemsPage، loadFlow من الكود القديم دون تغيير) ...
-window.handleSearchInput = function() {
-  suggestFocusIdx = -1;
-  openSuggestList();
-  filterLoadFlow();
-};
+window.handleSearchInput = function() { suggestFocusIdx = -1; openSuggestList(); filterLoadFlow(); };
 
 window.openSuggestList = function() {
   const query = cleanItemName(document.getElementById('searchLoad').value);
@@ -712,10 +765,7 @@ window.fetchInventoryFresh = async function() {
     saveSession();
     isInventoryLoadedOnce = true;
     window.toast('✅ تم تحديث الأصناف بنجاح');
-  } catch(e) {
-    console.error(e);
-    window.toast('❌ تعذر جلب الأصناف من السيرفر');
-  }
+  } catch(e) { console.error(e); window.toast('❌ تعذر جلب الأصناف من السيرفر'); }
 };
 
 function renderItemsPage() {
@@ -1051,16 +1101,17 @@ window.saveQuickLoadEdit = function() {
 };
 
 // ----------------------------------------------------
-// 4. دوال الترحيل (Archiving) - الإضافة الجديدة
+// 4. دوال الترحيل (Archiving) - مخصصة للمدير
 // ----------------------------------------------------
 window.archiveLoad = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   if(!confirm(`هل أنت متأكد من ترحيل واعتماد حمولة يوم ${d}؟\n(لن يتم مسحها محلياً إلا بعد ترحيل الجرد النهائي)`)) return;
   
   try {
+    const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري ترحيل الحمولة...');
     await setDoc(doc(db, 'archived_loads', d), {
-      date: d, timestamp: new Date().toISOString(), user: auth.currentUser?.email || 'Unknown',
+      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'Unknown',
       loadedInSession: loadedInSession, cartItems: cartItems
     });
     window.toast('✅ تم ترحيل الحمولة بنجاح!');
@@ -1076,9 +1127,10 @@ window.archiveInventory = async function() {
   }));
 
   try {
+    const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري إغلاق اليوم...');
     await setDoc(doc(db, 'archived_inventory', d), {
-      date: d, timestamp: new Date().toISOString(), user: auth.currentUser?.email || 'Unknown', inventoryData: exportData
+      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'Unknown', inventoryData: exportData
     });
     
     // تنظيف الجهاز لبدء يوم جديد
@@ -1189,6 +1241,9 @@ window.toast = function(msg) {
   const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 };
+
+// تشغيل الفحص المبدئي للصلاحيات
+checkLoginState();
 </script>
 <script>
 if ("serviceWorker" in navigator) {
