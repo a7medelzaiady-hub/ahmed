@@ -238,7 +238,6 @@ table select:focus { border-color: var(--brand); }
     <button onclick="showPage('pg-load',this)">⬆️ التحميل</button>
     <button onclick="showPage('pg-summary',this)">📊 الجرد والحركة</button>
     <button class="admin-only" onclick="showPage('pg-archive',this)">🗄️ الأرشيف</button>
-    <button class="btn-logout" style="margin-right: auto;" onclick="window.logout()">خروج 🔒</button>
   </nav>
 
   <div id="print-header">
@@ -446,104 +445,12 @@ try {
 }
 
 // ----------------------------------------------------
-// 1. نظام الحماية بالجلسات (Session-based Auth)
+// 1. تشغيل التطبيق مباشرة (تم إلغاء نظام الحماية/تسجيل الدخول)
 // ----------------------------------------------------
-// صفحة تسجيل الدخول أصبحت ملفاً منفصلاً: login.html
-// هذا الملف لا يعرض أي نموذج دخول؛ فقط يتحقق من صلاحية الجلسة الحالية
-// ويحوّل المستخدم لصفحة الدخول لو:
-//   - مفيش جلسة محفوظة أصلاً (أول مرة / جاي من رابط خارجي على جهاز جديد)
-//   - الجلسة قديمة ومفيش نشاط منذ فترة طويلة (افتراضياً 24 ساعة)
-//   - الصفحة اتفتحت بإحالة (referrer) من دومين خارجي غريب عن الموقع نفسه
-const LOGIN_PAGE = 'index.html';
-const SESSION_MAX_IDLE_MS = 24 * 60 * 60 * 1000; // يوم كامل من عدم النشاط يُبطل الجلسة
-
-function goToLogin() {
-  // نحفظ الصفحة الحالية عشان بعد الدخول نرجّع المستخدم لمكانه
-  try { sessionStorage.setItem('postLoginRedirect', location.pathname + location.search); } catch(e) {}
-  location.href = LOGIN_PAGE;
-}
-
-function isExternalReferrer() {
-  if (!document.referrer) return false; // فتح مباشر (بوكماركة / PWA) مش هنعتبره خارجي
-  try {
-    const refHost = new URL(document.referrer).hostname;
-    return refHost && refHost !== location.hostname;
-  } catch(e) { return false; }
-}
-
-function getSavedSession() {
-  const raw = localStorage.getItem('loggedUser');
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch(e) { return null; }
-}
-
-function touchSessionActivity(user) {
-  user.lastActive = new Date().toISOString();
-  localStorage.setItem('loggedUser', JSON.stringify(user));
-}
-
-function checkLoginState() {
-  const user = getSavedSession();
-
-  if (!user) { goToLogin(); return; }
-
-  const lastActiveTime = user.lastActive ? new Date(user.lastActive).getTime() : 0;
-  const idleFor = Date.now() - lastActiveTime;
-
-  if (idleFor > SESSION_MAX_IDLE_MS) { goToLogin(); return; }
-
-  if (isExternalReferrer()) { goToLogin(); return; }
-
-  // الجلسة سليمة: نفعّل الجلسة ونحدّث وقت آخر نشاط
-  touchSessionActivity(user);
-
+function startApp() {
   document.getElementById('app-content').style.display = 'block';
-
-  // نظام الصلاحيات: إذا لم يكن admin، أخفِ أزرار الأرشيف والترحيل
-  if (user.role !== 'admin') {
-    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-  } else {
-    document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
-  }
-
   if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
-
-  startActivityHeartbeat();
 }
-
-// نحافظ على الجلسة حية طول ما المستخدم شغال بالتطبيق فعلياً
-let heartbeatStarted = false;
-function startActivityHeartbeat() {
-  if (heartbeatStarted) return;
-  heartbeatStarted = true;
-
-  const refresh = () => {
-    const user = getSavedSession();
-    if (user) touchSessionActivity(user);
-  };
-
-  // تحديث دوري كل 5 دقايق طول ما الصفحة مفتوحة ونشطة
-  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 5 * 60 * 1000);
-
-  // تحديث عند أي تفاعل حقيقي من المستخدم
-  ['click', 'keydown', 'touchstart'].forEach(evt => {
-    document.addEventListener(evt, refresh, { passive: true });
-  });
-
-  // تحديث عند الرجوع للتاب بعد غياب
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
-}
-
-window.logout = async function() {
-  const user = getSavedSession();
-  if (user) {
-    try {
-      await updateDoc(doc(db, "users", user.username), { isOnline: false });
-    } catch(e) {}
-  }
-  localStorage.removeItem('loggedUser');
-  location.href = LOGIN_PAGE;
-};
 
 // ----------------------------------------------------
 // 2. المتغيرات والدوال الأساسية
@@ -1232,8 +1139,8 @@ window.toast = function(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 };
 
-// تشغيل الفحص المبدئي للجلسة
-checkLoginState();
+// تشغيل التطبيق مباشرة
+startApp();
 </script>
 <script>
 if ("serviceWorker" in navigator) {
