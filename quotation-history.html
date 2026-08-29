@@ -230,7 +230,7 @@ table select:focus { border-color: var(--brand); }
 </head>
 <body>
 
-<!-- المحتوى الرئيسي (مخفي حتى يتم التحقق من الجلسة) -->
+<!-- المحتوى الرئيسي -->
 <div id="app-content">
   <nav>
     <span class="logo">🛢️ الزيادي</span>
@@ -267,7 +267,11 @@ table select:focus { border-color: var(--brand); }
         <h2>تسجيل تحميل حمولة السيارة</h2>
         <p>سجّل كمية التحميل الحالية لكل صنف لربطها بالمبيعات</p>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap: wrap;">
+        <!-- زر الانتقال السريع لصفحة الجرد والحركة -->
+        <button class="btn btn-primary btn-sm" onclick="showPage('pg-summary', document.querySelectorAll('nav button')[3])" style="background:var(--blue); color:#fff; display:flex; align-items:center; gap:5px; height:38px;">
+          📊 الذهاب إلى صفحة الجرد والحركة
+        </button>
         <button class="btn btn-primary btn-sm admin-only" onclick="window.archiveLoad()" style="height: 38px;">💾 اعتماد الحمولة</button>
         <button class="btn btn-success btn-sm" onclick="window.exportLoadPDF()" style="background:var(--red); color:#fff; display:flex; align-items:center; gap:5px; height: 38px;">
           📄 إذن PDF
@@ -371,7 +375,7 @@ table select:focus { border-color: var(--brand); }
     </div>
   </div>
 
-  <!-- صفحة الأرشيف الجديدة -->
+  <!-- صفحة الأرشيف -->
   <div class="page" id="pg-archive">
     <div class="ph">
       <h2>🗄️ أرشيف الأيام السابقة</h2>
@@ -415,7 +419,7 @@ table select:focus { border-color: var(--brand); }
     </div>
   </div>
 
-</div> <!-- نهاية app-content -->
+</div>
 
 <div id="toast"></div>
 
@@ -445,17 +449,11 @@ try {
     db = getFirestore(app);
 }
 
-// ----------------------------------------------------
-// 1. تشغيل التطبيق مباشرة (تم إلغاء نظام الحماية/تسجيل الدخول)
-// ----------------------------------------------------
 function startApp() {
   document.getElementById('app-content').style.display = 'block';
   if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
 }
 
-// ----------------------------------------------------
-// 2. المتغيرات والدوال الأساسية
-// ----------------------------------------------------
 let firebaseItems = [];
 let cartItems     = {};
 let loadedInSession = {};
@@ -554,12 +552,9 @@ function isCarton(item){
   if(u==="box")return true;
   if(u==="pcs")return false;
   const un=(item.unitName||"").trim();
-  return un==="كرتونة"||un==="كرtونه"||un==="كرtونه";
+  return un==="كرتونة"||un==="كرtونه";
 }
 
-// ----------------------------------------------------
-// 3. دوال التنقل والواجهة (UI/UX)
-// ----------------------------------------------------
 window.showPage = function(id, btn) {
   syncSessionVars();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -825,7 +820,6 @@ window.updateManualSummaryField = function(itemId, field, val) {
 
     const totalManualPcs = ((parseFloat(r.currentManualCartons)||0) * r.cap) + (parseInt(r.currentManualLoose)||0);
     r.manualText = (r.currentManualCartons !== '' || r.currentManualLoose !== '') ? formatQuantityDetailed(totalManualPcs, r.cap, r.unit) : '—';
-    if (!field === 'diffStatus') { r.calculatedStatus = (totalManualPcs < r.totalRemPcs) ? "عجز" : (totalManualPcs > r.totalRemPcs) ? "زيادة" : ""; }
   }
 };
 
@@ -998,12 +992,9 @@ window.saveQuickLoadEdit = function() {
   saveSession(); closeEditLoadModal(); window.toast('✅ تم تحديث كمية التحميل وتسجيل التاريخ'); buildCalculatedRows(); window.filterSummaryUI();
 };
 
-// ----------------------------------------------------
-// 4. دوال الترحيل (Archiving) - مخصصة للمدير
-// ----------------------------------------------------
 window.archiveLoad = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
-  if(!confirm(`هل أنت متأكد من ترحيل واعتماد حمولة يوم ${d}؟\n(لن يتم مسحها محلياً إلا بعد ترحيل الجرد النهائي)`)) return;
+  if(!confirm(`هل أنت متأكد من ترحيل واعتماد حمولة يوم ${d}؟`)) return;
   
   try {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
@@ -1018,7 +1009,7 @@ window.archiveLoad = async function() {
 
 window.archiveInventory = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
-  if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟\nسيتم مسح بيانات اليوم من الذاكرة المؤقتة للبدء في يوم جديد.`)) return;
+  if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
   const exportData = cachedCalculatedRows.map(r => ({
     id: r.id, name: r.it.name, loaded: r.loadedText, sold: r.soldText, remain: r.remText, returnedManual: r.manualText, status: r.calculatedStatus || 'مضبوط'
@@ -1031,7 +1022,6 @@ window.archiveInventory = async function() {
       date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'Unknown', inventoryData: exportData
     });
     
-    // تنظيف الجهاز لبدء يوم جديد
     localStorage.removeItem('cartItems_' + d);
     localStorage.removeItem('loadedInSession_' + d);
     loadedInSession = {}; cartItems = {};
@@ -1070,9 +1060,6 @@ window.fetchArchive = async function() {
   } catch (e) { console.error(e); container.innerHTML = `<div class="empty"><span class="em">❌</span>خطأ في جلب البيانات</div>`; }
 };
 
-// ----------------------------------------------------
-// 5. دوال الطباعة والتصدير (PDF)
-// ----------------------------------------------------
 window.exportPDF = async function(mode = 'all') {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات لتصديرها'); return; }
   const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
@@ -1130,17 +1117,12 @@ window.exportLoadPDF = async function() {
   html2pdf().set(opt).from(container.querySelector('#invoice-print-area')).save().then(() => { document.body.removeChild(container); window.toast('✅ تم تصدير الفاتورة بنجاح'); }).catch(err => { console.error(err); window.toast('❌ حدث خطأ أثناء التصدير'); document.body.removeChild(container); });
 };
 
-window.printSummaryReport = function() {
-  const d = document.getElementById('summaryDate').value; document.getElementById('print-date-lbl').textContent = "تاريخ حركة الجرد: " + d; window.print();
-};
-
 let toastTimer;
 window.toast = function(msg) {
   const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 };
 
-// تشغيل التطبيق مباشرة
 startApp();
 </script>
 <script>
