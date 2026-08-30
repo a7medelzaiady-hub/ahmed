@@ -652,7 +652,7 @@
     }
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, getDocs, addDoc, updateDoc, doc, getDoc, serverTimestamp, increment, query, where, orderBy, limit, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, getDocs, addDoc, updateDoc, doc, getDoc, serverTimestamp, increment, query, where, orderBy, limit, deleteDoc, writeBatch, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -1555,6 +1555,13 @@
             else if (finalCash > 0) finalMethod = "سداد نقدي";
 
             const currentInvoiceTime = document.getElementById('invTime').value || originalInvoiceTime || new Date().toLocaleString('ar-EG');
+            
+            // =========================================================================
+            // حل المشكلة: تحويل نص التاريخ في الشاشة إلى Date Object لحفظ Timestamp صحيح
+            // =========================================================================
+            let parsedTimeMs = parseArabicDate(currentInvoiceTime);
+            let finalDateObj = parsedTimeMs > 0 ? new Date(parsedTimeMs) : new Date();
+            let finalTimestampObj = Timestamp.fromDate(finalDateObj);
 
             let finalNotes = "";
             if (editId && originalInvoiceDataForLogs) {
@@ -1580,6 +1587,7 @@
                 cashAmount: Number(finalCash) || 0,
                 walletAmount: Number(finalWallet) || 0,
                 items, time: currentInvoiceTime, 
+                timestamp: finalTimestampObj, // التحديث هنا: الحفظ بالتاريخ الموجود بالشاشة
                 notes: finalNotes
             };
 
@@ -1587,8 +1595,7 @@
 
             if (!editId) {
                 const newInvoiceRef = doc(collection(db, "invoices"));
-                const newInvoiceData = { ...baseInvoiceData, timestamp: serverTimestamp() };
-                batch.set(newInvoiceRef, newInvoiceData);
+                batch.set(newInvoiceRef, baseInvoiceData);
                 editId = String(newInvoiceRef.id).trim();
 
                 if (fromOrderId) {
@@ -1978,7 +1985,7 @@
 
                     originalInvoiceTime = data.time || "";
                     document.getElementById('invTime').value = originalInvoiceTime;
-                    document.getElementById('invTime').readOnly = true;
+                    // السماح بتعديل التاريخ إن لزم الأمر
 
                     document.getElementById('cashAmount').value = data.cashAmount || 0;
                     document.getElementById('walletAmount').value = data.walletAmount || 0;
