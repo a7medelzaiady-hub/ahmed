@@ -364,9 +364,15 @@
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
-                    const factor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * factor;
+                    const factor = Math.max(1, Number(item.unitFactor || productsMap[id].factor) || 1);
                     
+                    let pcs = 0;
+                    if (item.unit === 'box') {
+                        pcs = (Number(item.qty) || 0) * factor;
+                    } else {
+                        pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * factor;
+                    }
+
                     let itemBuy = Number(item.buy) || 0;
                     let buyPrice = itemBuy > 0 ? (itemBuy / factor) : productsMap[id].currentBuy;
 
@@ -382,8 +388,15 @@
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
-                    const factor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * factor;
+                    
+                    const factor = Math.max(1, Number(item.unitFactor || productsMap[id].factor) || 1);
+                    let pcs = 0;
+                    if (item.unit === 'box') {
+                        pcs = (Number(item.qty) || 0) * factor;
+                    } else {
+                        pcs = Number(item.qty) || 0;
+                    }
+
                     let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
                     pushEvent(id, { type: 'sale', date, qty: pcs, revenue });
@@ -456,8 +469,9 @@
 
     function formatSoldQuantityInCartons(pcs, factor) {
         const safeFactor = Math.max(1, Number(factor) || 1);
+        if (safeFactor === 1) return `${pcs} قطعة/جركن`;
+
         const totalCartons = pcs / safeFactor;
-        
         if (Number.isInteger(totalCartons)) {
             return `${totalCartons} كرتونة`;
         } else {
@@ -511,8 +525,9 @@
             grandCurrent += p.profitCurrent;
 
             const factor = Math.max(1, Number(p.factor) || 1);
+            const unitLabel = factor > 1 ? 'الكرتونة' : 'القطعة';
 
-            // حساب ربح الكرتونة الواحدة مباشرة
+            // حساب ربح الكرتونة / القطعة الواحدة
             const unitProfitAvgCarton = p.qtySold > 0 ? ((p.profitAvg / p.qtySold) * factor) : 0;
             const unitProfitCurrCarton = p.qtySold > 0 ? ((p.profitCurrent / p.qtySold) * factor) : 0;
 
@@ -528,13 +543,13 @@
                         <div class="profit-label mt-2">الربح بالمتوسط:</div>
                         <div class="profit-value">
                             ${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
-                            <span class="unit-profit-tag">(ربح الكرتونة: ${unitProfitAvgCarton.toFixed(2)})</span>
+                            <span class="unit-profit-tag">(ربح ${unitLabel}: ${unitProfitAvgCarton.toFixed(2)})</span>
                         </div>
 
                         <div class="profit-label mt-1">الربح بالسعر الحالي:</div>
                         <div class="profit-current">
                             ${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
-                            <span class="unit-profit-tag" style="color:#0284c7; background:#e0f2fe;">(ربح الكرتونة: ${unitProfitCurrCarton.toFixed(2)})</span>
+                            <span class="unit-profit-tag" style="color:#0284c7; background:#e0f2fe;">(ربح ${unitLabel}: ${unitProfitCurrCarton.toFixed(2)})</span>
                         </div>
                     </div>
                     <div>
