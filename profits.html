@@ -56,9 +56,7 @@
         }
         .top-nav .nav-icon:active { transform: scale(0.9); }
 
-        .filter-section {
-            padding: 18px 20px 5px;
-        }
+        .filter-section { padding: 18px 20px 5px; }
         .filter-card {
             background: white;
             border-radius: 18px;
@@ -97,9 +95,7 @@
             font-size: 0.85rem;
         }
 
-        .search-section {
-            padding: 15px 20px 5px;
-        }
+        .search-section { padding: 15px 20px 5px; }
         .search-wrapper { position: relative; }
         .search-wrapper i {
             position: absolute;
@@ -152,18 +148,8 @@
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
         .item-qty-sold { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
 
-        .profit-box { text-align: right; }
-        .profit-value {
-            font-weight: 800;
-            font-size: 1.02rem;
-            color: var(--primary-green);
-        }
-        .profit-current {
-            font-weight: 700;
-            font-size: 0.82rem;
-            color: #0284c7;
-            margin-top: 2px;
-        }
+        .profit-value { font-weight: 800; font-size: 1.02rem; color: var(--primary-green); }
+        .profit-current { font-weight: 700; font-size: 0.82rem; color: #0284c7; margin-top: 2px; }
         .profit-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; }
         .unit-profit-tag { font-size: 0.68rem; color: var(--accent-green); font-weight: 700; display: inline-block; margin-right: 4px; }
 
@@ -249,7 +235,7 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري جلب البيانات السريعة...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري الموازنة الحسابية...
     </div>
 </div>
 
@@ -296,7 +282,6 @@
 
     async function loadData() {
         try {
-            // 1. استخدام التخزين المحلي للأصناف للحد من استهلاك البيانات
             let cachedInventory = localStorage.getItem("cache_profits_inventory");
             if (cachedInventory) {
                 const parsed = JSON.parse(cachedInventory);
@@ -330,7 +315,6 @@
                 try { localStorage.setItem("cache_profits_inventory", JSON.stringify(listToCache)); } catch(e){}
             }
 
-            // 2. تحميل الفواتير والمعاملات بسرعة بالتوازي
             const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
@@ -354,7 +338,6 @@
                 events[id].push(ev);
             }
 
-            // الرصيد الافتتاحي
             Object.values(productsMap).forEach(p => {
                 let openingPcs = 0;
                 let openingPrice = p.currentBuy;
@@ -375,7 +358,6 @@
                 }
             });
 
-            // مشتريات التوريد
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -394,7 +376,6 @@
                 });
             });
 
-            // مبيعات
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -409,7 +390,6 @@
                 });
             });
 
-            // محاكاة حساب المتوسط والأرباح
             Object.keys(events).forEach(id => {
                 const list = events[id].slice().sort((a, b) => {
                     const timeA = a.date ? a.date.getTime() : 0;
@@ -450,12 +430,12 @@
                         runQty -= ev.qty;
                         saleLines[id].push({ 
                             date: ev.date, 
-                            qty: ev.qty, 
-                            revenue: ev.revenue, 
-                            costAvg, 
-                            profitAvg, 
-                            costCurrent, 
-                            profitCurrent 
+                            qty: Number(ev.qty) || 0, 
+                            revenue: Number(ev.revenue) || 0, 
+                            costAvg: Number(costAvg) || 0, 
+                            profitAvg: Number(profitAvg) || 0, 
+                            costCurrent: Number(costCurrent) || 0, 
+                            profitCurrent: Number(profitCurrent) || 0 
                         });
                     }
                 });
@@ -489,24 +469,26 @@
             saleLines[productId].forEach(line => {
                 if (fromDate && (!line.date || line.date < fromDate)) return;
                 if (toDate && (!line.date || line.date > toDate)) return;
-                profitAvgMap[productId] = (profitAvgMap[productId] || 0) + line.profitAvg;
-                profitCurrentMap[productId] = (profitCurrentMap[productId] || 0) + line.profitCurrent;
-                qtyByProduct[productId] = (qtyByProduct[productId] || 0) + line.qty;
+                
+                profitAvgMap[productId] = (Number(profitAvgMap[productId]) || 0) + Number(line.profitAvg);
+                profitCurrentMap[productId] = (Number(profitCurrentMap[productId]) || 0) + Number(line.profitCurrent);
+                qtyByProduct[productId] = (Number(qtyByProduct[productId]) || 0) + Number(line.qty);
             });
         });
 
         let list = Object.keys(productsMap).map(id => ({
             ...productsMap[id],
-            profitAvg: profitAvgMap[id] || 0,
-            profitCurrent: profitCurrentMap[id] || 0,
-            qtySold: qtyByProduct[id] || 0
+            profitAvg: Number(profitAvgMap[id]) || 0,
+            profitCurrent: Number(profitCurrentMap[id]) || 0,
+            qtySold: Number(qtyByProduct[id]) || 0
         }));
 
         if (term) {
             list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
         }
 
-        list = list.filter(p => qtyByProduct[p.id] !== undefined);
+        // إبقاء الأصناف التي تم بيعها فقط
+        list = list.filter(p => qtyByProduct[p.id] !== undefined && qtyByProduct[p.id] !== 0);
         list.sort((a, b) => b.profitAvg - a.profitAvg);
 
         const container = document.getElementById('itemsContainer');
@@ -514,11 +496,11 @@
         let grandCurrent = 0;
         let html = '';
 
+        // تجميع الإجمالي التراكمي الدقيق من الأصناف المفلترة
         list.forEach(p => {
             grandAvg += p.profitAvg;
             grandCurrent += p.profitCurrent;
 
-            // حساب ربح القطعة الواحدة
             const unitProfitAvg = p.qtySold > 0 ? (p.profitAvg / p.qtySold) : 0;
             const unitProfitCurr = p.qtySold > 0 ? (p.profitCurrent / p.qtySold) : 0;
 
@@ -556,8 +538,8 @@
 
         container.innerHTML = html;
         document.getElementById('totalCount').innerText = list.length;
-        document.getElementById('grandTotalProfit').innerText = grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2});
-        document.getElementById('grandTotalProfitCurrent').innerText = `إجمالي الأرباح (سعر الشراء الحالي): ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        document.getElementById('grandTotalProfit').innerText = `${grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('grandTotalProfitCurrent').innerText = `إجمالي الأرباح (سعر الشراء الحالي): ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
     };
 
     window.goToDetails = function(id) {
