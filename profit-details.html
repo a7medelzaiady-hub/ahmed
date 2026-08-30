@@ -82,7 +82,7 @@
         .stat-box .label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
         .stat-box .value { font-size: 1.05rem; font-weight: 800; color: var(--primary-green); }
         .stat-box .value.current { color: #0284c7; }
-        .stat-box .value.negative { color: var(--danger); }
+        .stat-box .sub-val { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; margin-top: 2px; }
 
         .filter-section { padding: 0 15px 10px; }
         .filter-card {
@@ -148,7 +148,7 @@
         .day-qty { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
         .day-profit { font-weight: 800; font-size: 0.95rem; color: var(--primary-green); text-align: left; }
         .day-profit .sub { font-size: 0.75rem; color: #0284c7; font-weight: 700; display: block; }
-        .day-profit.negative { color: var(--danger); }
+        .day-profit .unit-p { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; display: block; }
 
         .purchases-box {
             background: #f8fafc;
@@ -191,12 +191,14 @@
 
 <div class="stats-grid">
     <div class="stat-box">
-        <div class="label">الربح (متوسط التكلفة المتحرك)</div>
+        <div class="label">الربح (متوسط التكلفة)</div>
         <div class="value" id="totalProfitVal">0.00</div>
+        <div class="sub-val" id="unitProfitAvg">ربح القطعة: 0.00</div>
     </div>
     <div class="stat-box">
         <div class="label">الربح (سعر الشراء الحالي)</div>
         <div class="value current" id="totalProfitCurrVal">0.00</div>
+        <div class="sub-val" id="unitProfitCurr">ربح القطعة: 0.00</div>
     </div>
     <div class="stat-box">
         <div class="label">إجمالي القطع المباعة</div>
@@ -286,6 +288,7 @@
             return;
         }
         try {
+            // جلب صنف واحد فقط لتوفير البيانات والوقت
             const productSnap = await getDoc(doc(db, "inventory", productId));
             if (!productSnap.exists()) {
                 document.getElementById('productHeader').innerHTML = '<div class="name">الصنف غير موجود</div>';
@@ -308,6 +311,7 @@
                 <div class="barcode">باركود: ${productInfo.barcode}</div>
             `;
 
+            // استخدام الاستعلام المباشر فقط لتقليل تنزيل البيانات غير الضرورية
             const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
@@ -338,10 +342,10 @@
             }
 
             if (openingPcs) {
-                events.push({ type: 'purchase', label: 'شراء', date: new Date(0), qty: openingPcs, price: openingPrice });
+                events.push({ type: 'purchase', label: 'عند التأسييس', date: new Date(0), qty: openingPcs, price: openingPrice });
             }
 
-            // 2. فواتير التوريد (المشتريات)
+            // 2. فواتير التوريد (تصفية موجهة)
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -361,7 +365,6 @@
                 });
             });
 
-            // تحديث السعر الحالي إذا كان صفر بناءً على آخر عملية شراء
             let lastPurchase = events.filter(e => e.type === 'purchase' && e.price > 0).slice(-1)[0];
             if (currentBuyPrice === 0 && lastPurchase) {
                 currentBuyPrice = lastPurchase.price;
@@ -385,22 +388,16 @@
                 });
             });
 
-            // =========================================================
-            // إصلاح الترتيب المحاسبي لإنهاء مشكلة تكلفة 0.00:
-            // عمليات الشراء تأخذ أولوية الأسبقية إذا تساوت التواريخ مع البيع
-            // =========================================================
+            // ترتيب دقيق مع إعطاء الأسبقية للشراء في نفس اليوم
             events.sort((a, b) => {
                 const timeA = a.date ? a.date.getTime() : 0;
                 const timeB = b.date ? b.date.getTime() : 0;
-                
                 const dateA_str = a.date ? a.date.toISOString().slice(0, 10) : '';
                 const dateB_str = b.date ? b.date.toISOString().slice(0, 10) : '';
 
-                // إذا كانا في نفس اليوم، تجعل المشتريات تسبق المبيعات لتأمين تكلفة البيع
                 if (dateA_str === dateB_str && a.type !== b.type) {
                     return a.type === 'purchase' ? -1 : 1;
                 }
-                
                 return timeA - timeB;
             });
 
@@ -417,7 +414,6 @@
                     }
                     purchaseEvents.push(ev);
                 } else {
-                    // إذا أُجريت عملية بيع والرصيد/المتوسط ما زال صفر، نطبق سعر الشراء الحالي لمنع خصم صفر
                     let effectiveCostUnit = runAvg > 0 ? runAvg : currentBuyPrice;
 
                     const costAvg = effectiveCostUnit * ev.qty;
@@ -506,6 +502,8 @@
             totalProfitCurrent += d.profitCurrent;
             totalQty += d.qty;
 
+            const unitProfitDayAvg = d.qty > 0 ? (d.profitAvg / d.qty) : 0;
+
             const displayDate = key === 'بدون تاريخ' ? key : new Date(key).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
             html += `
                 <div class="day-card">
@@ -516,6 +514,7 @@
                     <div class="day-profit">
                         <div>${d.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
                         <span class="sub">${d.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                        <span class="unit-p">ربح القطعة: ${unitProfitDayAvg.toFixed(2)}</span>
                     </div>
                 </div>
             `;
@@ -525,10 +524,16 @@
             html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-inbox fa-2x mb-2"></i><br>لا توجد بيانات مبيعات في هذه الفترة</div>`;
         }
 
+        const avgUnitProfitAll = totalQty > 0 ? (totalProfitAvg / totalQty) : 0;
+        const currUnitProfitAll = totalQty > 0 ? (totalProfitCurrent / totalQty) : 0;
+
         document.getElementById('daysContainer').innerHTML = html;
         document.getElementById('totalProfitVal').innerText = totalProfitAvg.toLocaleString('en-US', {minimumFractionDigits: 2});
         document.getElementById('totalProfitCurrVal').innerText = totalProfitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2});
         document.getElementById('totalQtyVal').innerText = totalQty;
+        
+        document.getElementById('unitProfitAvg').innerText = `ربح القطعة: ${avgUnitProfitAll.toFixed(2)} ج.م`;
+        document.getElementById('unitProfitCurr').innerText = `ربح القطعة: ${currUnitProfitAll.toFixed(2)} ج.م`;
     };
 
     loadDetails();
