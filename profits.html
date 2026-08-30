@@ -146,12 +146,12 @@
 
         .item-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 3px; color: var(--text-dark); line-height: 1.3; }
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
-        .item-qty-sold { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+        .item-qty-sold { font-size: 0.8rem; color: var(--primary-green); font-weight: 700; margin-top: 4px; }
 
         .profit-value { font-weight: 800; font-size: 1.02rem; color: var(--primary-green); }
         .profit-current { font-weight: 700; font-size: 0.82rem; color: #0284c7; margin-top: 2px; }
         .profit-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; }
-        .unit-profit-tag { font-size: 0.68rem; color: var(--accent-green); font-weight: 700; display: inline-block; margin-right: 4px; }
+        .unit-profit-tag { font-size: 0.72rem; color: #086634; font-weight: 800; display: inline-block; margin-right: 4px; background: #eaf8f0; padding: 1px 6px; border-radius: 6px; }
 
         .btn-details {
             background: #f0fdf4;
@@ -235,7 +235,7 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري الموازنة الحسابية...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل الأرباح...
     </div>
 </div>
 
@@ -454,6 +454,22 @@
         renderItems();
     };
 
+    function formatSoldQuantity(pcs, factor) {
+        if (!factor || factor <= 1) {
+            return `${pcs} جركن/قطعة`;
+        }
+        const cartons = Math.floor(pcs / factor);
+        const remainder = pcs % factor;
+
+        if (cartons > 0 && remainder > 0) {
+            return `${cartons} كرتونة و ${remainder} قطعة`;
+        } else if (cartons > 0) {
+            return `${cartons} كرتونة`;
+        } else {
+            return `${remainder} قطعة`;
+        }
+    }
+
     window.renderItems = function() {
         const term = document.getElementById('searchInput').value.toLowerCase().trim();
         const fromVal = document.getElementById('fromDate').value;
@@ -487,7 +503,6 @@
             list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
         }
 
-        // إبقاء الأصناف التي تم بيعها فقط
         list = list.filter(p => qtyByProduct[p.id] !== undefined && qtyByProduct[p.id] !== 0);
         list.sort((a, b) => b.profitAvg - a.profitAvg);
 
@@ -496,31 +511,36 @@
         let grandCurrent = 0;
         let html = '';
 
-        // تجميع الإجمالي التراكمي الدقيق من الأصناف المفلترة
         list.forEach(p => {
             grandAvg += p.profitAvg;
             grandCurrent += p.profitCurrent;
 
-            const unitProfitAvg = p.qtySold > 0 ? (p.profitAvg / p.qtySold) : 0;
-            const unitProfitCurr = p.qtySold > 0 ? (p.profitCurrent / p.qtySold) : 0;
+            const factor = Math.max(1, Number(p.factor) || 1);
+            const unitLabel = factor > 1 ? 'كرتونة' : 'قطعة';
+
+            // حساب ربح الكرتونة الواحدة / القطعة
+            const unitProfitAvg = p.qtySold > 0 ? ((p.profitAvg / p.qtySold) * factor) : 0;
+            const unitProfitCurr = p.qtySold > 0 ? ((p.profitCurrent / p.qtySold) * factor) : 0;
+
+            const displaySoldQty = formatSoldQuantity(p.qtySold, factor);
 
             html += `
                 <div class="item-card">
                     <div>
                         <div class="item-name">${p.name}</div>
                         <div class="item-barcode">باركود: ${p.barcode}</div>
-                        <div class="item-qty-sold">إجمالي المباع: ${p.qtySold} قطعة</div>
+                        <div class="item-qty-sold">إجمالي المباع: ${displaySoldQty}</div>
                         
                         <div class="profit-label mt-2">الربح بالمتوسط:</div>
                         <div class="profit-value">
                             ${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
-                            <span class="unit-profit-tag">(للقطعة: ${unitProfitAvg.toFixed(2)})</span>
+                            <span class="unit-profit-tag">(ربح الـ ${unitLabel}: ${unitProfitAvg.toFixed(2)})</span>
                         </div>
 
                         <div class="profit-label mt-1">الربح بالسعر الحالي:</div>
                         <div class="profit-current">
                             ${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
-                            <span class="unit-profit-tag" style="color:#0284c7;">(للقطعة: ${unitProfitCurr.toFixed(2)})</span>
+                            <span class="unit-profit-tag" style="color:#0284c7; background:#e0f2fe;">(ربح الـ ${unitLabel}: ${unitProfitCurr.toFixed(2)})</span>
                         </div>
                     </div>
                     <div>
