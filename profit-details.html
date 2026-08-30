@@ -309,6 +309,10 @@
             const d = new Date(data.timestamp);
             if (!isNaN(d)) return d;
         }
+        if (data.date) {
+            const d = new Date(data.date);
+            if (!isNaN(d)) return d;
+        }
         return new Date(0);
     }
 
@@ -321,6 +325,7 @@
     let purchaseEvents = [];
     let productInfo = null;
     let currentBuyPrice = 0;
+    let currentSellPrice = 0;
     let productFactor = 1;
 
     function formatQtyDisplay(pcs, factor) {
@@ -351,11 +356,15 @@
             
             let rawBuy = Number(pData.buy) || 0;
             currentBuyPrice = rawBuy > 0 ? (rawBuy / productFactor) : 0;
+            
+            let rawSell = Number(pData.sell || pData.price || pData.sellPrice) || 0;
+            currentSellPrice = rawSell > 0 ? (rawSell / productFactor) : 0;
 
             productInfo = {
                 name: pData.name || 'بدون اسم',
                 barcode: pData.barcode || '---',
-                fallbackBuy: currentBuyPrice
+                fallbackBuy: currentBuyPrice,
+                fallbackSell: currentSellPrice
             };
 
             document.getElementById('productHeader').innerHTML = `
@@ -401,7 +410,7 @@
                 const data = docSnap.data();
                 const date = getDocDate(data);
                 data.items?.forEach(item => {
-                    const id = item.stockId;
+                    const id = item.stockId || item.productId || item.id;
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
                     
@@ -413,7 +422,7 @@
                         pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : Number(item.qty) || 0;
                     }
                     
-                    let itemBuy = Number(item.buy) || 0;
+                    let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
                     let buyPrice = itemBuy > 0 ? (itemBuy / itemFactor) : currentBuyPrice;
 
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
@@ -427,41 +436,48 @@
                 currentBuyPrice = lastPurchase.price;
             }
 
-            // 3. فواتير المبيعات (معالجة السعر والإيراد لحل مشكلة صفر الربح)
+            // 3. فواتير المبيعات (فحص شامل لكافة الحقول المحتملة لحساب الإيراد الصحيح)
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const invDate = getDocDate(data);
                 data.items?.forEach(item => {
-                    const id = item.stockId;
+                    const id = item.stockId || item.productId || item.id;
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
 
                     const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
                     let pcs = 0;
+                    let rawQty = Number(item.qty || item.quantity) || 0;
+                    
                     if (item.unit === 'box') {
-                        pcs = (Number(item.qty) || 0) * itemFactor;
+                        pcs = rawQty * itemFactor;
                     } else {
-                        pcs = Number(item.qty) || 0;
+                        pcs = rawQty;
                     }
 
-                    // استخراج سعر الوحدة والإيراد بدقة
-                    let unitSellPrice = Number(item.price || item.sellPrice || item.unitPrice) || 0;
+                    // البحث عن سعر البيع بكل المسميات المحتملة
+                    let unitSellPrice = Number(item.sell || item.price || item.sellPrice || item.unitPrice) || 0;
                     let revenue = 0;
 
                     if (item.totalPrice !== undefined && item.totalPrice !== null && Number(item.totalPrice) > 0) {
                         revenue = Number(item.totalPrice);
                     } else if (item.total !== undefined && item.total !== null && Number(item.total) > 0) {
                         revenue = Number(item.total);
-                    } else {
-                        revenue = unitSellPrice * (Number(item.qty) || 0);
+                    } else if (unitSellPrice > 0) {
+                        revenue = unitSellPrice * rawQty;
+                    } else if (currentSellPrice > 0) {
+                        // استخدام سعر البيع من كارت الصنف في حالة خلو الفاتورة منه
+                        revenue = currentSellPrice * pcs;
+                        unitSellPrice = currentSellPrice;
                     }
 
-                    // إذا كان سعر الفردي غير موجود وحسبنا الإيراد، نستنتج سعر الوحدة
                     if (!unitSellPrice && pcs > 0 && revenue > 0) {
-                        unitSellPrice = revenue / (Number(item.qty) || 1);
+                        unitSellPrice = revenue / pcs;
                     }
 
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
+
+                    console.log("صنف مباع:", item.name, "كمية:", pcs, "إيراد:", revenue, "سعر وحدة:", unitSellPrice);
 
                     events.push({ 
                         type: 'sale', 
@@ -471,7 +487,7 @@
                         partyName: data.customerName || 'عميل نقدي', 
                         unitPrice: unitSellPrice,
                         rawUnit: item.unit,
-                        rawQty: item.qty
+                        rawQty: rawQty
                     });
                 });
             });
