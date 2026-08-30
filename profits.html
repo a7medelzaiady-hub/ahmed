@@ -300,13 +300,14 @@
                 const data = d.data();
                 if (data.isDeleted) return;
                 const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                const currentBuy = Number(data.buy) || 0;
                 productsMap[d.id] = {
                     id: d.id,
                     name: data.name || 'بدون اسم',
                     barcode: data.barcode || '---',
                     factor,
-                    fallbackBuy: Number(data.buy) || 0,
-                    currentBuy: Number(data.buy) || 0,
+                    fallbackBuy: currentBuy,
+                    currentBuy: currentBuy,
                     raw: data
                 };
                 if (data.name) namesMap[data.name.trim()] = d.id;
@@ -331,15 +332,20 @@
 
             Object.values(productsMap).forEach(p => {
                 let openingPcs = 0;
-                let openingPrice = p.fallbackBuy;
+                let openingPrice = p.currentBuy; // الافتراضي هو السعر الحالي
+
                 if (openingQtyMap[p.id]) {
                     openingPcs = openingQtyMap[p.id];
-                    openingPrice = openingQtyMap[p.id] > 0 ? (openingValueMap[p.id] / openingQtyMap[p.id]) : p.fallbackBuy;
+                    // استخدام السعر المسجل للرصيد الافتتاحي، وفي حال عدم وجوده يتم استخدام السعر الحالي
+                    if (openingQtyMap[p.id] > 0 && openingValueMap[p.id] > 0) {
+                        openingPrice = openingValueMap[p.id] / openingQtyMap[p.id];
+                    }
                 } else if (p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
                     openingPcs = Number(p.raw.openingTotalPcs);
                 } else if (p.raw.openingQty !== undefined && p.raw.openingQty !== null) {
                     openingPcs = Math.round(Number(p.raw.openingQty) * p.factor);
                 }
+
                 if (openingPcs) {
                     pushEvent(p.id, { type: 'purchase', date: new Date(0), qty: openingPcs, price: openingPrice });
                 }
@@ -353,7 +359,7 @@
                     if (!id || !productsMap[id]) return;
                     const factor = Math.max(1, Number(item.unitFactor) || 1);
                     let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * factor;
-                    const buyPrice = Number(item.buy) || 0;
+                    const buyPrice = Number(item.buy) || productsMap[id].currentBuy;
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
                     pushEvent(id, { type: 'purchase', date, qty: pcs, price: buyPrice });
