@@ -131,9 +131,8 @@
             align-items: center;
             box-shadow: 0 6px 16px rgba(11,102,65,0.2);
         }
-        .summary-strip .label { font-size: 0.75rem; opacity: 0.85; }
-        .summary-strip .value { font-size: 1.15rem; font-weight: 800; }
-        .summary-strip .sub-val { font-size: 0.85rem; opacity: 0.9; margin-top: 2px; }
+        .summary-strip .label { font-size: 0.8rem; opacity: 0.85; }
+        .summary-strip .value { font-size: 1.3rem; font-weight: 800; }
 
         .item-card {
             padding: 16px 20px;
@@ -152,19 +151,14 @@
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
         .item-qty-sold { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
 
-        .profit-box { text-align: left; }
         .profit-value {
             font-weight: 800;
             font-size: 1.05rem;
             color: var(--primary-green);
         }
         .profit-value.negative { color: var(--danger); }
-        .profit-current {
-            font-weight: 700;
-            font-size: 0.8rem;
-            color: #0284c7;
-            margin-top: 2px;
-        }
+        .profit-value-secondary { font-size: 0.9rem; color: #64748b; }
+        .profit-value-secondary.negative { color: #e11d48; opacity: 0.8; }
         .profit-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
 
         .btn-details {
@@ -240,9 +234,10 @@
 
 <div class="summary-strip">
     <div>
-        <div class="label">إجمالي أرباح الفترة (المتوسط / السعر الحالي)</div>
+        <div class="label">إجمالي الأرباح (متوسط التكلفة المتحرك)</div>
         <div class="value" id="grandTotalProfit">0.00</div>
-        <div class="sub-val" id="grandTotalProfitCurrent">بالسعر الحالي: 0.00</div>
+        <div class="label mt-1">إجمالي الأرباح (سعر الشراء الحالي)</div>
+        <div class="value" id="grandTotalProfitCurrent" style="font-size: 1.1rem;">0.00</div>
     </div>
     <i class="fas fa-chart-line fa-lg"></i>
 </div>
@@ -274,6 +269,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // تاريخ أي مستند (فاتورة بيع أو فاتورة توريد) = حقل timestamp
     function getDocDate(data) {
         if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
         if (data.timestamp) {
@@ -283,9 +279,9 @@
         return null;
     }
 
-    let productsMap = {}; 
+    let productsMap = {}; // id -> {name, barcode, factor, fallbackBuy, raw}
     let namesMap = {};
-    let saleLines = {}; 
+    let saleLines = {}; // productId -> [{date, qty, revenue, cost, profit}]
 
     async function loadData() {
         try {
@@ -300,57 +296,61 @@
                 const data = d.data();
                 if (data.isDeleted) return;
                 const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                const currentBuy = Number(data.buy) || 0;
                 productsMap[d.id] = {
                     id: d.id,
                     name: data.name || 'بدون اسم',
                     barcode: data.barcode || '---',
                     factor,
-                    fallbackBuy: currentBuy,
-                    currentBuy: currentBuy,
+                    fallbackBuy: Number(data.buy) || 0,
                     raw: data
                 };
                 if (data.name) namesMap[data.name.trim()] = d.id;
             });
 
-            let openingQtyMap = {};
-            let openingValueMap = {};
-            openingSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (!data.productId) return;
-                const qty = Number(data.quantityPcs) || 0;
-                let value = (data.totalAmount !== undefined && data.totalAmount !== null) ? Number(data.totalAmount) || 0 : (Number(data.unitPrice) || 0) * qty;
-                openingQtyMap[data.productId] = (openingQtyMap[data.productId] || 0) + qty;
-                openingValueMap[data.productId] = (openingValueMap[data.productId] || 0) + value;
-            });
-
+            // تجميع الأحداث (شراء / بيع) لكل صنف على خط زمني واحد
             let events = {};
             function pushEvent(id, ev) {
                 if (!events[id]) events[id] = [];
                 events[id].push(ev);
             }
 
-            Object.values(productsMap).forEach(p => {
-                let openingPcs = 0;
-                let openingPrice = p.currentBuy; // الافتراضي هو السعر الحالي
+            // الرصيد الافتتاحي: كل حركة على حدة بسعرها المسجل وقت الاستيراد
+            // لو حركة معينة سعرها صفر (يعني السعر مكتبش وقتها)، بناخد سعر الشراء الحالي للصنف كبديل لها هي بس
+            // (بدل ما نعمل متوسط عام يفسد باقي الحركات اللي فعلاً كان ليها سعر مسجل)
+            let productsWithOpeningEvent = new Set();
+            openingSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                const id = data.productId;
+                if (!id || !productsMap[id]) return;
+                const qty = Number(data.quantityPcs) || 0;
+                if (!qty) return;
+                let price;
+                if (data.unitPrice !== undefined && data.unitPrice !== null && Number(data.unitPrice) > 0) {
+                    price = Number(data.unitPrice);
+                } else if (data.totalAmount !== undefined && data.totalAmount !== null && Number(data.totalAmount) > 0) {
+                    price = Number(data.totalAmount) / qty;
+                } else {
+                    price = productsMap[id].fallbackBuy; // لم يُكتب سعر شراء وقت استيراد هذه الحركة تحديدًا
+                }
+                pushEvent(id, { type: 'purchase', date: new Date(0), qty, price });
+                productsWithOpeningEvent.add(id);
+            });
 
-                if (openingQtyMap[p.id]) {
-                    openingPcs = openingQtyMap[p.id];
-                    // استخدام السعر المسجل للرصيد الافتتاحي، وفي حال عدم وجوده يتم استخدام السعر الحالي
-                    if (openingQtyMap[p.id] > 0 && openingValueMap[p.id] > 0) {
-                        openingPrice = openingValueMap[p.id] / openingQtyMap[p.id];
-                    }
-                } else if (p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
+            // لو الصنف مفهوش أي حركة رصيد افتتاحي مسجلة أصلاً (نادر) - نستخدم الحقول القديمة على مستند الصنف
+            Object.values(productsMap).forEach(p => {
+                if (productsWithOpeningEvent.has(p.id)) return;
+                let openingPcs = 0;
+                if (p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
                     openingPcs = Number(p.raw.openingTotalPcs);
                 } else if (p.raw.openingQty !== undefined && p.raw.openingQty !== null) {
                     openingPcs = Math.round(Number(p.raw.openingQty) * p.factor);
                 }
-
                 if (openingPcs) {
-                    pushEvent(p.id, { type: 'purchase', date: new Date(0), qty: openingPcs, price: openingPrice });
+                    pushEvent(p.id, { type: 'purchase', date: new Date(0), qty: openingPcs, price: p.fallbackBuy });
                 }
             });
 
+            // عمليات الشراء من فواتير التوريد - بسعر buy المسجل وقت التوريد نفسه
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -358,14 +358,17 @@
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
                     const factor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * factor;
-                    const buyPrice = Number(item.buy) || productsMap[id].currentBuy;
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
+                        ? Number(item.totalPcs)
+                        : (Number(item.qty) || 0) * factor;
+                    const buyPrice = Number(item.buy) || 0;
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
                     pushEvent(id, { type: 'purchase', date, qty: pcs, price: buyPrice });
                 });
             });
 
+            // عمليات البيع من الفواتير
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -373,19 +376,22 @@
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
                     const factor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * factor;
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
+                        ? Number(item.totalPcs)
+                        : (Number(item.qty) || 0) * factor;
                     let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
                     pushEvent(id, { type: 'sale', date, qty: pcs, revenue });
                 });
             });
 
+            // محاكاة متوسط التكلفة المتحرك لكل صنف بالترتيب الزمني
+            // بنحسب في نفس الوقت الربح بطريقة "السعر الحالي" (سعر buy الحالي مطبق على كل المبيعات) للمقارنة
             Object.keys(events).forEach(id => {
+                const currentBuyPrice = productsMap[id] ? productsMap[id].fallbackBuy : 0;
                 const list = events[id].slice().sort((a, b) => (a.date ? a.date.getTime() : 0) - (b.date ? b.date.getTime() : 0));
                 let runQty = 0, runAvg = 0;
                 saleLines[id] = [];
-                const currentBuy = productsMap[id].currentBuy;
-
                 list.forEach(ev => {
                     if (ev.type === 'purchase') {
                         if (ev.qty > 0) {
@@ -396,22 +402,12 @@
                             runQty = Math.max(0, runQty + ev.qty);
                         }
                     } else {
-                        const costAvg = runAvg * ev.qty;
-                        const profitAvg = ev.revenue - costAvg;
-
-                        const costCurrent = currentBuy * ev.qty;
+                        const cost = runAvg * ev.qty;
+                        const profit = ev.revenue - cost;
+                        const costCurrent = currentBuyPrice * ev.qty;
                         const profitCurrent = ev.revenue - costCurrent;
-
                         runQty -= ev.qty;
-                        saleLines[id].push({ 
-                            date: ev.date, 
-                            qty: ev.qty, 
-                            revenue: ev.revenue, 
-                            costAvg, 
-                            profitAvg, 
-                            costCurrent, 
-                            profitCurrent 
-                        });
+                        saleLines[id].push({ date: ev.date, qty: ev.qty, revenue: ev.revenue, cost, profit, profitCurrent });
                     }
                 });
             });
@@ -419,7 +415,8 @@
             renderItems();
         } catch (e) {
             console.error("خطأ في تجميع بيانات الأرباح:", e);
-            document.getElementById('itemsContainer').innerHTML = '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
+            document.getElementById('itemsContainer').innerHTML =
+                '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
         }
     }
 
@@ -436,53 +433,61 @@
         const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
         const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
 
-        let profitAvgMap = {};
-        let profitCurrentMap = {};
+        // تجميع الربح لكل صنف حسب الفلتر - بالطريقتين معًا
+        // ملاحظة: التكلفة محسوبة من المحاكاة الكاملة للتاريخ (كل عمليات الشراء من البداية)
+        // الفلتر هنا بيحدد بس أي المبيعات تدخل في الإجمالي المعروض، مش بيغيّر التكلفة نفسها
+        let profitByProduct = {};
+        let profitCurrentByProduct = {};
         let qtyByProduct = {};
 
         Object.keys(saleLines).forEach(productId => {
             saleLines[productId].forEach(line => {
                 if (fromDate && (!line.date || line.date < fromDate)) return;
                 if (toDate && (!line.date || line.date > toDate)) return;
-                profitAvgMap[productId] = (profitAvgMap[productId] || 0) + line.profitAvg;
-                profitCurrentMap[productId] = (profitCurrentMap[productId] || 0) + line.profitCurrent;
+                profitByProduct[productId] = (profitByProduct[productId] || 0) + line.profit;
+                profitCurrentByProduct[productId] = (profitCurrentByProduct[productId] || 0) + line.profitCurrent;
                 qtyByProduct[productId] = (qtyByProduct[productId] || 0) + line.qty;
             });
         });
 
         let list = Object.keys(productsMap).map(id => ({
             ...productsMap[id],
-            profitAvg: profitAvgMap[id] || 0,
-            profitCurrent: profitCurrentMap[id] || 0,
+            totalProfit: profitByProduct[id] || 0,
+            totalProfitCurrent: profitCurrentByProduct[id] || 0,
             qtySold: qtyByProduct[id] || 0
         }));
 
         if (term) {
-            list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
+            list = list.filter(p =>
+                p.name.toLowerCase().includes(term) || String(p.barcode).includes(term)
+            );
         }
 
+        // إخفاء الأصناف اللي مفيش لها أي حركة في الفترة المختارة
         list = list.filter(p => qtyByProduct[p.id] !== undefined);
-        list.sort((a, b) => b.profitAvg - a.profitAvg);
+
+        list.sort((a, b) => b.totalProfit - a.totalProfit);
 
         const container = document.getElementById('itemsContainer');
-        let grandAvg = 0;
-        let grandCurrent = 0;
+        let grandTotal = 0;
+        let grandTotalCurrent = 0;
         let html = '';
 
         list.forEach(p => {
-            grandAvg += p.profitAvg;
-            grandCurrent += p.profitCurrent;
+            grandTotal += p.totalProfit;
+            grandTotalCurrent += p.totalProfitCurrent;
+            const isNeg = p.totalProfit < 0;
+            const isNegCurrent = p.totalProfitCurrent < 0;
             html += `
                 <div class="item-card">
                     <div>
                         <div class="item-name">${p.name}</div>
                         <div class="item-barcode">باركود: ${p.barcode}</div>
-                        <div class="item-qty-sold">القطع المباعة: ${p.qtySold}</div>
-                        <div class="profit-label mt-1">الربح (المتوسط / السعر الحالي)</div>
-                        <div class="profit-box">
-                            <span class="profit-value">${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
-                            <span class="profit-current"> (${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})})</span>
-                        </div>
+                        <div class="item-qty-sold">إجمالي القطع المباعة: ${p.qtySold}</div>
+                        <div class="profit-label mt-1">الربح (متوسط التكلفة المتحرك)</div>
+                        <div class="profit-value ${isNeg ? 'negative' : ''}">${p.totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                        <div class="profit-label mt-1">الربح (سعر الشراء الحالي)</div>
+                        <div class="profit-value profit-value-secondary ${isNegCurrent ? 'negative' : ''}">${p.totalProfitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
                     </div>
                     <div>
                         <button class="btn-details" onclick="goToDetails('${p.id}')">
@@ -499,8 +504,8 @@
 
         container.innerHTML = html;
         document.getElementById('totalCount').innerText = list.length;
-        document.getElementById('grandTotalProfit').innerText = grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2});
-        document.getElementById('grandTotalProfitCurrent').innerText = `بالسعر الحالي: ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        document.getElementById('grandTotalProfit').innerText = grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2});
+        document.getElementById('grandTotalProfitCurrent').innerText = grandTotalCurrent.toLocaleString('en-US', {minimumFractionDigits: 2});
     };
 
     window.goToDetails = function(id) {
