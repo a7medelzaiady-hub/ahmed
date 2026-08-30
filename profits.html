@@ -454,19 +454,14 @@
         renderItems();
     };
 
-    function formatSoldQuantity(pcs, factor) {
-        if (!factor || factor <= 1) {
-            return `${pcs} جركن/قطعة`;
-        }
-        const cartons = Math.floor(pcs / factor);
-        const remainder = pcs % factor;
-
-        if (cartons > 0 && remainder > 0) {
-            return `${cartons} كرتونة و ${remainder} قطعة`;
-        } else if (cartons > 0) {
-            return `${cartons} كرتونة`;
+    function formatSoldQuantityInCartons(pcs, factor) {
+        const safeFactor = Math.max(1, Number(factor) || 1);
+        const totalCartons = pcs / safeFactor;
+        
+        if (Number.isInteger(totalCartons)) {
+            return `${totalCartons} كرتونة`;
         } else {
-            return `${remainder} قطعة`;
+            return `${totalCartons.toFixed(1)} كرتونة`;
         }
     }
 
@@ -516,13 +511,12 @@
             grandCurrent += p.profitCurrent;
 
             const factor = Math.max(1, Number(p.factor) || 1);
-            const unitLabel = factor > 1 ? 'كرتونة' : 'قطعة';
 
-            // حساب ربح الكرتونة الواحدة / القطعة
-            const unitProfitAvg = p.qtySold > 0 ? ((p.profitAvg / p.qtySold) * factor) : 0;
-            const unitProfitCurr = p.qtySold > 0 ? ((p.profitCurrent / p.qtySold) * factor) : 0;
+            // حساب ربح الكرتونة الواحدة مباشرة
+            const unitProfitAvgCarton = p.qtySold > 0 ? ((p.profitAvg / p.qtySold) * factor) : 0;
+            const unitProfitCurrCarton = p.qtySold > 0 ? ((p.profitCurrent / p.qtySold) * factor) : 0;
 
-            const displaySoldQty = formatSoldQuantity(p.qtySold, factor);
+            const displaySoldQty = formatSoldQuantityInCartons(p.qtySold, factor);
 
             html += `
                 <div class="item-card">
@@ -534,13 +528,13 @@
                         <div class="profit-label mt-2">الربح بالمتوسط:</div>
                         <div class="profit-value">
                             ${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
-                            <span class="unit-profit-tag">(ربح الـ ${unitLabel}: ${unitProfitAvg.toFixed(2)})</span>
+                            <span class="unit-profit-tag">(ربح الكرتونة: ${unitProfitAvgCarton.toFixed(2)})</span>
                         </div>
 
                         <div class="profit-label mt-1">الربح بالسعر الحالي:</div>
                         <div class="profit-current">
                             ${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
-                            <span class="unit-profit-tag" style="color:#0284c7; background:#e0f2fe;">(ربح الـ ${unitLabel}: ${unitProfitCurr.toFixed(2)})</span>
+                            <span class="unit-profit-tag" style="color:#0284c7; background:#e0f2fe;">(ربح الكرتونة: ${unitProfitCurrCarton.toFixed(2)})</span>
                         </div>
                     </div>
                     <div>
