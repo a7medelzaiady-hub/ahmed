@@ -293,7 +293,10 @@
             }
             const pData = productSnap.data();
             const factor = Math.max(1, Number(pData.unitFactor || pData.factor || pData.pcsPerCarton) || 1);
-            currentBuyPrice = Number(pData.buy) || 0;
+            
+            // حساب سعر شراء القطعة الواحدة للسعر الحالي
+            let rawBuy = Number(pData.buy) || 0;
+            currentBuyPrice = rawBuy > 0 ? (rawBuy / factor) : 0;
 
             productInfo = {
                 name: pData.name || 'بدون اسم',
@@ -325,7 +328,6 @@
                 openingValue += value;
             });
 
-            // الاعتماد على السعر الحالي مباشرة إذا لم توجد قيمة محددة للرصيد الافتتاحي
             let openingPrice = (openingPcs > 0 && openingValue > 0) ? (openingValue / openingPcs) : currentBuyPrice;
 
             if (!openingPcs) {
@@ -350,12 +352,22 @@
                     if (id !== productId && !(!id && nameMatch)) return;
                     const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
                     let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * itemFactor;
-                    const buyPrice = Number(item.buy) || currentBuyPrice; // لو ملقتش سعر الشراء في التوريد، استعمل السعر الحالي
+                    
+                    // تحويل سعر الشراء إلى سعر القطعة
+                    let itemBuy = Number(item.buy) || 0;
+                    let buyPrice = itemBuy > 0 ? (itemBuy / itemFactor) : currentBuyPrice;
+
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
                     events.push({ type: 'purchase', label: 'فاتورة توريد', date, qty: pcs, price: buyPrice });
                 });
             });
+
+            // الاعتماد على آخر سعر توريد متوفر إذا كان السعر الحالي في كارت الصنف = 0
+            let lastPurchase = events.filter(e => e.type === 'purchase' && e.price > 0).slice(-1)[0];
+            if (currentBuyPrice === 0 && lastPurchase) {
+                currentBuyPrice = lastPurchase.price;
+            }
 
             // عمليات البيع
             invoicesSnap.forEach(docSnap => {
