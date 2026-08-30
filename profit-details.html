@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -143,7 +144,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
+        .day-card:active { transform: scale(0.98); background: #f0fdf4; }
+
         .day-date { font-weight: 700; font-size: 0.9rem; }
         .day-qty { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
         .day-profit { font-weight: 800; font-size: 0.95rem; color: var(--primary-green); text-align: left; }
@@ -163,13 +168,37 @@
             align-items: center;
             background: white;
             border-radius: 10px;
-            padding: 8px 12px;
+            padding: 10px 12px;
             margin-bottom: 6px;
             font-size: 0.8rem;
             border: 1px solid #e2e8f0;
+            cursor: pointer;
         }
+        .purchase-item:active { background: #e0f2fe; }
         .purchase-item:last-child { margin-bottom: 0; }
         .badge-buy { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            backdrop-filter: blur(3px);
+        }
+        .modal-card {
+            background: white;
+            width: 90%;
+            max-width: 420px;
+            border-radius: 20px;
+            padding: 18px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 <body>
@@ -193,16 +222,16 @@
     <div class="stat-box">
         <div class="label">الربح (متوسط التكلفة)</div>
         <div class="value" id="totalProfitVal">0.00</div>
-        <div class="sub-val" id="unitProfitAvg">ربح القطعة: 0.00</div>
+        <div class="sub-val" id="unitProfitAvg">ربح الكرتونة/القطعة: 0.00</div>
     </div>
     <div class="stat-box">
         <div class="label">الربح (سعر الشراء الحالي)</div>
         <div class="value current" id="totalProfitCurrVal">0.00</div>
-        <div class="sub-val" id="unitProfitCurr">ربح القطعة: 0.00</div>
+        <div class="sub-val" id="unitProfitCurr">ربح الكرتونة/القطعة: 0.00</div>
     </div>
     <div class="stat-box">
-        <div class="label">إجمالي القطع المباعة</div>
-        <div class="value" id="totalQtyVal" style="color: var(--text-dark);">0</div>
+        <div class="label">إجمالي الكميات المباعة</div>
+        <div class="value" id="totalQtyVal" style="color: var(--text-dark); font-size: 0.85rem;">0</div>
     </div>
     <div class="stat-box">
         <div class="label">متوسط سعر التكلفة الحالي</div>
@@ -246,6 +275,18 @@
     </div>
 </div>
 
+<!-- Modal لعرض التفاصيل عند الضغط -->
+<div class="modal-overlay" id="detailsModal">
+    <div class="modal-card">
+        <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+            <h6 class="fw-bold m-0" id="modalTitle">تفاصيل الحركة</h6>
+            <i class="fas fa-times text-muted" style="cursor:pointer;" onclick="closeModal()"></i>
+        </div>
+        <div id="modalBody"></div>
+        <button class="btn btn-sm btn-secondary w-100 mt-3 fw-bold" onclick="closeModal()">إغلاق</button>
+    </div>
+</div>
+
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, collection, getDocs, doc, getDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -281,6 +322,19 @@
     let purchaseEvents = [];
     let productInfo = null;
     let currentBuyPrice = 0;
+    let productFactor = 1;
+
+    function formatQtyDisplay(pcs, factor) {
+        const safeFactor = Math.max(1, Number(factor) || 1);
+        if (safeFactor === 1) return `${pcs} قطعة/جركن`;
+        
+        const cartons = Math.floor(pcs / safeFactor);
+        const rem = pcs % safeFactor;
+        
+        if (cartons > 0 && rem > 0) return `${cartons} كرتونة و ${rem} قطعة`;
+        if (cartons > 0) return `${cartons} كرتونة`;
+        return `${rem} قطعة`;
+    }
 
     async function loadDetails() {
         if (!productId) {
@@ -288,17 +342,16 @@
             return;
         }
         try {
-            // جلب صنف واحد فقط لتوفير البيانات والوقت
             const productSnap = await getDoc(doc(db, "inventory", productId));
             if (!productSnap.exists()) {
                 document.getElementById('productHeader').innerHTML = '<div class="name">الصنف غير موجود</div>';
                 return;
             }
             const pData = productSnap.data();
-            const factor = Math.max(1, Number(pData.unitFactor || pData.factor || pData.pcsPerCarton) || 1);
+            productFactor = Math.max(1, Number(pData.unitFactor || pData.factor || pData.pcsPerCarton) || 1);
             
             let rawBuy = Number(pData.buy) || 0;
-            currentBuyPrice = rawBuy > 0 ? (rawBuy / factor) : 0;
+            currentBuyPrice = rawBuy > 0 ? (rawBuy / productFactor) : 0;
 
             productInfo = {
                 name: pData.name || 'بدون اسم',
@@ -311,7 +364,6 @@
                 <div class="barcode">باركود: ${productInfo.barcode}</div>
             `;
 
-            // استخدام الاستعلام المباشر فقط لتقليل تنزيل البيانات غير الضرورية
             const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
@@ -337,15 +389,15 @@
                 if (pData.openingTotalPcs !== undefined && pData.openingTotalPcs !== null) {
                     openingPcs = Number(pData.openingTotalPcs);
                 } else if (pData.openingQty !== undefined && pData.openingQty !== null) {
-                    openingPcs = Math.round(Number(pData.openingQty) * factor);
+                    openingPcs = Math.round(Number(pData.openingQty) * productFactor);
                 }
             }
 
             if (openingPcs) {
-                events.push({ type: 'purchase', label: 'عند التأسييس', date: new Date(0), qty: openingPcs, price: openingPrice });
+                events.push({ type: 'purchase', label: 'عند التأسيس', date: new Date(0), qty: openingPcs, price: openingPrice, partyName: 'رصيد افتتاحي' });
             }
 
-            // 2. فواتير التوريد (تصفية موجهة)
+            // 2. فواتير التوريد
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -353,15 +405,21 @@
                     const id = item.stockId;
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
-                    const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * itemFactor;
+                    
+                    const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
+                    let pcs = 0;
+                    if (item.unit === 'box') {
+                        pcs = (Number(item.qty) || 0) * itemFactor;
+                    } else {
+                        pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : Number(item.qty) || 0;
+                    }
                     
                     let itemBuy = Number(item.buy) || 0;
                     let buyPrice = itemBuy > 0 ? (itemBuy / itemFactor) : currentBuyPrice;
 
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
-                    events.push({ type: 'purchase', label: 'شراء', date, qty: pcs, price: buyPrice });
+                    events.push({ type: 'purchase', label: 'شراء', date, qty: pcs, price: buyPrice, partyName: data.supplierName || 'مورد غير محدد' });
                 });
             });
 
@@ -370,7 +428,7 @@
                 currentBuyPrice = lastPurchase.price;
             }
 
-            // 3. فواتير المبيعات
+            // 3. فواتير المبيعات (حساب الكمية الدقيقة لمنع التكرار والمضاعفة)
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const invDate = getDocDate(data);
@@ -379,16 +437,30 @@
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
 
-                    const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * itemFactor;
+                    const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
+                    let pcs = 0;
+                    if (item.unit === 'box') {
+                        pcs = (Number(item.qty) || 0) * itemFactor;
+                    } else {
+                        pcs = Number(item.qty) || 0;
+                    }
+
                     let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
 
-                    events.push({ type: 'sale', date: invDate, qty: pcs, revenue });
+                    events.push({ 
+                        type: 'sale', 
+                        date: invDate, 
+                        qty: pcs, 
+                        revenue, 
+                        partyName: data.customerName || 'عميل نقدي', 
+                        unitPrice: item.price,
+                        rawUnit: item.unit,
+                        rawQty: item.qty
+                    });
                 });
             });
 
-            // ترتيب دقيق مع إعطاء الأسبقية للشراء في نفس اليوم
             events.sort((a, b) => {
                 const timeA = a.date ? a.date.getTime() : 0;
                 const timeB = b.date ? b.date.getTime() : 0;
@@ -430,23 +502,27 @@
                         costAvg, 
                         profitAvg,
                         costCurrent,
-                        profitCurrent
+                        profitCurrent,
+                        partyName: ev.partyName,
+                        unitPrice: ev.unitPrice,
+                        rawUnit: ev.rawUnit,
+                        rawQty: ev.rawQty
                     });
                 }
             });
 
-            document.getElementById('avgVsCurrVal').innerText = `${currentBuyPrice.toFixed(2)}`;
+            document.getElementById('avgVsCurrVal').innerText = `${currentBuyPrice.toFixed(2)} ج.م`;
 
             let pLinesHtml = '';
-            purchaseEvents.forEach(p => {
+            purchaseEvents.forEach((p, idx) => {
                 const dateStr = p.date.getTime() === 0 ? 'عند التأسيس' : p.date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
                 pLinesHtml += `
-                    <div class="purchase-item">
+                    <div class="purchase-item" onclick="showPurchaseDetails(${idx})">
                         <div>
                             <div>${dateStr}</div>
-                            <div class="text-muted" style="font-size:0.75rem;">الكمية: ${p.qty} قطعة <span class="badge bg-light text-dark ms-1">${p.label}</span></div>
+                            <div class="text-muted" style="font-size:0.75rem;">الكمية: ${formatQtyDisplay(p.qty, productFactor)} | ${p.partyName}</div>
                         </div>
-                        <div class="badge-buy">${p.price.toFixed(2)}</div>
+                        <div class="badge-buy">${p.price.toFixed(2)} ج.م</div>
                     </div>
                 `;
             });
@@ -483,10 +559,11 @@
         let byDay = {};
         filtered.forEach(l => {
             const key = l.date ? l.date.toISOString().slice(0, 10) : 'بدون تاريخ';
-            if (!byDay[key]) byDay[key] = { qty: 0, profitAvg: 0, profitCurrent: 0 };
+            if (!byDay[key]) byDay[key] = { qty: 0, profitAvg: 0, profitCurrent: 0, items: [] };
             byDay[key].qty += l.qty;
             byDay[key].profitAvg += l.profitAvg;
             byDay[key].profitCurrent += l.profitCurrent;
+            byDay[key].items.push(l);
         });
 
         const dayKeys = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
@@ -502,19 +579,20 @@
             totalProfitCurrent += d.profitCurrent;
             totalQty += d.qty;
 
-            const unitProfitDayAvg = d.qty > 0 ? (d.profitAvg / d.qty) : 0;
-
+            const unitProfitDayAvg = d.qty > 0 ? ((d.profitAvg / d.qty) * productFactor) : 0;
             const displayDate = key === 'بدون تاريخ' ? key : new Date(key).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+            const unitText = productFactor > 1 ? 'الكرتونة' : 'القطعة';
+
             html += `
-                <div class="day-card">
+                <div class="day-card" onclick="showDaySalesDetails('${key}')">
                     <div>
                         <div class="day-date">${displayDate}</div>
-                        <div class="day-qty">القطع المباعة: ${d.qty}</div>
+                        <div class="day-qty">المباع: ${formatQtyDisplay(d.qty, productFactor)}</div>
                     </div>
                     <div class="day-profit">
-                        <div>${d.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                        <span class="sub">${d.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
-                        <span class="unit-p">ربح القطعة: ${unitProfitDayAvg.toFixed(2)}</span>
+                        <div>${d.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</div>
+                        <span class="sub">${d.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</span>
+                        <span class="unit-p">ربح ${unitText}: ${unitProfitDayAvg.toFixed(2)} ج.م</span>
                     </div>
                 </div>
             `;
@@ -524,16 +602,71 @@
             html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-inbox fa-2x mb-2"></i><br>لا توجد بيانات مبيعات في هذه الفترة</div>`;
         }
 
-        const avgUnitProfitAll = totalQty > 0 ? (totalProfitAvg / totalQty) : 0;
-        const currUnitProfitAll = totalQty > 0 ? (totalProfitCurrent / totalQty) : 0;
+        const avgUnitProfitAll = totalQty > 0 ? ((totalProfitAvg / totalQty) * productFactor) : 0;
+        const currUnitProfitAll = totalQty > 0 ? ((totalProfitCurrent / totalQty) * productFactor) : 0;
+        const unitText = productFactor > 1 ? 'الكرتونة' : 'القطعة';
 
         document.getElementById('daysContainer').innerHTML = html;
-        document.getElementById('totalProfitVal').innerText = totalProfitAvg.toLocaleString('en-US', {minimumFractionDigits: 2});
-        document.getElementById('totalProfitCurrVal').innerText = totalProfitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2});
-        document.getElementById('totalQtyVal').innerText = totalQty;
+        document.getElementById('totalProfitVal').innerText = `${totalProfitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('totalProfitCurrVal').innerText = `${totalProfitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('totalQtyVal').innerText = formatQtyDisplay(totalQty, productFactor);
         
-        document.getElementById('unitProfitAvg').innerText = `ربح القطعة: ${avgUnitProfitAll.toFixed(2)} ج.م`;
-        document.getElementById('unitProfitCurr').innerText = `ربح القطعة: ${currUnitProfitAll.toFixed(2)} ج.م`;
+        document.getElementById('unitProfitAvg').innerText = `ربح ${unitText}: ${avgUnitProfitAll.toFixed(2)} ج.م`;
+        document.getElementById('unitProfitCurr').innerText = `ربح ${unitText}: ${currUnitProfitAll.toFixed(2)} ج.م`;
+
+        window.daySalesData = byDay;
+    };
+
+    window.showPurchaseDetails = function(idx) {
+        const p = purchaseEvents[idx];
+        if (!p) return;
+        const dateStr = p.date.getTime() === 0 ? 'عند التأسيس' : p.date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        document.getElementById('modalTitle').innerText = `تفاصيل الشراء - ${dateStr}`;
+        document.getElementById('modalBody').innerHTML = `
+            <div class="p-2 border-bottom">
+                <div><b>جهة التوريد:</b> ${p.partyName}</div>
+                <div><b>نوع الحركة:</b> ${p.label}</div>
+                <div><b>الكمية الواردة:</b> ${formatQtyDisplay(p.qty, productFactor)}</div>
+                <div><b>تكلفة وحدة الشراء:</b> ${p.price.toFixed(2)} ج.م</div>
+                <div class="fw-bold text-success mt-1"><b>إجمالي التكلفة:</b> ${(p.qty * p.price).toFixed(2)} ج.م</div>
+            </div>
+        `;
+        document.getElementById('detailsModal').style.display = 'flex';
+    };
+
+    window.showDaySalesDetails = function(dateKey) {
+        const data = window.daySalesData[dateKey];
+        if (!data) return;
+        
+        const displayDate = dateKey === 'بدون تاريخ' ? dateKey : new Date(dateKey).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+        document.getElementById('modalTitle').innerText = `مبيعات ${displayDate}`;
+        
+        let html = '';
+        data.items.forEach((item, i) => {
+            const qtyStr = item.rawUnit === 'box' ? `${item.rawQty} كرتونة` : `${item.rawQty} قطعة/جركن`;
+            html += `
+                <div class="p-2 border-bottom text-start mb-1" style="font-size:0.82rem;">
+                    <div class="d-flex justify-content-between">
+                        <b>العميل: ${item.partyName}</b>
+                        <span class="badge bg-success">${qtyStr}</span>
+                    </div>
+                    <div class="text-muted mt-1">
+                        سعر البيع: ${item.unitPrice ? item.unitPrice + ' ج.م' : '---'} | الإجمالي: ${item.revenue.toFixed(2)} ج.م
+                    </div>
+                    <div class="text-primary fw-bold mt-1">
+                        الربح المحقق: ${item.profitAvg.toFixed(2)} ج.م
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('modalBody').innerHTML = html;
+        document.getElementById('detailsModal').style.display = 'flex';
+    };
+
+    window.closeModal = function() {
+        document.getElementById('detailsModal').style.display = 'none';
     };
 
     loadDetails();
