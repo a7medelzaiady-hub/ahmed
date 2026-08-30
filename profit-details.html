@@ -71,17 +71,17 @@
             gap: 10px;
             margin: 0 15px 10px;
         }
-        .stats-grid.three-col { grid-template-columns: 1fr 1fr 1fr; }
         .stat-box {
             background: white;
             border-radius: 16px;
-            padding: 14px;
+            padding: 12px 10px;
             text-align: center;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
             border: 1px solid rgba(0,0,0,0.01);
         }
-        .stat-box .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
-        .stat-box .value { font-size: 1.15rem; font-weight: 800; color: var(--primary-green); }
+        .stat-box .label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
+        .stat-box .value { font-size: 1.05rem; font-weight: 800; color: var(--primary-green); }
+        .stat-box .value.current { color: #0284c7; }
         .stat-box .value.negative { color: var(--danger); }
 
         .filter-section { padding: 0 15px 10px; }
@@ -128,6 +128,9 @@
             font-weight: 800;
             font-size: 0.9rem;
             color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
 
         .day-card {
@@ -143,8 +146,30 @@
         }
         .day-date { font-weight: 700; font-size: 0.9rem; }
         .day-qty { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-        .day-profit { font-weight: 800; font-size: 1rem; color: var(--primary-green); }
+        .day-profit { font-weight: 800; font-size: 0.95rem; color: var(--primary-green); text-align: left; }
+        .day-profit .sub { font-size: 0.75rem; color: #0284c7; font-weight: 700; display: block; }
         .day-profit.negative { color: var(--danger); }
+
+        .purchases-box {
+            background: #f8fafc;
+            border: 1px dashed var(--border-color);
+            border-radius: 16px;
+            margin: 0 15px 15px;
+            padding: 12px;
+        }
+        .purchase-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            border-radius: 10px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            font-size: 0.8rem;
+            border: 1px solid #e2e8f0;
+        }
+        .purchase-item:last-child { margin-bottom: 0; }
+        .badge-buy { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -164,19 +189,31 @@
     <div class="barcode"></div>
 </div>
 
-<div class="stats-grid three-col">
+<div class="stats-grid">
     <div class="stat-box">
-        <div class="label">إجمالي الربح</div>
+        <div class="label">إجمالي الربح (بالمتوسط)</div>
         <div class="value" id="totalProfitVal">0.00</div>
+    </div>
+    <div class="stat-box">
+        <div class="label">إجمالي الربح (بالسعر الحالي)</div>
+        <div class="value current" id="totalProfitCurrVal">0.00</div>
     </div>
     <div class="stat-box">
         <div class="label">إجمالي القطع المباعة</div>
         <div class="value" id="totalQtyVal" style="color: var(--text-dark);">0</div>
     </div>
     <div class="stat-box">
-        <div class="label">متوسط سعر التكلفة الحالي</div>
-        <div class="value" id="avgCostVal" style="color: var(--text-dark);">0.00</div>
+        <div class="label">متوسط التكلفة / السعر الحالي</div>
+        <div class="value" id="avgVsCurrVal" style="color: var(--text-dark); font-size: 0.85rem;">0.00 / 0.00</div>
     </div>
+</div>
+
+<!-- سجل أسعار الشراء -->
+<div class="section-title">
+    <span><i class="fas fa-history text-success me-1"></i> سجل أسعار الشراء الواردة</span>
+</div>
+<div class="purchases-box" id="purchasesList">
+    <div class="text-center text-muted font-small">جاري التحميل...</div>
 </div>
 
 <div class="filter-section">
@@ -198,7 +235,10 @@
     </div>
 </div>
 
-<div class="section-title">الربح حسب اليوم</div>
+<div class="section-title">
+    <span>الربح حسب اليوم</span>
+    <span style="font-size: 0.72rem; color: var(--text-muted);">(المتوسط / السعر الحالي)</span>
+</div>
 <div id="daysContainer">
     <div class="text-center text-muted mt-5 fw-bold">
         <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل التفاصيل...
@@ -222,7 +262,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // تاريخ أي مستند (فاتورة بيع أو فاتورة توريد) = حقل timestamp
     function getDocDate(data) {
         if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
         if (data.timestamp) {
@@ -237,8 +276,10 @@
     const paramFrom = params.get('from');
     const paramTo = params.get('to');
 
-    let allLines = []; // {date, qty, revenue, cost, profit} - نتيجة محاكاة المتوسط المتحرك
+    let allLines = []; 
+    let purchaseEvents = [];
     let productInfo = null;
+    let currentBuyPrice = 0;
 
     async function loadDetails() {
         if (!productId) {
@@ -253,10 +294,12 @@
             }
             const pData = productSnap.data();
             const factor = Math.max(1, Number(pData.unitFactor || pData.factor || pData.pcsPerCarton) || 1);
+            currentBuyPrice = Number(pData.buy) || 0;
+
             productInfo = {
                 name: pData.name || 'بدون اسم',
                 barcode: pData.barcode || '---',
-                fallbackBuy: Number(pData.buy) || 0
+                fallbackBuy: currentBuyPrice
             };
 
             document.getElementById('productHeader').innerHTML = `
@@ -272,34 +315,22 @@
 
             let events = [];
 
-            // الرصيد الافتتاحي - بسعره الحقيقي المسجل وقت الاستيراد (unitPrice/totalAmount)
             let openingPcs = 0;
             let openingValue = 0;
             openingSnap.forEach(d => {
                 const data = d.data();
                 const qty = Number(data.quantityPcs) || 0;
-                let value;
-                if (data.totalAmount !== undefined && data.totalAmount !== null) {
-                    value = Number(data.totalAmount) || 0;
-                } else {
-                    value = (Number(data.unitPrice) || 0) * qty;
-                }
+                let value = (data.totalAmount !== undefined && data.totalAmount !== null) ? Number(data.totalAmount) || 0 : (Number(data.unitPrice) || 0) * qty;
                 openingPcs += qty;
                 openingValue += value;
             });
-            let openingPrice = productInfo.fallbackBuy; // حل احتياطي لو مفيش حركة رصيد افتتاحي مسجلة
-            if (openingPcs > 0) {
-                openingPrice = openingValue / openingPcs;
-            } else if (pData.openingTotalPcs !== undefined && pData.openingTotalPcs !== null) {
-                openingPcs = Number(pData.openingTotalPcs);
-            } else if (pData.openingQty !== undefined && pData.openingQty !== null) {
-                openingPcs = Math.round(Number(pData.openingQty) * factor);
-            }
+            let openingPrice = productInfo.fallbackBuy;
+            if (openingPcs > 0) openingPrice = openingValue / openingPcs;
+
             if (openingPcs) {
-                events.push({ type: 'purchase', date: new Date(0), qty: openingPcs, price: openingPrice });
+                events.push({ type: 'purchase', label: 'رصيد افتتاحي', date: new Date(0), qty: openingPcs, price: openingPrice });
             }
 
-            // عمليات الشراء بسعرها الفعلي وقت التوريد
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -308,17 +339,14 @@
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
                     const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
-                        ? Number(item.totalPcs)
-                        : (Number(item.qty) || 0) * itemFactor;
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * itemFactor;
                     const buyPrice = Number(item.buy) || 0;
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
-                    events.push({ type: 'purchase', date, qty: pcs, price: buyPrice });
+                    events.push({ type: 'purchase', label: 'فاتورة توريد', date, qty: pcs, price: buyPrice });
                 });
             });
 
-            // عمليات البيع
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const invDate = getDocDate(data);
@@ -328,10 +356,7 @@
                     if (id !== productId && !(!id && nameMatch)) return;
 
                     const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
-                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
-                        ? Number(item.totalPcs)
-                        : (Number(item.qty) || 0) * itemFactor;
-
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * itemFactor;
                     let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
 
@@ -339,9 +364,9 @@
                 });
             });
 
-            // محاكاة متوسط التكلفة المتحرك بالترتيب الزمني
             events.sort((a, b) => (a.date ? a.date.getTime() : 0) - (b.date ? b.date.getTime() : 0));
             let runQty = 0, runAvg = 0;
+
             events.forEach(ev => {
                 if (ev.type === 'purchase') {
                     if (ev.qty > 0) {
@@ -351,24 +376,50 @@
                     } else {
                         runQty = Math.max(0, runQty + ev.qty);
                     }
+                    purchaseEvents.push(ev);
                 } else {
-                    const cost = runAvg * ev.qty;
-                    const profit = ev.revenue - cost;
+                    const costAvg = runAvg * ev.qty;
+                    const profitAvg = ev.revenue - costAvg;
+
+                    const costCurrent = currentBuyPrice * ev.qty;
+                    const profitCurrent = ev.revenue - costCurrent;
+
                     runQty -= ev.qty;
-                    allLines.push({ date: ev.date, qty: ev.qty, revenue: ev.revenue, cost, profit });
+                    allLines.push({ 
+                        date: ev.date, 
+                        qty: ev.qty, 
+                        revenue: ev.revenue, 
+                        costAvg, 
+                        profitAvg,
+                        costCurrent,
+                        profitCurrent
+                    });
                 }
             });
-            document.getElementById('avgCostVal').innerText = runAvg.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
-            // تطبيق فلتر التاريخ الجاي من صفحة الأرباح (لو موجود)
+            document.getElementById('avgVsCurrVal').innerText = `${runAvg.toFixed(2)} / ${currentBuyPrice.toFixed(2)}`;
+
+            // عرض سجل الشراء
+            let pLinesHtml = '';
+            purchaseEvents.forEach(p => {
+                const dateStr = p.date.getTime() === 0 ? 'عند التأسيس' : p.date.toLocaleDateString('ar-EG');
+                pLinesHtml += `
+                    <div class="purchase-item">
+                        <div><strong>${p.label}:</strong> ${p.qty} قطعة</div>
+                        <div>بتاريخ: ${dateStr}</div>
+                        <div class="badge-buy">${p.price.toFixed(2)} ج.م</div>
+                    </div>
+                `;
+            });
+            document.getElementById('purchasesList').innerHTML = pLinesHtml || '<div class="text-center text-muted">لا يوجد سجل توريد</div>';
+
             if (paramFrom) document.getElementById('fromDate').value = paramFrom;
             if (paramTo) document.getElementById('toDate').value = paramTo;
 
             renderDetails();
         } catch (e) {
             console.error("خطأ في تحميل تفاصيل الربح:", e);
-            document.getElementById('daysContainer').innerHTML =
-                '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
+            document.getElementById('daysContainer').innerHTML = '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
         }
     }
 
@@ -390,26 +441,28 @@
             return true;
         });
 
-        // تجميع حسب اليوم
         let byDay = {};
         filtered.forEach(l => {
             const key = l.date ? l.date.toISOString().slice(0, 10) : 'بدون تاريخ';
-            if (!byDay[key]) byDay[key] = { qty: 0, profit: 0 };
+            if (!byDay[key]) byDay[key] = { qty: 0, profitAvg: 0, profitCurrent: 0 };
             byDay[key].qty += l.qty;
-            byDay[key].profit += l.profit;
+            byDay[key].profitAvg += l.profitAvg;
+            byDay[key].profitCurrent += l.profitCurrent;
         });
 
         const dayKeys = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
 
-        let totalProfit = 0;
+        let totalProfitAvg = 0;
+        let totalProfitCurrent = 0;
         let totalQty = 0;
         let html = '';
 
         dayKeys.forEach(key => {
             const d = byDay[key];
-            totalProfit += d.profit;
+            totalProfitAvg += d.profitAvg;
+            totalProfitCurrent += d.profitCurrent;
             totalQty += d.qty;
-            const isNeg = d.profit < 0;
+
             const displayDate = key === 'بدون تاريخ' ? key : new Date(key).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
             html += `
                 <div class="day-card">
@@ -417,7 +470,10 @@
                         <div class="day-date">${displayDate}</div>
                         <div class="day-qty">القطع المباعة: ${d.qty}</div>
                     </div>
-                    <div class="day-profit ${isNeg ? 'negative' : ''}">${d.profit.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div class="day-profit">
+                        <div>${d.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                        <span class="sub">${d.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                    </div>
                 </div>
             `;
         });
@@ -427,8 +483,8 @@
         }
 
         document.getElementById('daysContainer').innerHTML = html;
-        document.getElementById('totalProfitVal').innerText = totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2});
-        document.getElementById('totalProfitVal').classList.toggle('negative', totalProfit < 0);
+        document.getElementById('totalProfitVal').innerText = totalProfitAvg.toLocaleString('en-US', {minimumFractionDigits: 2});
+        document.getElementById('totalProfitCurrVal').innerText = totalProfitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2});
         document.getElementById('totalQtyVal').innerText = totalQty;
     };
 
