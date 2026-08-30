@@ -152,20 +152,20 @@
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
         .item-qty-sold { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
 
-        .profit-box { text-align: left; }
+        .profit-box { text-align: right; }
         .profit-value {
             font-weight: 800;
-            font-size: 1.05rem;
+            font-size: 1.02rem;
             color: var(--primary-green);
         }
-        .profit-value.negative { color: var(--danger); }
         .profit-current {
             font-weight: 700;
-            font-size: 0.8rem;
+            font-size: 0.82rem;
             color: #0284c7;
             margin-top: 2px;
         }
-        .profit-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+        .profit-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; }
+        .unit-profit-tag { font-size: 0.68rem; color: var(--accent-green); font-weight: 700; display: inline-block; margin-right: 4px; }
 
         .btn-details {
             background: #f0fdf4;
@@ -206,7 +206,7 @@
         <a href="index.html" class="nav-icon" title="الصفحة الرئيسية">
             <i class="fas fa-home"></i>
         </a>
-        <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
+        <i class="fas fa-sync-alt nav-icon" onclick="forceRefreshData()" title="تحديث البيانات"></i>
     </div>
     <span class="fw-bold">أرباح الأصناف</span>
     <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
@@ -249,17 +249,17 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري حساب الأرباح...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري جلب البيانات السريعة...
     </div>
 </div>
 
 <div class="bottom-summary">
-    <i class="fas fa-boxes me-2"></i> عدد الأصناف: <span id="totalCount" class="ms-2">0</span>
+    <i class="fas fa-boxes me-2"></i> عدد الأصناف المباعة: <span id="totalCount" class="ms-2">0</span>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -272,7 +272,9 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    const db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
 
     function getDocDate(data) {
         if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
@@ -287,33 +289,53 @@
     let namesMap = {};
     let saleLines = {}; 
 
+    window.forceRefreshData = function() {
+        localStorage.removeItem("cache_profits_inventory");
+        window.location.reload(true);
+    };
+
     async function loadData() {
         try {
-            const [inventorySnap, invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
-                getDocs(collection(db, "inventory")),
+            // 1. استخدام التخزين المحلي للأصناف للحد من استهلاك البيانات
+            let cachedInventory = localStorage.getItem("cache_profits_inventory");
+            if (cachedInventory) {
+                const parsed = JSON.parse(cachedInventory);
+                parsed.forEach(p => {
+                    productsMap[p.id] = p;
+                    if (p.name) namesMap[p.name.trim()] = p.id;
+                });
+            } else {
+                const inventorySnap = await getDocs(collection(db, "inventory"));
+                let listToCache = [];
+                inventorySnap.forEach(d => {
+                    const data = d.data();
+                    if (data.isDeleted) return;
+                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                    const rawBuy = Number(data.buy) || 0;
+                    const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
+
+                    const pObj = {
+                        id: d.id,
+                        name: data.name || 'بدون اسم',
+                        barcode: data.barcode || '---',
+                        factor,
+                        fallbackBuy: currentBuyUnit,
+                        currentBuy: currentBuyUnit,
+                        raw: data
+                    };
+                    productsMap[d.id] = pObj;
+                    listToCache.push(pObj);
+                    if (data.name) namesMap[data.name.trim()] = d.id;
+                });
+                try { localStorage.setItem("cache_profits_inventory", JSON.stringify(listToCache)); } catch(e){}
+            }
+
+            // 2. تحميل الفواتير والمعاملات بسرعة بالتوازي
+            const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
                 getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
             ]);
-
-            inventorySnap.forEach(d => {
-                const data = d.data();
-                if (data.isDeleted) return;
-                const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                const rawBuy = Number(data.buy) || 0;
-                const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
-
-                productsMap[d.id] = {
-                    id: d.id,
-                    name: data.name || 'بدون اسم',
-                    barcode: data.barcode || '---',
-                    factor,
-                    fallbackBuy: currentBuyUnit,
-                    currentBuy: currentBuyUnit,
-                    raw: data
-                };
-                if (data.name) namesMap[data.name.trim()] = d.id;
-            });
 
             let openingQtyMap = {};
             let openingValueMap = {};
@@ -332,7 +354,7 @@
                 events[id].push(ev);
             }
 
-            // 1. الرصيد الافتتاحي
+            // الرصيد الافتتاحي
             Object.values(productsMap).forEach(p => {
                 let openingPcs = 0;
                 let openingPrice = p.currentBuy;
@@ -342,9 +364,9 @@
                     if (openingQtyMap[p.id] > 0 && openingValueMap[p.id] > 0) {
                         openingPrice = openingValueMap[p.id] / openingQtyMap[p.id];
                     }
-                } else if (p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
+                } else if (p.raw && p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
                     openingPcs = Number(p.raw.openingTotalPcs);
-                } else if (p.raw.openingQty !== undefined && p.raw.openingQty !== null) {
+                } else if (p.raw && p.raw.openingQty !== undefined && p.raw.openingQty !== null) {
                     openingPcs = Math.round(Number(p.raw.openingQty) * p.factor);
                 }
 
@@ -353,7 +375,7 @@
                 }
             });
 
-            // 2. عمليات الشراء من فواتير التوريد
+            // مشتريات التوريد
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -372,7 +394,7 @@
                 });
             });
 
-            // 3. عمليات البيع
+            // مبيعات
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -387,27 +409,23 @@
                 });
             });
 
-            // محاكاة حساب متوسط التكلفة بالترتيب المحاسبي الدقيق
+            // محاكاة حساب المتوسط والأرباح
             Object.keys(events).forEach(id => {
                 const list = events[id].slice().sort((a, b) => {
                     const timeA = a.date ? a.date.getTime() : 0;
                     const timeB = b.date ? b.date.getTime() : 0;
-
                     const dateA_str = a.date ? a.date.toISOString().slice(0, 10) : '';
                     const dateB_str = b.date ? b.date.toISOString().slice(0, 10) : '';
 
-                    // المشتريات تسبق المبيعات عند التساوي في اليوم لتوفير رصيد وتكلفة المبيعات
                     if (dateA_str === dateB_str && a.type !== b.type) {
                         return a.type === 'purchase' ? -1 : 1;
                     }
-
                     return timeA - timeB;
                 });
 
                 let runQty = 0, runAvg = 0;
                 saleLines[id] = [];
                 
-                // تحديث سعر الشراء الحالي بناءً على آخر عملية شراء متوفرة للصنف إن وجد
                 let lastP = list.filter(e => e.type === 'purchase' && e.price > 0).slice(-1)[0];
                 let currentBuy = (productsMap[id].currentBuy > 0) ? productsMap[id].currentBuy : (lastP ? lastP.price : 0);
 
@@ -499,16 +517,29 @@
         list.forEach(p => {
             grandAvg += p.profitAvg;
             grandCurrent += p.profitCurrent;
+
+            // حساب ربح القطعة الواحدة
+            const unitProfitAvg = p.qtySold > 0 ? (p.profitAvg / p.qtySold) : 0;
+            const unitProfitCurr = p.qtySold > 0 ? (p.profitCurrent / p.qtySold) : 0;
+
             html += `
                 <div class="item-card">
                     <div>
                         <div class="item-name">${p.name}</div>
                         <div class="item-barcode">باركود: ${p.barcode}</div>
-                        <div class="item-qty-sold">إجمالي القطع المباعة: ${p.qtySold}</div>
-                        <div class="profit-label mt-1">الربح (متوسط التكلفة المتحرك)</div>
-                        <div class="profit-value">${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                        <div class="profit-label mt-1">الربح (سعر الشراء الحالي)</div>
-                        <div class="profit-current">${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                        <div class="item-qty-sold">إجمالي المباع: ${p.qtySold} قطعة</div>
+                        
+                        <div class="profit-label mt-2">الربح بالمتوسط:</div>
+                        <div class="profit-value">
+                            ${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
+                            <span class="unit-profit-tag">(للقطعة: ${unitProfitAvg.toFixed(2)})</span>
+                        </div>
+
+                        <div class="profit-label mt-1">الربح بالسعر الحالي:</div>
+                        <div class="profit-current">
+                            ${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م
+                            <span class="unit-profit-tag" style="color:#0284c7;">(للقطعة: ${unitProfitCurr.toFixed(2)})</span>
+                        </div>
                     </div>
                     <div>
                         <button class="btn-details" onclick="goToDetails('${p.id}')">
