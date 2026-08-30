@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أرباح الأصناف - شركة الزيادي</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-green: #0b6641;
+            --accent-green: #10b981;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --danger: #f43f5e;
+            --danger-bg: #fff1f2;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 90px;
+            direction: rtl;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            color: white;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-radius: 0 0 25px 25px;
+            box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
+        }
+
+        .top-nav .nav-icon {
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: 0.2s;
+            color: white;
+            text-decoration: none;
+        }
+        .top-nav .nav-icon:active { transform: scale(0.9); }
+
+        .filter-section {
+            padding: 18px 20px 5px;
+        }
+        .filter-card {
+            background: white;
+            border-radius: 18px;
+            padding: 14px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            border: 1px solid var(--border-color);
+        }
+        .filter-row { display: flex; gap: 10px; align-items: center; }
+        .filter-row .form-label { font-size: 0.78rem; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
+        .filter-row input[type="date"] {
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            font-family: 'Cairo', sans-serif;
+            font-size: 0.85rem;
+            width: 100%;
+        }
+        .filter-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .btn-apply {
+            background: var(--primary-green);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            flex: 1;
+        }
+        .btn-clear {
+            background: #f1f5f9;
+            color: var(--text-muted);
+            border: none;
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .search-section {
+            padding: 15px 20px 5px;
+        }
+        .search-wrapper { position: relative; }
+        .search-wrapper i {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-green);
+        }
+        .search-input {
+            width: 100%;
+            padding: 14px 40px 14px 15px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            font-size: 0.95rem;
+            outline: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+        }
+        .search-input:focus { border-color: var(--accent-green); }
+
+        .summary-strip {
+            margin: 15px 15px 5px;
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            border-radius: 18px;
+            padding: 16px 20px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 6px 16px rgba(11,102,65,0.2);
+        }
+        .summary-strip .label { font-size: 0.8rem; opacity: 0.85; }
+        .summary-strip .value { font-size: 1.3rem; font-weight: 800; }
+
+        .item-card {
+            padding: 16px 20px;
+            background: white;
+            border-radius: 20px;
+            margin: 0 15px 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.01);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .item-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 3px; color: var(--text-dark); line-height: 1.3; }
+        .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
+        .item-qty-sold { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+
+        .profit-value {
+            font-weight: 800;
+            font-size: 1.05rem;
+            color: var(--primary-green);
+        }
+        .profit-value.negative { color: var(--danger); }
+        .profit-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+
+        .btn-details {
+            background: #f0fdf4;
+            color: var(--primary-green);
+            border: 1px solid #dcfce7;
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-details:active { transform: scale(0.95); }
+
+        .bottom-summary {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: white;
+            padding: 18px 20px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: center;
+            border-top: 1px solid var(--border-color);
+            color: var(--primary-green);
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <div class="d-flex align-items-center gap-3">
+        <a href="index.html" class="nav-icon" title="الصفحة الرئيسية">
+            <i class="fas fa-home"></i>
+        </a>
+        <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
+    </div>
+    <span class="fw-bold">أرباح الأصناف</span>
+    <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
+</div>
+
+<div class="filter-section">
+    <div class="filter-card">
+        <div class="filter-row">
+            <div style="flex:1">
+                <div class="form-label">من تاريخ</div>
+                <input type="date" id="fromDate">
+            </div>
+            <div style="flex:1">
+                <div class="form-label">إلى تاريخ</div>
+                <input type="date" id="toDate">
+            </div>
+        </div>
+        <div class="filter-actions">
+            <button class="btn-apply" onclick="renderItems()"><i class="fas fa-filter me-1"></i> تطبيق الفلتر</button>
+            <button class="btn-clear" onclick="clearFilter()">مسح</button>
+        </div>
+    </div>
+</div>
+
+<div class="search-section">
+    <div class="search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" class="search-input" placeholder="ابحث عن منتج أو باركود..." oninput="renderItems()">
+    </div>
+</div>
+
+<div class="summary-strip">
+    <div>
+        <div class="label">إجمالي الأرباح فى الفترة المحددة</div>
+        <div class="value" id="grandTotalProfit">0.00</div>
+    </div>
+    <i class="fas fa-chart-line fa-lg"></i>
+</div>
+
+<div id="itemsContainer">
+    <div class="text-center text-muted mt-5 fw-bold">
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري حساب الأرباح...
+    </div>
+</div>
+
+<div class="bottom-summary">
+    <i class="fas fa-boxes me-2"></i> عدد الأصناف: <span id="totalCount" class="ms-2">0</span>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // حقل سعر التكلفة في مستند الصنف (inventory) = buy
+    function getCostPerPiece(productData) {
+        return Number(productData.buy) || 0;
+    }
+
+    // حقل تاريخ الفاتورة = timestamp (Firestore Timestamp)
+    function getInvoiceDate(invoiceData) {
+        if (invoiceData.timestamp && invoiceData.timestamp.toDate) {
+            return invoiceData.timestamp.toDate();
+        }
+        if (invoiceData.timestamp) {
+            const d = new Date(invoiceData.timestamp);
+            if (!isNaN(d)) return d;
+        }
+        return null;
+    }
+
+    let productsMap = {}; // id -> {name, barcode, factor, costPerPiece}
+    let namesMap = {};
+    let allInvoiceLines = []; // {productId, date, qtyPcs, revenue, isReturn}
+
+    async function loadData() {
+        try {
+            const [inventorySnap, invoicesSnap] = await Promise.all([
+                getDocs(collection(db, "inventory")),
+                getDocs(collection(db, "invoices"))
+            ]);
+
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                if (data.isDeleted) return;
+                productsMap[d.id] = {
+                    id: d.id,
+                    name: data.name || 'بدون اسم',
+                    barcode: data.barcode || '---',
+                    costPerPiece: getCostPerPiece(data)
+                };
+                if (data.name) namesMap[data.name.trim()] = d.id;
+            });
+
+            invoicesSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                const invDate = getInvoiceDate(data);
+                data.items?.forEach(item => {
+                    const id = item.stockId || namesMap[item.name?.trim()];
+                    if (!id || !productsMap[id]) return;
+                    const product = productsMap[id];
+
+                    // totalPcs جاهزة ومحسوبة من التطبيق نفسه وقت البيع
+                    const factor = Math.max(1, Number(item.unitFactor) || 1);
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
+                        ? Number(item.totalPcs)
+                        : (Number(item.qty) || 0) * factor;
+
+                    const revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
+                    const costTotal = product.costPerPiece * pcs;
+                    let profit = revenue - costTotal;
+
+                    if (item.isReturn) {
+                        profit = -profit;
+                        pcs = -pcs;
+                    }
+
+                    allInvoiceLines.push({
+                        productId: id,
+                        date: invDate,
+                        qtyPcs: pcs,
+                        revenue,
+                        profit
+                    });
+                });
+            });
+
+            renderItems();
+        } catch (e) {
+            console.error("خطأ في تجميع بيانات الأرباح:", e);
+            document.getElementById('itemsContainer').innerHTML =
+                '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
+        }
+    }
+
+    window.clearFilter = function() {
+        document.getElementById('fromDate').value = '';
+        document.getElementById('toDate').value = '';
+        renderItems();
+    };
+
+    window.renderItems = function() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const fromVal = document.getElementById('fromDate').value;
+        const toVal = document.getElementById('toDate').value;
+        const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+        const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+
+        // تجميع الربح لكل صنف حسب الفلتر
+        let profitByProduct = {};
+        let qtyByProduct = {};
+
+        allInvoiceLines.forEach(line => {
+            if (fromDate && (!line.date || line.date < fromDate)) return;
+            if (toDate && (!line.date || line.date > toDate)) return;
+            profitByProduct[line.productId] = (profitByProduct[line.productId] || 0) + line.profit;
+            qtyByProduct[line.productId] = (qtyByProduct[line.productId] || 0) + line.qtyPcs;
+        });
+
+        let list = Object.keys(productsMap).map(id => ({
+            ...productsMap[id],
+            totalProfit: profitByProduct[id] || 0,
+            qtySold: qtyByProduct[id] || 0
+        }));
+
+        if (term) {
+            list = list.filter(p =>
+                p.name.toLowerCase().includes(term) || String(p.barcode).includes(term)
+            );
+        }
+
+        // إخفاء الأصناف اللي مفيش لها أي حركة في الفترة المختارة
+        list = list.filter(p => qtyByProduct[p.id] !== undefined);
+
+        list.sort((a, b) => b.totalProfit - a.totalProfit);
+
+        const container = document.getElementById('itemsContainer');
+        let grandTotal = 0;
+        let html = '';
+
+        list.forEach(p => {
+            grandTotal += p.totalProfit;
+            const isNeg = p.totalProfit < 0;
+            html += `
+                <div class="item-card">
+                    <div>
+                        <div class="item-name">${p.name}</div>
+                        <div class="item-barcode">باركود: ${p.barcode}</div>
+                        <div class="item-qty-sold">إجمالي القطع المباعة: ${p.qtySold}</div>
+                        <div class="profit-label mt-1">إجمالي الربح</div>
+                        <div class="profit-value ${isNeg ? 'negative' : ''}">${p.totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    </div>
+                    <div>
+                        <button class="btn-details" onclick="goToDetails('${p.id}')">
+                            تفاصيل <i class="fas fa-chevron-left"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (list.length === 0) {
+            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-search fa-2x mb-2"></i><br>لا توجد بيانات مطابقة</div>`;
+        }
+
+        container.innerHTML = html;
+        document.getElementById('totalCount').innerText = list.length;
+        document.getElementById('grandTotalProfit').innerText = grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2});
+    };
+
+    window.goToDetails = function(id) {
+        const fromVal = document.getElementById('fromDate').value;
+        const toVal = document.getElementById('toDate').value;
+        let url = `profit-details.html?id=${id}`;
+        if (fromVal) url += `&from=${fromVal}`;
+        if (toVal) url += `&to=${toVal}`;
+        window.location.href = url;
+    };
+
+    loadData();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
+}
+</script>
+</body>
+</html>
