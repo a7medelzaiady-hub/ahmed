@@ -208,7 +208,6 @@
     </div>
 </div>
 
-<!-- سجل أسعار الشراء -->
 <div class="section-title">
     <span><i class="fas fa-history text-success me-1"></i> سجل أسعار الشراء الواردة</span>
 </div>
@@ -315,6 +314,7 @@
 
             let events = [];
 
+            // تجميع كمية وقيمة الرصيد الافتتاحي
             let openingPcs = 0;
             let openingValue = 0;
             openingSnap.forEach(d => {
@@ -324,13 +324,23 @@
                 openingPcs += qty;
                 openingValue += value;
             });
-            let openingPrice = productInfo.fallbackBuy;
-            if (openingPcs > 0) openingPrice = openingValue / openingPcs;
+
+            // الاعتماد على السعر الحالي مباشرة إذا لم توجد قيمة محددة للرصيد الافتتاحي
+            let openingPrice = (openingPcs > 0 && openingValue > 0) ? (openingValue / openingPcs) : currentBuyPrice;
+
+            if (!openingPcs) {
+                if (pData.openingTotalPcs !== undefined && pData.openingTotalPcs !== null) {
+                    openingPcs = Number(pData.openingTotalPcs);
+                } else if (pData.openingQty !== undefined && pData.openingQty !== null) {
+                    openingPcs = Math.round(Number(pData.openingQty) * factor);
+                }
+            }
 
             if (openingPcs) {
                 events.push({ type: 'purchase', label: 'رصيد افتتاحي', date: new Date(0), qty: openingPcs, price: openingPrice });
             }
 
+            // فواتير التوريد
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -340,13 +350,14 @@
                     if (id !== productId && !(!id && nameMatch)) return;
                     const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
                     let pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0) * itemFactor;
-                    const buyPrice = Number(item.buy) || 0;
+                    const buyPrice = Number(item.buy) || currentBuyPrice; // لو ملقتش سعر الشراء في التوريد، استعمل السعر الحالي
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
                     events.push({ type: 'purchase', label: 'فاتورة توريد', date, qty: pcs, price: buyPrice });
                 });
             });
 
+            // عمليات البيع
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const invDate = getDocDate(data);
@@ -399,7 +410,6 @@
 
             document.getElementById('avgVsCurrVal').innerText = `${runAvg.toFixed(2)} / ${currentBuyPrice.toFixed(2)}`;
 
-            // عرض سجل الشراء
             let pLinesHtml = '';
             purchaseEvents.forEach(p => {
                 const dateStr = p.date.getTime() === 0 ? 'عند التأسيس' : p.date.toLocaleDateString('ar-EG');
