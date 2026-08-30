@@ -389,7 +389,7 @@
             // بنحسب في نفس الوقت الربح بطريقة "السعر الحالي" (سعر buy الحالي مطبق على كل المبيعات) للمقارنة
             Object.keys(events).forEach(id => {
                 const currentBuyPrice = productsMap[id] ? productsMap[id].fallbackBuy : 0;
-                const list = events[id].slice().sort((a, b) => (a.date ? a.date.getTime() : 0) - (b.date ? b.date.getTime() : 0));
+                const list = events[id].slice().sort((a, b) => (a.date ? a.date.getTime() : Number.MAX_SAFE_INTEGER) - (b.date ? b.date.getTime() : Number.MAX_SAFE_INTEGER));
                 let runQty = 0, runAvg = 0;
                 saleLines[id] = [];
                 list.forEach(ev => {
@@ -406,7 +406,7 @@
                         const profit = ev.revenue - cost;
                         const costCurrent = currentBuyPrice * ev.qty;
                         const profitCurrent = ev.revenue - costCurrent;
-                        runQty -= ev.qty;
+                        runQty = Math.max(0, runQty - ev.qty);
                         saleLines[id].push({ date: ev.date, qty: ev.qty, revenue: ev.revenue, cost, profit, profitCurrent });
                     }
                 });
