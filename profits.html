@@ -250,7 +250,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -265,76 +265,141 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // حقل سعر التكلفة في مستند الصنف (inventory) = buy
-    function getCostPerPiece(productData) {
-        return Number(productData.buy) || 0;
-    }
-
-    // حقل تاريخ الفاتورة = timestamp (Firestore Timestamp)
-    function getInvoiceDate(invoiceData) {
-        if (invoiceData.timestamp && invoiceData.timestamp.toDate) {
-            return invoiceData.timestamp.toDate();
-        }
-        if (invoiceData.timestamp) {
-            const d = new Date(invoiceData.timestamp);
+    // تاريخ أي مستند (فاتورة بيع أو فاتورة توريد) = حقل timestamp
+    function getDocDate(data) {
+        if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
+        if (data.timestamp) {
+            const d = new Date(data.timestamp);
             if (!isNaN(d)) return d;
         }
         return null;
     }
 
-    let productsMap = {}; // id -> {name, barcode, factor, costPerPiece}
+    let productsMap = {}; // id -> {name, barcode, factor, fallbackBuy, raw}
     let namesMap = {};
-    let allInvoiceLines = []; // {productId, date, qtyPcs, revenue, isReturn}
+    let saleLines = {}; // productId -> [{date, qty, revenue, cost, profit}]
 
     async function loadData() {
         try {
-            const [inventorySnap, invoicesSnap] = await Promise.all([
+            const [inventorySnap, invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
                 getDocs(collection(db, "inventory")),
-                getDocs(collection(db, "invoices"))
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
             ]);
 
             inventorySnap.forEach(d => {
                 const data = d.data();
                 if (data.isDeleted) return;
+                const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                 productsMap[d.id] = {
                     id: d.id,
                     name: data.name || 'بدون اسم',
                     barcode: data.barcode || '---',
-                    costPerPiece: getCostPerPiece(data)
+                    factor,
+                    fallbackBuy: Number(data.buy) || 0,
+                    raw: data
                 };
                 if (data.name) namesMap[data.name.trim()] = d.id;
             });
 
-            invoicesSnap.forEach(docSnap => {
+            // نجمع كمية وقيمة الرصيد الافتتاحي لكل صنف عشان نحسب سعره الحقيقي وقت التسجيل
+            let openingQtyMap = {};
+            let openingValueMap = {};
+            openingSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                const invDate = getInvoiceDate(data);
+                if (!data.productId) return;
+                const qty = Number(data.quantityPcs) || 0;
+                let value;
+                if (data.totalAmount !== undefined && data.totalAmount !== null) {
+                    value = Number(data.totalAmount) || 0;
+                } else {
+                    value = (Number(data.unitPrice) || 0) * qty;
+                }
+                openingQtyMap[data.productId] = (openingQtyMap[data.productId] || 0) + qty;
+                openingValueMap[data.productId] = (openingValueMap[data.productId] || 0) + value;
+            });
+
+            // تجميع الأحداث (شراء / بيع) لكل صنف على خط زمني واحد
+            let events = {};
+            function pushEvent(id, ev) {
+                if (!events[id]) events[id] = [];
+                events[id].push(ev);
+            }
+
+            // الرصيد الافتتاحي: أول حدث "شراء" في التايم لاين - بسعره الحقيقي المسجل وقت الاستيراد (unitPrice/totalAmount)
+            // لو الصنف اتضاف قبل ما يتسجل حركة رصيد افتتاحي (نادرًا)، بنرجع لسعر buy الحالي كحل احتياطي فقط
+            Object.values(productsMap).forEach(p => {
+                let openingPcs = 0;
+                let openingPrice = p.fallbackBuy;
+                if (openingQtyMap[p.id]) {
+                    openingPcs = openingQtyMap[p.id];
+                    openingPrice = openingQtyMap[p.id] > 0 ? (openingValueMap[p.id] / openingQtyMap[p.id]) : p.fallbackBuy;
+                } else if (p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
+                    openingPcs = Number(p.raw.openingTotalPcs);
+                } else if (p.raw.openingQty !== undefined && p.raw.openingQty !== null) {
+                    openingPcs = Math.round(Number(p.raw.openingQty) * p.factor);
+                }
+                if (openingPcs) {
+                    pushEvent(p.id, { type: 'purchase', date: new Date(0), qty: openingPcs, price: openingPrice });
+                }
+            });
+
+            // عمليات الشراء من فواتير التوريد - بسعر buy المسجل وقت التوريد نفسه
+            supplierSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                const date = getDocDate(data);
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
-                    const product = productsMap[id];
-
-                    // totalPcs جاهزة ومحسوبة من التطبيق نفسه وقت البيع
                     const factor = Math.max(1, Number(item.unitFactor) || 1);
                     let pcs = item.totalPcs !== undefined && item.totalPcs !== null
                         ? Number(item.totalPcs)
                         : (Number(item.qty) || 0) * factor;
+                    const buyPrice = Number(item.buy) || 0;
+                    const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
+                    if (isReturn) pcs = -Math.abs(pcs);
+                    pushEvent(id, { type: 'purchase', date, qty: pcs, price: buyPrice });
+                });
+            });
 
-                    const revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
-                    const costTotal = product.costPerPiece * pcs;
-                    let profit = revenue - costTotal;
+            // عمليات البيع من الفواتير
+            invoicesSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                const date = getDocDate(data);
+                data.items?.forEach(item => {
+                    const id = item.stockId || namesMap[item.name?.trim()];
+                    if (!id || !productsMap[id]) return;
+                    const factor = Math.max(1, Number(item.unitFactor) || 1);
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
+                        ? Number(item.totalPcs)
+                        : (Number(item.qty) || 0) * factor;
+                    let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
+                    if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
+                    pushEvent(id, { type: 'sale', date, qty: pcs, revenue });
+                });
+            });
 
-                    if (item.isReturn) {
-                        profit = -profit;
-                        pcs = -pcs;
+            // محاكاة متوسط التكلفة المتحرك لكل صنف بالترتيب الزمني
+            Object.keys(events).forEach(id => {
+                const list = events[id].slice().sort((a, b) => (a.date ? a.date.getTime() : 0) - (b.date ? b.date.getTime() : 0));
+                let runQty = 0, runAvg = 0;
+                saleLines[id] = [];
+                list.forEach(ev => {
+                    if (ev.type === 'purchase') {
+                        if (ev.qty > 0) {
+                            const newQty = runQty + ev.qty;
+                            runAvg = newQty > 0 ? (runQty * runAvg + ev.qty * ev.price) / newQty : 0;
+                            runQty = newQty;
+                        } else {
+                            runQty = Math.max(0, runQty + ev.qty);
+                        }
+                    } else {
+                        const cost = runAvg * ev.qty;
+                        const profit = ev.revenue - cost;
+                        runQty -= ev.qty;
+                        saleLines[id].push({ date: ev.date, qty: ev.qty, revenue: ev.revenue, cost, profit });
                     }
-
-                    allInvoiceLines.push({
-                        productId: id,
-                        date: invDate,
-                        qtyPcs: pcs,
-                        revenue,
-                        profit
-                    });
                 });
             });
 
@@ -360,14 +425,18 @@
         const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
 
         // تجميع الربح لكل صنف حسب الفلتر
+        // ملاحظة: التكلفة نفسها محسوبة من المحاكاة الكاملة للتاريخ (كل عمليات الشراء من البداية)
+        // الفلتر هنا بيحدد بس أي المبيعات تدخل في الإجمالي المعروض، مش بيغيّر التكلفة نفسها
         let profitByProduct = {};
         let qtyByProduct = {};
 
-        allInvoiceLines.forEach(line => {
-            if (fromDate && (!line.date || line.date < fromDate)) return;
-            if (toDate && (!line.date || line.date > toDate)) return;
-            profitByProduct[line.productId] = (profitByProduct[line.productId] || 0) + line.profit;
-            qtyByProduct[line.productId] = (qtyByProduct[line.productId] || 0) + line.qtyPcs;
+        Object.keys(saleLines).forEach(productId => {
+            saleLines[productId].forEach(line => {
+                if (fromDate && (!line.date || line.date < fromDate)) return;
+                if (toDate && (!line.date || line.date > toDate)) return;
+                profitByProduct[productId] = (profitByProduct[productId] || 0) + line.profit;
+                qtyByProduct[productId] = (qtyByProduct[productId] || 0) + line.qty;
+            });
         });
 
         let list = Object.keys(productsMap).map(id => ({
