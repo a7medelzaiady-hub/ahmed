@@ -69,8 +69,9 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
-            margin: 0 15px 15px;
+            margin: 0 15px 10px;
         }
+        .stats-grid.three-col { grid-template-columns: 1fr 1fr 1fr; }
         .stat-box {
             background: white;
             border-radius: 16px;
@@ -163,7 +164,7 @@
     <div class="barcode"></div>
 </div>
 
-<div class="stats-grid">
+<div class="stats-grid three-col">
     <div class="stat-box">
         <div class="label">إجمالي الربح</div>
         <div class="value" id="totalProfitVal">0.00</div>
@@ -171,6 +172,10 @@
     <div class="stat-box">
         <div class="label">إجمالي القطع المباعة</div>
         <div class="value" id="totalQtyVal" style="color: var(--text-dark);">0</div>
+    </div>
+    <div class="stat-box">
+        <div class="label">متوسط سعر التكلفة الحالي</div>
+        <div class="value" id="avgCostVal" style="color: var(--text-dark);">0.00</div>
     </div>
 </div>
 
@@ -202,7 +207,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, doc, getDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -217,18 +222,11 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // حقل سعر التكلفة في مستند الصنف (inventory) = buy
-    function getCostPerPiece(productData) {
-        return Number(productData.buy) || 0;
-    }
-
-    // حقل تاريخ الفاتورة = timestamp (Firestore Timestamp)
-    function getInvoiceDate(invoiceData) {
-        if (invoiceData.timestamp && invoiceData.timestamp.toDate) {
-            return invoiceData.timestamp.toDate();
-        }
-        if (invoiceData.timestamp) {
-            const d = new Date(invoiceData.timestamp);
+    // تاريخ أي مستند (فاتورة بيع أو فاتورة توريد) = حقل timestamp
+    function getDocDate(data) {
+        if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
+        if (data.timestamp) {
+            const d = new Date(data.timestamp);
             if (!isNaN(d)) return d;
         }
         return null;
@@ -239,7 +237,7 @@
     const paramFrom = params.get('from');
     const paramTo = params.get('to');
 
-    let allLines = []; // {date, qtyPcs, revenue, profit, invoiceNumber}
+    let allLines = []; // {date, qty, revenue, cost, profit} - نتيجة محاكاة المتوسط المتحرك
     let productInfo = null;
 
     async function loadDetails() {
@@ -254,10 +252,11 @@
                 return;
             }
             const pData = productSnap.data();
+            const factor = Math.max(1, Number(pData.unitFactor || pData.factor || pData.pcsPerCarton) || 1);
             productInfo = {
                 name: pData.name || 'بدون اسم',
                 barcode: pData.barcode || '---',
-                costPerPiece: getCostPerPiece(pData)
+                fallbackBuy: Number(pData.buy) || 0
             };
 
             document.getElementById('productHeader').innerHTML = `
@@ -265,10 +264,64 @@
                 <div class="barcode">باركود: ${productInfo.barcode}</div>
             `;
 
-            const invoicesSnap = await getDocs(collection(db, "invoices"));
+            const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance"), where("productId", "==", productId)))
+            ]);
+
+            let events = [];
+
+            // الرصيد الافتتاحي - بسعره الحقيقي المسجل وقت الاستيراد (unitPrice/totalAmount)
+            let openingPcs = 0;
+            let openingValue = 0;
+            openingSnap.forEach(d => {
+                const data = d.data();
+                const qty = Number(data.quantityPcs) || 0;
+                let value;
+                if (data.totalAmount !== undefined && data.totalAmount !== null) {
+                    value = Number(data.totalAmount) || 0;
+                } else {
+                    value = (Number(data.unitPrice) || 0) * qty;
+                }
+                openingPcs += qty;
+                openingValue += value;
+            });
+            let openingPrice = productInfo.fallbackBuy; // حل احتياطي لو مفيش حركة رصيد افتتاحي مسجلة
+            if (openingPcs > 0) {
+                openingPrice = openingValue / openingPcs;
+            } else if (pData.openingTotalPcs !== undefined && pData.openingTotalPcs !== null) {
+                openingPcs = Number(pData.openingTotalPcs);
+            } else if (pData.openingQty !== undefined && pData.openingQty !== null) {
+                openingPcs = Math.round(Number(pData.openingQty) * factor);
+            }
+            if (openingPcs) {
+                events.push({ type: 'purchase', date: new Date(0), qty: openingPcs, price: openingPrice });
+            }
+
+            // عمليات الشراء بسعرها الفعلي وقت التوريد
+            supplierSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                const date = getDocDate(data);
+                data.items?.forEach(item => {
+                    const id = item.stockId;
+                    const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
+                    if (id !== productId && !(!id && nameMatch)) return;
+                    const itemFactor = Math.max(1, Number(item.unitFactor) || 1);
+                    let pcs = item.totalPcs !== undefined && item.totalPcs !== null
+                        ? Number(item.totalPcs)
+                        : (Number(item.qty) || 0) * itemFactor;
+                    const buyPrice = Number(item.buy) || 0;
+                    const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
+                    if (isReturn) pcs = -Math.abs(pcs);
+                    events.push({ type: 'purchase', date, qty: pcs, price: buyPrice });
+                });
+            });
+
+            // عمليات البيع
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                const invDate = getInvoiceDate(data);
+                const invDate = getDocDate(data);
                 data.items?.forEach(item => {
                     const id = item.stockId;
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
@@ -279,23 +332,33 @@
                         ? Number(item.totalPcs)
                         : (Number(item.qty) || 0) * itemFactor;
 
-                    const revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
-                    const costTotal = productInfo.costPerPiece * pcs;
-                    let profit = revenue - costTotal;
+                    let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
+                    if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
 
-                    if (item.isReturn) {
-                        profit = -profit;
-                        pcs = -pcs;
-                    }
-
-                    allLines.push({
-                        date: invDate,
-                        qtyPcs: pcs,
-                        profit,
-                        invoiceNumber: data.invoiceNumber || docSnap.id
-                    });
+                    events.push({ type: 'sale', date: invDate, qty: pcs, revenue });
                 });
             });
+
+            // محاكاة متوسط التكلفة المتحرك بالترتيب الزمني
+            events.sort((a, b) => (a.date ? a.date.getTime() : 0) - (b.date ? b.date.getTime() : 0));
+            let runQty = 0, runAvg = 0;
+            events.forEach(ev => {
+                if (ev.type === 'purchase') {
+                    if (ev.qty > 0) {
+                        const newQty = runQty + ev.qty;
+                        runAvg = newQty > 0 ? (runQty * runAvg + ev.qty * ev.price) / newQty : 0;
+                        runQty = newQty;
+                    } else {
+                        runQty = Math.max(0, runQty + ev.qty);
+                    }
+                } else {
+                    const cost = runAvg * ev.qty;
+                    const profit = ev.revenue - cost;
+                    runQty -= ev.qty;
+                    allLines.push({ date: ev.date, qty: ev.qty, revenue: ev.revenue, cost, profit });
+                }
+            });
+            document.getElementById('avgCostVal').innerText = runAvg.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
             // تطبيق فلتر التاريخ الجاي من صفحة الأرباح (لو موجود)
             if (paramFrom) document.getElementById('fromDate').value = paramFrom;
@@ -332,7 +395,7 @@
         filtered.forEach(l => {
             const key = l.date ? l.date.toISOString().slice(0, 10) : 'بدون تاريخ';
             if (!byDay[key]) byDay[key] = { qty: 0, profit: 0 };
-            byDay[key].qty += l.qtyPcs;
+            byDay[key].qty += l.qty;
             byDay[key].profit += l.profit;
         });
 
