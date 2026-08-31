@@ -439,7 +439,7 @@ table select:focus { border-color: var(--brand); }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -649,26 +649,114 @@ window.scrollToFirstPending = function() {
   }
 };
 
+/* ===== احتساب المخزون التراكمي الموحد ===== */
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
   try {
-    const snap = await getDocs(collection(db, "inventory"));
-    firebaseItems = [];
-    snap.forEach(doc => {
-      const d = doc.data();
-      if (d.isDeleted) return;
-      const qty = Number(d.totalPcs) || 0;
-      if (qty === 0) return;
-      const cap = Number(d.unitFactor) || 1;
-      firebaseItems.push({ id: doc.id, name: d.name, capacity: cap, totalPcs: qty, unit: d.unit || '' });
+    const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
+      getDocs(collection(db, "invoices")),
+      getDocs(collection(db, "supplier_transactions")),
+      getDocs(collection(db, "inventory")),
+      getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+    ]);
+
+    let factorsMap = {};
+    let namesMap = {};
+    inventorySnap.forEach(d => {
+      const data = d.data();
+      const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+      factorsMap[d.id] = f;
+      if (data.name) namesMap[data.name.trim()] = d.id;
     });
+
+    let salesMap = {};
+    let purchasesMap = {};
+    let openingMap = {};
+
+    transSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.productId) {
+        openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
+      }
+    });
+
+    invoicesSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      data.items?.forEach(item => {
+        const id = item.stockId || namesMap[item.name?.trim()];
+        if (id) {
+          if (!salesMap[id]) salesMap[id] = 0;
+          const factor = factorsMap[id] || 1;
+          let rawQty = Number(item.qty) || 0;
+          let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
+          
+          if (item.isReturn) {
+            salesMap[id] -= pcs;
+          } else {
+            salesMap[id] += pcs;
+          }
+        }
+      });
+    });
+
+    supplierSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      data.items?.forEach(item => {
+        const id = item.stockId || namesMap[item.name?.trim()];
+        if (id) {
+          if (!purchasesMap[id]) purchasesMap[id] = 0;
+          const factor = factorsMap[id] || 1;
+          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+          let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+          let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
+
+          if (isReturn) {
+            purchasesMap[id] -= pcs;
+          } else {
+            purchasesMap[id] += pcs;
+          }
+        }
+      });
+    });
+
+    firebaseItems = [];
+    inventorySnap.forEach(doc => {
+      const data = doc.data();
+      if (!data.isDeleted) {
+        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+        
+        let openingTotalPcs = 0;
+        if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
+          openingTotalPcs = Number(data.openingTotalPcs);
+        } else if (data.openingQty !== undefined && data.openingQty !== null) {
+          openingTotalPcs = Math.round(Number(data.openingQty) * factor);
+        } else if (openingMap[doc.id]) {
+          openingTotalPcs = openingMap[doc.id];
+        }
+
+        const salesPcs = salesMap[doc.id] || 0;
+        const purchasesPcs = purchasesMap[doc.id] || 0;
+        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+        if (calculatedRealPcs !== 0) {
+          firebaseItems.push({
+            id: doc.id,
+            name: data.name,
+            capacity: factor,
+            totalPcs: calculatedRealPcs,
+            unit: data.unit || ''
+          });
+        }
+      }
+    });
+
     renderItemsPage();
     syncSessionVars();
     firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
     saveSession();
     isInventoryLoadedOnce = true;
-    window.toast('✅ تم تحديث الأصناف بنجاح');
+    window.toast('✅ تم تحديث الأرصدة التراكمية بنجاح');
   } catch(e) { console.error(e); window.toast('❌ تعذر جلب الأصناف من السيرفر'); }
 };
 
@@ -1051,9 +1139,6 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
-// ----------------------------------------------------
-// نظام الأرشيف الجديد (الكروت، الفلترة، المسح، التصدير)
-// ----------------------------------------------------
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
@@ -1064,7 +1149,6 @@ window.fetchArchive = async function() {
     if (selectedDate) {
       datesToFetch.push(selectedDate);
     } else {
-      // جلب آخر التواريخ إذا لم يحدد يوم
       const loadSnap = await getDocs(collection(db, 'archived_loads'));
       const invSnap  = await getDocs(collection(db, 'archived_inventory'));
       const set = new Set();
