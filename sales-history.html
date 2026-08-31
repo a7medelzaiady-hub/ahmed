@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1042,7 +1043,6 @@
             type: "confirm",
             icon: "danger",
             onConfirm: async () => {
-                // شاشة تحميل تمنع المستخدم من إغلاق الصفحة أثناء الرفع
                 const progressOverlay = document.createElement('div');
                 progressOverlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; font-family:Cairo;';
                 progressOverlay.innerHTML = `
@@ -1057,7 +1057,6 @@
                     const storageRef = firebase.storage().ref();
                     let uploadedCount = 0;
 
-                    // 1. توليد صور ورفعها لكل فاتورة معروضة
                     for (const inv of allInvoices) {
                         try {
                             const blob = await getInvoiceImageBlob(inv);
@@ -1069,7 +1068,6 @@
                             await fileRef.put(blob);
                             const downloadUrl = await fileRef.getDownloadURL();
 
-                            // حفظ مسار الصورة واسم العميل في قاعدة البيانات
                             await db.collection("customers_image_archive").add({
                                 invoiceId: inv.id,
                                 customerId: customerId,
@@ -1088,7 +1086,6 @@
 
                     document.getElementById('archiveProgressText').innerText = "جاري مسح السجلات الآن...";
 
-                    // 2. تصفير النظام (الكود الأصلي الخاص بك)
                     const batch = db.batch();
                     let count = 0;
                     allInvoices.forEach(inv => {
@@ -1155,7 +1152,54 @@
     };
     window.toggleDetails = (id) => { const el = document.getElementById(`details_box_${id}`); el.style.display = el.style.display === "none" ? "block" : "none"; };
     window.editInvoice = (id) => { window.location.href = `sales-invoice.html?edit=${id}&allowDateEdit=true`; };
-    window.deleteInvoice = (id) => { /* الدالة الأصلية تم حفظها في الكود لتجنب المساحة الزائدة هنا */ };
+
+    // ==========================================
+    // دالة حذف الفاتورة المُكتملة والمُفعلة
+    // ==========================================
+    window.deleteInvoice = (id) => {
+        const inv = allInvoices.find(i => i.id === id);
+        if (!inv) return;
+
+        window.showCustomUi({
+            title: "حذف الفاتورة",
+            message: `هل أنت تأكد من نقل فاتورة العميل (${inv.customerName || 'عميل نقدي'}) إلى سلة المحذوفات؟`,
+            type: "confirm",
+            icon: "danger",
+            confirmText: "نعم، نقل للسلة",
+            onConfirm: async () => {
+                try {
+                    await db.collection("invoices").doc(id).update({
+                        isDeleted: true,
+                        deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
+                    for (const tr of relatedTrans) {
+                        await db.collection("transactions").doc(tr.id).update({
+                            isDeleted: true,
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+
+                    window.showCustomUi({
+                        title: "تم الحذف",
+                        message: "✅ تم نقل الفاتورة بنجاح إلى سلة المحذوفات.",
+                        icon: "success",
+                        onConfirm: () => {
+                            loadData(true, loadedScope === 'ARCHIVE');
+                        }
+                    });
+                } catch (err) {
+                    console.error("خطأ أثناء الحذف:", err);
+                    window.showCustomUi({
+                        title: "خطأ",
+                        message: "تعذر نقل الفاتورة للسلة: " + err.message,
+                        icon: "danger"
+                    });
+                }
+            }
+        });
+    };
 
     checkAdminPermissions();
     loadData(true, false);
