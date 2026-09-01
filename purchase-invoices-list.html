@@ -549,9 +549,12 @@
                 const directPaid = data.totalPaid !== undefined ? Number(data.totalPaid) : (cashP + walletP || Number(data.paidAmount) || 0);
 
                 data.displayGross = amt;
-                data.displayNetPending = amt - directPaid;
                 data.computedCashPaid = cashP;
                 data.computedWalletPaid = walletP;
+                
+                // تحديد المدفوع الفعلي المخصص لهذه الفاتورة (بحيث لا يتجاوز قيمتها)
+                data.actualInvoicePaid = Math.min(amt, directPaid);
+                data.displayNetPending = Math.max(0, amt - data.actualInvoicePaid);
                 data.computedTotalPaid = directPaid;
 
                 if (data.type === "شراء" || data.type === "فاتورة شراء") {
@@ -590,8 +593,8 @@
         }
     };
 
-    // === الدالة المعدلة كلياً لاحتساب السداد واحتساب الرصيد السابق بدقة ===
-    function calculateHistoricalPreviousBalance(supId, invoiceTimestamp) {
+    // === دالة صحيحة ودقيقة لاحتساب الحساب السابق للمورد بالثانية قبل وقت الفاتورة ===
+    function calculateHistoricalPreviousBalance(supId, invoiceId, invoiceTimestamp) {
         const supplier = suppliersBase[supId];
         if (!supplier) return 0;
 
@@ -602,7 +605,8 @@
         // 1) احتساب سداد السندات المقيدة بحساب المورد قبل وقت الفاتورة
         globalVouchers.forEach(v => {
             const vParty = v.partyId || v.supplierId;
-            if (vParty === supId && v.timestamp && v.timestamp.seconds < targetSeconds) {
+            const vSec = v.timestamp?.seconds || 0;
+            if (vParty === supId && vSec < targetSeconds) {
                 const amt = Number(v.amount) || 0;
                 if (v.type === "صرف" || v.actionType === "سداد مورد" || String(v.details || '').includes("سداد")) {
                     credit += amt;
@@ -612,11 +616,11 @@
             }
         });
 
-        // 2) احتساب حركة الفواتير السابقة مع السداد المباشر داخل الفاتورة
+        // 2) احتساب حركة الفواتير السابقة مع السداد المباشر
         allInvoices.forEach(inv => {
-            if (inv.supplierId === supId && inv.timestamp && inv.timestamp.seconds < targetSeconds) {
+            const invSec = inv.timestamp?.seconds || 0;
+            if (inv.supplierId === supId && (invSec < targetSeconds || (invSec === targetSeconds && inv.id < invoiceId))) {
                 if (inv.type === "شراء" || inv.type === "فاتورة شراء") {
-                    // الدين يزداد بإجمالي الفاتورة، وينقص بالمبلغ المسدد فوراً منها
                     debt += inv.displayGross;
                     credit += (inv.computedTotalPaid || 0);
                 } else if (inv.type === "مرتجع شراء") {
@@ -637,7 +641,7 @@
 
         container.innerHTML = dataList.map(inv => {
             const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
+            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp);
             const formattedDate = formatEnglishDate(inv.date);
 
             let badgeClass = 'type-credit';
@@ -658,11 +662,11 @@
             }
 
             const totalInvoiceVal = Number(inv.displayGross);
-            const netPendingVal = Number(inv.isReturn ? inv.displayGross : inv.displayNetPending);
-            
-            const currentInvoicePaid = Number(inv.computedTotalPaid || 0);
-            const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -totalInvoiceVal : inv.displayNetPending);
-            const targetPriceColor = inv.isReturn ? 'var(--danger)' : (inv.displayNetPending > 0 ? 'var(--danger)' : 'var(--success)');
+            const currentInvoicePaid = Number(inv.actualInvoicePaid || 0);
+            const pendingFromInvoice = inv.isReturn ? 0 : Math.max(0, totalInvoiceVal - currentInvoicePaid);
+
+            // الصافي الحالي المترتب بعد تطبيق هذه الفاتورة
+            const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -totalInvoiceVal : (totalInvoiceVal - inv.computedTotalPaid));
             
             const totalStatusLabel = finalSupplierTotal < 0 ? 'دائن' : 'مدين';
             const totalStatusClass = finalSupplierTotal < 0 ? 'text-success' : 'text-danger';
@@ -697,8 +701,8 @@
                     
                     <div class="main-amount-row">
                         <span class="main-amount-label">${inv.isReturn ? 'قيمة المرتجع' : 'المتبقي من الفاتورة'}</span>
-                        <span class="main-amount-val" style="color:${targetPriceColor};">
-                            ${generateCurrencyHTML(inv.isReturn ? -netPendingVal : netPendingVal)}
+                        <span class="main-amount-val" style="color:${inv.isReturn ? 'var(--danger)' : (pendingFromInvoice > 0 ? 'var(--danger)' : 'var(--success)')};">
+                            ${generateCurrencyHTML(inv.isReturn ? -totalInvoiceVal : pendingFromInvoice)}
                             <small style="font-size:0.75rem; font-weight:800;">EGP</small>
                         </span>
                     </div>
@@ -841,7 +845,7 @@
         if (!inv) return;
 
         const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
+        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp);
         const items = inv.items || [];
         const hiddenDiv = document.getElementById('thermalInvoiceHidden');
         const formattedDate = formatEnglishDate(inv.date);
@@ -869,7 +873,7 @@
         const cashPaid = Number(inv.computedCashPaid || 0);
         const walletPaid = Number(inv.computedWalletPaid || 0);
         const netPending = Number(inv.displayNetPending);
-        const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : netPending);
+        const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : (grossTotal - inv.computedTotalPaid));
 
         let paymentDesc = "آجل الحساب";
         if (cashPaid > 0 && walletPaid > 0) paymentDesc = "مشترك (كاش + محفظة)";
@@ -954,7 +958,7 @@
             
             progressAlert.innerText = `جاري تجهيز الفاتورة (${i + 1} من ${allInvoices.length}) - ${supName}`;
 
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
+            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp);
             const items = inv.items || [];
             const formattedDate = formatEnglishDate(inv.date);
 
@@ -981,7 +985,7 @@
             const cashPaid = Number(inv.computedCashPaid || 0);
             const walletPaid = Number(inv.computedWalletPaid || 0);
             const netPending = Number(inv.displayNetPending);
-            const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : netPending);
+            const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : (grossTotal - inv.computedTotalPaid));
 
             let paymentDesc = "آجل الحساب";
             if (cashPaid > 0 && walletPaid > 0) paymentDesc = "مشترك (كاش + محفظة)";
