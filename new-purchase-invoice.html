@@ -464,7 +464,6 @@
     let orderId = urlParams.get('orderId');
     let isChanged = false;
     let currentFetchedOldBalance = 0;
-    let originalInvoiceTime = "";
     let oldInvoiceData = null;
 
     const CACHE_KEYS = { suppliers: "cache_suppliers", inventory: "cache_inventory", ts: "cache_purchase_ts" };
@@ -474,16 +473,6 @@
         const n = parseFloat(num);
         if (isNaN(n)) return "0";
         return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
-    }
-
-    function parsePurchaseDate(dateStr) {
-        if (!dateStr) return 0;
-        try {
-            const cleanStr = String(dateStr).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-            const parsed = Date.parse(cleanStr);
-            if (!isNaN(parsed)) return parsed;
-        } catch (e) { }
-        return 0;
     }
 
     window.showCustomAlert = (msg) => {
@@ -520,40 +509,25 @@
         return Number(sup.openingBalance) || 0;
     }
 
-    async function getRealSupplierBalance(supplierId, baseBalance = 0, targetInvoiceTimeStr = null) {
+    async function getRealSupplierBalance(supplierId, baseBalance = 0) {
         try {
             const [snapInvoices, snapTrans] = await Promise.all([
                 getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId))),
                 getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId)))
             ]);
 
-            const targetTimeMs = targetInvoiceTimeStr ? parsePurchaseDate(targetInvoiceTimeStr) : null;
-
-            let invoicesList = snapInvoices.docs.map(d => {
-                const data = d.data();
-                const timeMs = data.timestamp ? (data.timestamp.seconds * 1000) : parsePurchaseDate(data.date);
-                return { id: String(d.id).trim(), timeMs, data };
-            });
-
-            invoicesList.sort((a, b) => a.timeMs - b.timeMs);
-
             let invoiceDebt = 0;
-            for (const item of invoicesList) {
-                if (editId && item.id === String(editId).trim()) continue;
-                if (targetTimeMs && targetTimeMs > 0 && item.timeMs >= targetTimeMs) continue;
-
-                const amt = Number(item.data.grossTotal) || Number(item.data.total) || 0;
-                const paid = Number(item.data.totalPaid || (Number(item.data.cashPaid || 0) + Number(item.data.walletPaid || 0)));
+            snapInvoices.forEach(docSnap => {
+                if (editId && docSnap.id === editId) return;
+                const data = docSnap.data();
+                const amt = Number(data.grossTotal) || Number(data.total) || 0;
+                const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
                 invoiceDebt += (amt - paid);
-            }
+            });
 
             let transEffect = 0;
             snapTrans.forEach(docSnap => {
                 const tr = docSnap.data();
-                if (targetTimeMs && targetTimeMs > 0) {
-                    const trTimeMs = tr.timestamp ? (tr.timestamp.seconds * 1000) : parsePurchaseDate(tr.date);
-                    if (trTimeMs >= targetTimeMs) return;
-                }
                 const amt = Number(tr.amount) || 0;
                 if (tr.type === 'قبض') transEffect -= amt;
                 else if (tr.type === 'صرف') transEffect += amt;
@@ -587,8 +561,7 @@
             balanceDiv.querySelector('#curBalanceVal').innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحساب...';
 
             const startBalance = getSupplierBaseBalance(exactMatch);
-            const currentInvTime = document.getElementById('invTime').value || originalInvoiceTime;
-            const realDebt = await getRealSupplierBalance(exactMatch.id, startBalance, editId ? currentInvTime : null);
+            const realDebt = await getRealSupplierBalance(exactMatch.id, startBalance);
             currentFetchedOldBalance = realDebt;
             showBalance(realDebt);
             calc();
@@ -623,8 +596,7 @@
         balanceDiv.style.display = 'block';
         balanceSpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحساب...';
 
-        const currentInvTime = document.getElementById('invTime').value || originalInvoiceTime;
-        const realDebt = await getRealSupplierBalance(id, baseBalance, editId ? currentInvTime : null);
+        const realDebt = await getRealSupplierBalance(id, baseBalance);
         currentFetchedOldBalance = realDebt;
         showBalance(realDebt);
 
@@ -1090,8 +1062,7 @@
                 const sup = suppliers.find(s => s.id === currentSupId);
                 if (sup) {
                     const startBalance = getSupplierBaseBalance(sup);
-                    const currentInvTime = document.getElementById('invTime').value || originalInvoiceTime;
-                    const realDebt = await getRealSupplierBalance(currentSupId, startBalance, editId ? currentInvTime : null);
+                    const realDebt = await getRealSupplierBalance(currentSupId, startBalance);
                     currentFetchedOldBalance = realDebt;
                     showBalance(realDebt);
                 }
@@ -1120,10 +1091,7 @@
                     oldInvoiceData = invDoc.data();
                     document.getElementById('supplierSelect').value = oldInvoiceData.supplierId || "";
                     document.getElementById('supplierSearch').value = oldInvoiceData.supplierName || '';
-
-                    originalInvoiceTime = oldInvoiceData.date || '';
-                    document.getElementById('invTime').value = originalInvoiceTime;
-                    document.getElementById('invTime').readOnly = true;
+                    document.getElementById('invTime').value = oldInvoiceData.date || '';
 
                     document.getElementById('cashAmount').value = oldInvoiceData.cashPaid || 0;
                     document.getElementById('walletAmount').value = oldInvoiceData.walletPaid || 0;
@@ -1134,12 +1102,9 @@
                         document.getElementById('supplierBalanceInfo').style.display = 'block';
 
                         const startBalance = getSupplierBaseBalance(sup);
-                        const realB = await getRealSupplierBalance(oldInvoiceData.supplierId, startBalance, originalInvoiceTime);
+                        const realB = await getRealSupplierBalance(oldInvoiceData.supplierId, startBalance);
                         currentFetchedOldBalance = realB;
                         showBalance(realB);
-                    } else {
-                        currentFetchedOldBalance = 0;
-                        showBalance(0);
                     }
 
                     document.getElementById("itemsContainer").innerHTML = "";
