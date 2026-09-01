@@ -107,7 +107,6 @@
 
         #pageMainTitle { font-size: 0.95rem; font-weight: 700; margin: 0; line-height: 1.3; }
 
-        /* ===== Mobile responsive header ===== */
         @media (max-width: 576px) {
             .header-section { padding: 8px 6px; }
             .header-container { flex-wrap: nowrap; gap: 3px; }
@@ -201,7 +200,6 @@
         .method-stat-card.cash .val { color: var(--warning); }
         .method-stat-card.wallet .val { color: #2456c7; }
 
-        /* ===== Mobile: table becomes stacked cards ===== */
         @media (max-width: 767px) {
             .statement-table thead { display: none; }
             .statement-table, .statement-table tbody, .statement-table tr, .statement-table td {
@@ -465,17 +463,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
-        collection,
-        addDoc,
-        getDocs,
-        getDoc,
-        doc,
-        deleteDoc,
-        updateDoc,
-        query,
-        where,
-        orderBy,
-        serverTimestamp
+        collection, addDoc, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -629,7 +617,7 @@
             querySnapshot.forEach((doc) => {
                 const d = doc.data();
                 
-                let actualPartyId = d.partyId || d.customerId || d.supplierId || d.clientId ||
+                let actualPartyId = d.partyId || d.supplierId || d.customerId || d.clientId ||
                     d.party_id || d.custId || d.client_id || d.accountId || d.account_id || "";
 
                 let savedName = d.customerName || d.partyName || d.supplierName || d.clientName || d.name || "";
@@ -800,7 +788,9 @@
         updateMethodTotals(filtered);
     };
 
-    // === دالة احتساب الرصيد التاريخي الدقيق لكل من المورد والعميل بالـ Timestamp ===
+    // =========================================================================
+    // دالة احتساب الرصيد التاريخي الدقيق للمورد والعميل (حل المشكلة جذرياً)
+    // =========================================================================
     async function calculateCustomerBalance(partyId, targetTimestamp = null, currentVoucherId = null) {
         if (!partyId) return 0;
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
@@ -810,29 +800,38 @@
             try {
                 const partyDoc = await getDoc(doc(db, "suppliers", partyId));
                 if (!partyDoc.exists()) return 0;
+                
                 const openingBal = Number(partyDoc.data().openingBalance ?? partyDoc.data().initialBalance ?? 0);
                 
-                const [snapTrans, snapItems] = await Promise.all([
+                // البحث بالحقلين لتجنب استبعاد أية سندات مسجلة تحت المورد
+                const [snapTrans1, snapTrans2, snapItems] = await Promise.all([
                     getDocs(query(collection(db, "transactions"), where("supplierId", "==", partyId))),
+                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
                     getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", partyId)))
                 ]);
 
                 let debt = 0;   
                 let credit = 0; 
+                const processedDocIds = new Set();
 
-                // 1. حساب السندات السابقة فقط
-                snapTrans.forEach(docSnap => {
+                const processTransactionDoc = (docSnap) => {
+                    if (processedDocIds.has(docSnap.id)) return;
                     if (currentVoucherId && docSnap.id === currentVoucherId) return;
+                    
+                    processedDocIds.add(docSnap.id);
                     const d = docSnap.data();
                     const trSec = d.timestamp?.seconds || 0;
+                    
                     if (trSec < targetSec || (trSec === targetSec && docSnap.id < currentVoucherId)) {
                         const amt = Number(d.amount) || 0;
                         if (d.type === "صرف") credit += amt;
                         else if (d.type === "قبض") debt += amt;
                     }
-                });
+                };
 
-                // 2. حساب الفواتير السابقة فقط وخصم السداد المباشر منها
+                snapTrans1.forEach(processTransactionDoc);
+                snapTrans2.forEach(processTransactionDoc);
+
                 snapItems.forEach(docSnap => {
                     const d = docSnap.data();
                     const invSec = d.timestamp?.seconds || 0;
@@ -874,8 +873,12 @@
                     }
                 });
                 
-                const processTransaction = (tr) => {
+                const processedCustDocIds = new Set();
+                const processCustomerDoc = (tr) => {
+                    if (processedCustDocIds.has(tr.id)) return;
                     if (currentVoucherId && tr.id === currentVoucherId) return;
+                    
+                    processedCustDocIds.add(tr.id);
                     const t = tr.data();
                     const trSec = t.timestamp?.seconds || 0;
                     if (trSec < targetSec) {
@@ -884,8 +887,8 @@
                     }
                 };
                 
-                transSnap1.forEach(processTransaction);
-                transSnap2.forEach(processTransaction);
+                transSnap1.forEach(processCustomerDoc);
+                transSnap2.forEach(processCustomerDoc);
                 
                 return balance;
             } catch (err) {
