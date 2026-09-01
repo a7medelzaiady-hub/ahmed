@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>إدارة سندات القبض والصرف - شركة الزيادي</title>
     <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
@@ -10,12 +10,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
 
+    <!-- Bootstrap RTL -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Google Fonts: Cairo & Montserrat -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <style>
@@ -31,8 +34,19 @@
             --warning: #f7a01b;
         }
 
-        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; font-size: 0.85rem; }
+        body { 
+            background: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-primary); 
+            padding-bottom: 30px; 
+            font-size: 0.85rem; 
+            -webkit-tap-highlight-color: transparent;
+        }
         
+        .amount-number, #recAmount, #recPrevBalance, #recNewBalance, #vouchersTotal, #totalCash, #totalWallet {
+            font-family: 'Montserrat', 'Cairo', sans-serif !important;
+        }
+
         .header-section { 
             padding: 10px 12px; 
             background: var(--header-bg); 
@@ -235,7 +249,7 @@
     <div class="header-section">
         <div class="header-container container">
             <div class="header-right">
-                <a href="index.html" class="btn-action" title="الصفحة الرئيسية">
+                <a href="index1.html" class="btn-action" title="الصفحة الرئيسية">
                     <i class="fas fa-home"></i>
                 </a>
                 <button id="btnExcelExport" class="btn-action btn-excel-custom" onclick="exportToExcel()" title="تصدير إكسل">
@@ -460,7 +474,8 @@
         updateDoc,
         query,
         where,
-        orderBy
+        orderBy,
+        serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -645,6 +660,7 @@
                     allVouchers.push({
                         id: doc.id,
                         date: d.date,
+                        timestamp: d.timestamp || null,
                         type: d.type,
                         partyId: actualPartyId,
                         partyType: resolvedPartyType,
@@ -719,7 +735,7 @@
         
         if (btn.dataset.action === 'edit') window.startEditVoucher(id);
         if (btn.dataset.action === 'delete') window.deleteVoucher(id);
-        if (btn.dataset.action === 'share') window.openReceiptModal(voucher.type, voucher.date, voucher.amount, voucher.partyId, voucher.resolvedName);
+        if (btn.dataset.action === 'share') window.openReceiptModal(voucher.type, voucher.date, voucher.amount, voucher.partyId, voucher.resolvedName, voucher.timestamp, voucher.id);
     });
 
     function updateMethodTotals(data) {
@@ -784,9 +800,11 @@
         updateMethodTotals(filtered);
     };
 
-    async function calculateCustomerBalance(partyId) {
+    // === دالة احتساب الرصيد التاريخي الدقيق لكل من المورد والعميل بالـ Timestamp ===
+    async function calculateCustomerBalance(partyId, targetTimestamp = null, currentVoucherId = null) {
         if (!partyId) return 0;
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
+        const targetSec = targetTimestamp?.seconds || Infinity;
         
         if (pType === 'مورد') {
             try {
@@ -795,25 +813,40 @@
                 const openingBal = Number(partyDoc.data().openingBalance ?? partyDoc.data().initialBalance ?? 0);
                 
                 const [snapTrans, snapItems] = await Promise.all([
-                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
+                    getDocs(query(collection(db, "transactions"), where("supplierId", "==", partyId))),
                     getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", partyId)))
                 ]);
 
                 let debt = 0;   
                 let credit = 0; 
 
+                // 1. حساب السندات السابقة فقط
                 snapTrans.forEach(docSnap => {
+                    if (currentVoucherId && docSnap.id === currentVoucherId) return;
                     const d = docSnap.data();
-                    const amt = Number(d.amount) || 0;
-                    if (d.type === "صرف") credit += amt;
-                    else if (d.type === "قبض") debt += amt;
+                    const trSec = d.timestamp?.seconds || 0;
+                    if (trSec < targetSec || (trSec === targetSec && docSnap.id < currentVoucherId)) {
+                        const amt = Number(d.amount) || 0;
+                        if (d.type === "صرف") credit += amt;
+                        else if (d.type === "قبض") debt += amt;
+                    }
                 });
 
+                // 2. حساب الفواتير السابقة فقط وخصم السداد المباشر منها
                 snapItems.forEach(docSnap => {
                     const d = docSnap.data();
-                    const amt = Number(d.total) || Number(d.amount) || 0;
-                    if (d.type === "شراء" || d.type === "فاتورة شراء") debt += amt;
-                    else if (d.type === "مرتجع شراء") credit += amt;
+                    const invSec = d.timestamp?.seconds || 0;
+                    if (invSec < targetSec) {
+                        const amt = Number(d.grossTotal) || Number(d.total) || Number(d.amount) || 0;
+                        const paid = Number(d.totalPaid || (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)));
+                        
+                        if (d.type === "شراء" || d.type === "فاتورة شراء") {
+                            debt += amt;
+                            credit += paid;
+                        } else if (d.type === "مرتجع شراء") {
+                            credit += amt;
+                        }
+                    }
                 });
 
                 return (openingBal + debt) - credit;
@@ -827,17 +860,29 @@
                 if (!partyDoc.exists()) return 0;
                 let balance = Number(partyDoc.data().initialBalance ?? partyDoc.data().openingBalance ?? 0);
                 
-                const invoicesSnap = await getDocs(query(collection(db, "invoices"), where("customerId", "==", partyId)));
-                invoicesSnap.forEach(inv => { balance += Number(inv.data().remaining || 0); });
+                const [invoicesSnap, transSnap1, transSnap2] = await Promise.all([
+                    getDocs(query(collection(db, "invoices"), where("customerId", "==", partyId))),
+                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
+                    getDocs(query(collection(db, "transactions"), where("customerId", "==", partyId)))
+                ]);
+
+                invoicesSnap.forEach(inv => {
+                    const invData = inv.data();
+                    const invSec = invData.timestamp?.seconds || 0;
+                    if (invSec < targetSec) {
+                        balance += Number(invData.remaining || 0);
+                    }
+                });
                 
                 const processTransaction = (tr) => {
+                    if (currentVoucherId && tr.id === currentVoucherId) return;
                     const t = tr.data();
-                    if (t.type === 'قبض') balance -= Number(t.amount || 0);
-                    if (t.type === 'صرف') balance += Number(t.amount || 0);
+                    const trSec = t.timestamp?.seconds || 0;
+                    if (trSec < targetSec) {
+                        if (t.type === 'قبض') balance -= Number(t.amount || 0);
+                        if (t.type === 'صرف') balance += Number(t.amount || 0);
+                    }
                 };
-                
-                const transSnap1 = await getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId)));
-                const transSnap2 = await getDocs(query(collection(db, "transactions"), where("customerId", "==", partyId))); 
                 
                 transSnap1.forEach(processTransaction);
                 transSnap2.forEach(processTransaction);
@@ -850,7 +895,7 @@
         }
     }
 
-    window.openReceiptModal = async (type, date, amount, partyId, resolvedName) => {
+    window.openReceiptModal = async (type, date, amount, partyId, resolvedName, voucherTimestamp = null, voucherId = null) => {
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
         let pName = resolvedName;
         
@@ -860,19 +905,17 @@
         document.getElementById('recAmount').innerText = `${Number(amount).toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recStatusText').innerText = type === 'قبض' ? 'تم الاستلام بنجاح' : 'تم الصرف بنجاح';
         
-        const currentBalance = await calculateCustomerBalance(partyId);
-        let prevBalance = currentBalance;
+        const historicalPrevBalance = await calculateCustomerBalance(partyId, voucherTimestamp, voucherId);
         
+        let newBalance = historicalPrevBalance;
         if (pType === 'عميل') {
-            if (type === 'قبض') { prevBalance = currentBalance + Number(amount); }
-            else { prevBalance = currentBalance - Number(amount); }
+            newBalance = (type === 'قبض') ? (historicalPrevBalance - Number(amount)) : (historicalPrevBalance + Number(amount));
         } else {
-            if (type === 'صرف') { prevBalance = currentBalance + Number(amount); }
-            else { prevBalance = currentBalance - Number(amount); }
+            newBalance = (type === 'صرف') ? (historicalPrevBalance - Number(amount)) : (historicalPrevBalance + Number(amount));
         }
         
-        document.getElementById('recPrevBalance').innerText = `${prevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
-        document.getElementById('recNewBalance').innerText = `${currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('recPrevBalance').innerText = `${historicalPrevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('recNewBalance').innerText = `${newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         
         receiptModalObj.show();
     };
@@ -943,11 +986,14 @@
             date, 
             type, 
             partyId, 
+            supplierId: partyType === 'مورد' ? partyId : null,
+            customerId: partyType === 'عميل' ? partyId : null,
             partyType, 
             customerName: customerName,
             amount, 
             method, 
-            note 
+            note,
+            ...(editId ? {} : { timestamp: serverTimestamp() })
         };
         
         try {
@@ -955,9 +1001,9 @@
                 await updateDoc(doc(db, "transactions", editId), docData);
                 alert("تم تحديث بيانات السند بنجاح.");
             } else {
-                await addDoc(collection(db, "transactions"), docData);
+                const docRef = await addDoc(collection(db, "transactions"), docData);
                 alert("تم حفظ السند الجديد بنجاح بقاعدة البيانات.");
-                await openReceiptModal(type, date, amount, partyId, customerName);
+                await openReceiptModal(type, date, amount, partyId, customerName, null, docRef.id);
             }
             resetVoucherForm();
             await loadVouchers();
@@ -1075,14 +1121,13 @@
                 const v = displayedVouchers[i];
                 const pType = partiesMap[v.partyId] ? partiesMap[v.partyId].type : 'عميل';
                 
-                const currentBalance = await calculateCustomerBalance(v.partyId);
-                let prevBalance = currentBalance;
+                const historicalPrevBalance = await calculateCustomerBalance(v.partyId, v.timestamp, v.id);
+                
+                let newBalance = historicalPrevBalance;
                 if (pType === 'عميل') {
-                    if (v.type === 'قبض') { prevBalance = currentBalance + v.amount; }
-                    else { prevBalance = currentBalance - v.amount; }
+                    newBalance = (v.type === 'قبض') ? (historicalPrevBalance - v.amount) : (historicalPrevBalance + v.amount);
                 } else {
-                    if (v.type === 'صرف') { prevBalance = currentBalance + v.amount; }
-                    else { prevBalance = currentBalance - v.amount; }
+                    newBalance = (v.type === 'صرف') ? (historicalPrevBalance - v.amount) : (historicalPrevBalance + v.amount);
                 }
 
                 hiddenContainer.innerHTML = `
@@ -1110,11 +1155,11 @@
                         <table class="receipt-table-layout" style="background: #f4f6f5; border-radius: 6px; padding: 5px; margin-top: 8px;">
                             <tr>
                                 <td style="text-align: right; padding: 5px 8px; color: #444;">الحساب السابق:</td>
-                                <td style="text-align: left; font-weight: bold; color: #000;">${prevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
+                                <td style="text-align: left; font-weight: bold; color: #000;">${historicalPrevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
                             </tr>
                             <tr style="border-top: 1px solid #ddd !important;">
                                 <td style="text-align: right; padding: 5px 8px; color: #444; font-weight: bold;">المتبقي بعد السداد:</td>
-                                <td style="text-align: left; font-weight: bold; color: #198754;">${currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
+                                <td style="text-align: left; font-weight: bold; color: #198754;">${newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
                             </tr>
                         </table>
                         <div class="text-center mt-3 pt-2" style="border-top: 1px dashed #ccc;">
