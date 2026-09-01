@@ -274,6 +274,7 @@
             font-size: 0.95rem;
             display: flex;
             justify-content: center;
+            gap: 15px;
             border-top: 1px solid var(--border-color);
             color: var(--primary-green);
             box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
@@ -357,7 +358,8 @@
 </div>
 
 <div class="bottom-summary">
-    <i class="fas fa-boxes me-2"></i> عدد الأصناف المباعة: <span id="totalCount" class="ms-2">0</span>
+    <div><i class="fas fa-boxes me-1"></i> أصناف مباعة: <span id="totalCount">0</span></div>
+    <div class="border-start ps-3"><i class="fas fa-receipt me-1"></i> إجمالي الفواتير: <span id="totalInvoicesCount">0</span></div>
 </div>
 
 <script type="module">
@@ -618,9 +620,10 @@
         let profitCurrentMap = {};
         let qtyByProduct = {};
         let invoicesCountByProduct = {};
+        let globalUniqueInvoices = new Set(); // لحساب إجمالي عدد الفواتير الكلي في الفترة
 
         Object.keys(saleLines).forEach(productId => {
-            let uniqueInvoices = new Set();
+            let productUniqueInvoices = new Set();
             saleLines[productId].forEach(line => {
                 if (fromDate && (!line.date || line.date < fromDate)) return;
                 if (toDate && (!line.date || line.date > toDate)) return;
@@ -630,17 +633,19 @@
                 qtyByProduct[productId] = (Number(qtyByProduct[productId]) || 0) + Number(line.qty);
                 
                 if (line.invoiceId) {
-                    uniqueInvoices.add(line.invoiceId);
+                    productUniqueInvoices.add(line.invoiceId);
+                    globalUniqueInvoices.add(line.invoiceId);
                 } else {
-                    // في حالة عدم توفر id الفاتورة يتم احتساب السطر كعملية بيع منفصلة
                     invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + 1;
                 }
             });
 
-            if (uniqueInvoices.size > 0) {
-                invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + uniqueInvoices.size;
+            if (productUniqueInvoices.size > 0) {
+                invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + productUniqueInvoices.size;
             }
         });
+
+        const totalPeriodInvoices = globalUniqueInvoices.size;
 
         let list = Object.keys(productsMap).map(id => {
             const factor = Math.max(1, Number(productsMap[id].factor) || 1);
@@ -655,24 +660,25 @@
             };
         });
 
-        // فلترة الأصناف المباعة فقط
         list = list.filter(p => p.qtySold !== 0);
 
         if (term) {
             list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
         }
 
-        // تحديث كروت الإحصائيات الذكية الأعلى والأقل طلباً بناءً على تكرار الفواتير
         if (list.length > 0) {
             const sortedByInvoicesDesc = [...list].sort((a, b) => b.invoiceCount - a.invoiceCount);
             const topSeller = sortedByInvoicesDesc[0];
             const lowSeller = sortedByInvoicesDesc[sortedByInvoicesDesc.length - 1];
 
+            const topPercentage = totalPeriodInvoices > 0 ? ((topSeller.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+            const lowPercentage = totalPeriodInvoices > 0 ? ((lowSeller.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+
             document.getElementById('topSellerName').innerText = topSeller.name;
-            document.getElementById('topSellerQty').innerText = `${topSeller.invoiceCount} فاتورة`;
+            document.getElementById('topSellerQty').innerText = totalPeriodInvoices > 0 ? `${topSeller.invoiceCount} من أصل ${totalPeriodInvoices} (${topPercentage}%)` : `${topSeller.invoiceCount} فاتورة`;
 
             document.getElementById('lowSellerName').innerText = lowSeller.name;
-            document.getElementById('lowSellerQty').innerText = `${lowSeller.invoiceCount} فاتورة`;
+            document.getElementById('lowSellerQty').innerText = totalPeriodInvoices > 0 ? `${lowSeller.invoiceCount} من أصل ${totalPeriodInvoices} (${lowPercentage}%)` : `${lowSeller.invoiceCount} فاتورة`;
         } else {
             document.getElementById('topSellerName').innerText = '---';
             document.getElementById('topSellerQty').innerText = '0 فاتورة';
@@ -680,13 +686,12 @@
             document.getElementById('lowSellerQty').innerText = '0 فاتورة';
         }
 
-        // إستراتيجية الترتيب والفرز
         if (currentSortMode === 'profit') {
-            list.sort((a, b) => b.profitAvg - a.profitAvg); // الأعلى ربحاً
+            list.sort((a, b) => b.profitAvg - a.profitAvg);
         } else if (currentSortMode === 'count') {
-            list.sort((a, b) => b.invoiceCount - a.invoiceCount); // الأكثر تكراراً في الفواتير
+            list.sort((a, b) => b.invoiceCount - a.invoiceCount);
         } else if (currentSortMode === 'slow') {
-            list.sort((a, b) => a.invoiceCount - b.invoiceCount); // الأقل تكراراً في الفواتير
+            list.sort((a, b) => a.invoiceCount - b.invoiceCount);
         }
 
         const container = document.getElementById('itemsContainer');
@@ -705,8 +710,8 @@
             const unitProfitCurrCarton = p.qtySold > 0 ? ((p.profitCurrent / p.qtySold) * factor) : 0;
 
             const displaySoldQty = formatSoldQuantityInCartons(p.qtySold, factor);
+            const invoicePercentage = totalPeriodInvoices > 0 ? ((p.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
 
-            // إضافة الوسوم التلقائية
             let badgeHtml = '';
             if (currentSortMode === 'count' && index < 3) {
                 badgeHtml = `<span class="rank-badge badge-top">🏆 الأكثر تكراراً (#${index+1})</span>`;
@@ -715,6 +720,10 @@
             } else if (currentSortMode === 'profit' && index < 3) {
                 badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
             }
+
+            const invoiceCountText = totalPeriodInvoices > 0 
+                ? `${p.invoiceCount} من أصل ${totalPeriodInvoices} فاتورة (${invoicePercentage}%)`
+                : `${p.invoiceCount} فاتورة`;
 
             html += `
                 <div class="item-card">
@@ -727,7 +736,7 @@
                     </div>
 
                     <div class="item-qty-sold"><i class="fas fa-cubes me-1"></i> إجمالي الكمية المباعة: ${displaySoldQty}</div>
-                    <div class="item-invoice-count"><i class="fas fa-file-invoice me-1"></i> عدد مرات الذكر بالفواتير: ${p.invoiceCount} فاتورة</div>
+                    <div class="item-invoice-count"><i class="fas fa-file-invoice me-1"></i> عدد مرات الذكر بالفواتير: ${invoiceCountText}</div>
 
                     <div class="mt-2">
                         <div class="profit-label">الربح بالمتوسط:</div>
@@ -761,6 +770,7 @@
 
         container.innerHTML = html;
         document.getElementById('totalCount').innerText = list.length;
+        document.getElementById('totalInvoicesCount').innerText = totalPeriodInvoices;
         document.getElementById('grandTotalProfit').innerText = `${grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('grandTotalProfitCurrent').innerText = `إجمالي الأرباح (سعر الشراء الحالي): ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
     };
