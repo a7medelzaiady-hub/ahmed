@@ -509,7 +509,8 @@
         return Number(sup.openingBalance) || 0;
     }
 
-    async function getRealSupplierBalance(supplierId, baseBalance = 0) {
+    // === دالة احتساب الرصيد السابق التاريخي بالدقة الزمانية الثوانية الـ Timestamp ===
+    async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null) {
         try {
             const [snapInvoices, snapTrans] = await Promise.all([
                 getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId))),
@@ -517,20 +518,39 @@
             ]);
 
             let invoiceDebt = 0;
+            const targetSec = targetTimestamp?.seconds || Infinity;
+
             snapInvoices.forEach(docSnap => {
+                // استبعاد الفاتورة الحالية الجاري تعديلها
                 if (editId && docSnap.id === editId) return;
+                
                 const data = docSnap.data();
-                const amt = Number(data.grossTotal) || Number(data.total) || 0;
-                const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
-                invoiceDebt += (amt - paid);
+                const invSec = data.timestamp?.seconds || 0;
+
+                // احتساب المعاملات ذات الـ Timestamp الأقدم تاريخياً فقط
+                // وفي حالة التساوي في الثانية يقع المقارنة على معرف المستند لمنع التداخل
+                if (invSec < targetSec || (invSec === targetSec && docSnap.id < editId)) {
+                    const amt = Number(data.grossTotal) || Number(data.total) || 0;
+                    const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
+                    
+                    if (data.type === "مرتجع شراء") {
+                        invoiceDebt -= amt;
+                    } else {
+                        invoiceDebt += (amt - paid);
+                    }
+                }
             });
 
             let transEffect = 0;
             snapTrans.forEach(docSnap => {
                 const tr = docSnap.data();
-                const amt = Number(tr.amount) || 0;
-                if (tr.type === 'قبض') transEffect -= amt;
-                else if (tr.type === 'صرف') transEffect += amt;
+                const trSec = tr.timestamp?.seconds || 0;
+
+                if (trSec < targetSec) {
+                    const amt = Number(tr.amount) || 0;
+                    if (tr.type === 'قبض') transEffect -= amt;
+                    else if (tr.type === 'صرف') transEffect += amt;
+                }
             });
 
             return Number(baseBalance) + invoiceDebt + transEffect;
@@ -561,7 +581,8 @@
             balanceDiv.querySelector('#curBalanceVal').innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحساب...';
 
             const startBalance = getSupplierBaseBalance(exactMatch);
-            const realDebt = await getRealSupplierBalance(exactMatch.id, startBalance);
+            const targetTS = (editId && oldInvoiceData) ? oldInvoiceData.timestamp : null;
+            const realDebt = await getRealSupplierBalance(exactMatch.id, startBalance, targetTS);
             currentFetchedOldBalance = realDebt;
             showBalance(realDebt);
             calc();
@@ -596,7 +617,8 @@
         balanceDiv.style.display = 'block';
         balanceSpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحساب...';
 
-        const realDebt = await getRealSupplierBalance(id, baseBalance);
+        const targetTS = (editId && oldInvoiceData) ? oldInvoiceData.timestamp : null;
+        const realDebt = await getRealSupplierBalance(id, baseBalance, targetTS);
         currentFetchedOldBalance = realDebt;
         showBalance(realDebt);
 
@@ -895,6 +917,7 @@
 
             const invoiceDate = document.getElementById('invTime').value || new Date().toISOString().split('T')[0];
 
+            // الحفاظ على الـ Timestamp الأصلي للفاتورة إن وجد للتعديل لضمان حفظ الترتيب التاريخي الدقيق
             const baseInvoiceData = {
                 supplierId, supplierName,
                 grossTotal: Number(total) || 0,
@@ -905,7 +928,8 @@
                 netTotal: Number(total - (finalCash + finalWallet)) || 0,
                 paymentType: finalMethod,
                 type: "شراء",
-                items, date: invoiceDate
+                items, date: invoiceDate,
+                ...(editId && oldInvoiceData?.timestamp ? { timestamp: oldInvoiceData.timestamp } : { timestamp: serverTimestamp() })
             };
 
             const batch = writeBatch(db);
@@ -961,7 +985,7 @@
                 batch.update(invRef, baseInvoiceData);
             } else {
                 const newInvRef = doc(collection(db, "supplier_transactions"));
-                batch.set(newInvRef, { ...baseInvoiceData, timestamp: serverTimestamp() });
+                batch.set(newInvRef, baseInvoiceData);
                 currentDocId = newInvRef.id;
             }
 
@@ -971,7 +995,7 @@
                     amount: finalCash, type: "صرف", actionType: "سداد مورد",
                     details: `سداد نقدي (كاش) مقابل فاتورة شراء رقم (${currentDocId.substring(0,6)})`,
                     date: invoiceDate, supplierId: supplierId, invoiceId: currentDocId,
-                    paymentMethod: "cash", timestamp: serverTimestamp()
+                    paymentMethod: "cash", timestamp: (editId && oldInvoiceData?.timestamp) ? oldInvoiceData.timestamp : serverTimestamp()
                 });
             }
 
@@ -981,7 +1005,7 @@
                     amount: finalWallet, type: "صرف", actionType: "سداد مورد",
                     details: `سداد محفظة إلكترونية مقابل فاتورة شراء رقم (${currentDocId.substring(0,6)})`,
                     date: invoiceDate, supplierId: supplierId, invoiceId: currentDocId,
-                    paymentMethod: "wallet", timestamp: serverTimestamp()
+                    paymentMethod: "wallet", timestamp: (editId && oldInvoiceData?.timestamp) ? oldInvoiceData.timestamp : serverTimestamp()
                 });
             }
 
@@ -1062,7 +1086,8 @@
                 const sup = suppliers.find(s => s.id === currentSupId);
                 if (sup) {
                     const startBalance = getSupplierBaseBalance(sup);
-                    const realDebt = await getRealSupplierBalance(currentSupId, startBalance);
+                    const targetTS = (editId && oldInvoiceData) ? oldInvoiceData.timestamp : null;
+                    const realDebt = await getRealSupplierBalance(currentSupId, startBalance, targetTS);
                     currentFetchedOldBalance = realDebt;
                     showBalance(realDebt);
                 }
@@ -1102,7 +1127,14 @@
                         document.getElementById('supplierBalanceInfo').style.display = 'block';
 
                         const startBalance = getSupplierBaseBalance(sup);
-                        const realB = await getRealSupplierBalance(oldInvoiceData.supplierId, startBalance);
+                        
+                        // احتساب الرصيد السابق بناءً على Timestamp الفاتورة الأصلية بدقة
+                        const realB = await getRealSupplierBalance(
+                            oldInvoiceData.supplierId, 
+                            startBalance, 
+                            oldInvoiceData.timestamp
+                        );
+                        
                         currentFetchedOldBalance = realB;
                         showBalance(realB);
                     }
