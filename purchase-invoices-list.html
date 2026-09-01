@@ -508,6 +508,25 @@
         return dateStr.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
     }
 
+    // === توحيد طريقة قراءة الوقت مع صفحة تعديل الفاتورة: نفس منطق parsePurchaseDate ===
+    function parsePurchaseDate(dateStr) {
+        if (!dateStr) return 0;
+        try {
+            const cleanStr = String(dateStr).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            const parsed = Date.parse(cleanStr);
+            if (!isNaN(parsed)) return parsed;
+        } catch (e) { }
+        return 0;
+    }
+
+    // نفس الأولوية المستخدمة في new-purchase-invoice.html: timestamp أولاً ثم التاريخ النصي كبديل
+    function getRecordTimeMs(record) {
+        if (record && record.timestamp && record.timestamp.seconds) {
+            return record.timestamp.seconds * 1000;
+        }
+        return parsePurchaseDate(record ? record.date : null);
+    }
+
     function generateCurrencyHTML(value, forceColor = '') {
         const isNegative = value < 0;
         const absoluteFormatted = Math.abs(value).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -582,7 +601,7 @@
             document.getElementById('totalPaid').innerHTML = generateCurrencyHTML(totalPaid);
             document.getElementById('totalPending').innerHTML = generateCurrencyHTML(finalPending > 0 ? finalPending : 0);
             
-            allInvoices.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+            allInvoices.sort((a,b) => getRecordTimeMs(b) - getRecordTimeMs(a));
             renderInvoices(allInvoices);
         } catch (error) {
             console.error(error);
@@ -590,27 +609,36 @@
         }
     };
 
-    function calculateHistoricalPreviousBalance(supId, invoiceTimestamp) {
+    // === محسوبة الآن بنفس منطق getRealSupplierBalance في صفحة تعديل الفاتورة تمامًا ===
+    // تفضّل timestamp عند توفره، وإلا تلجأ لتحليل التاريخ النصي (date) - لضمان تطابق الرقم بين الصفحتين
+    function calculateHistoricalPreviousBalance(supId, targetInvoice) {
         const supplier = suppliersBase[supId];
         if (!supplier) return 0;
 
         let debt = 0;
         let credit = 0;
-        const targetSeconds = invoiceTimestamp?.seconds || 0;
+        const targetTimeMs = getRecordTimeMs(targetInvoice);
 
         globalVouchers.forEach(v => {
-            if (v.partyId === supId && v.timestamp && v.timestamp.seconds < targetSeconds) {
-                const amt = Number(v.amount) || 0;
-                if (v.type === "صرف") credit += amt;
-                else if (v.type === "قبض") debt += amt;
+            if (v.partyId === supId) {
+                const vTimeMs = getRecordTimeMs(v);
+                if (targetTimeMs > 0 && vTimeMs < targetTimeMs) {
+                    const amt = Number(v.amount) || 0;
+                    if (v.type === "صرف") credit += amt;
+                    else if (v.type === "قبض") debt += amt;
+                }
             }
         });
 
         allInvoices.forEach(inv => {
-            if (inv.supplierId === supId && inv.timestamp && inv.timestamp.seconds < targetSeconds) {
-                const amt = inv.displayGross;
-                if (inv.type === "شراء" || inv.type === "فاتورة شراء") debt += amt;
-                else if (inv.type === "مرتجع شراء") credit += amt;
+            if (inv.id === targetInvoice.id) return;
+            if (inv.supplierId === supId) {
+                const invTimeMs = getRecordTimeMs(inv);
+                if (targetTimeMs > 0 && invTimeMs < targetTimeMs) {
+                    const amt = inv.displayGross;
+                    if (inv.type === "شراء" || inv.type === "فاتورة شراء") debt += amt;
+                    else if (inv.type === "مرتجع شراء") credit += amt;
+                }
             }
         });
 
@@ -626,7 +654,7 @@
 
         container.innerHTML = dataList.map(inv => {
             const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
+            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv);
             const formattedDate = formatEnglishDate(inv.date);
 
             let badgeClass = 'type-credit';
@@ -835,7 +863,7 @@
         if (!inv) return;
 
         const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
+        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv);
         const items = inv.items || [];
         const hiddenDiv = document.getElementById('thermalInvoiceHidden');
         const formattedDate = formatEnglishDate(inv.date);
@@ -948,7 +976,7 @@
             
             progressAlert.innerText = `جاري تجهيز الفاتورة (${i + 1} من ${allInvoices.length}) - ${supName}`;
 
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
+            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv);
             const items = inv.items || [];
             const formattedDate = formatEnglishDate(inv.date);
 
