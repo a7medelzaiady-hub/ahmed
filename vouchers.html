@@ -537,16 +537,14 @@
                 const data = doc.data();
                 partiesMap[doc.id] = {
                     name: data.name,
-                    type: 'مورد',
-                    currentBalance: Number(data.currentBalance ?? data.balance ?? data.openingBalance ?? data.initialBalance ?? 0)
+                    type: 'مورد'
                 };
             });
             custSnap.forEach(doc => {
                 const data = doc.data();
                 partiesMap[doc.id] = {
                     name: data.name,
-                    type: 'عميل',
-                    currentBalance: Number(data.currentBalance ?? data.balance ?? data.initialBalance ?? data.openingBalance ?? 0)
+                    type: 'عميل'
                 };
             });
             
@@ -789,80 +787,21 @@
     };
 
     // =========================================================================
-    // دالة جلب الرصيد المسجل مباشرة بـ Firestore (المطابق لشاشة قائمة الموردين)
+    // جلب الرصيد المباشر والحي فوراً من وثيقة المورد دون الاعتماد على كاش محلي
     // =========================================================================
-    async function getDirectPartyBalanceFromFirestore(partyId) {
+    async function getLiveFirestoreBalance(partyId) {
         if (!partyId) return 0;
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
         const colName = pType === 'مورد' ? "suppliers" : "customers";
         
         try {
-            const partyDoc = await getDoc(doc(db, colName, partyId));
-            if (partyDoc.exists()) {
-                const data = partyDoc.data();
-                // قراءة currentBalance مباشرة وهو الحقل الظاهر في Firestore لديك
-                if (data.currentBalance !== undefined && data.currentBalance !== null) {
-                    return Number(data.currentBalance);
-                }
+            const docSnap = await getDoc(doc(db, colName, partyId));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                return Number(data.currentBalance ?? data.balance ?? data.openingBalance ?? data.initialBalance ?? 0);
             }
         } catch (e) {
-            console.error("Error reading Firestore balance:", e);
-        }
-
-        // في حالة الموردين - حساب مطابق لشاشة الموردين بالظبط
-        if (pType === 'مورد') {
-            try {
-                const partyDoc = await getDoc(doc(db, "suppliers", partyId));
-                if (!partyDoc.exists()) return 0;
-                const pData = partyDoc.data();
-                const openingBal = Number(pData.openingBalance ?? pData.initialBalance ?? 0);
-                
-                const [snapTrans1, snapTrans2, snapItems] = await Promise.all([
-                    getDocs(query(collection(db, "transactions"), where("supplierId", "==", partyId))),
-                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
-                    getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", partyId)))
-                ]);
-
-                let totalPurchases = 0; 
-                let totalPayments = 0;  
-                let totalReturns = 0;   
-
-                snapItems.forEach(docSnap => {
-                    const d = docSnap.data();
-                    const gross = Number(d.grossTotal || d.total || d.amount || 0);
-                    const paid = Number(d.totalPaid || (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)));
-                    
-                    const t = String(d.type || '');
-                    if (t.includes("شراء") || t.includes("مشتريات")) {
-                        totalPurchases += gross;
-                        totalPayments += paid; 
-                    } else if (t.includes("مرتجع")) {
-                        totalReturns += gross;
-                    }
-                });
-
-                const processedDocIds = new Set();
-                const processDoc = (docSnap) => {
-                    if (processedDocIds.has(docSnap.id)) return;
-                    processedDocIds.add(docSnap.id);
-                    const d = docSnap.data();
-                    const amt = Number(d.amount || d.total || 0);
-                    
-                    if (d.type === "صرف") {
-                        totalPayments += amt; 
-                    } else if (d.type === "قبض") {
-                        totalPurchases += amt; 
-                    }
-                };
-
-                snapTrans1.forEach(processDoc);
-                snapTrans2.forEach(processDoc);
-
-                return (openingBal + totalPurchases) - (totalPayments + totalReturns);
-            } catch (err) {
-                console.error("Error calculating supplier balance:", err);
-                return 0;
-            }
+            console.error("خطأ قراءة الرصيد المباشر:", e);
         }
         return 0;
     }
@@ -877,27 +816,27 @@
         document.getElementById('recAmount').innerText = `${Number(amount).toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recStatusText').innerText = type === 'قبض' ? 'تم الاستلام بنجاح' : 'تم الصرف بنجاح';
         
-        // جلب الرصيد الجاري الفعلي للمورد (71,885.00 ج.م)
-        const currentBalance = await getDirectPartyBalanceFromFirestore(partyId);
+        // استعلام حي ومباشر فوراً من Firestore لجلب الرصيد الفلي
+        const liveBalance = await getLiveFirestoreBalance(partyId);
         
         let prevBalance = 0;
         let newBalance = 0;
         
         if (voucherId) {
-            // المعاينة لسند مسجل ومحفوظ سابقاً (تم خصم مبلغه من currentBalance بالفعل)
-            newBalance = currentBalance;
+            // في حالة استعراض سند قديم مسجل مسبقاً بالتطبيـق (تم خصمه بالفعل من currentBalance)
+            newBalance = liveBalance;
             if (pType === 'مورد') {
-                prevBalance = (type === 'صرف') ? (currentBalance + Number(amount)) : (currentBalance - Number(amount));
+                prevBalance = (type === 'صرف') ? (liveBalance + Number(amount)) : (liveBalance - Number(amount));
             } else {
-                prevBalance = (type === 'قبض') ? (currentBalance + Number(amount)) : (currentBalance - Number(amount));
+                prevBalance = (type === 'قبض') ? (liveBalance + Number(amount)) : (liveBalance - Number(amount));
             }
         } else {
-            // فور إنشاء سند جديد
-            prevBalance = currentBalance;
+            // في حالة حفظ سند جديد لحظياً (لم يتم الخصم من currentBalance بـ Firestore بعد)
+            prevBalance = liveBalance;
             if (pType === 'مورد') {
-                newBalance = (type === 'صرف') ? (currentBalance - Number(amount)) : (currentBalance + Number(amount));
+                newBalance = (type === 'صرف') ? (liveBalance - Number(amount)) : (liveBalance + Number(amount));
             } else {
-                newBalance = (type === 'قبض') ? (currentBalance - Number(amount)) : (currentBalance + Number(amount));
+                newBalance = (type === 'قبض') ? (liveBalance - Number(amount)) : (liveBalance + Number(amount));
             }
         }
         
@@ -1111,15 +1050,15 @@
                 const v = displayedVouchers[i];
                 const pType = partiesMap[v.partyId] ? partiesMap[v.partyId].type : 'عميل';
                 
-                const currentBalance = await getDirectPartyBalanceFromFirestore(v.partyId);
+                const liveBalance = await getLiveFirestoreBalance(v.partyId);
                 
-                let prevBalance = currentBalance;
-                let newBalance = currentBalance;
+                let prevBalance = liveBalance;
+                let newBalance = liveBalance;
 
                 if (pType === 'مورد') {
-                    prevBalance = (v.type === 'صرف') ? (currentBalance + v.amount) : (currentBalance - v.amount);
+                    prevBalance = (v.type === 'صرف') ? (liveBalance + v.amount) : (liveBalance - v.amount);
                 } else {
-                    prevBalance = (v.type === 'قبض') ? (currentBalance + v.amount) : (currentBalance - v.amount);
+                    prevBalance = (v.type === 'قبض') ? (liveBalance + v.amount) : (liveBalance - v.amount);
                 }
 
                 hiddenContainer.innerHTML = `
