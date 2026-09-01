@@ -136,7 +136,6 @@
         .summary-strip .value { font-size: 1.1rem; font-weight: 800; }
         .summary-strip .sub-val { font-size: 0.75rem; opacity: 0.9; margin-top: 2px; }
 
-        /* التصميم الجديد لكارت الصنف */
         .item-card {
             background: white;
             border-radius: 18px;
@@ -159,7 +158,6 @@
         .badge-top { background: #dcfce7; color: #15803d; }
         .badge-low { background: #ffe4e6; color: #be123c; }
 
-        /* شبكة الإحصائيات السريعة */
         .stat-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -176,14 +174,12 @@
         .stat-box .title { font-size: 0.65rem; color: var(--text-muted); font-weight: 700; }
         .stat-box .val { font-size: 0.8rem; font-weight: 800; color: var(--text-dark); margin-top: 1px; }
 
-        /* أشرطة التقدم البصرية */
         .progress-group { margin-bottom: 10px; }
         .progress-item { margin-bottom: 5px; }
         .progress-info { display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 700; margin-bottom: 2px; }
         .progress-bar-bg { height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
         .progress-bar-fill { height: 100%; border-radius: 10px; }
 
-        /* صندوق الأرباح الذكي */
         .profit-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -192,6 +188,7 @@
             border: 1px solid #dcfce7;
             border-radius: 12px;
             padding: 8px 10px;
+            margin-bottom: 10px;
         }
         .profit-box { display: flex; flex-direction: column; }
         .profit-box .p-label { font-size: 0.65rem; color: #166534; font-weight: 700; }
@@ -206,6 +203,31 @@
         .profit-box.current-buy .p-label { color: #0369a1; }
         .profit-box.current-buy .p-val { color: #0284c7; }
         .profit-box.current-buy .p-unit { color: #0369a1; }
+
+        /* قسم التحليل الذكي المضاف لكارت الصنف */
+        .item-analysis-box {
+            background: #fdfbf7;
+            border: 1px dashed #f59e0b;
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-top: 8px;
+        }
+        .analysis-header {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #b45309;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+        .analysis-bullet {
+            font-size: 0.7rem;
+            color: #334155;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 2px;
+        }
 
         .item-card-footer {
             display: flex;
@@ -563,6 +585,37 @@
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
     }
 
+    // دالة إنشاء التحليل التلقائي الموجز بناءً على أرقام الصنف
+    function generateItemAnalysis(invoicePct, daysPct, profitAvg, grandAvgTotal) {
+        let demandTxt = "";
+        if (invoicePct >= 25) demandTxt = "طلب مرتفع جداً (يظهر في أكثر من ربع الفواتير).";
+        else if (invoicePct >= 10) demandTxt = "طلب متوسط إلى جيد بالفواتير.";
+        else demandTxt = "طلب محدود بالفواتير.";
+
+        let activeTxt = "";
+        if (daysPct >= 75) activeTxt = "حركة بيع يومية منتظمة جداً.";
+        else if (daysPct >= 40) activeTxt = "حركة بيع متقطعة على مدار الأيام.";
+        else activeTxt = "حركة بطيئة أو مبيعات متركزة في أيّام قليلة.";
+
+        let profitShare = grandAvgTotal > 0 ? ((profitAvg / grandAvgTotal) * 100).toFixed(1) : 0;
+        let profitTxt = `يساهم بـ ${profitShare}% من أرباح الفترة.`;
+
+        let advice = "";
+        if (invoicePct >= 25 && daysPct >= 75) advice = "صنف استراتيجي، يلزم عدم انقطاعه عن المخزن.";
+        else if (daysPct < 30) advice = "صنف بطيء، يُفضّل عمل عروض لتنشيطه أو تقليل كميات الشراء.";
+        else advice = "صنف متوازن أداءً وربحاً.";
+
+        return `
+            <div class="item-analysis-box">
+                <div class="analysis-header"><i class="fas fa-chart-pie me-1"></i> التحليل السريع للطلب والأداء:</div>
+                <div class="analysis-bullet">• <b>معدل الطلب:</b> ${demandTxt}</div>
+                <div class="analysis-bullet">• <b>الانتظام:</b> ${activeTxt}</div>
+                <div class="analysis-bullet">• <b>المساهمة المالية:</b> ${profitTxt}</div>
+                <div class="analysis-bullet">• <b>التوصية:</b> <span class="text-dark fw-bold">${advice}</span></div>
+            </div>
+        `;
+    }
+
     window.renderItems = function() {
         const term = document.getElementById('searchInput').value.toLowerCase().trim();
         const fromVal = document.getElementById('fromDate').value;
@@ -634,6 +687,13 @@
             list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
         }
 
+        let grandAvg = 0;
+        let grandCurrent = 0;
+        list.forEach(p => {
+            grandAvg += p.profitAvg;
+            grandCurrent += p.profitCurrent;
+        });
+
         if (list.length > 0) {
             const sortedByInvoicesDesc = [...list].sort((a, b) => b.invoiceCount - a.invoiceCount);
             const topSeller = sortedByInvoicesDesc[0];
@@ -663,14 +723,9 @@
         }
 
         const container = document.getElementById('itemsContainer');
-        let grandAvg = 0;
-        let grandCurrent = 0;
         let html = '';
 
         list.forEach((p, index) => {
-            grandAvg += p.profitAvg;
-            grandCurrent += p.profitCurrent;
-
             const factor = Math.max(1, Number(p.factor) || 1);
             const unitLabel = factor > 1 ? 'الكرتونة' : 'القطعة';
 
@@ -690,6 +745,8 @@
                 badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
             }
 
+            const analysisHtml = generateItemAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg);
+
             html += `
                 <div class="item-card">
                     <div class="item-header">
@@ -700,7 +757,6 @@
                         ${badgeHtml}
                     </div>
 
-                    <!-- شبكة أرقام سريعة -->
                     <div class="stat-grid">
                         <div class="stat-box">
                             <div class="title"><i class="fas fa-cubes text-success"></i> الكمية</div>
@@ -716,7 +772,6 @@
                         </div>
                     </div>
 
-                    <!-- أشرطة تقدم بصرية -->
                     <div class="progress-group">
                         <div class="progress-item">
                             <div class="progress-info">
@@ -738,7 +793,6 @@
                         </div>
                     </div>
 
-                    <!-- صندوق الأرباح المنظم -->
                     <div class="profit-container">
                         <div class="profit-box">
                             <span class="p-label">الربح بالمتوسط</span>
@@ -751,6 +805,8 @@
                             <span class="p-unit">ربح ${unitLabel}: ${unitProfitCurrCarton.toFixed(2)}</span>
                         </div>
                     </div>
+
+                    ${analysisHtml}
 
                     <div class="item-card-footer">
                         <span class="text-muted" style="font-size:0.7rem;">حالة الحركة: <b>${p.daysCount > 0 ? 'نشط' : 'ركود'}</b></span>
