@@ -619,8 +619,13 @@
         allInvoices.forEach(inv => {
             if (inv.supplierId === supId && inv.timestamp && inv.timestamp.seconds < targetSeconds) {
                 const amt = inv.displayGross;
-                if (inv.type === "شراء" || inv.type === "فاتورة شراء") debt += amt;
-                else if (inv.type === "مرتجع شراء") credit += amt;
+                const paid = inv.computedTotalPaid || 0;
+                if (inv.type === "شراء" || inv.type === "فاتورة شراء") {
+                    debt += amt;
+                    credit += paid; // خصم المدفوع المباشر للفواتير السابقة
+                } else if (inv.type === "مرتجع شراء") {
+                    credit += amt;
+                }
             }
         });
 
@@ -663,8 +668,9 @@
             const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -totalInvoiceVal : inv.displayNetPending);
             const targetPriceColor = inv.isReturn ? 'var(--danger)' : (inv.displayNetPending > 0 ? 'var(--danger)' : 'var(--success)');
             
-            const totalStatusLabel = finalSupplierTotal < 0 ? 'دائن' : 'مدين';
-            const totalStatusClass = finalSupplierTotal < 0 ? 'text-success' : 'text-danger';
+            // تحديد طبيعة الحساب بدقة: إذا كان أكبر من الصفر فهو دائن (مستحق للمورد)، وإذا كان بالسالب فهو مدين (له فلوس عند المورد)
+            const totalStatusLabel = finalSupplierTotal > 0 ? 'دائن للمورد' : (finalSupplierTotal < 0 ? 'مدين للمحل' : 'متزن');
+            const totalStatusClass = finalSupplierTotal > 0 ? 'text-danger' : (finalSupplierTotal < 0 ? 'text-success' : 'text-dark');
 
             return `
             <div class="invoice-card ${inv.isReturn ? 'return-style' : 'purchase-style'}" id="card-${inv.id}">
