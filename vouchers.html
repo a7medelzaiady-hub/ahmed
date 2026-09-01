@@ -536,21 +536,83 @@
             supSnap.forEach(doc => {
                 const data = doc.data();
                 partiesMap[doc.id] = {
+                    id: doc.id,
                     name: data.name,
-                    type: 'مورد'
+                    type: 'مورد',
+                    raw: data
                 };
             });
             custSnap.forEach(doc => {
                 const data = doc.data();
                 partiesMap[doc.id] = {
+                    id: doc.id,
                     name: data.name,
-                    type: 'عميل'
+                    type: 'عميل',
+                    raw: data
                 };
             });
             
             localStorage.setItem('cache_partiesMap', JSON.stringify(partiesMap));
         } catch (err) {
             console.error("Error fetching parties:", err);
+        }
+    }
+
+    // === 1. استخراج الرصيد المرجعي الأولي بنفس الطريقة من كود الفاتورة بالضبط ===
+    function getSupplierBaseBalance(sup) {
+        if (!sup) return 0;
+        const raw = sup.raw || sup;
+        if (raw.currentBalance !== undefined && raw.currentBalance !== null) {
+            return Number(raw.currentBalance) || 0;
+        }
+        return Number(raw.openingBalance ?? raw.initialBalance ?? 0);
+    }
+
+    // === 2. احتساب الرصيد السابق التراكمي الحقيقي بنفس دالة الفاتورة حرفياً ===
+    async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null, currentVoucherId = null) {
+        try {
+            const [snapInvoices, snapTrans] = await Promise.all([
+                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId))),
+                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId)))
+            ]);
+
+            let invoiceDebt = 0;
+            const targetSec = targetTimestamp?.seconds || Infinity;
+
+            snapInvoices.forEach(docSnap => {
+                const data = docSnap.data();
+                const invSec = data.timestamp?.seconds || 0;
+
+                if (invSec < targetSec) {
+                    const amt = Number(data.grossTotal) || Number(data.total) || 0;
+                    const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
+                    
+                    if (data.type === "مرتجع شراء") {
+                        invoiceDebt -= amt;
+                    } else {
+                        // دين الفاتورة الصافي = إجمالي الفاتورة - المدفوع فيها
+                        invoiceDebt += (amt - paid);
+                    }
+                }
+            });
+
+            let transEffect = 0;
+            snapTrans.forEach(docSnap => {
+                if (currentVoucherId && docSnap.id === currentVoucherId) return;
+                
+                const tr = docSnap.data();
+                const trSec = tr.timestamp?.seconds || 0;
+
+                if (trSec < targetSec && !tr.invoiceId) {
+                    const amt = Number(tr.amount || tr.total || 0);
+                    if (tr.type === 'قبض') transEffect -= amt;
+                    else if (tr.type === 'صرف') transEffect += amt;
+                }
+            });
+
+            return Number(baseBalance) + invoiceDebt + transEffect;
+        } catch (e) { 
+            return Number(baseBalance); 
         }
     }
 
@@ -786,26 +848,6 @@
         updateMethodTotals(filtered);
     };
 
-    // =========================================================================
-    // جلب الرصيد المباشر والحي فوراً من وثيقة المورد دون الاعتماد على كاش محلي
-    // =========================================================================
-    async function getLiveFirestoreBalance(partyId) {
-        if (!partyId) return 0;
-        const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
-        const colName = pType === 'مورد' ? "suppliers" : "customers";
-        
-        try {
-            const docSnap = await getDoc(doc(db, colName, partyId));
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                return Number(data.currentBalance ?? data.balance ?? data.openingBalance ?? data.initialBalance ?? 0);
-            }
-        } catch (e) {
-            console.error("خطأ قراءة الرصيد المباشر:", e);
-        }
-        return 0;
-    }
-
     window.openReceiptModal = async (type, date, amount, partyId, resolvedName, voucherTimestamp = null, voucherId = null) => {
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
         let pName = resolvedName;
@@ -816,28 +858,49 @@
         document.getElementById('recAmount').innerText = `${Number(amount).toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recStatusText').innerText = type === 'قبض' ? 'تم الاستلام بنجاح' : 'تم الصرف بنجاح';
         
-        // استعلام حي ومباشر فوراً من Firestore لجلب الرصيد الفلي
-        const liveBalance = await getLiveFirestoreBalance(partyId);
-        
         let prevBalance = 0;
-        let newBalance = 0;
         
-        if (voucherId) {
-            // في حالة استعراض سند قديم مسجل مسبقاً بالتطبيـق (تم خصمه بالفعل من currentBalance)
-            newBalance = liveBalance;
-            if (pType === 'مورد') {
-                prevBalance = (type === 'صرف') ? (liveBalance + Number(amount)) : (liveBalance - Number(amount));
-            } else {
-                prevBalance = (type === 'قبض') ? (liveBalance + Number(amount)) : (liveBalance - Number(amount));
-            }
+        if (pType === 'مورد') {
+            const sup = partiesMap[partyId];
+            const startBalance = getSupplierBaseBalance(sup);
+            // حساب الرصيد السابق التراكمي المظبوط بالظبط نفس كود الفاتورة
+            prevBalance = await getRealSupplierBalance(partyId, startBalance, voucherTimestamp, voucherId);
         } else {
-            // في حالة حفظ سند جديد لحظياً (لم يتم الخصم من currentBalance بـ Firestore بعد)
-            prevBalance = liveBalance;
-            if (pType === 'مورد') {
-                newBalance = (type === 'صرف') ? (liveBalance - Number(amount)) : (liveBalance + Number(amount));
-            } else {
-                newBalance = (type === 'قبض') ? (liveBalance - Number(amount)) : (liveBalance + Number(amount));
+            // كود حساب رصيد العملاء التاريخي
+            try {
+                const cDoc = await getDoc(doc(db, "customers", partyId));
+                let cBal = Number(cDoc.data()?.initialBalance ?? cDoc.data()?.openingBalance ?? 0);
+                const targetSec = voucherTimestamp?.seconds || Infinity;
+                
+                const [invoicesSnap, transSnap] = await Promise.all([
+                    getDocs(query(collection(db, "invoices"), where("customerId", "==", partyId))),
+                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId)))
+                ]);
+                
+                invoicesSnap.forEach(inv => {
+                    if ((inv.data().timestamp?.seconds || 0) < targetSec) {
+                        cBal += Number(inv.data().remaining || 0);
+                    }
+                });
+                transSnap.forEach(tr => {
+                    if (voucherId && tr.id === voucherId) return;
+                    if ((tr.data().timestamp?.seconds || 0) < targetSec) {
+                        if (tr.data().type === 'قبض') cBal -= Number(tr.data().amount || 0);
+                        if (tr.data().type === 'صرف') cBal += Number(tr.data().amount || 0);
+                    }
+                });
+                prevBalance = cBal;
+            } catch (e) {
+                prevBalance = 0;
             }
+        }
+        
+        let newBalance = prevBalance;
+        if (pType === 'عميل') {
+            newBalance = (type === 'قبض') ? (prevBalance - Number(amount)) : (prevBalance + Number(amount));
+        } else {
+            // للمورد: سند الصرف له يقلل المديونية المطالب بها
+            newBalance = (type === 'صرف') ? (prevBalance - Number(amount)) : (prevBalance + Number(amount));
         }
         
         document.getElementById('recPrevBalance').innerText = `${prevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
@@ -1050,16 +1113,14 @@
                 const v = displayedVouchers[i];
                 const pType = partiesMap[v.partyId] ? partiesMap[v.partyId].type : 'عميل';
                 
-                const liveBalance = await getLiveFirestoreBalance(v.partyId);
-                
-                let prevBalance = liveBalance;
-                let newBalance = liveBalance;
-
+                let prevBalance = 0;
                 if (pType === 'مورد') {
-                    prevBalance = (v.type === 'صرف') ? (liveBalance + v.amount) : (liveBalance - v.amount);
-                } else {
-                    prevBalance = (v.type === 'قبض') ? (liveBalance + v.amount) : (liveBalance - v.amount);
+                    const sup = partiesMap[v.partyId];
+                    const startBalance = getSupplierBaseBalance(sup);
+                    prevBalance = await getRealSupplierBalance(v.partyId, startBalance, v.timestamp, v.id);
                 }
+
+                let newBalance = (v.type === 'صرف') ? (prevBalance - v.amount) : (prevBalance + v.amount);
 
                 hiddenContainer.innerHTML = `
                     <div id="tempReceipt" class="receipt-preview-box" dir="rtl" style="box-shadow:none; margin:0; border:1px solid #000;">
