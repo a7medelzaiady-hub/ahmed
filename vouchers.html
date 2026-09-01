@@ -446,7 +446,7 @@
 
                     <div class="text-center mt-3 pt-2" style="border-top: 1px dashed #ccc;">
                         <small style="font-size: 0.7rem; color: #444; display: block;">شكراً لتعاملكم معنا</small>
-                        <small style="font-size: 0.7rem; color: #444; display: block; font-weight: bold; margin-top: 2px;">للتواصل 01027830834</small>
+                        <small style="font-size: 0.7rem; color: #444; display: block; font-weight: bold; margin-top: 2px;">ل للتواصل 01027830834</small>
                     </div>
                 </div>
             </div>
@@ -789,7 +789,7 @@
     };
 
     // =========================================================================
-    // دالة احتساب الرصيد التاريخي الدقيق للمورد والعميل (حل المشكلة جذرياً)
+    // دالة احتساب الرصيد المطابقة تماماً لشاشة قائمة الموردين والعملاء
     // =========================================================================
     async function calculateCustomerBalance(partyId, targetTimestamp = null, currentVoucherId = null) {
         if (!partyId) return 0;
@@ -801,20 +801,37 @@
                 const partyDoc = await getDoc(doc(db, "suppliers", partyId));
                 if (!partyDoc.exists()) return 0;
                 
-                const openingBal = Number(partyDoc.data().openingBalance ?? partyDoc.data().initialBalance ?? 0);
+                const pData = partyDoc.data();
+                const openingBal = Number(pData.openingBalance ?? pData.initialBalance ?? 0);
                 
-                // البحث بالحقلين لتجنب استبعاد أية سندات مسجلة تحت المورد
                 const [snapTrans1, snapTrans2, snapItems] = await Promise.all([
                     getDocs(query(collection(db, "transactions"), where("supplierId", "==", partyId))),
                     getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
                     getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", partyId)))
                 ]);
 
-                let debt = 0;   
-                let credit = 0; 
-                const processedDocIds = new Set();
+                let totalPurchases = 0; 
+                let totalPayments = 0;  
+                let totalReturns = 0;   
 
-                const processTransactionDoc = (docSnap) => {
+                snapItems.forEach(docSnap => {
+                    const d = docSnap.data();
+                    const invSec = d.timestamp?.seconds || 0;
+                    if (invSec < targetSec) {
+                        const gross = Number(d.grossTotal || d.total || d.amount || 0);
+                        const paid = Number(d.totalPaid || (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)));
+                        
+                        if (d.type === "شراء" || d.type === "فاتورة شراء") {
+                            totalPurchases += gross;
+                            totalPayments += paid; 
+                        } else if (d.type === "مرتجع شراء") {
+                            totalReturns += gross;
+                        }
+                    }
+                });
+
+                const processedDocIds = new Set();
+                const processDoc = (docSnap) => {
                     if (processedDocIds.has(docSnap.id)) return;
                     if (currentVoucherId && docSnap.id === currentVoucherId) return;
                     
@@ -823,32 +840,21 @@
                     const trSec = d.timestamp?.seconds || 0;
                     
                     if (trSec < targetSec || (trSec === targetSec && docSnap.id < currentVoucherId)) {
-                        const amt = Number(d.amount) || 0;
-                        if (d.type === "صرف") credit += amt;
-                        else if (d.type === "قبض") debt += amt;
+                        const amt = Number(d.amount || d.total || 0);
+                        if (d.type === "صرف") {
+                            totalPayments += amt; 
+                        } else if (d.type === "قبض") {
+                            totalPurchases += amt; 
+                        }
                     }
                 };
 
-                snapTrans1.forEach(processTransactionDoc);
-                snapTrans2.forEach(processTransactionDoc);
+                snapTrans1.forEach(processDoc);
+                snapTrans2.forEach(processDoc);
 
-                snapItems.forEach(docSnap => {
-                    const d = docSnap.data();
-                    const invSec = d.timestamp?.seconds || 0;
-                    if (invSec < targetSec) {
-                        const amt = Number(d.grossTotal) || Number(d.total) || Number(d.amount) || 0;
-                        const paid = Number(d.totalPaid || (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)));
-                        
-                        if (d.type === "شراء" || d.type === "فاتورة شراء") {
-                            debt += amt;
-                            credit += paid;
-                        } else if (d.type === "مرتجع شراء") {
-                            credit += amt;
-                        }
-                    }
-                });
+                const currentDebt = (openingBal + totalPurchases) - (totalPayments + totalReturns);
+                return currentDebt;
 
-                return (openingBal + debt) - credit;
             } catch (err) {
                 console.error("خطأ بحساب رصيد المورد:", err);
                 return 0;
