@@ -446,7 +446,7 @@
 
                     <div class="text-center mt-3 pt-2" style="border-top: 1px dashed #ccc;">
                         <small style="font-size: 0.7rem; color: #444; display: block;">شكراً لتعاملكم معنا</small>
-                        <small style="font-size: 0.7rem; color: #444; display: block; font-weight: bold; margin-top: 2px;">ل للتواصل 01027830834</small>
+                        <small style="font-size: 0.7rem; color: #444; display: block; font-weight: bold; margin-top: 2px;">للتواصل 01027830834</small>
                     </div>
                 </div>
             </div>
@@ -538,7 +538,7 @@
                 partiesMap[doc.id] = {
                     name: data.name,
                     type: 'مورد',
-                    initialBalance: Number(data.openingBalance ?? data.initialBalance ?? 0)
+                    initialBalance: Number(data.balance ?? data.currentBalance ?? data.openingBalance ?? data.initialBalance ?? 0)
                 };
             });
             custSnap.forEach(doc => {
@@ -546,7 +546,7 @@
                 partiesMap[doc.id] = {
                     name: data.name,
                     type: 'عميل',
-                    initialBalance: Number(data.initialBalance ?? data.openingBalance ?? 0)
+                    initialBalance: Number(data.balance ?? data.currentBalance ?? data.initialBalance ?? data.openingBalance ?? 0)
                 };
             });
             
@@ -789,119 +789,25 @@
     };
 
     // =========================================================================
-    // دالة احتساب الرصيد المطابقة تماماً لشاشة قائمة الموردين والعملاء
+    // دالة استخراج رصيد المورد الفعلي المباشر المطابق لشاشة الموردين
     // =========================================================================
-    async function calculateCustomerBalance(partyId, targetTimestamp = null, currentVoucherId = null) {
+    async function getDirectPartyBalance(partyId) {
         if (!partyId) return 0;
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
-        const targetSec = targetTimestamp?.seconds || Infinity;
+        const colName = pType === 'مورد' ? "suppliers" : "customers";
         
-        if (pType === 'مورد') {
-            try {
-                const partyDoc = await getDoc(doc(db, "suppliers", partyId));
-                if (!partyDoc.exists()) return 0;
-                
-                const pData = partyDoc.data();
-                const openingBal = Number(pData.openingBalance ?? pData.initialBalance ?? 0);
-                
-                const [snapTrans1, snapTrans2, snapItems] = await Promise.all([
-                    getDocs(query(collection(db, "transactions"), where("supplierId", "==", partyId))),
-                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
-                    getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", partyId)))
-                ]);
-
-                let totalPurchases = 0; 
-                let totalPayments = 0;  
-                let totalReturns = 0;   
-
-                snapItems.forEach(docSnap => {
-                    const d = docSnap.data();
-                    const invSec = d.timestamp?.seconds || 0;
-                    if (invSec < targetSec) {
-                        const gross = Number(d.grossTotal || d.total || d.amount || 0);
-                        const paid = Number(d.totalPaid || (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)));
-                        
-                        if (d.type === "شراء" || d.type === "فاتورة شراء") {
-                            totalPurchases += gross;
-                            totalPayments += paid; 
-                        } else if (d.type === "مرتجع شراء") {
-                            totalReturns += gross;
-                        }
-                    }
-                });
-
-                const processedDocIds = new Set();
-                const processDoc = (docSnap) => {
-                    if (processedDocIds.has(docSnap.id)) return;
-                    if (currentVoucherId && docSnap.id === currentVoucherId) return;
-                    
-                    processedDocIds.add(docSnap.id);
-                    const d = docSnap.data();
-                    const trSec = d.timestamp?.seconds || 0;
-                    
-                    if (trSec < targetSec || (trSec === targetSec && docSnap.id < currentVoucherId)) {
-                        const amt = Number(d.amount || d.total || 0);
-                        if (d.type === "صرف") {
-                            totalPayments += amt; 
-                        } else if (d.type === "قبض") {
-                            totalPurchases += amt; 
-                        }
-                    }
-                };
-
-                snapTrans1.forEach(processDoc);
-                snapTrans2.forEach(processDoc);
-
-                const currentDebt = (openingBal + totalPurchases) - (totalPayments + totalReturns);
-                return currentDebt;
-
-            } catch (err) {
-                console.error("خطأ بحساب رصيد المورد:", err);
-                return 0;
+        try {
+            const docRef = doc(db, colName, partyId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                // جلب المديونية المسجلة بنفس مسمى الحقل المستعمل في شاشة قائمة الموردين
+                return Number(data.balance ?? data.currentBalance ?? data.debt ?? data.openingBalance ?? data.initialBalance ?? 0);
             }
-        } else {
-            try {
-                const partyDoc = await getDoc(doc(db, "customers", partyId));
-                if (!partyDoc.exists()) return 0;
-                let balance = Number(partyDoc.data().initialBalance ?? partyDoc.data().openingBalance ?? 0);
-                
-                const [invoicesSnap, transSnap1, transSnap2] = await Promise.all([
-                    getDocs(query(collection(db, "invoices"), where("customerId", "==", partyId))),
-                    getDocs(query(collection(db, "transactions"), where("partyId", "==", partyId))),
-                    getDocs(query(collection(db, "transactions"), where("customerId", "==", partyId)))
-                ]);
-
-                invoicesSnap.forEach(inv => {
-                    const invData = inv.data();
-                    const invSec = invData.timestamp?.seconds || 0;
-                    if (invSec < targetSec) {
-                        balance += Number(invData.remaining || 0);
-                    }
-                });
-                
-                const processedCustDocIds = new Set();
-                const processCustomerDoc = (tr) => {
-                    if (processedCustDocIds.has(tr.id)) return;
-                    if (currentVoucherId && tr.id === currentVoucherId) return;
-                    
-                    processedCustDocIds.add(tr.id);
-                    const t = tr.data();
-                    const trSec = t.timestamp?.seconds || 0;
-                    if (trSec < targetSec) {
-                        if (t.type === 'قبض') balance -= Number(t.amount || 0);
-                        if (t.type === 'صرف') balance += Number(t.amount || 0);
-                    }
-                };
-                
-                transSnap1.forEach(processCustomerDoc);
-                transSnap2.forEach(processCustomerDoc);
-                
-                return balance;
-            } catch (err) {
-                console.error("خطأ بحساب رصيد العميل:", err);
-                return 0;
-            }
+        } catch (e) {
+            console.error("خطأ جلب رصيد الطرف:", e);
         }
+        return 0;
     }
 
     window.openReceiptModal = async (type, date, amount, partyId, resolvedName, voucherTimestamp = null, voucherId = null) => {
@@ -914,16 +820,31 @@
         document.getElementById('recAmount').innerText = `${Number(amount).toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recStatusText').innerText = type === 'قبض' ? 'تم الاستلام بنجاح' : 'تم الصرف بنجاح';
         
-        const historicalPrevBalance = await calculateCustomerBalance(partyId, voucherTimestamp, voucherId);
+        // جلب الرصيد الفلي للمورد مباشرة المسجل بالسيستم (مثلاً 71,885)
+        const currentBalance = await getDirectPartyBalance(partyId);
         
-        let newBalance = historicalPrevBalance;
-        if (pType === 'عميل') {
-            newBalance = (type === 'قبض') ? (historicalPrevBalance - Number(amount)) : (historicalPrevBalance + Number(amount));
+        let prevBalance = currentBalance;
+        let newBalance = currentBalance;
+        
+        if (voucherId) {
+            // السند محفوظ وموجود مسبقاً بالأرشيف (تم الخصم منه بالفعل)
+            newBalance = currentBalance;
+            if (pType === 'مورد') {
+                prevBalance = (type === 'صرف') ? (currentBalance + Number(amount)) : (currentBalance - Number(amount));
+            } else {
+                prevBalance = (type === 'قبض') ? (currentBalance + Number(amount)) : (currentBalance - Number(amount));
+            }
         } else {
-            newBalance = (type === 'صرف') ? (historicalPrevBalance - Number(amount)) : (historicalPrevBalance + Number(amount));
+            // السند جديد يتم إنشاؤه الآن (لم يُخصم بعد)
+            prevBalance = currentBalance;
+            if (pType === 'مورد') {
+                newBalance = (type === 'صرف') ? (currentBalance - Number(amount)) : (currentBalance + Number(amount));
+            } else {
+                newBalance = (type === 'قبض') ? (currentBalance - Number(amount)) : (currentBalance + Number(amount));
+            }
         }
         
-        document.getElementById('recPrevBalance').innerText = `${historicalPrevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('recPrevBalance').innerText = `${prevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recNewBalance').innerText = `${newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         
         receiptModalObj.show();
@@ -1012,9 +933,10 @@
             } else {
                 const docRef = await addDoc(collection(db, "transactions"), docData);
                 alert("تم حفظ السند الجديد بنجاح بقاعدة البيانات.");
-                await openReceiptModal(type, date, amount, partyId, customerName, null, docRef.id);
+                await openReceiptModal(type, date, amount, partyId, customerName, null, null);
             }
             resetVoucherForm();
+            await fetchPartiesData();
             await loadVouchers();
         } catch (err) {
             console.error("Error storing transaction record:", err);
@@ -1027,6 +949,7 @@
         try {
             await deleteDoc(doc(db, "transactions", id));
             alert("تم حذف السند بنجاح.");
+            await fetchPartiesData();
             await loadVouchers();
         } catch (err) {
             console.error("Error deleting document:", err);
@@ -1041,6 +964,7 @@
             const promises = allVouchers.map(v => deleteDoc(doc(db, "transactions", v.id)));
             await Promise.all(promises);
             alert("تم مسح وتنظيف أرشيف السندات بالكامل.");
+            await fetchPartiesData();
             await loadVouchers();
         } catch (err) {
             console.error("Error purging all elements:", err);
@@ -1130,13 +1054,14 @@
                 const v = displayedVouchers[i];
                 const pType = partiesMap[v.partyId] ? partiesMap[v.partyId].type : 'عميل';
                 
-                const historicalPrevBalance = await calculateCustomerBalance(v.partyId, v.timestamp, v.id);
-                
-                let newBalance = historicalPrevBalance;
-                if (pType === 'عميل') {
-                    newBalance = (v.type === 'قبض') ? (historicalPrevBalance - v.amount) : (historicalPrevBalance + v.amount);
+                const currentBalance = await getDirectPartyBalance(v.partyId);
+                let prevBalance = currentBalance;
+                let newBalance = currentBalance;
+
+                if (pType === 'مورد') {
+                    prevBalance = (v.type === 'صرف') ? (currentBalance + v.amount) : (currentBalance - v.amount);
                 } else {
-                    newBalance = (v.type === 'صرف') ? (historicalPrevBalance - v.amount) : (historicalPrevBalance + v.amount);
+                    prevBalance = (v.type === 'قبض') ? (currentBalance + v.amount) : (currentBalance - v.amount);
                 }
 
                 hiddenContainer.innerHTML = `
@@ -1164,7 +1089,7 @@
                         <table class="receipt-table-layout" style="background: #f4f6f5; border-radius: 6px; padding: 5px; margin-top: 8px;">
                             <tr>
                                 <td style="text-align: right; padding: 5px 8px; color: #444;">الحساب السابق:</td>
-                                <td style="text-align: left; font-weight: bold; color: #000;">${historicalPrevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
+                                <td style="text-align: left; font-weight: bold; color: #000;">${prevBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
                             </tr>
                             <tr style="border-top: 1px solid #ddd !important;">
                                 <td style="text-align: right; padding: 5px 8px; color: #444; font-weight: bold;">المتبقي بعد السداد:</td>
@@ -1173,7 +1098,7 @@
                         </table>
                         <div class="text-center mt-3 pt-2" style="border-top: 1px dashed #ccc;">
                             <small style="font-size: 0.7rem; color: #444; display: block;">شكراً لتعاملكم معنا</small>
-                            <small style="font-size: 0.7rem; color: #444; display: block; font-weight: bold; margin-top: 2px;">للتواصل 01027830834</small>
+                            <small style="font-size: 0.7rem; color: #444; display: block; font-weight: bold; margin-top: 2px;">ل للتواصل 01027830834</small>
                         </div>
                     </div>
                 `;
