@@ -95,7 +95,6 @@
             font-size: 0.85rem;
         }
 
-        /* كروت الإحصائيات الذكية */
         .analytics-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -138,12 +137,11 @@
             text-overflow: ellipsis;
         }
         .analytics-sub {
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             font-weight: 700;
             margin-top: 2px;
         }
 
-        /* أدوات الفرز والتصفية */
         .sort-section {
             padding: 10px 20px 5px;
             display: flex;
@@ -225,6 +223,7 @@
         .item-name { font-weight: 800; font-size: 0.95rem; color: var(--text-dark); line-height: 1.3; }
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
         .item-qty-sold { font-size: 0.82rem; color: var(--primary-green); font-weight: 800; margin-top: 4px; }
+        .item-invoice-count { font-size: 0.82rem; color: #0284c7; font-weight: 800; margin-top: 2px; }
 
         .rank-badge {
             font-size: 0.68rem;
@@ -314,25 +313,25 @@
     </div>
 </div>
 
-<!-- كروت تحليل الأداء والإحصائيات السريعة -->
+<!-- كروت تحليل الأداء بناءً على تكرار الفواتير -->
 <div class="analytics-grid">
     <div class="analytics-card highlight-top">
-        <div class="analytics-title"><i class="fas fa-crown text-warning"></i> الأكثر مبيعا (كمية)</div>
+        <div class="analytics-title"><i class="fas fa-crown text-warning"></i> الأكثر تكراراً بالكتالوج</div>
         <div class="analytics-val" id="topSellerName">---</div>
-        <div class="analytics-sub text-success" id="topSellerQty">0 كرتونة</div>
+        <div class="analytics-sub text-success" id="topSellerQty">0 فاتورة</div>
     </div>
     <div class="analytics-card highlight-low">
-        <div class="analytics-title"><i class="fas fa-exclamation-triangle text-danger"></i> الأقل مبيعا</div>
+        <div class="analytics-title"><i class="fas fa-exclamation-triangle text-danger"></i> الأقل طلباً بالفواتير</div>
         <div class="analytics-val" id="lowSellerName">---</div>
-        <div class="analytics-sub text-danger" id="lowSellerQty">0 كرتونة</div>
+        <div class="analytics-sub text-danger" id="lowSellerQty">0 فاتورة</div>
     </div>
 </div>
 
 <!-- أزرار اختيار نوع الفرز -->
 <div class="sort-section">
     <button class="sort-chip active" id="sortProfitBtn" onclick="setSortMode('profit')"><i class="fas fa-coins me-1"></i> الأعلى ربحاً</button>
-    <button class="sort-chip" id="sortQtyBtn" onclick="setSortMode('qty')"><i class="fas fa-fire me-1"></i> الأكثر مبيعاً (كميات)</button>
-    <button class="sort-chip" id="sortSlowBtn" onclick="setSortMode('slow')"><i class="fas fa-hourglass-half me-1"></i> الأقل مبيعا (بطيء الحركة)</button>
+    <button class="sort-chip" id="sortCountBtn" onclick="setSortMode('count')"><i class="fas fa-file-invoice me-1"></i> الأكثر تكراراً (عدد الفواتير)</button>
+    <button class="sort-chip" id="sortSlowBtn" onclick="setSortMode('slow')"><i class="fas fa-hourglass-half me-1"></i> الأقل طلباً (عدد الفواتير)</button>
 </div>
 
 <div class="search-section">
@@ -392,7 +391,7 @@
     let productsMap = {}; 
     let namesMap = {};
     let saleLines = {}; 
-    let currentSortMode = 'profit'; // Default sort mode
+    let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
         localStorage.removeItem("cache_profits_inventory");
@@ -402,7 +401,7 @@
     window.setSortMode = function(mode) {
         currentSortMode = mode;
         document.getElementById('sortProfitBtn').classList.toggle('active', mode === 'profit');
-        document.getElementById('sortQtyBtn').classList.toggle('active', mode === 'qty');
+        document.getElementById('sortCountBtn').classList.toggle('active', mode === 'count');
         document.getElementById('sortSlowBtn').classList.toggle('active', mode === 'slow');
         renderItems();
     };
@@ -512,6 +511,7 @@
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
+                const invoiceId = docSnap.id;
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
@@ -526,7 +526,7 @@
 
                     let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
-                    pushEvent(id, { type: 'sale', date, qty: pcs, revenue });
+                    pushEvent(id, { type: 'sale', date, qty: pcs, revenue, invoiceId });
                 });
             });
 
@@ -575,7 +575,8 @@
                             costAvg: Number(costAvg) || 0, 
                             profitAvg: Number(profitAvg) || 0, 
                             costCurrent: Number(costCurrent) || 0, 
-                            profitCurrent: Number(profitCurrent) || 0 
+                            profitCurrent: Number(profitCurrent) || 0,
+                            invoiceId: ev.invoiceId
                         });
                     }
                 });
@@ -583,7 +584,7 @@
 
             renderItems();
         } catch (e) {
-            console.error("خطأ في تجميع بيانات الأرباح والإحصائيات:", e);
+            console.error("خطأ في تجميع البيانات:", e);
             document.getElementById('itemsContainer').innerHTML = '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
         }
     }
@@ -616,8 +617,10 @@
         let profitAvgMap = {};
         let profitCurrentMap = {};
         let qtyByProduct = {};
+        let invoicesCountByProduct = {};
 
         Object.keys(saleLines).forEach(productId => {
+            let uniqueInvoices = new Set();
             saleLines[productId].forEach(line => {
                 if (fromDate && (!line.date || line.date < fromDate)) return;
                 if (toDate && (!line.date || line.date > toDate)) return;
@@ -625,20 +628,30 @@
                 profitAvgMap[productId] = (Number(profitAvgMap[productId]) || 0) + Number(line.profitAvg);
                 profitCurrentMap[productId] = (Number(profitCurrentMap[productId]) || 0) + Number(line.profitCurrent);
                 qtyByProduct[productId] = (Number(qtyByProduct[productId]) || 0) + Number(line.qty);
+                
+                if (line.invoiceId) {
+                    uniqueInvoices.add(line.invoiceId);
+                } else {
+                    // في حالة عدم توفر id الفاتورة يتم احتساب السطر كعملية بيع منفصلة
+                    invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + 1;
+                }
             });
+
+            if (uniqueInvoices.size > 0) {
+                invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + uniqueInvoices.size;
+            }
         });
 
         let list = Object.keys(productsMap).map(id => {
             const factor = Math.max(1, Number(productsMap[id].factor) || 1);
             const qtyPcs = Number(qtyByProduct[id]) || 0;
-            const cartonsSold = qtyPcs / factor;
 
             return {
                 ...productsMap[id],
                 profitAvg: Number(profitAvgMap[id]) || 0,
                 profitCurrent: Number(profitCurrentMap[id]) || 0,
                 qtySold: qtyPcs,
-                cartonsSold: cartonsSold
+                invoiceCount: Number(invoicesCountByProduct[id]) || 0
             };
         });
 
@@ -649,31 +662,31 @@
             list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
         }
 
-        // تحديث كروت الإحصائيات الذكية الأعلى والأقل مبيعاً من النتائج المفلترة
+        // تحديث كروت الإحصائيات الذكية الأعلى والأقل طلباً بناءً على تكرار الفواتير
         if (list.length > 0) {
-            const sortedByQtyDesc = [...list].sort((a, b) => b.cartonsSold - a.cartonsSold);
-            const topSeller = sortedByQtyDesc[0];
-            const lowSeller = sortedByQtyDesc[sortedByQtyDesc.length - 1];
+            const sortedByInvoicesDesc = [...list].sort((a, b) => b.invoiceCount - a.invoiceCount);
+            const topSeller = sortedByInvoicesDesc[0];
+            const lowSeller = sortedByInvoicesDesc[sortedByInvoicesDesc.length - 1];
 
             document.getElementById('topSellerName').innerText = topSeller.name;
-            document.getElementById('topSellerQty').innerText = formatSoldQuantityInCartons(topSeller.qtySold, topSeller.factor);
+            document.getElementById('topSellerQty').innerText = `${topSeller.invoiceCount} فاتورة`;
 
             document.getElementById('lowSellerName').innerText = lowSeller.name;
-            document.getElementById('lowSellerQty').innerText = formatSoldQuantityInCartons(lowSeller.qtySold, lowSeller.factor);
+            document.getElementById('lowSellerQty').innerText = `${lowSeller.invoiceCount} فاتورة`;
         } else {
             document.getElementById('topSellerName').innerText = '---';
-            document.getElementById('topSellerQty').innerText = '0 كرتونة';
+            document.getElementById('topSellerQty').innerText = '0 فاتورة';
             document.getElementById('lowSellerName').innerText = '---';
-            document.getElementById('lowSellerQty').innerText = '0 كرتونة';
+            document.getElementById('lowSellerQty').innerText = '0 فاتورة';
         }
 
-        // إستراتيجية الفرز والترتيب
+        // إستراتيجية الترتيب والفرز
         if (currentSortMode === 'profit') {
-            list.sort((a, b) => b.profitAvg - a.profitAvg); // الأعلى ربحًا
-        } else if (currentSortMode === 'qty') {
-            list.sort((a, b) => b.cartonsSold - a.cartonsSold); // الأكثر مبيعًا (كمية)
+            list.sort((a, b) => b.profitAvg - a.profitAvg); // الأعلى ربحاً
+        } else if (currentSortMode === 'count') {
+            list.sort((a, b) => b.invoiceCount - a.invoiceCount); // الأكثر تكراراً في الفواتير
         } else if (currentSortMode === 'slow') {
-            list.sort((a, b) => a.cartonsSold - b.cartonsSold); // الأقل مبيعًا (بطيء الحركة)
+            list.sort((a, b) => a.invoiceCount - b.invoiceCount); // الأقل تكراراً في الفواتير
         }
 
         const container = document.getElementById('itemsContainer');
@@ -695,10 +708,10 @@
 
             // إضافة الوسوم التلقائية
             let badgeHtml = '';
-            if (currentSortMode === 'qty' && index < 3) {
-                badgeHtml = `<span class="rank-badge badge-top">🏆 الأكثر مبيعا (#${index+1})</span>`;
+            if (currentSortMode === 'count' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-top">🏆 الأكثر تكراراً (#${index+1})</span>`;
             } else if (currentSortMode === 'slow' && index < 3) {
-                badgeHtml = `<span class="rank-badge badge-low">⚠️ بطيء الحركة</span>`;
+                badgeHtml = `<span class="rank-badge badge-low">⚠️ الأقل طلباً بالفواتير</span>`;
             } else if (currentSortMode === 'profit' && index < 3) {
                 badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
             }
@@ -713,7 +726,8 @@
                         ${badgeHtml}
                     </div>
 
-                    <div class="item-qty-sold"><i class="fas fa-cubes me-1"></i> إجمالي المباع: ${displaySoldQty}</div>
+                    <div class="item-qty-sold"><i class="fas fa-cubes me-1"></i> إجمالي الكمية المباعة: ${displaySoldQty}</div>
+                    <div class="item-invoice-count"><i class="fas fa-file-invoice me-1"></i> عدد مرات الذكر بالفواتير: ${p.invoiceCount} فاتورة</div>
 
                     <div class="mt-2">
                         <div class="profit-label">الربح بالمتوسط:</div>
