@@ -894,16 +894,34 @@
     window.saveDailyCashRegister = async () => {
         const targetDate = document.getElementById('dateFilterInput')?.value || new Date().toLocaleDateString('en-CA');
         const todayCash = parseFloat(document.getElementById('todayCash')?.innerText || 0);
-        const diff = parseFloat(document.getElementById('actualCashInput')?.value.trim() || 0) - todayCash;
+        const inputVal = document.getElementById('actualCashInput')?.value.trim() || "";
+
+        // حساب الكاش الفعلي بدقة وتفكيك الأرقام المكتوبة بمسافات
+        let actualCash = 0;
+        if (inputVal !== "") {
+            convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => {
+                const n = parseFloat(p.trim());
+                if (!isNaN(n)) actualCash += n;
+            });
+        } else {
+            actualCash = todayCash; // في حالة عدم الإدخال تفترض المطابقة
+        }
+
+        const diff = actualCash - todayCash;
 
         window.showCustomUi({
             title: "تأكيد ترحيل النقدية",
-            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟`,
-            type: "confirm", icon: "info",
+            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- المتوقع: ${todayCash.toFixed(2)}\n- الفعلي: ${actualCash.toFixed(2)}\n- الفارق: ${diff.toFixed(2)}`,
+            type: "confirm", 
+            icon: "info",
             onConfirm: async () => {
                 try {
                     await db.collection("daily_cash_register").doc(targetDate).set({
-                        date: targetDate, expectedCash: todayCash, difference: diff,
+                        date: targetDate, 
+                        expectedCash: todayCash, 
+                        actualCash: actualCash,
+                        difference: diff,
+                        createdBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
                     window.showCustomUi({ title: "تم الترحيل بنجاح", message: `✅ تم حفظ وإغلاق سجل النقدية بنجاح.`, icon: "success" });
@@ -1173,7 +1191,7 @@
 
                     const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
                     for (const tr of relatedTrans) {
-                        await db.collection("transactions").doc(tr.id),update({
+                        await db.collection("transactions").doc(tr.id).update({
                             isDeleted: true,
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
