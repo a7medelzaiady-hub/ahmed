@@ -893,7 +893,13 @@
 
     window.saveDailyCashRegister = async () => {
         const targetDate = document.getElementById('dateFilterInput')?.value || new Date().toLocaleDateString('en-CA');
+        
+        // استخراج قيم الإحصائيات الكاملة الظاهرة بالشاشة
         const todayCash = parseFloat(document.getElementById('todayCash')?.innerText || 0);
+        const todayWallet = parseFloat(document.getElementById('todayWallet')?.innerText || 0);
+        const todayRemaining = parseFloat(document.getElementById('todayRemaining')?.innerText || 0);
+        const todayTotalSales = parseFloat(document.getElementById('todayTotalSales')?.innerText || 0);
+
         const inputVal = document.getElementById('actualCashInput')?.value.trim() || "";
 
         // حساب الكاش الفعلي بدقة وتفكيك الأرقام المكتوبة بمسافات
@@ -911,12 +917,12 @@
 
         window.showCustomUi({
             title: "تأكيد ترحيل النقدية",
-            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- المتوقع: ${todayCash.toFixed(2)}\n- الفعلي: ${actualCash.toFixed(2)}\n- الفارق: ${diff.toFixed(2)}`,
+            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- إجمالي المبيعات: ${todayTotalSales.toFixed(2)}\n- المتوقع كاش: ${todayCash.toFixed(2)}\n- الفعلي كاش: ${actualCash.toFixed(2)}\n- الفارق: ${diff.toFixed(2)}`,
             type: "confirm", 
             icon: "info",
             onConfirm: async () => {
                 try {
-                    // حفظ جميع المسميات المحتملة لحقول الكاش الفعلي لضمان التوافق التام مع cash-register.html
+                    // حفظ كافة الحقول الشاملة بجميع مسمياتها لضمان مطابقة عرض cash-register.html
                     await db.collection("daily_cash_register").doc(targetDate).set({
                         date: targetDate, 
                         expectedCash: todayCash, 
@@ -925,7 +931,19 @@
                         cashAmount: actualCash,
                         actualCashInput: inputVal,
                         difference: diff,
+                        
+                        // الإحصائيات الإضافية الشاملة
+                        totalSales: todayTotalSales,
+                        todayTotalSales: todayTotalSales,
+                        
+                        walletTotal: todayWallet,
+                        todayWallet: todayWallet,
+                        
+                        remainingTotal: todayRemaining,
+                        todayRemaining: todayRemaining,
+                        
                         createdBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
+                        closedBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
 
