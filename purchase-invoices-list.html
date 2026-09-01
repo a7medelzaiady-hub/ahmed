@@ -508,25 +508,6 @@
         return dateStr.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
     }
 
-    // === توحيد طريقة قراءة الوقت مع صفحة تعديل الفاتورة: نفس منطق parsePurchaseDate ===
-    function parsePurchaseDate(dateStr) {
-        if (!dateStr) return 0;
-        try {
-            const cleanStr = String(dateStr).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-            const parsed = Date.parse(cleanStr);
-            if (!isNaN(parsed)) return parsed;
-        } catch (e) { }
-        return 0;
-    }
-
-    // نفس الأولوية المستخدمة في new-purchase-invoice.html: timestamp أولاً ثم التاريخ النصي كبديل
-    function getRecordTimeMs(record) {
-        if (record && record.timestamp && record.timestamp.seconds) {
-            return record.timestamp.seconds * 1000;
-        }
-        return parsePurchaseDate(record ? record.date : null);
-    }
-
     function generateCurrencyHTML(value, forceColor = '') {
         const isNegative = value < 0;
         const absoluteFormatted = Math.abs(value).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -601,7 +582,7 @@
             document.getElementById('totalPaid').innerHTML = generateCurrencyHTML(totalPaid);
             document.getElementById('totalPending').innerHTML = generateCurrencyHTML(finalPending > 0 ? finalPending : 0);
             
-            allInvoices.sort((a,b) => getRecordTimeMs(b) - getRecordTimeMs(a));
+            allInvoices.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
             renderInvoices(allInvoices);
         } catch (error) {
             console.error(error);
@@ -609,35 +590,30 @@
         }
     };
 
-    // === محسوبة الآن بنفس منطق getRealSupplierBalance في صفحة تعديل الفاتورة تمامًا ===
-    // تفضّل timestamp عند توفره، وإلا تلجأ لتحليل التاريخ النصي (date) - لضمان تطابق الرقم بين الصفحتين
-    function calculateHistoricalPreviousBalance(supId, targetInvoice) {
+    // === التصحيح المحاسبي لدالة الحساب التاريخي السابق ===
+    function calculateHistoricalPreviousBalance(supId, invoiceTimestamp) {
         const supplier = suppliersBase[supId];
         if (!supplier) return 0;
 
         let debt = 0;
         let credit = 0;
-        const targetTimeMs = getRecordTimeMs(targetInvoice);
+        const targetSeconds = invoiceTimestamp?.seconds || 0;
 
         globalVouchers.forEach(v => {
-            if (v.partyId === supId) {
-                const vTimeMs = getRecordTimeMs(v);
-                if (targetTimeMs > 0 && vTimeMs < targetTimeMs) {
-                    const amt = Number(v.amount) || 0;
-                    if (v.type === "صرف") credit += amt;
-                    else if (v.type === "قبض") debt += amt;
-                }
+            if (v.partyId === supId && v.timestamp && v.timestamp.seconds < targetSeconds) {
+                const amt = Number(v.amount) || 0;
+                if (v.type === "صرف") credit += amt;
+                else if (v.type === "قبض") debt += amt;
             }
         });
 
         allInvoices.forEach(inv => {
-            if (inv.id === targetInvoice.id) return;
-            if (inv.supplierId === supId) {
-                const invTimeMs = getRecordTimeMs(inv);
-                if (targetTimeMs > 0 && invTimeMs < targetTimeMs) {
-                    const amt = inv.displayGross;
-                    if (inv.type === "شراء" || inv.type === "فاتورة شراء") debt += amt;
-                    else if (inv.type === "مرتجع شراء") credit += amt;
+            if (inv.supplierId === supId && inv.timestamp && inv.timestamp.seconds < targetSeconds) {
+                if (inv.type === "شراء" || inv.type === "فاتورة شراء") {
+                    // إضافة المتبقي فقط من الفاتورة السابقة لتراكم الدين الآجل بدقة
+                    debt += (inv.displayGross - (inv.computedTotalPaid || 0));
+                } else if (inv.type === "مرتجع شراء") {
+                    credit += inv.displayGross;
                 }
             }
         });
@@ -654,7 +630,7 @@
 
         container.innerHTML = dataList.map(inv => {
             const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv);
+            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
             const formattedDate = formatEnglishDate(inv.date);
 
             let badgeClass = 'type-credit';
@@ -766,7 +742,7 @@
         }).join('');
     }
 
-    // === دالة الحذف وتخصيم/إعادة الكميات للمخزن بكل دقة ===
+    // === دالة الحذف وتخصيم/إعادة الكميات للمخزن ===
     window.deleteSingleInvoice = async function(invoiceId) {
         if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم خصم/تعديل كميات الأصناف من المخزن تلقائياً ولا يمكن التراجع عن هذا الإجراء.')) return;
         
@@ -777,7 +753,6 @@
         }
 
         try {
-            // 1) تعديل كميات الأصناف بالمخزن
             if (Array.isArray(inv.items) && inv.items.length > 0) {
                 for (const item of inv.items) {
                     const itemId = item.stockId || item.id;
@@ -798,7 +773,6 @@
                         }
 
                         const isReturn = inv.isReturn || inv.type === "مرتجع شراء" || item.isReturn === true;
-                        // إذا كانت الفاتورة شراء وتم حذفها -> يخصم من المخزن. إذا كانت مرتجع وتم حذفها -> يضاف للمخزن.
                         const pcsModifier = isReturn ? totalPcsToModify : -totalPcsToModify;
 
                         await updateDoc(productRef, {
@@ -809,10 +783,8 @@
                 }
             }
 
-            // 2) حذف الفاتورة من Firestore
             await deleteDoc(doc(db, "supplier_transactions", invoiceId));
 
-            // 3) إزالة العنصر من الواجهة فوراً
             const card = document.getElementById('card-' + invoiceId);
             if (card) {
                 card.style.transition = 'opacity 0.3s, transform 0.3s';
@@ -863,7 +835,7 @@
         if (!inv) return;
 
         const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv);
+        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
         const items = inv.items || [];
         const hiddenDiv = document.getElementById('thermalInvoiceHidden');
         const formattedDate = formatEnglishDate(inv.date);
@@ -976,7 +948,7 @@
             
             progressAlert.innerText = `جاري تجهيز الفاتورة (${i + 1} من ${allInvoices.length}) - ${supName}`;
 
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv);
+            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.timestamp);
             const items = inv.items || [];
             const formattedDate = formatEnglishDate(inv.date);
 
