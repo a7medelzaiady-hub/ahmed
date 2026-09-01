@@ -546,7 +546,7 @@
                 const amt = Number(data.grossTotal) || Number(data.total) || 0;
                 const cashP = Number(data.cashPaid || 0);
                 const walletP = Number(data.walletPaid || 0);
-                const directPaid = data.totalPaid ? Number(data.totalPaid) : (cashP + walletP || Number(data.paidAmount) || 0);
+                const directPaid = data.totalPaid !== undefined ? Number(data.totalPaid) : (cashP + walletP || Number(data.paidAmount) || 0);
 
                 data.displayGross = amt;
                 data.displayNetPending = amt - directPaid;
@@ -590,7 +590,7 @@
         }
     };
 
-    // === التصحيح المحاسبي لدالة الحساب التاريخي السابق ===
+    // === الدالة المعدلة كلياً لاحتساب السداد واحتساب الرصيد السابق بدقة ===
     function calculateHistoricalPreviousBalance(supId, invoiceTimestamp) {
         const supplier = suppliersBase[supId];
         if (!supplier) return 0;
@@ -599,19 +599,26 @@
         let credit = 0;
         const targetSeconds = invoiceTimestamp?.seconds || 0;
 
+        // 1) احتساب سداد السندات المقيدة بحساب المورد قبل وقت الفاتورة
         globalVouchers.forEach(v => {
-            if (v.partyId === supId && v.timestamp && v.timestamp.seconds < targetSeconds) {
+            const vParty = v.partyId || v.supplierId;
+            if (vParty === supId && v.timestamp && v.timestamp.seconds < targetSeconds) {
                 const amt = Number(v.amount) || 0;
-                if (v.type === "صرف") credit += amt;
-                else if (v.type === "قبض") debt += amt;
+                if (v.type === "صرف" || v.actionType === "سداد مورد" || String(v.details || '').includes("سداد")) {
+                    credit += amt;
+                } else if (v.type === "قبض") {
+                    debt += amt;
+                }
             }
         });
 
+        // 2) احتساب حركة الفواتير السابقة مع السداد المباشر داخل الفاتورة
         allInvoices.forEach(inv => {
             if (inv.supplierId === supId && inv.timestamp && inv.timestamp.seconds < targetSeconds) {
                 if (inv.type === "شراء" || inv.type === "فاتورة شراء") {
-                    // إضافة المتبقي فقط من الفاتورة السابقة لتراكم الدين الآجل بدقة
-                    debt += (inv.displayGross - (inv.computedTotalPaid || 0));
+                    // الدين يزداد بإجمالي الفاتورة، وينقص بالمبلغ المسدد فوراً منها
+                    debt += inv.displayGross;
+                    credit += (inv.computedTotalPaid || 0);
                 } else if (inv.type === "مرتجع شراء") {
                     credit += inv.displayGross;
                 }
@@ -742,7 +749,6 @@
         }).join('');
     }
 
-    // === دالة الحذف وتخصيم/إعادة الكميات للمخزن ===
     window.deleteSingleInvoice = async function(invoiceId) {
         if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم خصم/تعديل كميات الأصناف من المخزن تلقائياً ولا يمكن التراجع عن هذا الإجراء.')) return;
         
