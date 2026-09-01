@@ -331,7 +331,7 @@
 
                 <div id="supplierBalanceInfo">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-wallet me-1"></i> مستحقات المورد السابقة: <span id="curBalanceVal">0</span> ج.م</span>
+                        <span><i class="fas fa-wallet me-1"></i> مستحقات المورد السابقة: <span id="curBalanceVal">0.00</span> ج.م</span>
                     </div>
                 </div>
             </div>
@@ -371,25 +371,25 @@
             <div class="row align-items-center g-2 pb-2 mb-2 border-bottom border-white border-opacity-25 text-center">
                 <div class="col-4 border-end border-white border-opacity-25">
                     <small class="d-block opacity-75" style="font-size: 0.65rem; margin-bottom: 2px;">صافي الفاتورة الحالية</small>
-                    <span id="displayTotal" class="fw-bold text-white" style="font-size: 0.85rem;">0</span>
+                    <span id="displayTotal" class="fw-bold text-white" style="font-size: 0.85rem;">0.00</span>
                 </div>
                 <div class="col-4 border-end border-white border-opacity-25">
                     <small class="d-block opacity-75" style="font-size: 0.65rem; margin-bottom: 2px;">مستحقات سابقة</small>
-                    <span id="displayOldBalance" class="fw-bold" style="font-size: 0.85rem; color: var(--gold);">0</span>
+                    <span id="displayOldBalance" class="fw-bold" style="font-size: 0.85rem; color: var(--gold);">0.00</span>
                 </div>
                 <div class="col-4">
                     <small class="d-block fw-bold" style="font-size: 0.65rem; color: #ffeb3b; margin-bottom: 2px;">الإجمالي الكلي المستحق</small>
-                    <span id="displayGrandTotal" class="fw-bold" style="font-size: 0.95rem; color: #ffeb3b;">0</span>
+                    <span id="displayGrandTotal" class="fw-bold" style="font-size: 0.95rem; color: #ffeb3b;">0.00</span>
                 </div>
             </div>
             <div class="row align-items-center g-2 text-center">
                 <div class="col-6 border-end border-white border-opacity-25">
                     <small class="d-block opacity-75" style="font-size: 0.65rem; margin-bottom: 2px;">المدفوع الآن</small>
-                    <span id="displayPaid" class="fw-bold text-white" style="font-size: 0.9rem;">0</span>
+                    <span id="displayPaid" class="fw-bold text-white" style="font-size: 0.9rem;">0.00</span>
                 </div>
                 <div class="col-6">
                     <small class="d-block opacity-75" style="font-size: 0.65rem; margin-bottom: 2px;">الرصيد المتبقي للمورد</small>
-                    <span id="displayRemaining" class="fw-bold text-white" style="font-size: 0.95rem;">0</span>
+                    <span id="displayRemaining" class="fw-bold text-white" style="font-size: 0.95rem;">0.00</span>
                 </div>
             </div>
         </div>
@@ -435,7 +435,7 @@
         <div style="background: var(--header-bg); color: white; border-radius: 12px; padding: 12px; font-size: 0.9rem; margin-bottom: 15px;">
             <div class="d-flex justify-content-between fw-bold">
                 <span>الصافي النهائي للفاتورة:</span>
-                <span><span id="revTotalVal">0</span> ج.م</span>
+                <span><span id="revTotalVal">0.00</span> ج.م</span>
             </div>
         </div>
 
@@ -469,6 +469,8 @@
     };
 
     const app = initializeApp(firebaseConfig);
+    
+    // تفعيل التخزين المحلي التلقائي للأوفلاين بشكل كامل ومتوافق مع تعدد التبويبات
     let db;
     try {
         db = initializeFirestore(app, {
@@ -530,6 +532,7 @@
         return Number(sup.openingBalance) || 0;
     }
 
+    // === دالة احتساب الرصيد السابق للمورد تاريخياً وضبط السدادات المباشرة ===
     async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null) {
         try {
             const [snapInvoices, snapTrans] = await Promise.all([
@@ -541,11 +544,13 @@
             const targetSec = targetTimestamp?.seconds || Infinity;
 
             snapInvoices.forEach(docSnap => {
+                // استبعاد الفاتورة المفتوحة للتعديل حالياً
                 if (editId && docSnap.id === editId) return;
                 
                 const data = docSnap.data();
                 const invSec = data.timestamp?.seconds || 0;
 
+                // التجميع التاريخي حتى لحظة الفاتورة المحددة فقط
                 if (invSec < targetSec || (invSec === targetSec && docSnap.id < editId)) {
                     const amt = Number(data.grossTotal) || Number(data.total) || 0;
                     const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
@@ -553,6 +558,7 @@
                     if (data.type === "مرتجع شراء") {
                         invoiceDebt -= amt;
                     } else {
+                        // دين الفاتورة الصافي = إجمالي الفاتورة - السداد المباشر داخل الفاتورة
                         invoiceDebt += (amt - paid);
                     }
                 }
@@ -563,7 +569,8 @@
                 const tr = docSnap.data();
                 const trSec = tr.timestamp?.seconds || 0;
 
-                if (trSec < targetSec) {
+                // مراعاة حركة السندات والتحويلات الخارجية المسجلة سابقاً
+                if (trSec < targetSec && !tr.invoiceId) {
                     const amt = Number(tr.amount) || 0;
                     if (tr.type === 'قبض') transEffect -= amt;
                     else if (tr.type === 'صرف') transEffect += amt;
