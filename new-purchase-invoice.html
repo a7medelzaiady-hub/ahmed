@@ -2,10 +2,19 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>فاتورة شراء - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Bootstrap RTL -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Google Fonts: Cairo & Montserrat -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -28,13 +37,18 @@
             --shadow-sm: 0 1px 3px rgba(11,94,61,0.06);
             --shadow-md: 0 4px 14px rgba(11,94,61,0.08);
         }
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body {
             background: var(--bg-light);
             font-family: 'Cairo', sans-serif;
             color: var(--text-primary);
-            padding-bottom: 80px;
-            -webkit-tap-highlight-color: transparent;
+            padding-bottom: 90px;
+            overflow-x: hidden;
+            font-size: 0.95rem;
+        }
+
+        .amount-number, .p-price, .p-subtotal, #curBalanceVal, #displayTotal, #displayOldBalance, #displayGrandTotal, #displayPaid, #displayRemaining, #revTotalVal {
+            font-family: 'Montserrat', 'Cairo', sans-serif !important;
         }
 
         .header-nav {
@@ -442,7 +456,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, doc, getDoc, query, where, serverTimestamp, writeBatch, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, getDoc, query, where, serverTimestamp, writeBatch, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -455,7 +469,14 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
 
     let inventory = [];
     let suppliers = [];
@@ -471,8 +492,8 @@
 
     function formatNumClean(num) {
         const n = parseFloat(num);
-        if (isNaN(n)) return "0";
-        return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
+        if (isNaN(n)) return "0.00";
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     window.showCustomAlert = (msg) => {
@@ -509,7 +530,6 @@
         return Number(sup.openingBalance) || 0;
     }
 
-    // === دالة احتساب الرصيد السابق التاريخي بالدقة الزمانية الثوانية الـ Timestamp ===
     async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null) {
         try {
             const [snapInvoices, snapTrans] = await Promise.all([
@@ -521,14 +541,11 @@
             const targetSec = targetTimestamp?.seconds || Infinity;
 
             snapInvoices.forEach(docSnap => {
-                // استبعاد الفاتورة الحالية الجاري تعديلها
                 if (editId && docSnap.id === editId) return;
                 
                 const data = docSnap.data();
                 const invSec = data.timestamp?.seconds || 0;
 
-                // احتساب المعاملات ذات الـ Timestamp الأقدم تاريخياً فقط
-                // وفي حالة التساوي في الثانية يقع المقارنة على معرف المستند لمنع التداخل
                 if (invSec < targetSec || (invSec === targetSec && docSnap.id < editId)) {
                     const amt = Number(data.grossTotal) || Number(data.total) || 0;
                     const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
@@ -658,7 +675,7 @@
             row.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن: ${currentTotalPcs} ق`;
             const factor = Number(p.unitFactor || p.factor) || 1;
             const buyPrice = (selectedUnit === 'box') ? (Number(p.buy) || 0) : ((Number(p.buy) || 0) / factor);
-            priceInput.value = formatNumClean(buyPrice);
+            priceInput.value = (Number(buyPrice) || 0).toFixed(2);
         }
         isChanged = true;
         calc();
@@ -677,7 +694,7 @@
 
         const factor = Number(p.unitFactor || p.factor) || 1;
         const buyPrice = (selectedUnit === 'box') ? (Number(p.buy) || 0) : ((Number(p.buy) || 0) / factor);
-        priceInput.value = formatNumClean(buyPrice);
+        priceInput.value = (Number(buyPrice) || 0).toFixed(2);
 
         calc();
     };
@@ -719,11 +736,11 @@
                     </div>
                     <div class="col-3 px-1">
                         <span class="sub-lbl">سعر الشراء</span>
-                        <input type="number" step="0.01" class="form-control p-price px-1" value="${oldData ? formatNumClean(oldData.buy || oldData.price) : ''}" oninput="handleInput()">
+                        <input type="number" step="0.01" class="form-control p-price px-1" value="${oldData ? (Number(oldData.buy || oldData.price || 0)).toFixed(2) : ''}" oninput="handleInput()">
                     </div>
                     <div class="col-3 px-1">
                         <span class="sub-lbl">الإجمالي</span>
-                        <input type="text" class="form-control p-subtotal px-1 fw-bold" readonly value="0" style="background:#f8faf9!important; color:var(--accent)!important;">
+                        <input type="text" class="form-control p-subtotal px-1 fw-bold" readonly value="0.00" style="background:#f8faf9!important; color:var(--accent)!important;">
                     </div>
                     <div class="col-3 px-1">
                         <div class="return-switch-container">
@@ -917,7 +934,6 @@
 
             const invoiceDate = document.getElementById('invTime').value || new Date().toISOString().split('T')[0];
 
-            // الحفاظ على الـ Timestamp الأصلي للفاتورة إن وجد للتعديل لضمان حفظ الترتيب التاريخي الدقيق
             const baseInvoiceData = {
                 supplierId, supplierName,
                 grossTotal: Number(total) || 0,
@@ -934,7 +950,6 @@
 
             const batch = writeBatch(db);
 
-            // عكس وإلغاء تأثير الفاتورة القديمة بالمخزن تماماً عند التعديل
             if (editId && oldInvoiceData && Array.isArray(oldInvoiceData.items)) {
                 for (const oldItem of oldInvoiceData.items) {
                     const targetStockId = oldItem.stockId || oldItem.id;
@@ -964,7 +979,6 @@
                 }
             }
 
-            // إضافة وتطبيق الكميات الفعلية للفاتورة الحالية في المخزن
             for (const item of items) {
                 if (item.stockId) {
                     const storeDocRef = doc(db, "inventory", item.stockId);
@@ -1128,7 +1142,6 @@
 
                         const startBalance = getSupplierBaseBalance(sup);
                         
-                        // احتساب الرصيد السابق بناءً على Timestamp الفاتورة الأصلية بدقة
                         const realB = await getRealSupplierBalance(
                             oldInvoiceData.supplierId, 
                             startBalance, 
@@ -1175,6 +1188,13 @@
     }
 
     init();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
 </script>
 </body>
 </html>
