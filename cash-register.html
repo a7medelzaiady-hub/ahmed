@@ -349,7 +349,18 @@
         }
 
         container.innerHTML = records.map(item => {
-            const diff = Number(item.difference || 0);
+            const expectedCashNum = Number(item.expectedCash || 0);
+
+            // استخراج الكاش الفعلي بأي مسمى موجود أو احتسابه تلقائياً لتفادي العجز الوهمي
+            let actualCashNum = 0;
+            if (item.actualCash !== undefined) actualCashNum = Number(item.actualCash);
+            else if (item.actualCashAmount !== undefined) actualCashNum = Number(item.actualCashAmount);
+            else if (item.cashAmount !== undefined) actualCashNum = Number(item.cashAmount);
+            else actualCashNum = expectedCashNum + Number(item.difference || 0);
+
+            // إعادة حساب الفارق الصحيح بناءً على القيم الفعلية
+            const diff = actualCashNum - expectedCashNum;
+
             let statusBadge = "";
             let cardClass = "matched";
 
@@ -364,13 +375,14 @@
                 cardClass = "has-deficit";
             }
 
-            const expectedCash = Number(item.expectedCash || 0).toFixed(1);
-            const actualCash = Number(item.actualCash || 0).toFixed(1);
+            const expectedCash = expectedCashNum.toFixed(1);
+            const actualCash = actualCashNum.toFixed(1);
             const totalSales = Number(item.totalSales || 0).toFixed(1);
             const walletTotal = Number(item.walletTotal || 0).toFixed(1);
             const remainingTotal = Number(item.remainingTotal || 0).toFixed(1);
             const docId = item.id;
             const recordDate = item.date || item.id;
+            const userCreated = item.createdBy || item.closedBy || 'أحمد محمود الزيادي';
 
             let formattedTime = "";
             if (item.timestamp && item.timestamp.seconds) {
@@ -383,7 +395,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div>
                             <h6 class="fw-bold mb-0 text-dark"><i class="far fa-calendar-alt me-1"></i> يوم: ${recordDate}</h6>
-                            <span class="meta-text"><i class="fas fa-user-check me-1"></i> بوسطة: ${item.closedBy || 'أحمد محمود الزيادي'} ${formattedTime ? '| ' + formattedTime : ''}</span>
+                            <span class="meta-text"><i class="fas fa-user-check me-1"></i> بوسطة: ${userCreated} ${formattedTime ? '| ' + formattedTime : ''}</span>
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             ${statusBadge}
