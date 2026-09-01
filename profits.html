@@ -224,6 +224,7 @@
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
         .item-qty-sold { font-size: 0.82rem; color: var(--primary-green); font-weight: 800; margin-top: 4px; }
         .item-invoice-count { font-size: 0.82rem; color: #0284c7; font-weight: 800; margin-top: 2px; }
+        .item-days-count { font-size: 0.82rem; color: #d97706; font-weight: 800; margin-top: 2px; }
 
         .rank-badge {
             font-size: 0.68rem;
@@ -271,10 +272,9 @@
             background: white;
             padding: 15px 20px;
             font-weight: 800;
-            font-size: 0.95rem;
+            font-size: 0.88rem;
             display: flex;
-            justify-content: center;
-            gap: 15px;
+            justify-content: space-around;
             border-top: 1px solid var(--border-color);
             color: var(--primary-green);
             box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
@@ -314,7 +314,6 @@
     </div>
 </div>
 
-<!-- كروت تحليل الأداء بناءً على تكرار الفواتير -->
 <div class="analytics-grid">
     <div class="analytics-card highlight-top">
         <div class="analytics-title"><i class="fas fa-crown text-warning"></i> الأكثر تكراراً بالكتالوج</div>
@@ -328,7 +327,6 @@
     </div>
 </div>
 
-<!-- أزرار اختيار نوع الفرز -->
 <div class="sort-section">
     <button class="sort-chip active" id="sortProfitBtn" onclick="setSortMode('profit')"><i class="fas fa-coins me-1"></i> الأعلى ربحاً</button>
     <button class="sort-chip" id="sortCountBtn" onclick="setSortMode('count')"><i class="fas fa-file-invoice me-1"></i> الأكثر تكراراً (عدد الفواتير)</button>
@@ -358,8 +356,9 @@
 </div>
 
 <div class="bottom-summary">
-    <div><i class="fas fa-boxes me-1"></i> أصناف مباعة: <span id="totalCount">0</span></div>
-    <div class="border-start ps-3"><i class="fas fa-receipt me-1"></i> إجمالي الفواتير: <span id="totalInvoicesCount">0</span></div>
+    <div><i class="fas fa-boxes me-1"></i> أصناف: <span id="totalCount">0</span></div>
+    <div><i class="fas fa-receipt me-1"></i> فواتير: <span id="totalInvoicesCount">0</span></div>
+    <div><i class="fas fa-calendar-alt me-1"></i> أيام بيع: <span id="totalActiveDays">0</span></div>
 </div>
 
 <script type="module">
@@ -620,10 +619,15 @@
         let profitCurrentMap = {};
         let qtyByProduct = {};
         let invoicesCountByProduct = {};
-        let globalUniqueInvoices = new Set(); // لحساب إجمالي عدد الفواتير الكلي في الفترة
+        let activeDaysByProduct = {}; 
+
+        let globalUniqueInvoices = new Set();
+        let globalUniqueDays = new Set(); // لحساب إجمالي عدد أيام البيع الفعلية
 
         Object.keys(saleLines).forEach(productId => {
             let productUniqueInvoices = new Set();
+            let productUniqueDays = new Set();
+
             saleLines[productId].forEach(line => {
                 if (fromDate && (!line.date || line.date < fromDate)) return;
                 if (toDate && (!line.date || line.date > toDate)) return;
@@ -638,14 +642,22 @@
                 } else {
                     invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + 1;
                 }
+
+                if (line.date && line.date.getTime() > 0) {
+                    const dayStr = line.date.toISOString().slice(0, 10);
+                    productUniqueDays.add(dayStr);
+                    globalUniqueDays.add(dayStr);
+                }
             });
 
             if (productUniqueInvoices.size > 0) {
                 invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + productUniqueInvoices.size;
             }
+            activeDaysByProduct[productId] = productUniqueDays.size;
         });
 
         const totalPeriodInvoices = globalUniqueInvoices.size;
+        const totalPeriodDays = globalUniqueDays.size;
 
         let list = Object.keys(productsMap).map(id => {
             const factor = Math.max(1, Number(productsMap[id].factor) || 1);
@@ -656,7 +668,8 @@
                 profitAvg: Number(profitAvgMap[id]) || 0,
                 profitCurrent: Number(profitCurrentMap[id]) || 0,
                 qtySold: qtyPcs,
-                invoiceCount: Number(invoicesCountByProduct[id]) || 0
+                invoiceCount: Number(invoicesCountByProduct[id]) || 0,
+                daysCount: Number(activeDaysByProduct[id]) || 0
             };
         });
 
@@ -711,6 +724,7 @@
 
             const displaySoldQty = formatSoldQuantityInCartons(p.qtySold, factor);
             const invoicePercentage = totalPeriodInvoices > 0 ? ((p.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+            const daysPercentage = totalPeriodDays > 0 ? ((p.daysCount / totalPeriodDays) * 100).toFixed(1) : 0;
 
             let badgeHtml = '';
             if (currentSortMode === 'count' && index < 3) {
@@ -725,6 +739,10 @@
                 ? `${p.invoiceCount} من أصل ${totalPeriodInvoices} فاتورة (${invoicePercentage}%)`
                 : `${p.invoiceCount} فاتورة`;
 
+            const daysCountText = totalPeriodDays > 0
+                ? `${p.daysCount} من أصل ${totalPeriodDays} يوم بيع (${daysPercentage}%)`
+                : `${p.daysCount} يوم`;
+
             html += `
                 <div class="item-card">
                     <div class="item-card-header">
@@ -737,6 +755,7 @@
 
                     <div class="item-qty-sold"><i class="fas fa-cubes me-1"></i> إجمالي الكمية المباعة: ${displaySoldQty}</div>
                     <div class="item-invoice-count"><i class="fas fa-file-invoice me-1"></i> عدد مرات الذكر بالفواتير: ${invoiceCountText}</div>
+                    <div class="item-days-count"><i class="fas fa-calendar-check me-1"></i> تم بيعه خلال: ${daysCountText}</div>
 
                     <div class="mt-2">
                         <div class="profit-label">الربح بالمتوسط:</div>
@@ -771,6 +790,7 @@
         container.innerHTML = html;
         document.getElementById('totalCount').innerText = list.length;
         document.getElementById('totalInvoicesCount').innerText = totalPeriodInvoices;
+        document.getElementById('totalActiveDays').innerText = totalPeriodDays;
         document.getElementById('grandTotalProfit').innerText = `${grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('grandTotalProfitCurrent').innerText = `إجمالي الأرباح (سعر الشراء الحالي): ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
     };
