@@ -378,6 +378,7 @@
     let namesMap = {};
     let saleLines = {}; 
     let firstStockDateMap = {}; 
+    let computedStockMap = {}; // stock balance as calculated from purchase/sale history, to cross-check against the raw inventory field
     let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
@@ -579,6 +580,13 @@
                         }
                     }
                 });
+
+                // Stock balance as derived purely from purchase/sale history —
+                // used to cross-check against the raw "currentStockPcs" field
+                // that comes directly from the inventory document, so we can
+                // tell the user when the two disagree (e.g. balance not
+                // updated after a restock) instead of silently showing "0".
+                computedStockMap[id] = runQty;
             });
 
             renderItems();
@@ -603,7 +611,7 @@
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
     }
 
-    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandPositiveProfit, daysInStock, currentStockPcs, qtySold, factor) {
+    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandPositiveProfit, daysInStock, currentStockPcs, qtySold, factor, computedStockPcs) {
         const safeFactor = Math.max(1, Number(factor) || 1);
         const safeStockPcs = Number(currentStockPcs) || 0;
         const currentStockDisplay = formatSoldQuantityInCartons(safeStockPcs, safeFactor);
@@ -628,7 +636,15 @@
         let advice = "";
         let adviceColor = "text-dark";
 
-        if (stockCoverDays <= 10 && safeStockPcs > 0 && dailyRatePcs > 0) {
+        // FIX: out-of-stock items with active recent sales must win over the
+        // "new/promising item" message below. Previously an item with
+        // safeStockPcs === 0 skipped the urgent-reorder branch entirely
+        // (it required stock > 0) and fell through to a soft "watch it"
+        // message even though it had completely run out.
+        if (safeStockPcs === 0 && dailyRatePcs > 0) {
+            advice = `🚨 الصنف نفد من المخزن بالكامل وما زال عليه طلب (${dailyRatePcs.toFixed(1)} قطعة/يوم). يُوصى **بالطلب فوراً**.`;
+            adviceColor = "text-danger";
+        } else if (stockCoverDays <= 10 && safeStockPcs > 0 && dailyRatePcs > 0) {
             advice = `⚠️ الرصيد الحالي (${currentStockDisplay}) يكفي لحوالي ${stockCoverDaysStr} فقط. يُوصى **بالطلب فوراً**.`;
             adviceColor = "text-danger";
         } else if (stockCoverDays > 90 && safeStockPcs > 0 && dailyRatePcs > 0) {
@@ -662,6 +678,17 @@
             profitShareHtml = `يساهم بـ ${profitShare}% من إجمالي الأرباح`;
         }
 
+        // ADDITION: warn when the raw inventory balance disagrees with what
+        // purchase/sale history implies the stock should be — this is how a
+        // user can tell whether a "0" balance is real or just an un-updated
+        // record.
+        let stockMismatchHtml = '';
+        const safeComputedStock = Number(computedStockPcs) || 0;
+        if (Math.abs(safeComputedStock - safeStockPcs) >= Math.max(1, safeFactor)) {
+            const computedDisplay = formatSoldQuantityInCartons(safeComputedStock, safeFactor);
+            stockMismatchHtml = `<div class="analysis-bullet">• <span class="text-danger fw-bold">⚠️ تنبيه:</span> الرصيد المسجل بالمخزون (${currentStockDisplay}) يختلف عن الرصيد المتوقع من حركة الشراء/البيع (${computedDisplay}) — يُنصح بمراجعة الجرد الفعلي.</div>`;
+        }
+
         return `
             <div class="item-analysis-box">
                 <div class="analysis-header"><i class="fas fa-balance-scale me-1"></i> التحليل العادل وتدفق المخزون:</div>
@@ -669,6 +696,7 @@
                 <div class="analysis-bullet">• <b>معدل البيع اليومي:</b> ${(dailyRatePcs).toFixed(1)} قطعة/يوم.</div>
                 <div class="analysis-bullet">• <b>المساهمة المالية:</b> ${profitShareHtml}</div>
                 <div class="analysis-bullet">• <b>التوصية والكميات:</b> <span class="${adviceColor} fw-bold">${advice}</span></div>
+                ${stockMismatchHtml}
             </div>
         `;
     }
@@ -832,7 +860,8 @@
             }
 
             const safeStock = Number(p.currentStockPcs) || 0;
-            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandPositiveProfit, p.daysInStock, safeStock, p.qtySold, factor);
+            const computedStock = Number(computedStockMap[p.id]) || 0;
+            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandPositiveProfit, p.daysInStock, safeStock, p.qtySold, factor, computedStock);
 
             html += `
                 <div class="item-card">
