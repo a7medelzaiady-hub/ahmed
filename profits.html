@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>أرباح وإدارة القرارات للمخزون - شركة الزيادي</title>
+    <title>أرباح وإحصائيات الأصناف - شركة الزيادي</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -83,25 +83,18 @@
             font-size: 0.8rem;
         }
 
-        /* كروت ملخص القرارات */
-        .decision-summary-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            padding: 10px 15px 5px;
-        }
-        .dec-card {
+        .analytics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px 15px 5px; }
+        .analytics-card {
             background: white;
-            border-radius: 12px;
-            padding: 8px 10px;
+            border-radius: 14px;
+            padding: 10px 12px;
             border: 1px solid var(--border-color);
-            text-align: center;
         }
-        .dec-card.urgent { background: #fff1f2; border-color: #fecdd3; }
-        .dec-card.stagnant { background: #fffbebfb; border-color: #fde68a; }
-        .dec-card.star { background: #f0fdf4; border-color: #bbf7d0; }
-        .dec-title { font-size: 0.65rem; font-weight: 700; color: var(--text-muted); }
-        .dec-val { font-size: 1rem; font-weight: 800; margin-top: 2px; }
+        .analytics-card.highlight-top { background: #f0fdf4; border-color: #bbf7d0; }
+        .analytics-card.highlight-low { background: #fff1f2; border-color: #fecdd3; }
+        .analytics-title { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); }
+        .analytics-val { font-size: 0.85rem; font-weight: 800; color: var(--text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .analytics-sub { font-size: 0.7rem; font-weight: 700; }
 
         .sort-section { padding: 8px 15px 5px; display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; }
         .sort-chip {
@@ -115,10 +108,6 @@
             border: none;
         }
         .sort-chip.active { background: var(--primary-green); color: white; }
-        .sort-chip.chip-urgent { background: #ffe4e6; color: #be123c; }
-        .sort-chip.chip-urgent.active { background: #e11d48; color: white; }
-        .sort-chip.chip-stagnant { background: #fef3c7; color: #b45309; }
-        .sort-chip.chip-stagnant.active { background: #d97706; color: white; }
 
         .search-section { padding: 8px 15px 5px; }
         .search-wrapper { position: relative; }
@@ -154,7 +143,6 @@
             padding: 14px;
             border: 1px solid var(--border-color);
             box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-            position: relative;
         }
 
         .item-header {
@@ -165,18 +153,6 @@
         }
         .item-title { font-size: 0.95rem; font-weight: 800; color: var(--text-dark); line-height: 1.2; }
         .item-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
-
-        /* شارات ABC والتقييم */
-        .abc-badge {
-            font-size: 0.68rem;
-            font-weight: 800;
-            padding: 3px 8px;
-            border-radius: 8px;
-            display: inline-block;
-        }
-        .badge-abc-a { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
-        .badge-abc-b { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-        .badge-abc-c { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 
         .rank-badge { font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 8px; }
         .badge-top { background: #dcfce7; color: #15803d; }
@@ -295,7 +271,7 @@
         <a href="index.html" class="nav-icon" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <i class="fas fa-sync-alt nav-icon" onclick="forceRefreshData()" title="تحديث البيانات"></i>
     </div>
-    <span class="fw-bold">إدارة المخزون وقرارات الشراء</span>
+    <span class="fw-bold">إحصائيات وأرباح الأصناف</span>
     <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
 </div>
 
@@ -318,27 +294,23 @@
     </div>
 </div>
 
-<!-- ملخص قرارات الشراء الخاطفة -->
-<div class="decision-summary-grid">
-    <div class="dec-card urgent">
-        <div class="dec-title"><i class="fas fa-exclamation-circle text-danger me-1"></i> طلب عاجل</div>
-        <div class="dec-val text-danger" id="urgentCount">0</div>
+<div class="analytics-grid">
+    <div class="analytics-card highlight-top">
+        <div class="analytics-title"><i class="fas fa-crown text-warning"></i> الأكثر تكراراً</div>
+        <div class="analytics-val" id="topSellerName">---</div>
+        <div class="analytics-sub text-success" id="topSellerQty">0 فاتورة</div>
     </div>
-    <div class="dec-card stagnant">
-        <div class="dec-title"><i class="fas fa-hourglass-end text-warning me-1"></i> مخزون زائد/راكد</div>
-        <div class="dec-val text-warning" id="stagnantCount">0</div>
-    </div>
-    <div class="dec-card star">
-        <div class="dec-title"><i class="fas fa-star text-success me-1"></i> أصناف الفئة (A)</div>
-        <div class="dec-val text-success" id="classACount">0</div>
+    <div class="analytics-card highlight-low">
+        <div class="analytics-title"><i class="fas fa-exclamation-triangle text-danger"></i> الأقل طلباً</div>
+        <div class="analytics-val" id="lowSellerName">---</div>
+        <div class="analytics-sub text-danger" id="lowSellerQty">0 فاتورة</div>
     </div>
 </div>
 
 <div class="sort-section">
     <button class="sort-chip active" id="sortProfitBtn" onclick="setSortMode('profit')"><i class="fas fa-coins me-1"></i> الأعلى ربحاً</button>
-    <button class="sort-chip chip-urgent" id="sortUrgentBtn" onclick="setSortMode('urgent')"><i class="fas fa-shopping-cart me-1"></i> يتطلب الشراء فوراً</button>
-    <button class="sort-chip chip-stagnant" id="sortStagnantBtn" onclick="setSortMode('stagnant')"><i class="fas fa-boxes me-1"></i> المخزون الراكد</button>
     <button class="sort-chip" id="sortCountBtn" onclick="setSortMode('count')"><i class="fas fa-file-invoice me-1"></i> الأكثر تكراراً</button>
+    <button class="sort-chip" id="sortSlowBtn" onclick="setSortMode('slow')"><i class="fas fa-hourglass-half me-1"></i> الأقل طلباً</button>
 </div>
 
 <div class="search-section">
@@ -359,7 +331,7 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحليلات وإعداد القرارات...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري التحميل...
     </div>
 </div>
 
@@ -400,7 +372,7 @@
     let productsMap = {}; 
     let namesMap = {};
     let saleLines = {}; 
-    let firstStockDateMap = {};
+    let firstStockDateMap = {}; // تخزين تاريخ أول إضافة للصنف للمخزن
     let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
@@ -411,9 +383,8 @@
     window.setSortMode = function(mode) {
         currentSortMode = mode;
         document.getElementById('sortProfitBtn').classList.toggle('active', mode === 'profit');
-        document.getElementById('sortUrgentBtn').classList.toggle('active', mode === 'urgent');
-        document.getElementById('sortStagnantBtn').classList.toggle('active', mode === 'stagnant');
         document.getElementById('sortCountBtn').classList.toggle('active', mode === 'count');
+        document.getElementById('sortSlowBtn').classList.toggle('active', mode === 'slow');
         renderItems();
     };
 
@@ -436,6 +407,7 @@
                     const rawBuy = Number(data.buy) || 0;
                     const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
                     
+                    // حساب الرصيد الحالي بالقطع
                     const currentStockPcs = Number(data.totalPcs) || ((Number(data.qty) || 0) * factor);
 
                     const pObj = {
@@ -477,6 +449,7 @@
                 if (!events[id]) events[id] = [];
                 events[id].push(ev);
 
+                // تتبع تاريخ أول دخول/توريد للمخزن
                 if (ev.type === 'purchase' && ev.date) {
                     if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
                         firstStockDateMap[id] = ev.date;
@@ -624,35 +597,38 @@
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
     }
 
-    // صياغة تحليل وقرار المخزون
-    function generateFairAnalysis(abcClass, profitAvg, grandAvgTotal, daysInStock, currentStockPcs, qtySold, factor) {
+    // دالة التحليل الذكي العادلة بناءً على أيام بقاء الصنف بالمخزن والكمية الحالية
+    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandAvgTotal, daysInStock, currentStockPcs, qtySold, factor) {
         const safeFactor = Math.max(1, Number(factor) || 1);
         const currentStockDisplay = formatSoldQuantityInCartons(currentStockPcs, safeFactor);
 
+        // معدل المبيعات اليومي (قطع في اليوم)
         const dailyRatePcs = daysInStock > 0 ? (qtySold / daysInStock) : qtySold;
+        
+        // عدد الأيام التي يكفيها المخزون الحالي بناء على معدل السحب
         let stockCoverDays = dailyRatePcs > 0 ? Math.round(currentStockPcs / dailyRatePcs) : 999;
 
-        let abcText = "";
-        if (abcClass === 'A') abcText = "<span class='badge-abc-a abc-badge'>فئة (A) - الأكثر ربحية</span>";
-        else if (abcClass === 'B') abcText = "<span class='badge-abc-b abc-badge'>فئة (B) - ربحية متوسطة</span>";
-        else abcText = "<span class='badge-abc-c abc-badge'>فئة (C) - ربحية منخفضة</span>";
+        let ageTxt = "";
+        if (daysInStock <= 15) ageTxt = `منتج جديد بالمخزن (بقاله ${daysInStock} يوم فقط).`;
+        else if (daysInStock <= 45) ageTxt = `موجود بالمخزن منذ ${daysInStock} يوم.`;
+        else ageTxt = `صنف قديم بالمخزن (بقاله ${daysInStock} يوم).`;
 
         let advice = "";
         let adviceColor = "text-dark";
 
         if (stockCoverDays <= 10 && currentStockPcs > 0) {
-            advice = `🚨 <b>قرار عاجل:</b> المخزون الحالي (${currentStockDisplay}) يكفي ${stockCoverDays} أيام فقط. يُوصى ببدء **إعادة الطلب فوراً** لعدم خسارة المبيعات.`;
+            advice = `⚠️ الرصيد الحالي (${currentStockDisplay}) يكفي لحوالي ${stockCoverDays} أيام فقط. يُوصى **بالطلب فوراً**.`;
             adviceColor = "text-danger";
         } else if (stockCoverDays > 90 && currentStockPcs > 0) {
-            let suggestPcs = Math.ceil(dailyRatePcs * 30);
+            let suggestPcs = Math.ceil(dailyRatePcs * 30); // ما يكفي 30 يوم
             let suggestDisplay = formatSoldQuantityInCartons(suggestPcs, safeFactor);
-            advice = `✋ <b>تجميد الشراء:</b> المخزون يكفي لأكثر من ${stockCoverDays} يوماً! يُنصح بعمل عروض ترويجية لتسييل البضاعة (الكمية المثالية للشراء مستقبلاً: ${suggestDisplay}).`;
+            advice = `✋ المخزون الحالي كبير جداً ويكفي ${stockCoverDays} يوم! يُنصح **بتقليل الكميات عند الشراء** (الكمية المثالية للشراء يكفي ${suggestDisplay}).`;
             adviceColor = "text-warning";
-        } else if (currentStockPcs === 0) {
-            advice = `❌ <b>منتهي تماماً:</b> الرصيد حالياً (0). إذا كان الصنف من الفئة A يلزم توفيره فوراً.`;
-            adviceColor = "text-danger";
+        } else if (daysInStock <= 15 && qtySold > 0) {
+            advice = `✨ صنف جديد ذو سحب واعد، يُفضل متابعته لتحديد إعادة الطلب.`;
+            adviceColor = "text-success";
         } else {
-            advice = `✅ <b>مخزون متوازن:</b> الكمية تكفي لـ ${stockCoverDays} يوماً تقريباً بمعدل الاستهلاك الحالي.`;
+            advice = `✅ الكمية الحالية مناسبة لمعدل البيع وتكفي لـ ${stockCoverDays} يوم تقريباً.`;
             adviceColor = "text-success";
         }
 
@@ -660,12 +636,11 @@
 
         return `
             <div class="item-analysis-box">
-                <div class="analysis-header">
-                    <i class="fas fa-brain me-1"></i> تصنيف الصنف والقرار التكتيكي: ${abcText}
-                </div>
-                <div class="analysis-bullet">• <b>معدل البيع اليومي:</b> ${(dailyRatePcs).toFixed(1)} قطعة/يوم (بقاله ${daysInStock} يوم بالمخزن).</div>
-                <div class="analysis-bullet">• <b>المساهمة المالية:</b> يساهم بـ ${profitShare}% من أرباح النشاط.</div>
-                <div class="analysis-bullet">• <b>توجيه القرار:</b> <span class="${adviceColor}">${advice}</span></div>
+                <div class="analysis-header"><i class="fas fa-balance-scale me-1"></i> التحليل العادل وتدفق المخزون:</div>
+                <div class="analysis-bullet">• <b>عمر الصنف بالمخزن:</b> ${ageTxt}</div>
+                <div class="analysis-bullet">• <b>معدل البيع اليومي:</b> ${(dailyRatePcs).toFixed(1)} قطعة/يوم.</div>
+                <div class="analysis-bullet">• <b>المساهمة المالية:</b> يساهم بـ ${profitShare}% من إجمالي الأرباح.</div>
+                <div class="analysis-bullet">• <b>التوصية والكميات:</b> <span class="${adviceColor} fw-bold">${advice}</span></div>
             </div>
         `;
     }
@@ -727,12 +702,10 @@
             const factor = Math.max(1, Number(productsMap[id].factor) || 1);
             const qtyPcs = Number(qtyByProduct[id]) || 0;
 
+            // حساب الأيام التي قضاها الصنف بالمخزن
             let firstDate = firstStockDateMap[id] || new Date();
             let diffTime = Math.abs(today - firstDate);
             let daysInStock = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-
-            const dailyRatePcs = daysInStock > 0 ? (qtyPcs / daysInStock) : qtyPcs;
-            let stockCoverDays = dailyRatePcs > 0 ? Math.round(productsMap[id].currentStockPcs / dailyRatePcs) : 999;
 
             return {
                 ...productsMap[id],
@@ -741,8 +714,7 @@
                 qtySold: qtyPcs,
                 invoiceCount: Number(invoicesCountByProduct[id]) || 0,
                 daysCount: Number(activeDaysByProduct[id]) || 0,
-                daysInStock: daysInStock,
-                stockCoverDays: stockCoverDays
+                daysInStock: daysInStock
             };
         });
 
@@ -759,45 +731,32 @@
             grandCurrent += p.profitCurrent;
         });
 
-        // تطبيق خوارزمية تحليل ABC بفرز الأرباح تنازلياً وتحديد الفئات
-        list.sort((a, b) => b.profitAvg - a.profitAvg);
-        let cumulativeProfit = 0;
-        let urgentCounter = 0;
-        let stagnantCounter = 0;
-        let classACounter = 0;
+        if (list.length > 0) {
+            const sortedByInvoicesDesc = [...list].sort((a, b) => b.invoiceCount - a.invoiceCount);
+            const topSeller = sortedByInvoicesDesc[0];
+            const lowSeller = sortedByInvoicesDesc[sortedByInvoicesDesc.length - 1];
 
-        list.forEach(p => {
-            cumulativeProfit += p.profitAvg;
-            let cumPercentage = grandAvg > 0 ? (cumulativeProfit / grandAvg) * 100 : 100;
+            const topPercentage = totalPeriodInvoices > 0 ? ((topSeller.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+            const lowPercentage = totalPeriodInvoices > 0 ? ((lowSeller.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
 
-            if (cumPercentage <= 80) {
-                p.abcClass = 'A';
-                classACounter++;
-            } else if (cumPercentage <= 95) {
-                p.abcClass = 'B';
-            } else {
-                p.abcClass = 'C';
-            }
+            document.getElementById('topSellerName').innerText = topSeller.name;
+            document.getElementById('topSellerQty').innerText = `${topSeller.invoiceCount}/${totalPeriodInvoices} (${topPercentage}%)`;
 
-            if (p.stockCoverDays <= 10) urgentCounter++;
-            if (p.stockCoverDays > 90 && p.currentStockPcs > 0) stagnantCounter++;
-        });
+            document.getElementById('lowSellerName').innerText = lowSeller.name;
+            document.getElementById('lowSellerQty').innerText = `${lowSeller.invoiceCount}/${totalPeriodInvoices} (${lowPercentage}%)`;
+        } else {
+            document.getElementById('topSellerName').innerText = '---';
+            document.getElementById('topSellerQty').innerText = '0 فاتورة';
+            document.getElementById('lowSellerName').innerText = '---';
+            document.getElementById('lowSellerQty').innerText = '0 فاتورة';
+        }
 
-        document.getElementById('urgentCount').innerText = urgentCounter;
-        document.getElementById('stagnantCount').innerText = stagnantCounter;
-        document.getElementById('classACount').innerText = classACounter;
-
-        // خيارات الترتيب والفلترة الخاصة بالقرارات
         if (currentSortMode === 'profit') {
             list.sort((a, b) => b.profitAvg - a.profitAvg);
-        } else if (currentSortMode === 'urgent') {
-            list = list.filter(p => p.stockCoverDays <= 10);
-            list.sort((a, b) => a.stockCoverDays - b.stockCoverDays);
-        } else if (currentSortMode === 'stagnant') {
-            list = list.filter(p => p.stockCoverDays > 90);
-            list.sort((a, b) => b.stockCoverDays - a.stockCoverDays);
         } else if (currentSortMode === 'count') {
             list.sort((a, b) => b.invoiceCount - a.invoiceCount);
+        } else if (currentSortMode === 'slow') {
+            list.sort((a, b) => a.invoiceCount - b.invoiceCount);
         }
 
         const container = document.getElementById('itemsContainer');
@@ -815,13 +774,15 @@
             const daysPercentage = totalPeriodDays > 0 ? ((p.daysCount / totalPeriodDays) * 100).toFixed(1) : 0;
 
             let badgeHtml = '';
-            if (p.stockCoverDays <= 10) {
-                badgeHtml = `<span class="rank-badge badge-low">🚨 شراء عاجل</span>`;
-            } else if (p.abcClass === 'A') {
-                badgeHtml = `<span class="rank-badge badge-top">⭐ نجم الأرباح</span>`;
+            if (currentSortMode === 'count' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-top">🏆 الأكثر تكراراً (#${index+1})</span>`;
+            } else if (currentSortMode === 'slow' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-low">⚠️ الأقل طلباً</span>`;
+            } else if (currentSortMode === 'profit' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
             }
 
-            const analysisHtml = generateFairAnalysis(p.abcClass, p.profitAvg, grandAvg, p.daysInStock, p.currentStockPcs, p.qtySold, factor);
+            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg, p.daysInStock, p.currentStockPcs, p.qtySold, factor);
 
             html += `
                 <div class="item-card">
@@ -889,7 +850,7 @@
                     ${analysisHtml}
 
                     <div class="item-card-footer">
-                        <span class="text-muted" style="font-size:0.7rem;">الرصيد الحالي: <b>${formatSoldQuantityInCartons(p.currentStockPcs, factor)}</b></span>
+                        <span class="text-muted" style="font-size:0.7rem;">الرصيد بالمخزن الآن: <b>${formatSoldQuantityInCartons(p.currentStockPcs, factor)}</b></span>
                         <button class="btn-details" onclick="goToDetails('${p.id}')">
                             التفاصيل <i class="fas fa-chevron-left me-1"></i>
                         </button>
@@ -899,7 +860,7 @@
         });
 
         if (list.length === 0) {
-            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-search fa-2x mb-2"></i><br>لا توجد بيانات مطابقة للفلتر والتصنيف المحدد</div>`;
+            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-search fa-2x mb-2"></i><br>لا توجد بيانات مطابقة للفلتر</div>`;
         }
 
         container.innerHTML = html;
