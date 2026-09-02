@@ -223,7 +223,7 @@
         <div class="panel-header">
             <div class="d-flex align-items-center gap-2">
                 <i class="fas fa-list-check text-primary"></i>
-                <span>سجل حركة الدخول والخروج</span>
+                <span>سجل التنقل والحركات العامة</span>
             </div>
         </div>
         <div class="table-responsive">
@@ -231,8 +231,8 @@
                 <thead class="table-light">
                     <tr>
                         <th style="width: 25%;">المستخدم</th>
-                        <th style="width: 25%;">الحدث</th>
-                        <th style="width: 50%;">التوقيت</th>
+                        <th style="width: 35%;">الحدث / الصفحة</th>
+                        <th style="width: 40%;">التوقيت</th>
                     </tr>
                 </thead>
                 <tbody id="globalLogsTbody">
@@ -249,8 +249,8 @@
     <div class="modal-card" onclick="event.stopPropagation()">
         <div class="modal-card-header">
             <div>
-                <h6 class="m-0 fw-bold" id="modalUserName">سجل المستخدم</h6>
-                <span class="text-muted" style="font-size:0.72rem;">تفاصيل الحركات المسجلة</span>
+                <h6 class="m-0 fw-bold" id="modalUserName">مسار وتنقلات المستخدم</h6>
+                <span class="text-muted" style="font-size:0.72rem;">الصفحات والتنقلات المسجلة مؤخراً</span>
             </div>
             <button class="btn-close" onclick="closeTrailModal()"></button>
         </div>
@@ -261,7 +261,6 @@
 </div>
 
 <script type="module">
-    // استخدام Modular SDK المتطابق مع باقي النظام
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, query, orderBy, limit, doc, updateDoc, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -284,7 +283,6 @@
         db = getFirestore(app);
     }
 
-    // دوال مساعدة لحساب الوقت
     function parseTimestamp(ts) {
         if (!ts) return new Date();
         return ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
@@ -315,7 +313,7 @@
         return `منذ ${hrs} ساعة`;
     }
 
-    // 1. جلب ومراقبة الجلسات المباشرة
+    // 1. مراقبة الجلسات المباشرة
     function listenToSessions() {
         const container = document.getElementById('sessionsContainer');
         const kpiOnline = document.getElementById('kpiOnlineCount');
@@ -334,7 +332,6 @@
                 const lastActiveMs = s.lastActive ? parseTimestamp(s.lastActive).getTime() : 0;
                 const diffMins = (Date.now() - lastActiveMs) / (1000 * 60);
 
-                // النظام يرسل نبضة كل 20 ثانية، لذا إذا مر أكثر من دقيقتين فهو خامل أو مغلق للصفحة
                 let sessionStatus = 'offline';
                 if (s.status === 'active' || s.status === 'online') {
                     if (diffMins < 2) {
@@ -346,7 +343,6 @@
                     }
                 }
 
-                // نعرض فقط الجلسات التي لم يمر عليها أكثر من 24 ساعة لتنظيف الشاشة
                 if (diffMins < (24 * 60) && s.status !== 'kicked' && s.status !== 'logged_out') {
                     sessionList.push({
                         id: docSnap.id,
@@ -357,7 +353,6 @@
                 }
             });
 
-            // ترتيب بحيث يظهر النشط أولاً ثم الخامل
             sessionList.sort((a, b) => {
                 const order = { 'online': 1, 'idle': 2, 'offline': 3 };
                 return order[a.statusText] - order[b.statusText];
@@ -420,8 +415,8 @@
                         </div>
 
                         <div class="action-bar">
-                            <button class="btn-action-sm view" onclick="window.openUserTrail('${s.userId}')">
-                                <i class="fas fa-list"></i> سجل المستخدم
+                            <button class="btn-action-sm view" onclick="window.openUserTrail('${s.userId}', '${s.userName}')">
+                                <i class="fas fa-eye"></i> عرض التنقلات والصفحات
                             </button>
                             <button class="btn-action-sm kick" onclick="window.kickUser('${s.id}', '${s.userName}')">
                                 <i class="fas fa-power-off"></i> طرد وإنهاء
@@ -433,7 +428,7 @@
         });
     }
 
-    // 2. سجل الحركات (Logins & Logouts) الذي يتم تخزينه فعلياً في نظامك
+    // 2. سجل الحركات العام
     function listenToGlobalLogs() {
         const tbody = document.getElementById('globalLogsTbody');
         const kpiTotalLogs = document.getElementById('kpiTotalLogs');
@@ -455,7 +450,8 @@
                 
                 let actionBadge = `<span class="badge bg-secondary">${log.action}</span>`;
                 if (log.action === 'LOGIN') actionBadge = `<span class="badge bg-success"><i class="fas fa-sign-in-alt me-1"></i> دخول</span>`;
-                if (log.action === 'LOGOUT') actionBadge = `<span class="badge bg-danger"><i class="fas fa-sign-out-alt me-1"></i> خروج</span>`;
+                else if (log.action === 'LOGOUT') actionBadge = `<span class="badge bg-danger"><i class="fas fa-sign-out-alt me-1"></i> خروج</span>`;
+                else if (log.action === 'PAGE_VIEW') actionBadge = `<span class="badge bg-info text-dark"><i class="fas fa-file-lines me-1"></i> ${log.pageTitle || 'صفحة'}</span>`;
 
                 html += `
                     <tr>
@@ -469,59 +465,61 @@
         });
     }
 
-    // 3. عرض الخط الزمني لمستخدم محدد (مع الترتيب البرمجي لتفادي خطأ Index)
-    window.openUserTrail = async function(userId) {
-        document.getElementById('modalUserName').innerText = `حركات المستخدم`;
+    // 3. عرض الصفحات والتنقلات الزمني للمستخدم المحدد
+    window.openUserTrail = async function(userId, userName) {
+        document.getElementById('modalUserName').innerText = `تنقلات ${userName || 'المستخدم'}`;
         document.getElementById('userTrailModal').classList.add('open');
         const container = document.getElementById('modalTimelineContent');
-        container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>جاري الجلب...</span></div>`;
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>جاري جلب التنقلات...</span></div>`;
 
         try {
             const logsRef = collection(db, "session_logs");
-            // طلب بيانات المستخدم بدون orderBy لتفادي مشكلة Composite Index
             const q = query(logsRef, where("userId", "==", userId));
             const snap = await getDocs(q);
 
             if (snap.empty) {
-                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><span>لا توجد حركات مسجلة.</span></div>`;
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><span>لا توجد تنقلات مسجلة لهذا المستخدم.</span></div>`;
                 return;
             }
 
             let logsList = [];
-            snap.forEach(d => {
-                logsList.push({ id: d.id, ...d.data() });
-            });
+            snap.forEach(d => logsList.push({ id: d.id, ...d.data() }));
 
-            // ترتيب الحركات زمنيًا من الأحدث للأقدم داخل JavaScript
-            logsList.sort((a, b) => {
-                const timeA = parseTimestamp(a.timestamp).getTime();
-                const timeB = parseTimestamp(b.timestamp).getTime();
-                return timeB - timeA;
-            });
+            // فرز الحركات من الأحدث إلى الأقدم
+            logsList.sort((a, b) => parseTimestamp(b.timestamp).getTime() - parseTimestamp(a.timestamp).getTime());
 
-            // أخذ أحدث 20 حركة
-            const recentLogs = logsList.slice(0, 20);
+            const recentLogs = logsList.slice(0, 30);
 
             let html = '';
             recentLogs.forEach(l => {
                 const timeStr = l.timestamp ? parseTimestamp(l.timestamp).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '-';
                 
-                let title = "حركة مسجلة";
-                if (l.action === 'LOGIN') title = "تسجيل دخول للنظام";
-                if (l.action === 'LOGOUT') title = "تسجيل خروج";
+                let title = "زيارة صفحة";
+                let badgeClass = "bg-primary";
+
+                if (l.action === 'LOGIN') {
+                    title = "تسجيل دخول للنظام";
+                    badgeClass = "bg-success";
+                } else if (l.action === 'LOGOUT') {
+                    title = "تسجيل خروج";
+                    badgeClass = "bg-danger";
+                } else if (l.action === 'PAGE_VIEW' || l.pageTitle) {
+                    title = `فتح صفحة: <strong>${l.pageTitle || 'صفحة فرعية'}</strong>`;
+                    badgeClass = "bg-info text-dark";
+                }
 
                 html += `
                     <div class="timeline-item">
                         <div class="timeline-time">${timeStr}</div>
-                        <div class="timeline-title">${title} <span class="badge bg-light text-dark border ms-2">${l.action || ''}</span></div>
+                        <div class="timeline-title">${title} <span class="badge ${badgeClass} ms-2">${l.action || 'VIEW'}</span></div>
                     </div>
                 `;
             });
             container.innerHTML = html;
 
         } catch (e) {
-            container.innerHTML = `<div class="empty-state text-danger">حدث خطأ أثناء تحميل السجل.</div>`;
-            console.error("User trail fetch error:", e);
+            container.innerHTML = `<div class="empty-state text-danger">حدث خطأ أثناء تحميل سجل التنقلات.</div>`;
+            console.error(e);
         }
     };
 
@@ -529,16 +527,12 @@
         document.getElementById('userTrailModal').classList.remove('open');
     };
 
-    // 4. دالة طرد المستخدم
     window.kickUser = async function(sessionId, userName) {
         if (!confirm(`هل أنت متأكد من طرد "${userName}" وإنهاء جلسته؟`)) return;
         
         try {
             const sessionDocRef = doc(db, "sessions", sessionId);
-            // تغيير الحالة إلى kicked سيجعل كود الحماية في جهاز المستخدم يطرده فوراً
-            await updateDoc(sessionDocRef, {
-                status: 'kicked'
-            });
+            await updateDoc(sessionDocRef, { status: 'kicked' });
             alert(`تم إرسال أمر الطرد بنجاح لـ ${userName}`);
         } catch (error) {
             alert("حدث خطأ أثناء محاولة إنهاء الجلسة.");
@@ -546,10 +540,8 @@
         }
     };
 
-    // التشغيل المبدئي
     listenToSessions();
     listenToGlobalLogs();
-
 </script>
 </body>
 </html>
