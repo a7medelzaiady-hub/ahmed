@@ -360,19 +360,25 @@
         localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
     });
 
+    // إصلاح دالة جلب التاريخ لتجنب إرجاع 1970
     function getDocDate(data) {
+        if (!data) return null;
         if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
-        if (data.timestamp) {
-            const d = new Date(data.timestamp);
-            if (!isNaN(d)) return d;
+        if (data.createdAt && data.createdAt.toDate) return data.createdAt.toDate();
+        if (data.date && data.date.toDate) return data.date.toDate();
+
+        const rawStr = data.timestamp || data.createdAt || data.date;
+        if (rawStr) {
+            const d = new Date(rawStr);
+            if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
         }
-        return new Date(0);
+        return null;
     }
 
     let productsMap = {}; 
     let namesMap = {};
     let saleLines = {}; 
-    let firstStockDateMap = {}; // تخزين تاريخ أول إضافة للصنف للمخزن
+    let firstStockDateMap = {}; 
     let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
@@ -407,8 +413,9 @@
                     const rawBuy = Number(data.buy) || 0;
                     const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
                     
-                    // حساب الرصيد الحالي بالقطع
-                    const currentStockPcs = Number(data.totalPcs) || ((Number(data.qty) || 0) * factor);
+                    const currentStockPcs = (data.totalPcs !== undefined && data.totalPcs !== null)
+                        ? Number(data.totalPcs) || 0
+                        : (Number(data.qty) || 0) * factor;
 
                     const pObj = {
                         id: d.id,
@@ -449,8 +456,8 @@
                 if (!events[id]) events[id] = [];
                 events[id].push(ev);
 
-                // تتبع تاريخ أول دخول/توريد للمخزن
-                if (ev.type === 'purchase' && ev.date) {
+                // تسجيل تاريخ الشراء الأقدم بدقة
+                if (ev.type === 'purchase' && ev.date && ev.date.getFullYear() > 2000) {
                     if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
                         firstStockDateMap[id] = ev.date;
                     }
@@ -473,7 +480,7 @@
                 }
 
                 if (openingPcs) {
-                    let createDate = p.raw && p.raw.createdAt ? getDocDate(p.raw) : new Date(0);
+                    let createDate = getDocDate(p.raw);
                     pushEvent(p.id, { type: 'purchase', date: createDate, qty: openingPcs, price: openingPrice });
                 }
             });
@@ -528,12 +535,6 @@
                 const list = events[id].slice().sort((a, b) => {
                     const timeA = a.date ? a.date.getTime() : 0;
                     const timeB = b.date ? b.date.getTime() : 0;
-                    const dateA_str = a.date ? a.date.toISOString().slice(0, 10) : '';
-                    const dateB_str = b.date ? b.date.toISOString().slice(0, 10) : '';
-
-                    if (dateA_str === dateB_str && a.type !== b.type) {
-                        return a.type === 'purchase' ? -1 : 1;
-                    }
                     return timeA - timeB;
                 });
 
@@ -572,6 +573,13 @@
                             profitCurrent: Number(profitCurrent) || 0,
                             invoiceId: ev.invoiceId
                         });
+
+                        // تتبع أول تاريخ بيع إذا لم يكن هناك تاريخ شراء
+                        if (ev.date && ev.date.getFullYear() > 2000) {
+                            if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
+                                firstStockDateMap[id] = ev.date;
+                            }
+                        }
                     }
                 });
             });
@@ -590,45 +598,52 @@
     };
 
     function formatSoldQuantityInCartons(pcs, factor) {
+        const safePcs = Number(pcs) || 0;
         const safeFactor = Math.max(1, Number(factor) || 1);
-        if (safeFactor === 1) return `${pcs} قطعة`;
+        if (safeFactor === 1) return `${safePcs} قطعة`;
 
-        const totalCartons = pcs / safeFactor;
+        const totalCartons = safePcs / safeFactor;
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
     }
 
-    // دالة التحليل الذكي العادلة بناءً على أيام بقاء الصنف بالمخزن والكمية الحالية
     function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandAvgTotal, daysInStock, currentStockPcs, qtySold, factor) {
         const safeFactor = Math.max(1, Number(factor) || 1);
-        const currentStockDisplay = formatSoldQuantityInCartons(currentStockPcs, safeFactor);
+        const safeStockPcs = Number(currentStockPcs) || 0;
+        const currentStockDisplay = formatSoldQuantityInCartons(safeStockPcs, safeFactor);
 
-        // معدل المبيعات اليومي (قطع في اليوم)
-        const dailyRatePcs = daysInStock > 0 ? (qtySold / daysInStock) : qtySold;
+        const dailyRatePcs = daysInStock > 0 ? (qtySold / daysInStock) : 0;
         
-        // عدد الأيام التي يكفيها المخزون الحالي بناء على معدل السحب
-        let stockCoverDays = dailyRatePcs > 0 ? Math.round(currentStockPcs / dailyRatePcs) : 999;
+        let stockCoverDaysStr = "غير محدد";
+        let stockCoverDays = 999;
+        if (dailyRatePcs > 0) {
+            stockCoverDays = Math.round(safeStockPcs / dailyRatePcs);
+            stockCoverDaysStr = `${stockCoverDays} يوم`;
+        } else if (safeStockPcs === 0) {
+            stockCoverDaysStr = "0 يوم";
+            stockCoverDays = 0;
+        }
 
         let ageTxt = "";
-        if (daysInStock <= 15) ageTxt = `منتج جديد بالمخزن (بقاله ${daysInStock} يوم فقط).`;
+        if (daysInStock <= 15) ageTxt = `منتج جديد بالمخزن (بقاله ${daysInStock} يوم).`;
         else if (daysInStock <= 45) ageTxt = `موجود بالمخزن منذ ${daysInStock} يوم.`;
         else ageTxt = `صنف قديم بالمخزن (بقاله ${daysInStock} يوم).`;
 
         let advice = "";
         let adviceColor = "text-dark";
 
-        if (stockCoverDays <= 10 && currentStockPcs > 0) {
-            advice = `⚠️ الرصيد الحالي (${currentStockDisplay}) يكفي لحوالي ${stockCoverDays} أيام فقط. يُوصى **بالطلب فوراً**.`;
+        if (stockCoverDays <= 10 && safeStockPcs > 0 && dailyRatePcs > 0) {
+            advice = `⚠️ الرصيد الحالي (${currentStockDisplay}) يكفي لحوالي ${stockCoverDaysStr} فقط. يُوصى **بالطلب فوراً**.`;
             adviceColor = "text-danger";
-        } else if (stockCoverDays > 90 && currentStockPcs > 0) {
-            let suggestPcs = Math.ceil(dailyRatePcs * 30); // ما يكفي 30 يوم
+        } else if (stockCoverDays > 90 && safeStockPcs > 0 && dailyRatePcs > 0) {
+            let suggestPcs = Math.ceil(dailyRatePcs * 30);
             let suggestDisplay = formatSoldQuantityInCartons(suggestPcs, safeFactor);
-            advice = `✋ المخزون الحالي كبير جداً ويكفي ${stockCoverDays} يوم! يُنصح **بتقليل الكميات عند الشراء** (الكمية المثالية للشراء يكفي ${suggestDisplay}).`;
+            advice = `✋ المخزون الحالي كبير جداً ويكفي ${stockCoverDaysStr}! يُنصح **بتقليل الكميات** (الكمية المثالية للشراء تكفي ${suggestDisplay}).`;
             adviceColor = "text-warning";
         } else if (daysInStock <= 15 && qtySold > 0) {
             advice = `✨ صنف جديد ذو سحب واعد، يُفضل متابعته لتحديد إعادة الطلب.`;
             adviceColor = "text-success";
         } else {
-            advice = `✅ الكمية الحالية مناسبة لمعدل البيع وتكفي لـ ${stockCoverDays} يوم تقريباً.`;
+            advice = `✅ الكمية الحالية مناسبة لمعدل البيع وتكفي لـ ${stockCoverDaysStr} تقريباً.`;
             adviceColor = "text-success";
         }
 
@@ -701,11 +716,17 @@
         let list = Object.keys(productsMap).map(id => {
             const factor = Math.max(1, Number(productsMap[id].factor) || 1);
             const qtyPcs = Number(qtyByProduct[id]) || 0;
+            const daysActive = Number(activeDaysByProduct[id]) || 0;
 
-            // حساب الأيام التي قضاها الصنف بالمخزن
-            let firstDate = firstStockDateMap[id] || new Date();
-            let diffTime = Math.abs(today - firstDate);
-            let daysInStock = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            // حساب أيام البقاء بحد أدنى منطقي يساوي أقام أيام البيع الفعلية
+            let firstDate = firstStockDateMap[id];
+            let daysInStock = daysActive > 0 ? daysActive : 1;
+
+            if (firstDate && firstDate.getFullYear() > 2000) {
+                let diffTime = Math.abs(today - firstDate);
+                let calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                daysInStock = Math.max(daysActive, calculatedDays, 1);
+            }
 
             return {
                 ...productsMap[id],
@@ -713,7 +734,7 @@
                 profitCurrent: Number(profitCurrentMap[id]) || 0,
                 qtySold: qtyPcs,
                 invoiceCount: Number(invoicesCountByProduct[id]) || 0,
-                daysCount: Number(activeDaysByProduct[id]) || 0,
+                daysCount: daysActive,
                 daysInStock: daysInStock
             };
         });
@@ -782,7 +803,8 @@
                 badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
             }
 
-            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg, p.daysInStock, p.currentStockPcs, p.qtySold, factor);
+            const safeStock = Number(p.currentStockPcs) || 0;
+            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg, p.daysInStock, safeStock, p.qtySold, factor);
 
             html += `
                 <div class="item-card">
@@ -850,7 +872,7 @@
                     ${analysisHtml}
 
                     <div class="item-card-footer">
-                        <span class="text-muted" style="font-size:0.7rem;">الرصيد بالمخزن الآن: <b>${formatSoldQuantityInCartons(p.currentStockPcs, factor)}</b></span>
+                        <span class="text-muted" style="font-size:0.7rem;">الرصيد بالمخزن الآن: <b>${formatSoldQuantityInCartons(safeStock, factor)}</b></span>
                         <button class="btn-details" onclick="goToDetails('${p.id}')">
                             التفاصيل <i class="fas fa-chevron-left me-1"></i>
                         </button>
