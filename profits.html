@@ -160,19 +160,19 @@
 
         .stat-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 6px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
             margin-bottom: 10px;
         }
         .stat-box {
             background: #f8fafc;
             border: 1px solid #f1f5f9;
             border-radius: 10px;
-            padding: 6px 8px;
+            padding: 6px 4px;
             text-align: center;
         }
-        .stat-box .title { font-size: 0.65rem; color: var(--text-muted); font-weight: 700; }
-        .stat-box .val { font-size: 0.8rem; font-weight: 800; color: var(--text-dark); margin-top: 1px; }
+        .stat-box .title { font-size: 0.62rem; color: var(--text-muted); font-weight: 700; }
+        .stat-box .stat-val { font-size: 0.78rem; font-weight: 800; color: var(--text-dark); margin-top: 1px; }
 
         .progress-group { margin-bottom: 10px; }
         .progress-item { margin-bottom: 5px; }
@@ -204,7 +204,6 @@
         .profit-box.current-buy .p-val { color: #0284c7; }
         .profit-box.current-buy .p-unit { color: #0369a1; }
 
-        /* قسم التحليل الذكي المضاف لكارت الصنف */
         .item-analysis-box {
             background: #fdfbf7;
             border: 1px dashed #f59e0b;
@@ -373,6 +372,7 @@
     let productsMap = {}; 
     let namesMap = {};
     let saleLines = {}; 
+    let firstStockDateMap = {}; // تخزين تاريخ أول إضافة للصنف للمخزن
     let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
@@ -406,6 +406,9 @@
                     const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                     const rawBuy = Number(data.buy) || 0;
                     const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
+                    
+                    // حساب الرصيد الحالي بالقطع
+                    const currentStockPcs = Number(data.totalPcs) || ((Number(data.qty) || 0) * factor);
 
                     const pObj = {
                         id: d.id,
@@ -414,6 +417,7 @@
                         factor,
                         fallbackBuy: currentBuyUnit,
                         currentBuy: currentBuyUnit,
+                        currentStockPcs: currentStockPcs,
                         raw: data
                     };
                     productsMap[d.id] = pObj;
@@ -444,6 +448,13 @@
             function pushEvent(id, ev) {
                 if (!events[id]) events[id] = [];
                 events[id].push(ev);
+
+                // تتبع تاريخ أول دخول/توريد للمخزن
+                if (ev.type === 'purchase' && ev.date) {
+                    if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
+                        firstStockDateMap[id] = ev.date;
+                    }
+                }
             }
 
             Object.values(productsMap).forEach(p => {
@@ -462,7 +473,8 @@
                 }
 
                 if (openingPcs) {
-                    pushEvent(p.id, { type: 'purchase', date: new Date(0), qty: openingPcs, price: openingPrice });
+                    let createDate = p.raw && p.raw.createdAt ? getDocDate(p.raw) : new Date(0);
+                    pushEvent(p.id, { type: 'purchase', date: createDate, qty: openingPcs, price: openingPrice });
                 }
             });
 
@@ -585,33 +597,50 @@
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
     }
 
-    // دالة إنشاء التحليل التلقائي الموجز بناءً على أرقام الصنف
-    function generateItemAnalysis(invoicePct, daysPct, profitAvg, grandAvgTotal) {
-        let demandTxt = "";
-        if (invoicePct >= 25) demandTxt = "طلب مرتفع جداً (يظهر في أكثر من ربع الفواتير).";
-        else if (invoicePct >= 10) demandTxt = "طلب متوسط إلى جيد بالفواتير.";
-        else demandTxt = "طلب محدود بالفواتير.";
+    // دالة التحليل الذكي العادلة بناءً على أيام بقاء الصنف بالمخزن والكمية الحالية
+    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandAvgTotal, daysInStock, currentStockPcs, qtySold, factor) {
+        const safeFactor = Math.max(1, Number(factor) || 1);
+        const currentStockDisplay = formatSoldQuantityInCartons(currentStockPcs, safeFactor);
 
-        let activeTxt = "";
-        if (daysPct >= 75) activeTxt = "حركة بيع يومية منتظمة جداً.";
-        else if (daysPct >= 40) activeTxt = "حركة بيع متقطعة على مدار الأيام.";
-        else activeTxt = "حركة بطيئة أو مبيعات متركزة في أيّام قليلة.";
+        // معدل المبيعات اليومي (قطع في اليوم)
+        const dailyRatePcs = daysInStock > 0 ? (qtySold / daysInStock) : qtySold;
+        
+        // عدد الأيام التي يكفيها المخزون الحالي بناء على معدل السحب
+        let stockCoverDays = dailyRatePcs > 0 ? Math.round(currentStockPcs / dailyRatePcs) : 999;
 
-        let profitShare = grandAvgTotal > 0 ? ((profitAvg / grandAvgTotal) * 100).toFixed(1) : 0;
-        let profitTxt = `يساهم بـ ${profitShare}% من أرباح الفترة.`;
+        let ageTxt = "";
+        if (daysInStock <= 15) ageTxt = `منتج جديد بالمخزن (بقاله ${daysInStock} يوم فقط).`;
+        else if (daysInStock <= 45) ageTxt = `موجود بالمخزن منذ ${daysInStock} يوم.`;
+        else ageTxt = `صنف قديم بالمخزن (بقاله ${daysInStock} يوم).`;
 
         let advice = "";
-        if (invoicePct >= 25 && daysPct >= 75) advice = "صنف استراتيجي، يلزم عدم انقطاعه عن المخزن.";
-        else if (daysPct < 30) advice = "صنف بطيء، يُفضّل عمل عروض لتنشيطه أو تقليل كميات الشراء.";
-        else advice = "صنف متوازن أداءً وربحاً.";
+        let adviceColor = "text-dark";
+
+        if (stockCoverDays <= 10 && currentStockPcs > 0) {
+            advice = `⚠️ الرصيد الحالي (${currentStockDisplay}) يكفي لحوالي ${stockCoverDays} أيام فقط. يُوصى **بالطلب فوراً**.`;
+            adviceColor = "text-danger";
+        } else if (stockCoverDays > 90 && currentStockPcs > 0) {
+            let suggestPcs = Math.ceil(dailyRatePcs * 30); // ما يكفي 30 يوم
+            let suggestDisplay = formatSoldQuantityInCartons(suggestPcs, safeFactor);
+            advice = `✋ المخزون الحالي كبير جداً ويكفي ${stockCoverDays} يوم! يُنصح **بتقليل الكميات عند الشراء** (الكمية المثالية للشراء يكفي ${suggestDisplay}).`;
+            adviceColor = "text-warning";
+        } else if (daysInStock <= 15 && qtySold > 0) {
+            advice = `✨ صنف جديد ذو سحب واعد، يُفضل متابعته لتحديد إعادة الطلب.`;
+            adviceColor = "text-success";
+        } else {
+            advice = `✅ الكمية الحالية مناسبة لمعدل البيع وتكفي لـ ${stockCoverDays} يوم تقريباً.`;
+            adviceColor = "text-success";
+        }
+
+        let profitShare = grandAvgTotal > 0 ? ((profitAvg / grandAvgTotal) * 100).toFixed(1) : 0;
 
         return `
             <div class="item-analysis-box">
-                <div class="analysis-header"><i class="fas fa-chart-pie me-1"></i> التحليل السريع للطلب والأداء:</div>
-                <div class="analysis-bullet">• <b>معدل الطلب:</b> ${demandTxt}</div>
-                <div class="analysis-bullet">• <b>الانتظام:</b> ${activeTxt}</div>
-                <div class="analysis-bullet">• <b>المساهمة المالية:</b> ${profitTxt}</div>
-                <div class="analysis-bullet">• <b>التوصية:</b> <span class="text-dark fw-bold">${advice}</span></div>
+                <div class="analysis-header"><i class="fas fa-balance-scale me-1"></i> التحليل العادل وتدفق المخزون:</div>
+                <div class="analysis-bullet">• <b>عمر الصنف بالمخزن:</b> ${ageTxt}</div>
+                <div class="analysis-bullet">• <b>معدل البيع اليومي:</b> ${(dailyRatePcs).toFixed(1)} قطعة/يوم.</div>
+                <div class="analysis-bullet">• <b>المساهمة المالية:</b> يساهم بـ ${profitShare}% من إجمالي الأرباح.</div>
+                <div class="analysis-bullet">• <b>التوصية والكميات:</b> <span class="${adviceColor} fw-bold">${advice}</span></div>
             </div>
         `;
     }
@@ -631,6 +660,8 @@
 
         let globalUniqueInvoices = new Set();
         let globalUniqueDays = new Set();
+
+        const today = new Date();
 
         Object.keys(saleLines).forEach(productId => {
             let productUniqueInvoices = new Set();
@@ -671,13 +702,19 @@
             const factor = Math.max(1, Number(productsMap[id].factor) || 1);
             const qtyPcs = Number(qtyByProduct[id]) || 0;
 
+            // حساب الأيام التي قضاها الصنف بالمخزن
+            let firstDate = firstStockDateMap[id] || new Date();
+            let diffTime = Math.abs(today - firstDate);
+            let daysInStock = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
             return {
                 ...productsMap[id],
                 profitAvg: Number(profitAvgMap[id]) || 0,
                 profitCurrent: Number(profitCurrentMap[id]) || 0,
                 qtySold: qtyPcs,
                 invoiceCount: Number(invoicesCountByProduct[id]) || 0,
-                daysCount: Number(activeDaysByProduct[id]) || 0
+                daysCount: Number(activeDaysByProduct[id]) || 0,
+                daysInStock: daysInStock
             };
         });
 
@@ -745,7 +782,7 @@
                 badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
             }
 
-            const analysisHtml = generateItemAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg);
+            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg, p.daysInStock, p.currentStockPcs, p.qtySold, factor);
 
             html += `
                 <div class="item-card">
@@ -759,7 +796,7 @@
 
                     <div class="stat-grid">
                         <div class="stat-box">
-                            <div class="title"><i class="fas fa-cubes text-success"></i> الكمية</div>
+                            <div class="title"><i class="fas fa-cubes text-success"></i> المبيعات</div>
                             <div class="stat-val text-success">${displaySoldQty}</div>
                         </div>
                         <div class="stat-box">
@@ -769,6 +806,10 @@
                         <div class="stat-box">
                             <div class="title"><i class="fas fa-calendar-alt text-warning"></i> أيام البيع</div>
                             <div class="stat-val text-warning">${p.daysCount} يوم</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="title"><i class="fas fa-hourglass-start text-info"></i> بالمخزن</div>
+                            <div class="stat-val text-info">${p.daysInStock} يوم</div>
                         </div>
                     </div>
 
@@ -809,7 +850,7 @@
                     ${analysisHtml}
 
                     <div class="item-card-footer">
-                        <span class="text-muted" style="font-size:0.7rem;">حالة الحركة: <b>${p.daysCount > 0 ? 'نشط' : 'ركود'}</b></span>
+                        <span class="text-muted" style="font-size:0.7rem;">الرصيد بالمخزن الآن: <b>${formatSoldQuantityInCartons(p.currentStockPcs, factor)}</b></span>
                         <button class="btn-details" onclick="goToDetails('${p.id}')">
                             التفاصيل <i class="fas fa-chevron-left me-1"></i>
                         </button>
