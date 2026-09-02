@@ -360,7 +360,6 @@
         localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
     });
 
-    // إصلاح دالة جلب التاريخ لتجنب إرجاع 1970
     function getDocDate(data) {
         if (!data) return null;
         if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
@@ -456,7 +455,6 @@
                 if (!events[id]) events[id] = [];
                 events[id].push(ev);
 
-                // تسجيل تاريخ الشراء الأقدم بدقة
                 if (ev.type === 'purchase' && ev.date && ev.date.getFullYear() > 2000) {
                     if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
                         firstStockDateMap[id] = ev.date;
@@ -574,7 +572,6 @@
                             invoiceId: ev.invoiceId
                         });
 
-                        // تتبع أول تاريخ بيع إذا لم يكن هناك تاريخ شراء
                         if (ev.date && ev.date.getFullYear() > 2000) {
                             if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
                                 firstStockDateMap[id] = ev.date;
@@ -606,7 +603,7 @@
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
     }
 
-    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandAvgTotal, daysInStock, currentStockPcs, qtySold, factor) {
+    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandPositiveProfit, daysInStock, currentStockPcs, qtySold, factor) {
         const safeFactor = Math.max(1, Number(factor) || 1);
         const safeStockPcs = Number(currentStockPcs) || 0;
         const currentStockDisplay = formatSoldQuantityInCartons(safeStockPcs, safeFactor);
@@ -647,14 +644,30 @@
             adviceColor = "text-success";
         }
 
-        let profitShare = grandAvgTotal > 0 ? ((profitAvg / grandAvgTotal) * 100).toFixed(1) : 0;
+        // === FIX: profit-share calculation ===
+        // Previously this divided profitAvg by the NET total profit of all items
+        // (grandAvg), which includes loss-making / return items. When those
+        // losses drag the net total down near zero (or negative), the check
+        // `grandAvgTotal > 0` fails and the code silently prints a literal "0%"
+        // even for an item that is genuinely the #2 most profitable item.
+        // Fix: compare each item's profit against the pool of POSITIVE profit
+        // only (the actual "profit pie" being split), and show a proper
+        // negative/loss badge for items that are actually losing money.
+        let profitShareHtml;
+        if (profitAvg < 0) {
+            const lossShare = grandPositiveProfit > 0 ? ((Math.abs(profitAvg) / grandPositiveProfit) * 100).toFixed(1) : '0.0';
+            profitShareHtml = `<span class="text-danger fw-bold">خسارة (يقلل الأرباح بنسبة ${lossShare}%)</span>`;
+        } else {
+            const profitShare = grandPositiveProfit > 0 ? ((profitAvg / grandPositiveProfit) * 100).toFixed(1) : '0.0';
+            profitShareHtml = `يساهم بـ ${profitShare}% من إجمالي الأرباح`;
+        }
 
         return `
             <div class="item-analysis-box">
                 <div class="analysis-header"><i class="fas fa-balance-scale me-1"></i> التحليل العادل وتدفق المخزون:</div>
                 <div class="analysis-bullet">• <b>عمر الصنف بالمخزن:</b> ${ageTxt}</div>
                 <div class="analysis-bullet">• <b>معدل البيع اليومي:</b> ${(dailyRatePcs).toFixed(1)} قطعة/يوم.</div>
-                <div class="analysis-bullet">• <b>المساهمة المالية:</b> يساهم بـ ${profitShare}% من إجمالي الأرباح.</div>
+                <div class="analysis-bullet">• <b>المساهمة المالية:</b> ${profitShareHtml}</div>
                 <div class="analysis-bullet">• <b>التوصية والكميات:</b> <span class="${adviceColor} fw-bold">${advice}</span></div>
             </div>
         `;
@@ -718,7 +731,6 @@
             const qtyPcs = Number(qtyByProduct[id]) || 0;
             const daysActive = Number(activeDaysByProduct[id]) || 0;
 
-            // حساب أيام البقاء بحد أدنى منطقي يساوي أقام أيام البيع الفعلية
             let firstDate = firstStockDateMap[id];
             let daysInStock = daysActive > 0 ? daysActive : 1;
 
@@ -739,7 +751,16 @@
             };
         });
 
-        list = list.filter(p => p.qtySold !== 0);
+        // === FIX: item count ("أصناف") ===
+        // Previously this kept any product whose NET quantity across the period
+        // was non-zero (`qtySold !== 0`). That means a product with ONLY return
+        // events in the selected period (e.g. a customer returned something
+        // bought earlier, outside this date range) ends up with a NEGATIVE
+        // qtySold and still gets counted as one of the "أصناف" — even though
+        // nothing was actually sold in the period. That inflated/skewed the
+        // item count shown at the bottom. Now we only count items that were
+        // actually sold (net quantity > 0) in the period.
+        list = list.filter(p => p.qtySold > 0);
 
         if (term) {
             list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
@@ -747,9 +768,16 @@
 
         let grandAvg = 0;
         let grandCurrent = 0;
+        let grandPositiveProfit = 0; // sum of profit from items that ARE profitable — used for fair % contribution
+        let lossItemsCount = 0;
         list.forEach(p => {
             grandAvg += p.profitAvg;
             grandCurrent += p.profitCurrent;
+            if (p.profitAvg > 0) {
+                grandPositiveProfit += p.profitAvg;
+            } else if (p.profitAvg < 0) {
+                lossItemsCount++;
+            }
         });
 
         if (list.length > 0) {
@@ -804,7 +832,7 @@
             }
 
             const safeStock = Number(p.currentStockPcs) || 0;
-            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandAvg, p.daysInStock, safeStock, p.qtySold, factor);
+            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandPositiveProfit, p.daysInStock, safeStock, p.qtySold, factor);
 
             html += `
                 <div class="item-card">
@@ -891,6 +919,23 @@
         document.getElementById('totalActiveDays').innerText = totalPeriodDays;
         document.getElementById('grandTotalProfit').innerText = `${grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('grandTotalProfitCurrent').innerText = `بالسعر الحالي: ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+
+        // === ADDITION: loss-items indicator ===
+        // Surfaces items dragging the net total down, and shows the "clean"
+        // positive-profit pool so numbers on screen are self-explanatory.
+        let lossNote = document.getElementById('lossItemsNote');
+        if (!lossNote) {
+            lossNote = document.createElement('div');
+            lossNote.id = 'lossItemsNote';
+            lossNote.style.cssText = 'margin:0 15px 10px;font-size:0.72rem;font-weight:700;color:#be123c;';
+            document.querySelector('.summary-strip').insertAdjacentElement('afterend', lossNote);
+        }
+        if (lossItemsCount > 0) {
+            lossNote.innerHTML = `<i class="fas fa-triangle-exclamation me-1"></i> يوجد ${lossItemsCount} صنف بربح سالب (خسارة) ضمن الفترة الحالية، وهو ما يقلل صافي الإجمالي أعلاه. إجمالي الأرباح الإيجابية فقط: ${grandPositiveProfit.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+            lossNote.style.display = 'block';
+        } else {
+            lossNote.style.display = 'none';
+        }
     };
 
     window.goToDetails = function(id) {
