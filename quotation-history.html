@@ -1356,25 +1356,21 @@ window.toggleArchiveDetails = async function(d) {
       const loadData = loadDoc.data().cartItems || {};
       const itemsList = Object.values(loadData);
       html = `
-        <div style="font-size:13px; color:#8a5b00; font-weight:bold; margin-bottom:10px;">⚠️ بيانات الحمولة المسجلة (لم يُغلق اليوم نهائياً):</div>
+        <div style="font-size:12px; color:#8a5b00; font-weight:bold; margin-bottom:8px;">⚠️ بيانات الحمولة المسجلة (لم يُغلق اليوم نهائياً):</div>
         <div class="tbl-wrap">
           <table>
             <thead>
-              <tr><th style="text-align:right;">اسم الصنف</th><th>الكمية المحملة</th><th>آخر تعديل</th></tr>
+              <tr><th style="text-align:right;">اسم الصنف</th><th>الكراتين</th><th>القطع</th><th>آخر تعديل</th></tr>
             </thead>
             <tbody>
-              ${itemsList.map(item => {
-                const cap = item.capacity || 1;
-                const unit = getUnitName(item.name || '');
-                const totalPcs = ((parseFloat(item.loadedCartons) || 0) * cap) + (parseInt(item.loadedLoose) || 0);
-                const qtyText = formatQuantityDetailed(totalPcs, cap, unit).replace(/&nbsp;/g, ' ');
-                return `
+              ${itemsList.map(item => `
                 <tr>
-                  <td style="text-align:right; font-weight:800; font-size:15px; color:var(--brand-d);">${item.name || '—'}</td>
-                  <td style="color:var(--brand); font-weight:800; font-size:15px;">${qtyText}</td>
-                  <td style="font-size:12px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
-                </tr>`;
-              }).join('')}
+                  <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
+                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0}</td>
+                  <td>${item.loadedLoose || 0}</td>
+                  <td style="font-size:11px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </div>`;
@@ -1408,84 +1404,55 @@ window.exportArchivePDF = async function(d) {
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
     let tbody = '';
-    let headHtml = '';
-    let titleText = '';
-    let orientation = 'landscape';
+    let titleText = `تقرير جرد وتتبع حركة حمولة السيارة الفعلي`;
     const printDateStr = new Date().toLocaleDateString('ar-EG');
-    const isClosedDay = invDoc.exists();
 
-    if (isClosedDay) {
-      /* يوم مغلق نهائياً: نفس شكل وحجم خط تقرير "الجرد والحركة" */
-      titleText = 'تقرير جرد وتتبع حركة حمولة السيارة الفعلي';
-      headHtml = `
-        <tr style="background:#0b5e3d; color:#fff;">
-          <th style="padding:12px 8px; border:1px solid #0b5e3d; text-align:right; font-size:16px; font-weight:800;">اسم الصنف</th>
-          <th style="padding:12px 6px; border:1px solid #0b5e3d; text-align:center; font-size:16px; font-weight:800;">المحمل</th>
-          <th style="padding:12px 6px; border:1px solid #0b5e3d; text-align:center; font-size:16px; font-weight:800;">المباع</th>
-          <th style="padding:12px 6px; border:1px solid #0b5e3d; text-align:center; font-size:16px; font-weight:800; background:#08462d;">المتبقي بالعربية</th>
-          <th style="padding:12px 6px; border:1px solid #0b5e3d; text-align:center; font-size:16px; font-weight:800;">المتبقي (حسابي)</th>
-          <th style="padding:12px 6px; border:1px solid #0b5e3d; text-align:center; font-size:16px; font-weight:800;">الراجع</th>
-          <th style="padding:12px 6px; border:1px solid #0b5e3d; text-align:center; font-size:16px; font-weight:800;">الحالة</th>
-        </tr>`;
-
-      const data = invDoc.data().inventoryData || [];
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
       data.forEach(r => {
-        let statusColor = r.status === 'عجز' ? '#d90429' : (r.status === 'زيادة' ? '#2d6a4f' : '#1b2e26');
         tbody += `
           <tr style="page-break-inside: avoid;">
-            <td style="padding:10px 8px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:15px; color:#0a4a31;">${r.name}</td>
-            <td style="padding:10px 6px; border:1px solid #0b5e3d; text-align:center; font-size:15px; color:#0b5e3d; font-weight:bold;">${r.loaded}</td>
-            <td style="padding:10px 6px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:15px;">${r.sold}</td>
-            <td style="padding:10px 6px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:15px;">${r.inTruck || '—'}</td>
-            <td style="padding:10px 6px; border:1px solid #0b5e3d; text-align:center; color:#0b5e3d; font-weight:bold; background:#eefaf1; font-size:15px;">${r.remain || '—'}</td>
-            <td style="padding:10px 6px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:15px;">${r.returnedManual}</td>
-            <td style="padding:10px 6px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:15px; color:${statusColor};">${r.status}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:13px; color:#1b2e26;">${r.name}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px; color:#1b2e26;">${r.loaded}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:13px;">${r.sold}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:13px;">${r.inTruck || '—'}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; color:#0b5e3d; font-weight:bold; background:#eefaf1; font-size:13px;">${r.remain || '—'}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">${r.returnedManual}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:13px;">${r.status}</td>
           </tr>`;
       });
     } else if (loadDoc.exists()) {
-      /* يوم غير مغلق: نفس شكل وحجم خط "إذن التحميل" (اسم الصنف + كمية إجمالية محسوبة) */
-      titleText = 'إذن تحميل بضاعة (غير مغلق نهائياً)';
-      orientation = 'portrait';
-      headHtml = `
-        <tr style="background:#0b5e3d; color:#fff;">
-          <th style="padding:14px; border:1px solid #0b5e3d; text-align:center; font-size:20px;">م</th>
-          <th style="padding:14px 15px; border:1px solid #0b5e3d; text-align:right; font-size:20px;">اسم الصنف</th>
-          <th style="padding:14px 15px; border:1px solid #0b5e3d; text-align:left; font-size:20px;">الكمية المحملة</th>
-          <th style="padding:14px 10px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">آخر تعديل</th>
-        </tr>`;
-
       const loadData = loadDoc.data().cartItems || {};
-      let index = 1;
       Object.values(loadData).forEach(r => {
-        const cap = r.capacity || 1;
-        const unit = getUnitName(r.name || '');
-        const totalPcs = ((parseFloat(r.loadedCartons) || 0) * cap) + (parseInt(r.loadedLoose) || 0);
-        const qtyText = formatQuantityDetailed(totalPcs, cap, unit).replace(/&nbsp;/g, ' ');
         tbody += `
           <tr style="page-break-inside: avoid;">
-            <td style="padding:12px; border:1px solid #0b5e3d; text-align:center; font-size:18px; font-weight:bold; width:8%;">${index++}</td>
-            <td style="padding:12px 15px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; color:#1b2e26; font-size:18px; width:52%;">${r.name || '—'}</td>
-            <td style="padding:12px 15px; border:1px solid #0b5e3d; text-align:left; font-weight:bold; color:#0b5e3d; font-size:18px; width:25%; direction:ltr;">${qtyText}</td>
-            <td style="padding:12px 8px; border:1px solid #0b5e3d; text-align:center; font-size:12px; color:#6b7a73; width:15%;">${r.lastEditedAt || '—'}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:13px;">${r.name}</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">${r.loadedCartons || 0} كرتونة</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">${r.loadedLoose || 0} قطعة</td>
+            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:12px;" colspan="4">${r.lastEditedAt || '—'}</td>
           </tr>`;
       });
     }
 
     const html = `
-      <div id="arch-pdf-area" style="padding:25px; direction:rtl; font-family:'Cairo', Tahoma, sans-serif; background:#fff; width:${orientation === 'portrait' ? '800px' : '950px'}; box-sizing:border-box;">
-        <div style="text-align:center; border-bottom:2px dashed #0b5e3d; padding-bottom:12px; margin-bottom:18px;">
-          <h1 style="margin:0 0 4px 0; font-size:26px; color:#0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
-          <h2 style="margin:0 0 8px 0; font-size:18px; color:#475569; font-weight:700;">${titleText}</h2>
-          <p style="margin:0; font-size:15px; font-weight:bold; color:#1b2e26;">تاريخ الحركة: ${d} | تاريخ الطباعة: ${printDateStr}</p>
-        </div>
-        <table style="width:100%; border-collapse:collapse; border:2px solid #0b5e3d;">
-          <thead>${headHtml}</thead>
+      <div id="arch-pdf-area" style="padding:20px; direction:rtl; font-family:'Cairo', Tahoma, sans-serif; background:#fff; width:900px; box-sizing:border-box;">
+        <h2 style="text-align:center; color:#0b5e3d; margin-bottom:2px; font-size:24px; font-weight:800;">الزيادي لزيوت السيارات</h2>
+        <h3 style="text-align:center; color:#475569; margin-bottom:6px; font-size:16px; font-weight:700;">${titleText}</h3>
+        <p style="text-align:center; margin:0 0 12px 0; font-size:13px; font-weight:bold; color:#475569; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 8px;">تاريخ الحركة: ${d} | تاريخ الطباعة: ${printDateStr}</p>
+        <table style="width:100%; border-collapse:collapse; border:1.5px solid #0b5e3d;">
+          <thead>
+            <tr style="background:#0b5e3d; color:#fff;">
+              <th style="padding:10px 6px; text-align:right; font-size:14px; font-weight:800;">اسم الصنف</th>
+              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">المحمل</th>
+              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">المباع</th>
+              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800; background:#08462d;">المتبقي بالعربية</th>
+              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">المتبقي (حسابي)</th>
+              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">الراجع</th>
+              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">الحالة</th>
+            </tr>
+          </thead>
           <tbody>${tbody}</tbody>
         </table>
-        <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:15px; color:#1b2e26; margin-top:30px; padding:0 10px;">
-          <div>توقيع أمين المخزن: .......................</div>
-          <div>توقيع السائق: .......................</div>
-        </div>
       </div>`;
 
     const container = document.createElement('div');
@@ -1498,7 +1465,7 @@ window.exportArchivePDF = async function(d) {
       filename: `تقرير_أرشيف_${d}.pdf`, 
       image: { type:'jpeg', quality:0.98 }, 
       html2canvas: { scale:2, useCORS:true }, 
-      jsPDF: { unit:'in', format:'a4', orientation: orientation },
+      jsPDF: { unit:'in', format:'a4', orientation:'landscape' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
     
