@@ -163,9 +163,6 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .inv-status-select.status-ajz { border-color: var(--red); background: var(--red-lt); color: var(--red); }
 .inv-status-select.status-zyada{ border-color: var(--green); background: var(--green-lt); color: var(--green); }
 
-.btn-complete-item { background: var(--green-lt); color: var(--green); border: 1px solid #b7dfc7; padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px; }
-.btn-restore-item { background: var(--amber-lt); color: #8a5b00; border: 1px solid #ffe599; padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px; }
-
 /* مودال التعديل السريع للتحميل */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 999; display: none; align-items: center; justify-content: center; padding: 14px; backdrop-filter: blur(3px); }
 .modal-overlay.open { display: flex; }
@@ -215,7 +212,7 @@ tr:hover td { background: var(--brand-lt); }
 .suggest-item .s-status { font-size: 11px; padding: 2px 7px; border-radius: 20px; margin-right: auto; font-weight: 700; }
 .suggest-item .s-status.done { background: var(--green-lt); color: var(--green); }
 .suggest-item .s-status.pending { background: var(--amber-lt); color: var(--amber); }
-.suggest-item mark { background: #d1fae5; color: var(--brand-d); border-radius: 3px; padding: 0 2px; }
+.suggest-item mark { background: #d1fae5; color:var(--brand-d); border-radius: 3px; padding: 0 2px; }
 
 table input[type="number"] { width: 68px; padding: 6px; text-align: center; border: 1.5px solid var(--border); border-radius: 6px; font-family: inherit; font-weight: 700; outline: none; font-size: 13px; }
 table input[type="number"]:focus { border-color: var(--brand); background: var(--brand-lt); }
@@ -923,7 +920,7 @@ window.updateManualSummaryField = function(itemId, field, val) {
     const totalManualPcs = ((parseFloat(r.currentManualCartons)||0) * r.cap) + (parseInt(r.currentManualLoose)||0);
     r.manualText = (r.currentManualCartons !== '' || r.currentManualLoose !== '') ? formatQuantityDetailed(totalManualPcs, r.cap, r.unit) : '—';
     
-    // إعادة تعيين واحتساب "الموجود بالعربية" فور إدخال الراجع
+    // احتساب المتبقي بالعربية بدقة: المحمل - المباع - الراجع
     const inTruckPcs = r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs;
     r.inTruckText = formatQuantityDetailed(Math.max(0, inTruckPcs), r.cap, r.unit);
   }
@@ -1021,10 +1018,10 @@ function buildCalculatedRows() {
       calculatedStatus = (totalManualPcs < totalRemPcs) ? "عجز" : (totalManualPcs > totalRemPcs) ? "زيادة" : "";
     }
 
-    // احتساب "الموجود بالعربية" الفعلي بعد الخصم للمبيعات والراجع
+    // المعادلة الصحيحة بدقة لعمود (الموجود بالعربية)
     const totalReturnedPcs = ((parseFloat(currentManualCartons)||0) * cap) + (parseInt(currentManualLoose)||0);
-    const inTruckPcs = totalLoadedPcs - totalSoldPcs - totalReturnedPcs;
-    const inTruckText = formatQuantityDetailed(Math.max(0, inTruckPcs), cap, unit);
+    const inTruckPcs = Math.max(0, totalLoadedPcs - totalSoldPcs - totalReturnedPcs);
+    const inTruckText = formatQuantityDetailed(inTruckPcs, cap, unit);
 
     const loadedText = formatQuantityDetailed(totalLoadedPcs, cap, unit);
     let soldText = formatQuantityDetailed(Math.abs(totalSoldPcs), cap, unit);
@@ -1212,8 +1209,16 @@ window.archiveInventory = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
+  // تسجيل القيمة الحقيقية للترحييل بدقة متناهية
   const exportData = cachedCalculatedRows.map(r => ({
-    id: r.id, name: r.it.name, loaded: r.loadedText, sold: r.soldText, inTruck: r.inTruckText, remain: r.remText, returnedManual: r.manualText, status: r.calculatedStatus || 'مضبوط'
+    id: r.id, 
+    name: r.it.name, 
+    loaded: r.loadedText, 
+    sold: r.soldText, 
+    inTruck: (r.inTruckText && r.inTruckText !== '—') ? r.inTruckText.replace(/&nbsp;/g, ' ') : '0', 
+    remain: r.remText, 
+    returnedManual: (r.manualText && r.manualText !== '—') ? r.manualText.replace(/&nbsp;/g, ' ') : '0', 
+    status: r.calculatedStatus || 'مضبوط'
   }));
 
   try {
@@ -1335,16 +1340,19 @@ window.toggleArchiveDetails = async function(d) {
               </tr>
             </thead>
             <tbody>
-              ${data.map(r => `
+              ${data.map(r => {
+                const valInTruck = (r.inTruck && r.inTruck !== '—' && r.inTruck !== '') ? r.inTruck : '0';
+                const valReturned = (r.returnedManual && r.returnedManual !== '—' && r.returnedManual !== '') ? r.returnedManual : '0';
+                return `
                 <tr>
                   <td style="text-align:right; font-weight:bold; color:var(--brand-d);">${r.name}</td>
                   <td>${r.loaded}</td>
                   <td style="color:var(--red); font-weight:bold;">${r.sold}</td>
-                  <td style="color:var(--blue); font-weight:bold;">${r.inTruck || '—'}</td>
-                  <td style="font-weight:bold;">${r.returnedManual}</td>
+                  <td style="color:var(--blue); font-weight:bold;">${valInTruck}</td>
+                  <td style="font-weight:bold;">${valReturned}</td>
                   <td style="color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--text)'}; font-weight:bold;">${r.status}</td>
-                </tr>
-              `).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>
         </div>`;
@@ -1405,13 +1413,15 @@ window.exportArchivePDF = async function(d) {
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       data.forEach(r => {
+        const valInTruck = (r.inTruck && r.inTruck !== '—' && r.inTruck !== '') ? r.inTruck : '0';
+        const valReturned = (r.returnedManual && r.returnedManual !== '—' && r.returnedManual !== '') ? r.returnedManual : '0';
         tbody += `
           <tr>
             <td style="padding:10px; border:1px solid #ccc; text-align:right; font-weight:bold;">${r.name}</td>
             <td style="padding:10px; border:1px solid #ccc; text-align:center;">${r.loaded}</td>
             <td style="padding:10px; border:1px solid #ccc; text-align:center; color:#d90429;">${r.sold}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center; color:#0284c7; font-weight:bold;">${r.inTruck || '—'}</td>
-            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${r.returnedManual}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center; color:#0284c7; font-weight:bold;">${valInTruck}</td>
+            <td style="padding:10px; border:1px solid #ccc; text-align:center;">${valReturned}</td>
             <td style="padding:10px; border:1px solid #ccc; text-align:center; font-weight:bold;">${r.status}</td>
           </tr>`;
       });
@@ -1476,14 +1486,16 @@ window.exportPDF = async function(mode = 'all') {
   let tbody = '';
   exportRows.forEach(r => {
     let statusColor = r.calculatedStatus === 'عجز' ? '#d90429' : (r.calculatedStatus === 'زيادة' ? '#2d6a4f' : '#1b2e26');
+    const valInTruck = (r.inTruckText && r.inTruckText !== '—' && r.inTruckText !== '') ? r.inTruckText : '0';
+    const valReturned = (r.manualText && r.manualText !== '—' && r.manualText !== '') ? r.manualText : '0';
     tbody += `
       <tr>
         <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: right; font-weight: bold; color: #0a4a31; font-size:14px;">${r.it.name}${r.lastEditedAt ? `<br><span style="font-size:10px; color:#8a5b00;">(تعديل التحميل: ${r.lastEditedAt})</span>` : ''}</td>
         <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; color: #0b5e3d; font-weight: bold; font-size:14px;">${r.loadedText}</td>
         <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; color: #d90429; font-weight: bold; font-size:14px;">${r.soldText}</td>
-        <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; color: #0284c7; font-weight: bold; background: #e0f2fe; font-size:14px;">${r.inTruckText}</td>
+        <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; color: #0284c7; font-weight: bold; background: #e0f2fe; font-size:14px;">${valInTruck}</td>
         <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; color: #0b5e3d; font-weight: bold; background: #eefaf1; font-size:14px;">${r.remText}</td>
-        <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; font-weight: bold; font-size:14px;">${r.manualText}</td>
+        <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; font-weight: bold; font-size:14px;">${valReturned}</td>
         <td style="padding: 10px; border: 1px solid #e4e9e6; text-align: center; font-weight: bold; color: ${statusColor}; font-size:14px;">${r.calculatedStatus || '—'}</td>
       </tr>`;
   });
