@@ -1066,29 +1066,78 @@ window.filterSummaryUI = function() {
   });
 };
 
+/* ===== تعديل دالتي نافذة التعديل السريع لحل المشكلة ===== */
 window.openEditLoadModal = function(itemId) {
-  syncSessionVars(); const fbItem = firebaseItems.find(i => i.id === itemId); if (!fbItem) return;
-  const currentCart = cartItems[itemId] || { loadedCartons: 0, loadedLoose: 0 }; const unit = getUnitName(fbItem.name);
-  document.getElementById('modalItemId').value = itemId; document.getElementById('modalItemName').textContent = fbItem.name;
+  syncSessionVars(); 
+  const fbItem = firebaseItems.find(i => i.id === itemId); 
+  if (!fbItem) return;
+
+  const currentCart = cartItems[itemId] || { loadedCartons: 0, loadedLoose: 0 }; 
+  const unit = getUnitName(fbItem.name);
+
+  document.getElementById('modalItemId').value = itemId; 
+  document.getElementById('modalItemName').textContent = fbItem.name;
+
   const fieldsArea = document.getElementById('modalFieldsArea');
+
   if (fbItem.capacity > 1) {
-    fieldsArea.innerHTML = `<div class="field-inline priority-field"><label>📦 كراتين</label><input type="number" id="m-lc" min="0" step="any" value="${currentCart.loadedCartons || ''}" placeholder="0"></div><div class="field-inline"><label>${unit} منفرد</label><input type="number" id="m-ll" min="0" value="${currentCart.loadedLoose || ''}" placeholder="0"></div>`;
+    fieldsArea.innerHTML = `
+      <div class="field-inline priority-field">
+        <label>📦 كراتين</label>
+        <input type="number" id="m-lc" min="0" step="any" value="${currentCart.loadedCartons ?? ''}" placeholder="0">
+      </div>
+      <div class="field-inline">
+        <label>${unit} منفرد</label>
+        <input type="number" id="m-ll" min="0" value="${currentCart.loadedLoose ?? ''}" placeholder="0">
+      </div>`;
   } else {
-    fieldsArea.innerHTML = `<input type="hidden" id="m-lc" value="0"><div class="field-inline" style="flex:2;"><label>الكمية المحملة (${unit})</label><input type="number" id="m-ll" min="0" value="${currentCart.loadedLoose || ''}" placeholder="0"></div>`;
+    fieldsArea.innerHTML = `
+      <input type="hidden" id="m-lc" value="0">
+      <div class="field-inline" style="flex:2;">
+        <label>الكمية المحملة (${unit})</label>
+        <input type="number" id="m-ll" min="0" value="${currentCart.loadedLoose ?? ''}" placeholder="0">
+      </div>`;
   }
-  document.getElementById('editLoadModal').classList.add('open'); setTimeout(() => { const inp = document.getElementById('m-lc') || document.getElementById('m-ll'); if (inp) { inp.focus(); inp.select(); } }, 150);
+
+  document.getElementById('editLoadModal').classList.add('open'); 
+
+  setTimeout(() => { 
+    const inp = document.getElementById('m-lc') || document.getElementById('m-ll'); 
+    if (inp) { inp.focus(); inp.select(); } 
+  }, 150);
 };
 
 window.closeEditLoadModal = function() { document.getElementById('editLoadModal').classList.remove('open'); };
 
 window.saveQuickLoadEdit = function() {
-  syncSessionVars(); const itemId = document.getElementById('modalItemId').value; const fbItem = firebaseItems.find(i => i.id === itemId); if (!fbItem) return;
-  const lcInp = document.getElementById('m-lc'); const llInp = document.getElementById('m-ll');
-  const cartons = parseFloat(lcInp ? lcInp.value : 0) || 0; const loose   = parseInt(llInp ? llInp.value : 0) || 0;
-  const now = new Date(); const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-  loadedInSession[itemId] = { cartons, loose }; if (!cartItems[itemId]) cartItems[itemId] = { name: fbItem.name, capacity: fbItem.capacity };
-  cartItems[itemId].loadedCartons = cartons; cartItems[itemId].loadedLoose   = loose; cartItems[itemId].lastEditedAt  = editTimeStr;
-  saveSession(); closeEditLoadModal(); window.toast('✅ تم تحديث كمية التحميل وتسجيل التاريخ'); buildCalculatedRows(); window.filterSummaryUI();
+  syncSessionVars(); 
+  const itemId = document.getElementById('modalItemId').value; 
+  const fbItem = firebaseItems.find(i => i.id === itemId); 
+  if (!fbItem) return;
+
+  const lcInp = document.getElementById('m-lc'); 
+  const llInp = document.getElementById('m-ll');
+
+  const cartons = parseFloat(lcInp ? lcInp.value : 0) || 0; 
+  const loose   = parseInt(llInp ? llInp.value : 0) || 0;
+
+  const now = new Date(); 
+  const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+  loadedInSession[itemId] = { cartons, loose }; 
+
+  if (!cartItems[itemId]) cartItems[itemId] = { name: fbItem.name, capacity: fbItem.capacity };
+  cartItems[itemId].loadedCartons = cartons; 
+  cartItems[itemId].loadedLoose   = loose; 
+  cartItems[itemId].lastEditedAt  = editTimeStr;
+
+  saveSession(); 
+  closeEditLoadModal(); 
+  
+  buildCalculatedRows(); 
+  window.filterSummaryUI();
+
+  window.toast('✅ تم تحديث كمية التحميل بنجاح');
 };
 
 window.archiveLoad = async function() {
