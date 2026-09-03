@@ -977,7 +977,25 @@ function buildCalculatedRows() {
   syncSessionVars();
   let loaded = firebaseItems.map(fbItem => {
     let cartData = cartItems[fbItem.id];
-    if (!cartData) { cartData = { name: fbItem.name, capacity: fbItem.capacity, loadedCartons: 0, loadedLoose: 0, manualCartons: '', manualLoose: '', diffStatus: '', lastEditedAt: '', isInventoryDone: false }; }
+    if (!cartData) { 
+      cartData = { 
+        name: fbItem.name, 
+        capacity: fbItem.capacity, 
+        loadedCartons: loadedInSession[fbItem.id]?.cartons || 0, 
+        loadedLoose: loadedInSession[fbItem.id]?.loose || 0, 
+        manualCartons: '', 
+        manualLoose: '', 
+        diffStatus: '', 
+        lastEditedAt: '', 
+        isInventoryDone: false 
+      }; 
+    } else {
+      // مزامنة حالة التحميل المحدثة من الجلسة دائماً
+      if (loadedInSession[fbItem.id]) {
+        cartData.loadedCartons = loadedInSession[fbItem.id].cartons;
+        cartData.loadedLoose   = loadedInSession[fbItem.id].loose;
+      }
+    }
     return [fbItem.id, cartData];
   });
   const liveSales = memorySalesCache || {}; const rows = [];
@@ -1066,13 +1084,19 @@ window.filterSummaryUI = function() {
   });
 };
 
-/* ===== تعديل دالتي نافذة التعديل السريع لحل المشكلة ===== */
+/* ===== تعديل دالتي نافذة التعديل السريع المصلحة بشكل جذري ===== */
 window.openEditLoadModal = function(itemId) {
   syncSessionVars(); 
   const fbItem = firebaseItems.find(i => i.id === itemId); 
   if (!fbItem) return;
 
-  const currentCart = cartItems[itemId] || { loadedCartons: 0, loadedLoose: 0 }; 
+  const currentSess = loadedInSession[itemId] || {};
+  const currentCart = cartItems[itemId] || {};
+  
+  // استرجاع الكراتين والقطع سواء من تحفط الجلسة أو السجل
+  const cartonsVal = currentSess.cartons !== undefined ? currentSess.cartons : (currentCart.loadedCartons ?? '');
+  const looseVal   = currentSess.loose   !== undefined ? currentSess.loose   : (currentCart.loadedLoose   ?? '');
+
   const unit = getUnitName(fbItem.name);
 
   document.getElementById('modalItemId').value = itemId; 
@@ -1084,18 +1108,18 @@ window.openEditLoadModal = function(itemId) {
     fieldsArea.innerHTML = `
       <div class="field-inline priority-field">
         <label>📦 كراتين</label>
-        <input type="number" id="m-lc" min="0" step="any" value="${currentCart.loadedCartons ?? ''}" placeholder="0">
+        <input type="number" id="m-lc" min="0" step="any" value="${cartonsVal}" placeholder="0">
       </div>
       <div class="field-inline">
         <label>${unit} منفرد</label>
-        <input type="number" id="m-ll" min="0" value="${currentCart.loadedLoose ?? ''}" placeholder="0">
+        <input type="number" id="m-ll" min="0" value="${looseVal}" placeholder="0">
       </div>`;
   } else {
     fieldsArea.innerHTML = `
       <input type="hidden" id="m-lc" value="0">
       <div class="field-inline" style="flex:2;">
         <label>الكمية المحملة (${unit})</label>
-        <input type="number" id="m-ll" min="0" value="${currentCart.loadedLoose ?? ''}" placeholder="0">
+        <input type="number" id="m-ll" min="0" value="${looseVal}" placeholder="0">
       </div>`;
   }
 
@@ -1124,13 +1148,16 @@ window.saveQuickLoadEdit = function() {
   const now = new Date(); 
   const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
 
+  // 1. مزامنة وتحديث حالة التحميل
   loadedInSession[itemId] = { cartons, loose }; 
 
+  // 2. تحديث سجل الكارت
   if (!cartItems[itemId]) cartItems[itemId] = { name: fbItem.name, capacity: fbItem.capacity };
   cartItems[itemId].loadedCartons = cartons; 
   cartItems[itemId].loadedLoose   = loose; 
   cartItems[itemId].lastEditedAt  = editTimeStr;
 
+  // 3. الحفظ وإعادة تشكيل الصفوف وعرض الواجهة
   saveSession(); 
   closeEditLoadModal(); 
   
