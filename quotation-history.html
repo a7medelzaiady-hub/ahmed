@@ -350,10 +350,10 @@ table select:focus { border-color: var(--brand); }
       <div style="display:flex; gap:8px; margin-right:auto; flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm admin-only" onclick="window.archiveInventory()" style="background:#0a4a31;">🔒 إغلاق وترحيل اليوم</button>
         <button class="btn btn-success btn-sm" onclick="window.exportPDF('completed')" style="display:flex; align-items:center; gap:5px; background:var(--brand); color:#fff;">
-          📄 PDF الأصناف المكتملة
+          👁️ قراءة PDF (المكتملة)
         </button>
         <button class="btn btn-success btn-sm" onclick="window.exportPDF('all')" style="display:flex; align-items:center; gap:5px; background:var(--red); color:#fff;">
-          📄 PDF كل الجرد
+          👁️ قراءة PDF (كل الجرد)
         </button>
       </div>
     </div>
@@ -1283,7 +1283,7 @@ window.fetchArchive = async function() {
               👁️ عرض التفاصيل
             </button>
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
-              📄 تحميل PDF
+              👁️ قراءة PDF
             </button>
             <button class="btn btn-danger btn-sm" onclick="window.deleteArchiveDate('${d}')">
               🗑️ مسح
@@ -1394,7 +1394,7 @@ window.deleteArchiveDate = async function(d) {
 };
 
 window.exportArchivePDF = async function(d) {
-  window.toast('⏳ جاري إعداد ملف الـ PDF...');
+  window.toast('⏳ جاري فتح تقرير الـ PDF للعارض...');
   try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
@@ -1457,13 +1457,16 @@ window.exportArchivePDF = async function(d) {
     document.body.appendChild(container);
 
     const opt = { margin:0, filename: `تقرير_أرشيف_${d}.pdf`, image:{ type:'jpeg', quality:0.98 }, html2canvas:{ scale:2, useCORS:true }, jsPDF:{ unit:'in', format:'a4', orientation:'landscape' } };
-    html2pdf().set(opt).from(container.querySelector('#arch-pdf-area')).save().then(() => {
+    
+    // فتح الملف للعرض والقراءة بدلاً من التحميل المباشر
+    html2pdf().set(opt).from(container.querySelector('#arch-pdf-area')).output('bloburl').then((pdfUrl) => {
       document.body.removeChild(container);
-      window.toast('✅ تم تصدير ملف PDF بنجاح');
+      window.open(pdfUrl, '_blank');
+      window.toast('✅ تم فتح الملف للعرض والقراءة');
     });
   } catch (e) {
     console.error(e);
-    window.toast('❌ حدث خطأ أثناء التصدير');
+    window.toast('❌ حدث خطأ أثناء عرض التقرير');
   }
 };
 
@@ -1471,7 +1474,7 @@ window.exportPDF = async function(mode = 'all') {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات لتصديرها'); return; }
   const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
   if (!exportRows.length) { window.toast('⚠️ لا توجد أصناف مكتملة لتصديرها'); return; }
-  window.toast('⏳ جاري إنشاء تقرير الجرد PDF...');
+  window.toast('⏳ جاري تجهيز تقرير الجرد للعرض...');
   const reportDate = document.getElementById('summaryDate').value || defaultDateStr; const nowStr = new Date().toLocaleDateString('ar-EG');
   let tbody = '';
   exportRows.forEach(r => {
@@ -1499,7 +1502,13 @@ window.exportPDF = async function(mode = 'all') {
     </div>`;
   const container = document.createElement('div'); container.innerHTML = html; container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '-9999px'; document.body.appendChild(container);
   const opt = { margin: 0, filename: `تقرير_جرد_العربة_${mode}_${reportDate}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } };
-  html2pdf().set(opt).from(container.querySelector('#summary-print-area')).save().then(() => { document.body.removeChild(container); window.toast('✅ تم تصدير تقرير الجرد بنجاح'); });
+  
+  // فتح الملف للعرض والقراءة بدلاً من التحميل المباشر
+  html2pdf().set(opt).from(container.querySelector('#summary-print-area')).output('bloburl').then((pdfUrl) => { 
+    document.body.removeChild(container); 
+    window.open(pdfUrl, '_blank');
+    window.toast('✅ تم فتح ملف PDF للقراءة'); 
+  });
 };
 
 window.exportLoadPDF = async function() {
@@ -1522,7 +1531,13 @@ window.exportLoadPDF = async function() {
     </div>`;
   const container = document.createElement('div'); container.innerHTML = invoiceHTML; container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '-9999px'; document.body.appendChild(container);
   const opt = { margin: 0, filename: `إذن_تحميل_${reportDate}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } };
-  html2pdf().set(opt).from(container.querySelector('#invoice-print-area')).save().then(() => { document.body.removeChild(container); window.toast('✅ تم تصدير الفاتورة بنجاح'); }).catch(err => { console.error(err); window.toast('❌ حدث خطأ أثناء التصدير'); document.body.removeChild(container); });
+  
+  // فتح إذن التحميل مباشرة للعرض والقراءة
+  html2pdf().set(opt).from(container.querySelector('#invoice-print-area')).output('bloburl').then((pdfUrl) => { 
+    document.body.removeChild(container); 
+    window.open(pdfUrl, '_blank');
+    window.toast('✅ تم فتح الإذن للقراءة'); 
+  }).catch(err => { console.error(err); window.toast('❌ حدث خطأ أثناء المعاينة'); document.body.removeChild(container); });
 };
 
 let toastTimer;
