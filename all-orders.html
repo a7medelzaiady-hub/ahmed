@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -7,10 +8,6 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- مكتبة html2canvas لتحويل الجدول لصورة حرارية/واضحة للمشاركة -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
     <style>
         :root { 
             --accent: #b58900; /* لون مميز للنواقص (برتقالي/ذهبي) ليختلف عن المشتريات */
@@ -55,32 +52,6 @@
         .table-responsive { border-radius: 15px; overflow: hidden; border: 1px solid var(--border); }
         .table th { background-color: #f0f6f3; color: var(--header-bg); font-weight: 700; text-align: center; }
         .table td { text-align: center; vertical-align: middle; font-weight: 600; }
-
-        .btn-share {
-            background: #25d366;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 4px 10px;
-            font-size: 0.82rem;
-            font-weight: 700;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .btn-share:hover { background: #1eb954; color: white; }
-
-        /* النافذة الخفية لتوليد صورة قائمة النواقص */
-        .thermal-capture-container { position: absolute; left: -9999px; top: 0; }
-        #thermalReceiptArea { background: #ffffff; width: 380px; padding: 18px; color: #000000; font-family: 'Cairo', sans-serif; }
-        .receipt-header { text-align: center; border-bottom: 2px dashed #000000; padding-bottom: 12px; margin-bottom: 12px; }
-        .receipt-header h3 { margin: 0; font-size: 21px; font-weight: 800; }
-        .receipt-header p { margin: 4px 0 8px; font-size: 13px; font-weight: 700; }
-        .receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        .receipt-table th { border-bottom: 2px solid #000000; text-align: right; font-size: 12.5px; font-weight: 800; padding: 4px 2px; }
-        .receipt-table td { padding: 7px 2px; font-size: 12.5px; font-weight: 700; border-bottom: 1px dashed #cccccc; }
     </style>
 </head>
 <body>
@@ -91,12 +62,7 @@
 <div class="header">
     <a href="index.html" class="text-white"><i class="fas fa-arrow-right"></i></a>
     <h6 class="m-0 fw-bold">دفتر تسجيل نواقص الزيوت والبضاعة</h6>
-    <div class="d-flex align-items-center gap-2">
-        <button class="btn-share" onclick="window.shareShortages()" title="مشاركة القائمة صورة">
-            <i class="fas fa-share-alt"></i> شير
-        </button>
-        <span class="badge bg-warning text-dark fw-bold">نواقص يومية</span>
-    </div>
+    <span class="badge bg-warning text-dark fw-bold">نواقص يومية</span>
 </div>
 
 <div class="container mt-4">
@@ -148,27 +114,6 @@
     </div>
 </div>
 
-<!-- كارت توليد صورة قائمة النواقص للشير -->
-<div class="thermal-capture-container">
-    <div id="thermalReceiptArea">
-        <div class="receipt-header">
-            <h3>شركة الزيادي</h3>
-            <p>لزيوت وفلاتر السيارات</p>
-            <span style="border: 1.5px solid #000; padding: 2px 8px; border-radius: 5px; font-weight: 800;">قائمة نواقص البضاعة المطلوبة</span>
-        </div>
-        <table class="receipt-table">
-            <thead>
-                <tr>
-                    <th style="text-align:right;">الصنف</th>
-                    <th style="text-align:center; width:60px;">العدد</th>
-                    <th style="text-align:left;">ملاحظة</th>
-                </tr>
-            </thead>
-            <tbody id="thShortageItems"></tbody>
-        </table>
-    </div>
-</div>
-
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -185,8 +130,6 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-    let currentShortages = [];
 
     // تحميل الأصناف في الـ Datalist للبحث التلقائي
     async function loadInventory() {
@@ -211,7 +154,6 @@
         onSnapshot(q, (snapshot) => {
             const tbody = document.getElementById('shortagesTableBody');
             let html = "";
-            currentShortages = [];
             
             if(snapshot.empty) {
                 tbody.innerHTML = `<tr><td colspan="5" class="text-success p-4">كل الأصناف متوفرة ولا توجد نواقص حالياً الحمد لله 👍</td></tr>`;
@@ -223,8 +165,6 @@
                 const id = docSnap.id;
                 const dateStr = data.date ? data.date : "غير محدد";
                 
-                currentShortages.push(data);
-
                 html += `
                     <tr id="row_${id}">
                         <td class="text-end text-danger">${data.name}</td>
@@ -286,39 +226,6 @@
                 alert("فشل في حذف الصنف");
             }
         }
-    };
-
-    // دالة مشاركة القائمة كصورة
-    window.shareShortages = () => {
-        if(!currentShortages.length) {
-            alert("لا توجد نواقص لمشاركتها حالياً!");
-            return;
-        }
-
-        const tbody = document.getElementById('thShortageItems');
-        tbody.innerHTML = currentShortages.map(item => `
-            <tr>
-                <td style="text-align:right;">${item.name}</td>
-                <td style="text-align:center;">${item.qty}</td>
-                <td style="text-align:left;">${item.note || '-'}</td>
-            </tr>
-        `).join('');
-
-        setTimeout(() => {
-            html2canvas(document.getElementById('thermalReceiptArea'), { scale: 2 }).then(canvas => {
-                canvas.toBlob(blob => {
-                    const file = new File([blob], `shortages.png`, { type: 'image/png' });
-                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                        navigator.share({ files: [file], title: 'قائمة النواقص' });
-                    } else {
-                        const link = document.createElement('a'); 
-                        link.download = 'shortages.png'; 
-                        link.href = canvas.toDataURL(); 
-                        link.click();
-                    }
-                });
-            });
-        }, 300);
     };
 
     // تشغيل الدوال عند تحميل الصفحة
