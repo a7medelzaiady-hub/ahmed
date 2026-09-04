@@ -1,551 +1,329 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>تسجيل طلبية جديدة - شركة الزيادي</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة النواقص - شركة الزيادي</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- مكتبة html2canvas لتحويل الجدول لصورة حرارية/واضحة للمشاركة -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-<!-- إعدادات PWA -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0b5e3d">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
+    <style>
+        :root { 
+            --accent: #b58900; /* لون مميز للنواقص (برتقالي/ذهبي) ليختلف عن المشتريات */
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+        }
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); padding-bottom: 30px; }
+        
+        .header { 
+            background: var(--header-bg); padding: 15px 20px; display: flex; 
+            align-items: center; justify-content: space-between; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: white;
+            position: sticky; top: 0; z-index: 1000;
+        }
 
-<!-- مكتبات html2canvas و moment لمعالجة الصور والتواريخ -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+        .glass-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 20px; padding: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; 
+        }
 
-<style>
-:root {
-  --accent: #0b5e3d;
-  --header-bg: #0b5e3d;
-  --bg-light: #f4f7f6;
-  --text-primary: #1b2e26;
-  --border: #dce3de;
-}
+        label { font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; color: var(--header-bg); }
 
-* { box-sizing: border-box !important; }
+        input, select { 
+            background: var(--white) !important; border: 1px solid var(--border) !important; 
+            color: var(--text-primary) !important; border-radius: 12px !important; 
+            margin-bottom: 15px; padding: 12px !important; font-weight: 600;
+        }
+        input:focus, select:focus { border-color: var(--header-bg) !important; box-shadow: 0 0 8px rgba(11, 94, 61, 0.1) !important; }
 
-body {
-  background: var(--bg-light);
-  font-family: 'Cairo', sans-serif;
-  color: var(--text-primary);
-  padding-bottom: 40px;
-  margin: 0;
-}
+        .btn-add { 
+            background: var(--header-bg); color: #fff; border: none; 
+            width: 100%; padding: 12px; border-radius: 15px; 
+            font-weight: bold; font-size: 1.1rem; transition: 0.3s;
+        }
+        .btn-add:active { transform: scale(0.98); }
 
-.header-nav {
-  background: var(--header-bg);
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: white;
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
+        .table-responsive { border-radius: 15px; overflow: hidden; border: 1px solid var(--border); }
+        .table th { background-color: #f0f6f3; color: var(--header-bg); font-weight: 700; text-align: center; }
+        .table td { text-align: center; vertical-align: middle; font-weight: 600; }
 
-.nav-btn {
-  background: rgba(255,255,255,0.15);
-  width: 34px; height: 34px;
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: white; text-decoration: none; border: none; cursor: pointer;
-  font-size: 0.85rem;
-}
+        .btn-share {
+            background: #25d366;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-share:hover { background: #1eb954; color: white; }
 
-.form-card {
-  background: white;
-  border-radius: 12px;
-  padding: 16px;
-  margin: 14px;
-  border: 1px solid var(--border);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
-}
-
-.form-label {
-  font-size: 0.8rem;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.form-control, .form-select {
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  border: 1.5px solid var(--border);
-  padding: 8px 12px;
-}
-
-.form-control:focus, .form-select:focus {
-  border-color: var(--accent);
-  box-shadow: none;
-}
-
-.modal-overlay {
-  display: none;
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: rgba(0,0,0,0.6);
-  z-index: 9999;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(4px);
-}
-
-.modal-box {
-  background: white;
-  width: 88%;
-  max-width: 350px;
-  border-radius: 16px;
-  padding: 22px 18px;
-  text-align: center;
-}
-
-/* المنطقة الحرارية الخفية لتوليد صورة الشير */
-.thermal-capture-container { position: absolute; left: -9999px; top: 0; }
-#thermalReceiptArea { background: #ffffff; width: 380px; padding: 18px; color: #000000; font-family: 'Cairo', sans-serif; }
-.receipt-header { text-align: center; border-bottom: 2px dashed #000000; padding-bottom: 12px; margin-bottom: 12px; }
-.receipt-header h3 { margin: 0; font-size: 21px; font-weight: 800; }
-.receipt-header p { margin: 4px 0 8px; font-size: 13px; font-weight: 700; }
-.receipt-header .order-prep-badge { font-size: 15px; font-weight: 800; border: 1.5px solid #000; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 5px;}
-.receipt-info { font-size: 13.5px; font-weight: 800; border-bottom: 1px dashed #000000; padding-bottom: 10px; margin-bottom: 12px; }
-.receipt-info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-.receipt-table th { border-bottom: 2px solid #000000; text-align: right; font-size: 12.5px; font-weight: 800; padding: 4px 2px; }
-.receipt-table td { padding: 7px 2px; font-size: 12.5px; font-weight: 700; border-bottom: 1px dashed #cccccc; }
-.receipt-totals { border-top: 2px dashed #000000; padding-top: 8px; margin-top: 10px; }
-.receipt-total-row { padding-top: 4px; font-size: 14px; font-weight: 800; display: flex; justify-content: space-between; color: #333;}
-.receipt-total-row.grand-total { border-top: 1px solid #000; margin-top: 8px; padding-top: 8px; font-size: 17px; font-weight: 900; color: #000;}
-.receipt-footer-note { text-align: center; margin-top: 15px; font-size: 12.5px; font-weight: 800; border-top: 1px dashed #ccc; padding-top: 10px; }
-
-.spinner {
-  width: 30px; height: 30px;
-  border: 3px solid #e2e8f0;
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  margin: 0 auto 10px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
+        /* النافذة الخفية لتوليد صورة قائمة النواقص */
+        .thermal-capture-container { position: absolute; left: -9999px; top: 0; }
+        #thermalReceiptArea { background: #ffffff; width: 380px; padding: 18px; color: #000000; font-family: 'Cairo', sans-serif; }
+        .receipt-header { text-align: center; border-bottom: 2px dashed #000000; padding-bottom: 12px; margin-bottom: 12px; }
+        .receipt-header h3 { margin: 0; font-size: 21px; font-weight: 800; }
+        .receipt-header p { margin: 4px 0 8px; font-size: 13px; font-weight: 700; }
+        .receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .receipt-table th { border-bottom: 2px solid #000000; text-align: right; font-size: 12.5px; font-weight: 800; padding: 4px 2px; }
+        .receipt-table td { padding: 7px 2px; font-size: 12.5px; font-weight: 700; border-bottom: 1px dashed #cccccc; }
+    </style>
 </head>
 <body>
 
-<div class="header-nav">
-  <a href="index.html" class="nav-btn"><i class="fas fa-home"></i></a>
-  <h6 class="m-0 fw-bold" style="font-size: 0.85rem;" id="pageTitle">تسجيل طلبية جديدة</h6>
-  <a href="all-orders.html" class="nav-btn"><i class="fas fa-clipboard-list"></i></a>
-</div>
+<!-- قائمة الأصناف للبحث التلقائي -->
+<datalist id="inventoryList"></datalist>
 
-<div class="form-card">
-  <form id="orderForm" onsubmit="event.preventDefault(); saveOrder();">
-    <div class="mb-3">
-      <label class="form-label">اسم العميل</label>
-      <input type="text" id="customerName" class="form-control" placeholder="أدخل اسم العميل..." required>
-    </div>
-
-    <div class="mb-3">
-      <label class="form-label">تاريخ موعد التسليم</label>
-      <input type="date" id="orderDate" class="form-control" required>
-    </div>
-
-    <hr style="border-color: var(--border);">
-
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <label class="form-label m-0">الأصناف المطلوبة</label>
-      <button type="button" class="btn btn-sm btn-outline-success fw-bold" onclick="addItemRow()">
-        <i class="fas fa-plus"></i> إضافة صنف
-      </button>
-    </div>
-
-    <div id="itemsContainer"></div>
-
-    <div class="d-flex justify-content-between align-items-center my-3 p-2 rounded" style="background: #f0faf4;">
-      <span class="fw-bold style="font-size: 0.85rem;">إجمالي الطلبية:</span>
-      <span class="fw-bold text-success fs-6" id="grandTotalDisplay">0.00 ج.م</span>
-    </div>
-
-    <button type="submit" class="btn btn-success w-100 fw-bold py-2 mt-2" id="submitBtn" style="border-radius: 8px;">
-      <i class="fas fa-save"></i> حفظ الطلبية
-    </button>
-  </form>
-</div>
-
-<!-- نافذة نجاح الحفظ وخيارات المشاركة -->
-<div class="modal-overlay" id="successModal">
-  <div class="modal-box">
-    <div class="mb-2">
-      <i class="fas fa-check-circle text-success" style="font-size: 3.2rem;"></i>
-    </div>
-    <h5 class="fw-bold mb-1" style="font-size: 0.95rem;">تم تسجيل الطلبية!</h5>
-    <p id="successModalText" class="text-muted small mb-3" style="font-size: 0.78rem;"></p>
-    
-    <div class="d-flex flex-column gap-2">
-      <!-- زر مشاركة الطلبية عبر الشير والتواصل -->
-      <button id="shareCreatedOrderBtn" class="btn btn-success w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="border-radius: 8px; font-size: 0.8rem;">
-        <i class="fas fa-share-alt"></i> مشاركة الطلبية (واتساب)
-      </button>
-
-      <div class="d-flex gap-2">
-        <a href="all-orders.html" class="btn btn-outline-success w-100 fw-bold py-2" style="border-radius: 8px; font-size: 0.78rem;">
-          <i class="fas fa-list"></i> كل الطلبات
-        </a>
-        <button type="button" onclick="resetForm()" class="btn btn-light w-100 fw-bold py-2" style="border-radius: 8px; border: 1px solid #ddd; font-size: 0.78rem;">
-          <i class="fas fa-plus"></i> جديدة
+<div class="header">
+    <a href="index.html" class="text-white"><i class="fas fa-arrow-right"></i></a>
+    <h6 class="m-0 fw-bold">دفتر تسجيل نواقص الزيوت والبضاعة</h6>
+    <div class="d-flex align-items-center gap-2">
+        <button class="btn-share" onclick="window.shareShortages()" title="مشاركة القائمة صورة">
+            <i class="fas fa-share-alt"></i> شير
         </button>
-      </div>
-
-      <a href="index.html" class="btn btn-link text-muted fw-bold text-decoration-none mt-1 small" style="font-size: 0.75rem;">
-        <i class="fas fa-home"></i> الرئيسية
-      </a>
+        <span class="badge bg-warning text-dark fw-bold">نواقص يومية</span>
     </div>
-  </div>
 </div>
 
-<!-- نافذة تحميل إنشاء صورة المشاركة -->
-<div class="modal-overlay" id="shareLoadingModal">
-  <div class="modal-box" style="max-width: 250px;">
-    <div class="spinner mb-2"></div>
-    <h6 class="fw-bold text-dark m-0" style="font-size: 0.8rem;">جاري جلب الفاتورة وإنشاء الصورة...</h6>
-  </div>
+<div class="container mt-4">
+    <!-- كارت إضافة صنف ناقص جديد -->
+    <div class="glass-card">
+        <h5 class="mb-3 fw-bold text-success"><i class="fas fa-plus-circle me-1"></i> تسجيل صنف ناقص جديد</h5>
+        <form id="shortageForm" onsubmit="event.preventDefault(); window.saveShortage();">
+            <div class="row">
+                <div class="col-md-6 col-12">
+                    <label>اسم صنف الزيت / الفلتر</label>
+                    <input type="text" id="itemName" class="form-control" list="inventoryList" placeholder="ابحث أو اكتب اسم الصنف هنا..." required>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label>الكمية المطلوبة</label>
+                    <input type="number" id="itemQty" class="form-control" placeholder="0" min="1" required>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label>ملاحظة (اختياري)</label>
+                    <input type="text" id="itemNote" class="form-control" placeholder="مثال: زبون مستعجل..">
+                </div>
+            </div>
+            <button type="submit" class="btn-add mt-2" id="btnSubmit">
+                <i class="fas fa-save me-1"></i> إضافة لقائمة النواقص
+            </button>
+        </form>
+    </div>
+
+    <!-- كارت عرض النواقص الحالية -->
+    <div class="glass-card">
+        <h5 class="mb-3 fw-bold text-danger"><i class="fas fa-exclamation-triangle me-1"></i> قائمة النواقص الحالية بالمحل</h5>
+        <div class="table-responsive">
+            <table class="table table-hover m-0">
+                <thead>
+                    <tr>
+                        <th>الصنف</th>
+                        <th>العدد المطلـوب</th>
+                        <th>تاريخ التسجيل</th>
+                        <th>ملاحظات</th>
+                        <th>إجراء</th>
+                    </tr>
+                </thead>
+                <tbody id="shortagesTableBody">
+                    <tr>
+                        <td colspan="5" class="text-muted p-4">جاري تحميل النواقص الحالية...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- كود منطقة الفاتورة الحرارية الخفية لتوليد الصورة -->
+<!-- كارت توليد صورة قائمة النواقص للشير -->
 <div class="thermal-capture-container">
-  <div id="thermalReceiptArea">
-    <div class="receipt-header">
-      <h3>شركة الزيادي</h3>
-      <p>لزيوت وفلاتر السيارات</p>
-      <span class="order-prep-badge">قائمة بتجهيز الطلبية</span>
+    <div id="thermalReceiptArea">
+        <div class="receipt-header">
+            <h3>شركة الزيادي</h3>
+            <p>لزيوت وفلاتر السيارات</p>
+            <span style="border: 1.5px solid #000; padding: 2px 8px; border-radius: 5px; font-weight: 800;">قائمة نواقص البضاعة المطلوبة</span>
+        </div>
+        <table class="receipt-table">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">الصنف</th>
+                    <th style="text-align:center; width:60px;">العدد</th>
+                    <th style="text-align:left;">ملاحظة</th>
+                </tr>
+            </thead>
+            <tbody id="thShortageItems"></tbody>
+        </table>
     </div>
-    <div class="receipt-info">
-      <div class="receipt-info-row"><span>تاريخ الطلبية: <span id="thOrderDate">0000</span></span></div>
-      <div class="receipt-info-row"><span>موعد التسليم: <strong id="thRemainingDays">—</strong></span></div>
-      <div class="receipt-info-row"><span>العميل: <strong id="thCustomerName">—</strong></span></div>
-    </div>
-    <table class="receipt-table">
-      <thead>
-        <tr>
-          <th style="text-align:right;">الصنف</th>
-          <th style="text-align:center; width:45px;">العدد</th>
-          <th style="text-align:center; width:65px;">السعر</th>
-          <th style="text-align:left; width:75px;">الإجمالي</th>
-        </tr>
-      </thead>
-      <tbody id="thReceiptItems"></tbody>
-    </table>
-    <div class="receipt-totals">
-      <div class="receipt-total-row"><span>الإجمالي:</span><span id="thFinalTotal">0.00 ج.م</span></div>
-      <div class="receipt-total-row"><span>الحساب السابق:</span><span id="thPreviousBalance">0.00 ج.م</span></div>
-      <div class="receipt-total-row grand-total"><span>إجمالي الحساب:</span><span id="thGrandTotal">0.00 ج.م</span></div>
-    </div>
-    <div class="receipt-footer-note">
-      برجاء مراجعة الأصناف والأعداد والأسعار جيدا وتأكيدها معنا
-      <br>
-      <span style="font-size: 15px; font-weight: 900; margin-top: 8px; display: inline-block;">01027830834</span>
-    </div>
-  </div>
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, doc, getDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-  authDomain: "ahmedelzaiady.firebaseapp.com",
-  projectId: "ahmedelzaiady",
-  storageBucket: "ahmedelzaiady.firebasestorage.app",
-  messagingSenderId: "300306825071",
-  appId: "1:300306825071:web:0426ddde56280fa090329a"
-};
-
-const app = initializeApp(firebaseConfig);
-let db;
-try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-  });
-} catch (e) {
-  db = getFirestore(app);
-}
-
-let customerBalancesMap = {};
-let editOrderId = null;
-
-// تعيين تاريخ اليوم كقيمة افتراضية
-document.getElementById('orderDate').value = moment().format('YYYY-MM-DD');
-
-async function loadBalances() {
-  try {
-    const [custSnap, invSnap, transSnap] = await Promise.all([
-      getDocs(collection(db, "customers")),
-      getDocs(collection(db, "invoices")),
-      getDocs(collection(db, "transactions"))
-    ]);
-
-    const invoiceBalances = {};
-    invSnap.forEach(d => {
-      const data = d.data();
-      const cid = data.customerId;
-      if (cid) invoiceBalances[cid] = (invoiceBalances[cid] || 0) + (Number(data.remaining) || 0);
-    });
-
-    const transBalances = {};
-    transSnap.forEach(d => {
-      const data = d.data();
-      const cid = data.partyId;
-      if (cid) {
-        let effect = 0;
-        if (data.type === 'قبض') effect = -(Number(data.amount) || 0);
-        else if (data.type === 'صرف') effect = (Number(data.amount) || 0);
-        transBalances[cid] = (transBalances[cid] || 0) + effect;
-      }
-    });
-
-    customerBalancesMap = {};
-    custSnap.docs.forEach(docSnap => {
-      const data = docSnap.data();
-      const id = docSnap.id;
-      const opening = Number(data.initialBalance) || 0;
-      const invDebt = invoiceBalances[id] || 0;
-      const transDebt = transBalances[id] || 0;
-      const finalBalance = opening + invDebt + transDebt;
-
-      customerBalancesMap[id] = finalBalance;
-      if (data.name) customerBalancesMap[data.name.trim()] = finalBalance;
-    });
-  } catch (e) {
-    console.error("خطأ جلب المديونيات:", e);
-  }
-}
-
-window.addItemRow = (name = '', qty = 1, price = 0) => {
-  const container = document.getElementById('itemsContainer');
-  const rowId = 'item_' + Date.now() + Math.random().toString(36).substr(2, 4);
-  
-  const div = document.createElement('div');
-  div.className = 'row g-2 align-items-center mb-2 item-row';
-  div.id = rowId;
-  div.innerHTML = `
-    <div class="col-5">
-      <input type="text" class="form-control item-name" placeholder="الصنف" value="${name}" required>
-    </div>
-    <div class="col-3">
-      <input type="number" class="form-control item-qty" placeholder="العدد" value="${qty}" min="1" step="any" oninput="calculateTotal()" required>
-    </div>
-    <div class="col-3">
-      <input type="number" class="form-control item-price" placeholder="السعر" value="${price}" step="any" oninput="calculateTotal()" required>
-    </div>
-    <div class="col-1 p-0 text-center">
-      <button type="button" class="btn btn-link text-danger p-0" onclick="document.getElementById('${rowId}').remove(); calculateTotal();">
-        <i class="fas fa-trash-alt"></i>
-      </button>
-    </div>
-  `;
-  container.appendChild(div);
-  calculateTotal();
-};
-
-window.calculateTotal = () => {
-  let total = 0;
-  document.querySelectorAll('.item-row').forEach(row => {
-    const qty = Number(row.querySelector('.item-qty').value) || 0;
-    const price = Number(row.querySelector('.item-price').value) || 0;
-    total += (qty * price);
-  });
-  document.getElementById('grandTotalDisplay').innerText = total.toFixed(2) + ' ج.م';
-  return total;
-};
-
-window.saveOrder = async () => {
-  const customerName = document.getElementById('customerName').value.trim();
-  const rawDate = document.getElementById('orderDate').value;
-  const formattedDate = moment(rawDate).format('DD-MM-YYYY');
-
-  const items = [];
-  document.querySelectorAll('.item-row').forEach(row => {
-    const name = row.querySelector('.item-name').value.trim();
-    const qty = Number(row.querySelector('.item-qty').value) || 0;
-    const price = Number(row.querySelector('.item-price').value) || 0;
-    if (name && qty > 0) {
-      items.push({ name, quantity: qty, price });
-    }
-  });
-
-  if (!items.length) {
-    alert("برجاء إضافة صنف واحد على الأقل.");
-    return;
-  }
-
-  const total = calculateTotal();
-  const submitBtn = document.getElementById('submitBtn');
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> جاري الحفظ...';
-
-  try {
-    let savedOrderId = editOrderId;
-    const orderData = {
-      customerName,
-      date: formattedDate,
-      items,
-      total,
-      status: 'pending',
-      updatedAt: new Date().toISOString()
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
     };
 
-    if (editOrderId) {
-      await updateDoc(doc(db, 'orders', editOrderId), orderData);
-    } else {
-      orderData.createdAt = new Date().toISOString();
-      const docRef = await addDoc(collection(db, 'orders'), orderData);
-      savedOrderId = docRef.id;
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let currentShortages = [];
+
+    // تحميل الأصناف في الـ Datalist للبحث التلقائي
+    async function loadInventory() {
+        try {
+            const datalist = document.getElementById('inventoryList');
+            const invSnap = await getDocs(collection(db, "inventory"));
+            let options = "";
+            invSnap.forEach(doc => {
+                const data = doc.data();
+                const name = data.name || data.itemName;
+                if(name) options += `<option value="${name}">`;
+            });
+            datalist.innerHTML = options;
+        } catch (e) {
+            console.error("خطأ في جلب المخزون:", e);
+        }
     }
 
-    document.getElementById('successModalText').innerHTML = `تم حفظ طلبية العميل <b>${customerName}</b> بنجاح`;
-    
-    // ربط زر المشاركة بالدالة الحرارية
-    document.getElementById('shareCreatedOrderBtn').onclick = () => {
-      shareAsThermalInvoice(savedOrderId);
-    };
+    // الاستماع المباشر (Realtime) لجدول النواقص
+    function listenToShortages() {
+        const q = query(collection(db, "shortages"), orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+            const tbody = document.getElementById('shortagesTableBody');
+            let html = "";
+            currentShortages = [];
+            
+            if(snapshot.empty) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-success p-4">كل الأصناف متوفرة ولا توجد نواقص حالياً الحمد لله 👍</td></tr>`;
+                return;
+            }
 
-    document.getElementById('successModal').style.display = 'flex';
-  } catch (e) {
-    console.error("خطأ الحفظ:", e);
-    alert("حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً.");
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = '<i class="fas fa-save"></i> حفظ الطلبية';
-  }
-};
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+                const dateStr = data.date ? data.date : "غير محدد";
+                
+                currentShortages.push(data);
 
-window.resetForm = () => {
-  document.getElementById('orderForm').reset();
-  document.getElementById('itemsContainer').innerHTML = '';
-  document.getElementById('orderDate').value = moment().format('YYYY-MM-DD');
-  document.getElementById('successModal').style.display = 'none';
-  editOrderId = null;
-  addItemRow();
-};
-
-function calculateRemainingDays(dateStr) {
-  if (!dateStr) return 9999;
-  try {
-    const cleanDateStr = dateStr.split(' ')[0].trim();
-    const today = moment().startOf('day');
-    let target = moment(cleanDateStr, 'DD-MM-YYYY', true).startOf('day');
-    if (!target.isValid()) target = moment(cleanDateStr, 'YYYY-MM-DD', true).startOf('day');
-    if (!target.isValid()) target = moment(cleanDateStr).startOf('day');
-    if (!target.isValid()) return 9999;
-    return target.diff(today, 'days');
-  } catch (e) { return 9999; }
-}
-
-window.shareAsThermalInvoice = async (orderId) => {
-  document.getElementById('shareLoadingModal').style.display = 'flex';
-  
-  try {
-    const orderSnap = await getDoc(doc(db, 'orders', orderId));
-    if (!orderSnap.exists()) return;
-    const order = { id: orderSnap.id, ...orderSnap.data() };
-
-    const cId = order.customerId;
-    const cName = order.customerName ? order.customerName.trim() : '';
-
-    let prevBalance = 0;
-    if (cId && customerBalancesMap[cId] !== undefined) prevBalance = customerBalancesMap[cId];
-    else if (cName && customerBalancesMap[cName] !== undefined) prevBalance = customerBalancesMap[cName];
-
-    const currentTotal = Number(order.total || 0);
-    const grandTotal = prevBalance + currentTotal;
-
-    document.getElementById('thOrderDate').innerText = order.date ? order.date.split(' ')[0] : '—';
-    document.getElementById('thCustomerName').innerText = order.customerName || 'عميل';
-
-    const daysRemaining = calculateRemainingDays(order.date);
-    let remainingText = '';
-    if (daysRemaining === 9999) remainingText = 'غير محدد';
-    else if (daysRemaining === 0) remainingText = 'اليوم';
-    else if (daysRemaining === 1) remainingText = 'غداً';
-    else if (daysRemaining === 2) remainingText = 'بعد غد';
-    else if (daysRemaining > 2) remainingText = `بعد ${daysRemaining} أيام`;
-    else if (daysRemaining < 0) remainingText = `متأخر منذ ${Math.abs(daysRemaining)} يوم`;
-
-    document.getElementById('thRemainingDays').innerText = remainingText;
-    document.getElementById('thFinalTotal').innerText = `${currentTotal.toFixed(2)} ج.م`;
-    document.getElementById('thPreviousBalance').innerText = `${prevBalance.toFixed(2)} ج.م`; 
-    document.getElementById('thGrandTotal').innerText = `${grandTotal.toFixed(2)} ج.م`;
-
-    document.getElementById('thReceiptItems').innerHTML = order.items?.map(i => {
-      const qty = Number(i.quantity || i.qty || 0);
-      const price = Number(i.price || 0);
-      const itemTotal = qty * price;
-      return `<tr>
-        <td style="text-align:right;">${i.name || '—'}</td>
-        <td style="text-align:center;">${qty}</td>
-        <td style="text-align:center;">${price.toFixed(2)}</td>
-        <td style="text-align:left;">${itemTotal.toFixed(2)}</td>
-      </tr>`;
-    }).join('') || '';
-
-    setTimeout(() => {
-      html2canvas(document.getElementById('thermalReceiptArea'), { scale: 2 }).then(canvas => {
-        canvas.toBlob(blob => {
-          document.getElementById('shareLoadingModal').style.display = 'none';
-          const file = new File([blob], `order_${orderId}.png`, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], title: 'الطلبية' });
-          } else {
-            const link = document.createElement('a'); 
-            link.download = `order_${orderId}.png`; 
-            link.href = canvas.toDataURL(); 
-            link.click();
-          }
+                html += `
+                    <tr id="row_${id}">
+                        <td class="text-end text-danger">${data.name}</td>
+                        <td><span class="badge bg-secondary p-2 fs-6">${data.qty}</span></td>
+                        <td><small class="text-muted">${dateStr}</small></td>
+                        <td><small>${data.note || '-'}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-success" onclick="window.deleteShortage('${id}')" title="تم توفير الصنف وحذفه">
+                                <i class="fas fa-check-circle"></i> تم التوفير
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
         });
-      });
-    }, 400);
-  } catch (e) {
-    console.error("خطأ إنشاء الشير:", e);
-    document.getElementById('shareLoadingModal').style.display = 'none';
-  }
-};
-
-async function init() {
-  await loadBalances();
-  
-  const urlParams = new URLSearchParams(window.location.search);
-  editOrderId = urlParams.get('editOrderId');
-
-  if (editOrderId) {
-    document.getElementById('pageTitle').innerText = 'تعديل الطلبية';
-    const orderSnap = await getDoc(doc(db, 'orders', editOrderId));
-    if (orderSnap.exists()) {
-      const data = orderSnap.data();
-      document.getElementById('customerName').value = data.customerName || '';
-      if (data.date) {
-        const parsed = moment(data.date, 'DD-MM-YYYY');
-        if (parsed.isValid()) document.getElementById('orderDate').value = parsed.format('YYYY-MM-DD');
-      }
-      if (data.items && data.items.length) {
-        data.items.forEach(i => addItemRow(i.name, i.quantity || i.qty, i.price));
-      } else {
-        addItemRow();
-      }
     }
-  } else {
-    addItemRow();
-  }
-}
 
-init();
+    // دالة حفظ النقص الجديد
+    window.saveShortage = async () => {
+        const nameInput = document.getElementById('itemName');
+        const qtyInput = document.getElementById('itemQty');
+        const noteInput = document.getElementById('itemNote');
+        const btn = document.getElementById('btnSubmit');
+
+        if(!nameInput.value || !qtyInput.value) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري الحفظ...';
+
+        try {
+            await addDoc(collection(db, "shortages"), {
+                name: nameInput.value,
+                qty: Number(qtyInput.value),
+                note: noteInput.value,
+                createdAt: serverTimestamp(),
+                date: new Date().toLocaleDateString('ar-EG', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+            });
+
+            // إعادة تعيين الخانات
+            nameInput.value = "";
+            qtyInput.value = "";
+            noteInput.value = "";
+        } catch (e) {
+            console.error(e);
+            alert("حدث خطأ أثناء الحفظ");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> إضافة لقائمة النواقص';
+        }
+    };
+
+    // دالة حذف النقص (عند الضغط على تم التوفير)
+    window.deleteShortage = async (id) => {
+        if(confirm("هل تم شراء وتوفير هذا الصنف بالفعل ليتم إزالته من النواقص؟")) {
+            try {
+                await deleteDoc(doc(db, "shortages", id));
+            } catch (e) {
+                alert("فشل في حذف الصنف");
+            }
+        }
+    };
+
+    // دالة مشاركة القائمة كصورة
+    window.shareShortages = () => {
+        if(!currentShortages.length) {
+            alert("لا توجد نواقص لمشاركتها حالياً!");
+            return;
+        }
+
+        const tbody = document.getElementById('thShortageItems');
+        tbody.innerHTML = currentShortages.map(item => `
+            <tr>
+                <td style="text-align:right;">${item.name}</td>
+                <td style="text-align:center;">${item.qty}</td>
+                <td style="text-align:left;">${item.note || '-'}</td>
+            </tr>
+        `).join('');
+
+        setTimeout(() => {
+            html2canvas(document.getElementById('thermalReceiptArea'), { scale: 2 }).then(canvas => {
+                canvas.toBlob(blob => {
+                    const file = new File([blob], `shortages.png`, { type: 'image/png' });
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        navigator.share({ files: [file], title: 'قائمة النواقص' });
+                    } else {
+                        const link = document.createElement('a'); 
+                        link.download = 'shortages.png'; 
+                        link.href = canvas.toDataURL(); 
+                        link.click();
+                    }
+                });
+            });
+        }, 300);
+    };
+
+    // تشغيل الدوال عند تحميل الصفحة
+    loadInventory();
+    listenToShortages();
 </script>
 </body>
 </html>
