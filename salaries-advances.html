@@ -64,7 +64,7 @@
             border-radius: 8px;
         }
 
-        /* Header (same system as the dashboard) */
+        /* Header */
         .header {
             position: sticky; top: 0; z-index: 1000;
             background: linear-gradient(135deg, var(--brand-dark) 0%, var(--brand) 100%);
@@ -93,7 +93,7 @@
         }
         .btn-icon:active { transform: scale(0.92); background: rgba(255,255,255,0.25); }
 
-        /* Drawer (same as dashboard, current page highlighted) */
+        /* Drawer */
         .drawer-overlay {
             position: fixed; top: 0; right: 0; bottom: 0; left: 0;
             background: rgba(0, 0, 0, 0.5);
@@ -135,7 +135,7 @@
         .drawer-link.current { background: var(--brand-tint); color: var(--brand-dark); }
         .drawer-divider { height: 1px; background: var(--border-subtle); margin: 8px 0; }
 
-        /* Hero: title + month navigator */
+        /* Hero */
         .hero-panel {
             margin: 16px;
             border-radius: var(--radius-lg);
@@ -205,7 +205,7 @@
         }
         .section-label span.title { font-family: 'Tajawal', sans-serif; font-size: 13.5px; font-weight: 800; color: var(--brand-dark); }
 
-        /* Add driver form card */
+        /* Form card */
         .form-card {
             background: var(--card-bg); border: 1px solid var(--border-subtle);
             border-radius: var(--radius-md); padding: 16px; margin-bottom: 18px;
@@ -305,7 +305,7 @@
         .adv-list { display: flex; flex-direction: column; gap: 6px; }
         .adv-item {
             display: flex; align-items: center; justify-content: space-between;
-            background: var(--card-bg); border: 1px solid var(--border-subtle); border-radius: 9px;
+            background: var(--card-bg); border: 1px solid var(--border-subtle); border-radius: 99px;
             padding: 8px 12px; font-size: 12.5px;
         }
         .adv-item .info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -393,7 +393,7 @@
             <button id="nextMonth">›</button>
         </div>
     </div>
-    <div class="stats-row">
+    <div class="stats-row" id="statsRow">
         <div class="stat-chip">
             <div class="chip-icon gold-bg"><i class="fa-solid fa-sack-dollar"></i></div>
             <span class="chip-num" id="statSalary">٠</span>
@@ -412,7 +412,7 @@
     </div>
 </div>
 
-<div class="section-block">
+<div class="section-block" id="addDriverBlock">
     <div class="section-label">
         <div class="mark"><i class="fa-solid fa-user-plus"></i></div>
         <span class="title">إضافة سائق جديد</span>
@@ -460,7 +460,6 @@
         collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, query, where, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // نفس إعدادات قاعدة البيانات المستخدمة في باقي صفحات النظام
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
         authDomain: "ahmedelzaiady.firebaseapp.com",
@@ -483,10 +482,22 @@
 
     const ARABIC_MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
-    let drivers = [];     // [{id, name, phone, baseSalary, deficit}]
-    let advances = [];    // [{id, driverId, amount, date, note}]
+    let drivers = [];
+    let advances = [];
     let currentMonth = new Date().toISOString().slice(0,7);
     let openPanels = new Set();
+
+    // فحص المستخدم الحالي لمعرفة إذا كان "فكري"
+    const currentUser = (localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "").trim();
+    const isFekry = currentUser.includes("فكري") || currentUser.toLowerCase().includes("fekry");
+
+    // إخفاء إمكانية إضافة سواقين أو شريط الإحصائيات العامة لو كان المستخدم هو فكري
+    if (isFekry) {
+        const addBlock = document.getElementById('addDriverBlock');
+        const statsRow = document.getElementById('statsRow');
+        if (addBlock) addBlock.style.display = 'none';
+        if (statsRow) statsRow.style.display = 'none';
+    }
 
     function fmt(n){
         n = Math.round(Number(n) || 0);
@@ -501,9 +512,7 @@
     }
     function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
     function advancesOfMonth(driverId, ym){ return advancesOf(driverId).filter(a => a.date && a.date.slice(0,7) === ym); }
-    function totalAdvancesAllTime(driverId){ return advancesOf(driverId).reduce((s,a)=>s+Number(a.amount),0); }
 
-    // الحد المسموح = (عدد الأيام من بداية الشهر حتى تاريخ السلفة × نصيب اليوم من الراتب) + 2000 جنيه
     function calcAllowedLimit(baseSalary, dateStr){
         const d = new Date(dateStr + 'T00:00:00');
         const year = d.getFullYear(), month = d.getMonth();
@@ -513,7 +522,6 @@
         return (dayOfMonth * dailyRate) + 2000;
     }
 
-    // للعرض فقط: الحد المسموح حتى الآن (أو حتى نهاية الشهر لو بنعرض شهر سابق/قادم)
     function displayLimitForDriver(d){
         const now = new Date();
         const [vy, vm] = currentMonth.split('-').map(Number);
@@ -544,15 +552,22 @@
     // ---------- Render ----------
     function render(){
         document.getElementById('monthLabel').textContent = monthLabel(currentMonth);
-        document.getElementById('driversTitle').textContent = `السواقين (${drivers.length})`;
+
+        // تصفية السواقين: لو المستخدم هو فكري يظهر فقط السائق "فكري"
+        let displayDrivers = drivers;
+        if (isFekry) {
+            displayDrivers = drivers.filter(d => (d.name || '').includes('فكري'));
+        }
+
+        document.getElementById('driversTitle').textContent = `السواقين (${displayDrivers.length})`;
 
         let totalSalary = 0, totalAdv = 0;
         const list = document.getElementById('driversList');
 
-        if(drivers.length === 0){
-            list.innerHTML = `<div class="empty">لا يوجد سواقين بعد — أضف أول سائق من الفورم اللي فوق</div>`;
+        if(displayDrivers.length === 0){
+            list.innerHTML = `<div class="empty">لا يوجد بيانات سواقين متاحة لعرضها</div>`;
         } else {
-            list.innerHTML = drivers.map(d => {
+            list.innerHTML = displayDrivers.map(d => {
                 const advsMonth = advancesOfMonth(d.id, currentMonth);
                 const advSum = advsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const net = Number(d.baseSalary||0) - advSum;
@@ -561,7 +576,11 @@
 
                 const maxAdv = displayLimitForDriver(d);
                 const deficit = Number(d.deficit) || 0;
+                
+                // لليوزر فكري نفتح له اللوحة تلقائياً
+                if (isFekry) openPanels.add(d.id);
                 const isOpen = openPanels.has(d.id);
+
                 const initial = (d.name||'؟').trim().charAt(0);
 
                 const advItemsHtml = advsMonth.length ? advsMonth.map(a => `
@@ -596,7 +615,7 @@
                         <div class="driver-actions">
                             <button class="icon-btn" data-toggle="${d.id}"><i class="fa-solid fa-plus"></i> سلفة</button>
                             <button class="icon-btn" data-edit-deficit="${d.id}"><i class="fa-solid fa-pen"></i> العجز</button>
-                            <button class="icon-btn danger" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>
+                            ${!isFekry ? `<button class="icon-btn danger" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
                     </div>
                     <div class="advances-panel ${isOpen ? 'open' : ''}" id="panel-${d.id}">
@@ -646,23 +665,26 @@
     }
 
     // ---------- Actions ----------
-    document.getElementById('addDriverBtn').addEventListener('click', async () => {
-        const name = document.getElementById('newName').value.trim();
-        const phone = document.getElementById('newPhone').value.trim();
-        const baseSalary = Number(document.getElementById('newSalary').value) || 0;
-        if(!name){ document.getElementById('newName').focus(); return; }
-        try{
-            await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, deficit: 0, createdAt: serverTimestamp() });
-            document.getElementById('newName').value = '';
-            document.getElementById('newPhone').value = '';
-            document.getElementById('newSalary').value = '';
-        }catch(e){
-            alert('تعذرت إضافة السائق، حاول مرة أخرى');
-            console.error(e);
-        }
-    });
+    const addDriverBtn = document.getElementById('addDriverBtn');
+    if (addDriverBtn) {
+        addDriverBtn.addEventListener('click', async () => {
+            const name = document.getElementById('newName').value.trim();
+            const phone = document.getElementById('newPhone').value.trim();
+            const baseSalary = Number(document.getElementById('newSalary').value) || 0;
+            if(!name){ document.getElementById('newName').focus(); return; }
+            try{
+                await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, deficit: 0, createdAt: serverTimestamp() });
+                document.getElementById('newName').value = '';
+                document.getElementById('newPhone').value = '';
+                document.getElementById('newSalary').value = '';
+            }catch(e){
+                alert('تعذرت إضافة السائق، حاول مرة أخرى');
+                console.error(e);
+            }
+        });
+    }
 
-    let pendingAdvance = null; // holds data awaiting the admin's exception decision
+    let pendingAdvance = null;
 
     window.addAdvance = async function(driverId){
         const amountEl = document.getElementById(`advAmount-${driverId}`);
@@ -783,7 +805,7 @@
 </script>
 
 <script>
-    // Drawer + back button (نفس منطق باقي صفحات النظام)
+    // Drawer + back button
     const btnMenu = document.getElementById('btnMenu');
     const drawerMenu = document.getElementById('drawerMenu');
     const drawerOverlay = document.getElementById('drawerOverlay');
