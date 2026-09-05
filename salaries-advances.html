@@ -260,6 +260,32 @@
         .driver-nums .net .v { color: var(--brand); }
         .driver-nums .adv .v { color: var(--coral); }
         .driver-nums .limit .v { color: var(--text-mid); font-size: 12px; }
+        .driver-nums .deficit .v { color: var(--coral); }
+
+        /* Exception modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(15,42,30,0.55);
+            z-index: 5000; display: none; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: #fff; border-radius: var(--radius-md); max-width: 380px; width: 100%;
+            padding: 20px; box-shadow: var(--shadow-lg);
+        }
+        .modal-box .modal-icon {
+            width: 46px; height: 46px; border-radius: 50%; background: var(--coral-tint); color: var(--coral);
+            display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px;
+        }
+        .modal-box h3 { font-size: 15px; font-weight: 800; color: var(--text-deep); margin-bottom: 10px; }
+        .modal-box .modal-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+        .modal-box .modal-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-mid); }
+        .modal-box .modal-row b { color: var(--text-deep); font-variant-numeric: tabular-nums; }
+        .modal-box .modal-row.excess b { color: var(--coral); }
+        .modal-actions { display: flex; gap: 8px; }
+        .modal-actions .btn { flex: 1; }
+        .btn-cancel { background: var(--surface); color: var(--text-mid); border: 1px solid var(--border-subtle); }
+        .btn-exception { background: linear-gradient(135deg, #ef4444, var(--coral)); color: #fff; }
 
         .driver-actions { display: flex; gap: 8px; }
         .icon-btn {
@@ -396,7 +422,6 @@
             <div class="field"><label>اسم السائق</label><input id="newName" placeholder="مثال: محمد عبدالله"></div>
             <div class="field"><label>رقم التليفون (اختياري)</label><input id="newPhone" placeholder="01000000000"></div>
             <div class="field"><label>الراتب الأساسي</label><input id="newSalary" type="number" placeholder="0" min="0"></div>
-            <div class="field"><label>الحد الأقصى للسلف (اختياري)</label><input id="newMaxAdv" type="number" placeholder="بدون حد" min="0"></div>
             <button class="btn btn-brand" id="addDriverBtn">إضافة السائق</button>
         </div>
     </div>
@@ -414,6 +439,18 @@
 
 <div class="toolbar">
     <button class="btn btn-ghost" id="printBtn"><i class="fa-solid fa-print"></i> طباعة / تصدير PDF</button>
+</div>
+
+<div class="modal-overlay" id="exceptionModal">
+    <div class="modal-box">
+        <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <h3>السلفة دي أكبر من الحد المسموح به</h3>
+        <div class="modal-rows" id="exceptionModalRows"></div>
+        <div class="modal-actions">
+            <button class="btn btn-cancel" id="modalCancelBtn">إلغاء</button>
+            <button class="btn btn-exception" id="modalExceptionBtn">استثناء وتسجيل مع العجز</button>
+        </div>
+    </div>
 </div>
 
 <script type="module">
@@ -446,7 +483,7 @@
 
     const ARABIC_MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
-    let drivers = [];     // [{id, name, phone, baseSalary, maxAdvance}]
+    let drivers = [];     // [{id, name, phone, baseSalary, deficit}]
     let advances = [];    // [{id, driverId, amount, date, note}]
     let currentMonth = new Date().toISOString().slice(0,7);
     let openPanels = new Set();
@@ -465,6 +502,30 @@
     function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
     function advancesOfMonth(driverId, ym){ return advancesOf(driverId).filter(a => a.date && a.date.slice(0,7) === ym); }
     function totalAdvancesAllTime(driverId){ return advancesOf(driverId).reduce((s,a)=>s+Number(a.amount),0); }
+
+    // الحد المسموح = (عدد الأيام من بداية الشهر حتى تاريخ السلفة × نصيب اليوم من الراتب) + 2000 جنيه
+    function calcAllowedLimit(baseSalary, dateStr){
+        const d = new Date(dateStr + 'T00:00:00');
+        const year = d.getFullYear(), month = d.getMonth();
+        const daysInMonth = new Date(year, month+1, 0).getDate();
+        const dailyRate = Number(baseSalary || 0) / daysInMonth;
+        const dayOfMonth = d.getDate();
+        return (dayOfMonth * dailyRate) + 2000;
+    }
+
+    // للعرض فقط: الحد المسموح حتى الآن (أو حتى نهاية الشهر لو بنعرض شهر سابق/قادم)
+    function displayLimitForDriver(d){
+        const now = new Date();
+        const [vy, vm] = currentMonth.split('-').map(Number);
+        let refDateStr;
+        if (vy === now.getFullYear() && vm === (now.getMonth()+1)) {
+            refDateStr = now.toISOString().slice(0,10);
+        } else {
+            const daysInMonth = new Date(vy, vm, 0).getDate();
+            refDateStr = `${vy}-${String(vm).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+        }
+        return calcAllowedLimit(d.baseSalary, refDateStr);
+    }
 
     // ---------- Firestore listeners ----------
     onSnapshot(collection(db, DRIVERS_COL), (snap) => {
@@ -498,9 +559,8 @@
                 totalSalary += Number(d.baseSalary||0);
                 totalAdv += advSum;
 
-                const maxAdv = Number(d.maxAdvance) || 0;
-                const allTimeAdv = totalAdvancesAllTime(d.id);
-                const remaining = maxAdv > 0 ? Math.max(maxAdv - allTimeAdv, 0) : null;
+                const maxAdv = displayLimitForDriver(d);
+                const deficit = Number(d.deficit) || 0;
                 const isOpen = openPanels.has(d.id);
                 const initial = (d.name||'؟').trim().charAt(0);
 
@@ -509,6 +569,7 @@
                         <div class="info">
                             <span class="amount">${fmt(a.amount)}</span>
                             <span class="date">${a.date||''}</span>
+                            ${a.exception ? `<span class="note" style="color:var(--coral); font-weight:700;">استثناء</span>` : ''}
                             ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
                         </div>
                         <button data-del-adv="${a.id}" title="حذف">✕</button>
@@ -529,16 +590,17 @@
                             <div class="n"><div class="k">الراتب الأساسي</div><div class="v">${fmt(d.baseSalary)}</div></div>
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
                             <div class="n net"><div class="k">الصافي المستحق</div><div class="v">${fmt(net)}</div></div>
-                            <div class="n limit"><div class="k">الحد الأقصى للسلف</div><div class="v">${maxAdv > 0 ? fmt(maxAdv) : 'بدون حد'}</div></div>
+                            <div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>
+                            <div class="n deficit"><div class="k">العجز</div><div class="v">${fmt(deficit)}</div></div>
                         </div>
                         <div class="driver-actions">
                             <button class="icon-btn" data-toggle="${d.id}"><i class="fa-solid fa-plus"></i> سلفة</button>
-                            <button class="icon-btn" data-edit-limit="${d.id}"><i class="fa-solid fa-pen"></i> الحد</button>
+                            <button class="icon-btn" data-edit-deficit="${d.id}"><i class="fa-solid fa-pen"></i> العجز</button>
                             <button class="icon-btn danger" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
                     <div class="advances-panel ${isOpen ? 'open' : ''}" id="panel-${d.id}">
-                        <h3>سلف ${monthLabel(currentMonth)}${maxAdv > 0 ? ` — المتبقي من الحد الأقصى: ${fmt(remaining)}` : ''}</h3>
+                        <h3>سلف ${monthLabel(currentMonth)} — الحد المسموح حتى الآن: ${fmt(maxAdv)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="المبلغ" id="advAmount-${d.id}">
                             <input type="date" id="advDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
@@ -578,8 +640,8 @@
         document.querySelectorAll('[data-del-driver]').forEach(btn => {
             btn.onclick = () => deleteDriver(btn.getAttribute('data-del-driver'));
         });
-        document.querySelectorAll('[data-edit-limit]').forEach(btn => {
-            btn.onclick = () => editMaxAdvance(btn.getAttribute('data-edit-limit'));
+        document.querySelectorAll('[data-edit-deficit]').forEach(btn => {
+            btn.onclick = () => editDeficit(btn.getAttribute('data-edit-deficit'));
         });
     }
 
@@ -588,19 +650,19 @@
         const name = document.getElementById('newName').value.trim();
         const phone = document.getElementById('newPhone').value.trim();
         const baseSalary = Number(document.getElementById('newSalary').value) || 0;
-        const maxAdvance = Number(document.getElementById('newMaxAdv').value) || 0;
         if(!name){ document.getElementById('newName').focus(); return; }
         try{
-            await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, maxAdvance, createdAt: serverTimestamp() });
+            await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, deficit: 0, createdAt: serverTimestamp() });
             document.getElementById('newName').value = '';
             document.getElementById('newPhone').value = '';
             document.getElementById('newSalary').value = '';
-            document.getElementById('newMaxAdv').value = '';
         }catch(e){
             alert('تعذرت إضافة السائق، حاول مرة أخرى');
             console.error(e);
         }
     });
+
+    let pendingAdvance = null; // holds data awaiting the admin's exception decision
 
     window.addAdvance = async function(driverId){
         const amountEl = document.getElementById(`advAmount-${driverId}`);
@@ -612,30 +674,63 @@
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
         const driver = drivers.find(d => d.id === driverId);
-        const maxAdv = Number(driver && driver.maxAdvance) || 0;
-        if(maxAdv > 0){
-            const existingTotal = totalAdvancesAllTime(driverId);
-            const newTotal = existingTotal + amount;
-            if(newTotal > maxAdv){
-                const remaining = Math.max(maxAdv - existingTotal, 0);
-                alert(
-                    `تم تجاوز الحد الأقصى للسلف المسموح به لـ ${driver.name}\n` +
-                    `الحد الأقصى: ${fmt(maxAdv)}\n` +
-                    `المسحوب حالياً: ${fmt(existingTotal)}\n` +
-                    `المتبقي المسموح به: ${fmt(remaining)}`
-                );
-                return;
-            }
+        if(!driver) return;
+
+        const monthOfDate = date.slice(0,7);
+        const existingMonthTotal = advancesOfMonth(driverId, monthOfDate).reduce((s,a)=>s+Number(a.amount),0);
+        const newTotal = existingMonthTotal + amount;
+        const limit = calcAllowedLimit(driver.baseSalary, date);
+
+        if(newTotal > limit){
+            pendingAdvance = { driverId, amount, date, note, limit, newTotal, existingMonthTotal };
+            openExceptionModal(driver, pendingAdvance);
+            return;
         }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, exception: false, createdAt: serverTimestamp() });
             openPanels.add(driverId);
         }catch(e){
             alert('تعذرت إضافة السلفة، حاول مرة أخرى');
             console.error(e);
         }
     };
+
+    function openExceptionModal(driver, p){
+        const excess = p.newTotal - p.limit;
+        document.getElementById('exceptionModalRows').innerHTML = `
+            <div class="modal-row"><span>السائق</span><b>${escapeHtml(driver.name)}</b></div>
+            <div class="modal-row"><span>الحد المسموح به بتاريخ ${p.date}</span><b>${fmt(p.limit)}</b></div>
+            <div class="modal-row"><span>سلف الشهر الحالية</span><b>${fmt(p.existingMonthTotal)}</b></div>
+            <div class="modal-row"><span>السلفة الجديدة</span><b>${fmt(p.amount)}</b></div>
+            <div class="modal-row"><span>الإجمالي بعد الإضافة</span><b>${fmt(p.newTotal)}</b></div>
+            <div class="modal-row excess"><span>مقدار التجاوز (هيتسجل كعجز)</span><b>${fmt(excess)}</b></div>
+        `;
+        document.getElementById('exceptionModal').classList.add('open');
+    }
+
+    function closeExceptionModal(){
+        document.getElementById('exceptionModal').classList.remove('open');
+        pendingAdvance = null;
+    }
+
+    document.getElementById('modalCancelBtn').addEventListener('click', closeExceptionModal);
+
+    document.getElementById('modalExceptionBtn').addEventListener('click', async () => {
+        if(!pendingAdvance) return;
+        const { driverId, amount, date, note, limit, newTotal } = pendingAdvance;
+        const excess = Math.round(newTotal - limit);
+        const driver = drivers.find(d => d.id === driverId);
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, exception: true, createdAt: serverTimestamp() });
+            await updateDoc(doc(db, DRIVERS_COL, driverId), { deficit: (Number(driver.deficit)||0) + excess });
+            openPanels.add(driverId);
+        }catch(e){
+            alert('تعذر تسجيل السلفة بالاستثناء');
+            console.error(e);
+        }
+        closeExceptionModal();
+    });
 
     async function deleteAdvance(advId){
         try{ await deleteDoc(doc(db, ADVANCES_COL, advId)); }
@@ -656,18 +751,18 @@
         }
     }
 
-    async function editMaxAdvance(driverId){
+    async function editDeficit(driverId){
         const driver = drivers.find(d => d.id === driverId);
         if(!driver) return;
-        const current = Number(driver.maxAdvance) || 0;
-        const input = prompt(`الحد الأقصى للسلف لـ ${driver.name} (اكتب 0 لإلغاء أي حد):`, current || '');
+        const current = Number(driver.deficit) || 0;
+        const input = prompt(`تعديل العجز المسجل على ${driver.name}:`, current || 0);
         if(input === null) return;
         const value = Number(input);
         if(isNaN(value) || value < 0){ alert('من فضلك ادخل رقم صحيح'); return; }
         try{
-            await updateDoc(doc(db, DRIVERS_COL, driverId), { maxAdvance: value });
+            await updateDoc(doc(db, DRIVERS_COL, driverId), { deficit: value });
         }catch(e){
-            alert('تعذر تحديث الحد الأقصى');
+            alert('تعذر تحديث العجز');
             console.error(e);
         }
     }
