@@ -230,6 +230,8 @@
         .btn-brand:hover { filter: brightness(1.07); }
         .btn-coral { background: linear-gradient(135deg, #ef4444, var(--coral)); color: #fff; box-shadow: var(--shadow-sm); }
         .btn-coral:hover { filter: brightness(1.07); }
+        .btn-violet { background: linear-gradient(135deg, #8b5cf6, var(--violet)); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-violet:hover { filter: brightness(1.07); }
         .btn-ghost { background: var(--brand-tint); color: var(--brand-dark); }
         .btn-ghost:hover { background: #d7f0e3; }
 
@@ -255,14 +257,15 @@
         .driver-name { font-weight: 800; font-size: 14.5px; color: var(--text-deep); }
         .driver-phone { font-size: 11.5px; color: var(--text-mid); margin-top: 2px; }
 
-        .driver-nums { display: flex; gap: 18px; flex-wrap: wrap; }
+        .driver-nums { display: flex; gap: 14px; flex-wrap: wrap; }
         .driver-nums .n { text-align: center; }
         .driver-nums .n .k { font-size: 10px; color: var(--text-mid); font-weight: 700; margin-bottom: 3px; }
-        .driver-nums .n .v { font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
+        .driver-nums .n .v { font-weight: 800; font-size: 13.5px; font-variant-numeric: tabular-nums; }
         .driver-nums .net .v { color: var(--brand); }
         .driver-nums .adv .v { color: var(--coral); }
         .driver-nums .limit .v { color: var(--text-mid); font-size: 12px; }
         .driver-nums .deficit .v { color: var(--coral); }
+        .driver-nums .absence .v { color: var(--violet); }
 
         /* Exception modal */
         .modal-overlay {
@@ -289,15 +292,16 @@
         .btn-cancel { background: var(--surface); color: var(--text-mid); border: 1px solid var(--border-subtle); }
         .btn-exception { background: linear-gradient(135deg, #ef4444, var(--coral)); color: #fff; }
 
-        .driver-actions { display: flex; gap: 8px; }
+        .driver-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .icon-btn {
             border-radius: 8px; border: 1px solid var(--border-subtle);
             background: var(--surface); color: var(--text-mid); cursor: pointer;
-            display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
-            padding: 7px 10px; transition: all .15s; font-family: 'Cairo', sans-serif;
+            display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700;
+            padding: 6px 9px; transition: all .15s; font-family: 'Cairo', sans-serif;
         }
         .icon-btn:hover { color: var(--brand-dark); border-color: var(--brand-mid); background: var(--brand-tint); }
         .icon-btn.danger-btn:hover { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
+        .icon-btn.violet-btn:hover { color: var(--violet); border-color: var(--violet); background: var(--violet-tint); }
 
         .advances-panel { border-top: 1px solid var(--border-subtle); padding: 14px 15px 16px; display: none; background: var(--surface); }
         .advances-panel.open { display: block; }
@@ -315,8 +319,13 @@
             border-color: #fca5a5;
             background: #fff5f5;
         }
+        .adv-item.is-absence {
+            border-color: #ddd6fe;
+            background: #f5f3ff;
+        }
         .adv-item .info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .adv-item .amount { color: var(--coral); font-weight: 800; font-variant-numeric: tabular-nums; }
+        .adv-item.is-absence .amount { color: var(--violet); }
         .adv-item .date { color: var(--text-mid); font-size: 11px; font-variant-numeric: tabular-nums; }
         .adv-item .note { color: var(--text-mid); font-size: 11.5px; }
         
@@ -324,6 +333,7 @@
             padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800;
         }
         .badge-deficit { background: var(--coral-tint); color: var(--coral); border: 1px solid #f87171; }
+        .badge-absence { background: var(--violet-tint); color: var(--violet); border: 1px solid #a78bfa; }
         .badge-exception { background: var(--amber-tint); color: var(--amber); }
 
         .adv-item button { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 13px; padding: 2px 6px; }
@@ -499,7 +509,7 @@
     let drivers = [];
     let advances = [];
     let currentMonth = new Date().toISOString().slice(0,7);
-    let openPanels = new Map(); // التخزين الآن يحفظ نوع اللوحة المفصلة (adv / deficit)
+    let openPanels = new Map();
 
     const currentUser = (localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "").trim();
     const userRole = (sessionStorage.getItem('role') || localStorage.getItem('role') || '').toLowerCase();
@@ -526,7 +536,12 @@
     }
     function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
     function itemsOfMonth(driverId, ym, type){ 
-        return advancesOf(driverId).filter(a => a.date && a.date.slice(0,7) === ym && (type === 'deficit' ? a.isDeficit : !a.isDeficit)); 
+        return advancesOf(driverId).filter(a => {
+            if (!a.date || a.date.slice(0,7) !== ym) return false;
+            if (type === 'absence') return a.isAbsence;
+            if (type === 'deficit') return a.isDeficit;
+            return !a.isDeficit && !a.isAbsence;
+        }); 
     }
 
     function calcAllowedLimit(baseSalary, dateStr){
@@ -563,7 +578,7 @@
     onSnapshot(collection(db, ADVANCES_COL), (snap) => {
         advances = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         render();
-    }, (err) => console.error("خطأ في جلب السلف/العجز:", err));
+    }, (err) => console.error("خطأ في جلب السلف/العجز/الغياب:", err));
 
     // ---------- Render ----------
     function render(){
@@ -585,10 +600,13 @@
             list.innerHTML = displayDrivers.map(d => {
                 const advsMonth = itemsOfMonth(d.id, currentMonth, 'adv');
                 const deficitsMonth = itemsOfMonth(d.id, currentMonth, 'deficit');
+                const absencesMonth = itemsOfMonth(d.id, currentMonth, 'absence');
 
                 const advSum = advsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const deficitSum = deficitsMonth.reduce((s,a)=>s+Number(a.amount),0);
-                const net = Number(d.baseSalary||0) - advSum;
+                const absenceSum = absencesMonth.reduce((s,a)=>s+Number(a.amount),0);
+
+                const net = Number(d.baseSalary||0) - advSum - absenceSum;
 
                 totalSalary += Number(d.baseSalary||0);
                 totalAdv += advSum;
@@ -626,6 +644,19 @@
                     </div>
                 `).join('') : `<div class="no-adv">لا يوجد عجز مسجل في هذا الشهر</div>`;
 
+                // قائمة الغياب المميزة
+                const absenceItemsHtml = absencesMonth.length ? absencesMonth.map(a => `
+                    <div class="adv-item is-absence">
+                        <div class="info">
+                            <span class="badge-tag badge-absence">غياب</span>
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        <button data-del-adv="${a.id}" title="حذف">✕</button>
+                    </div>
+                `).join('') : `<div class="no-adv">لا يوجد أي غياب مسجل في هذا الشهر</div>`;
+
                 return `
                 <div class="driver">
                     <div class="driver-top">
@@ -637,14 +668,16 @@
                             </div>
                         </div>
                         <div class="driver-nums">
-                            <div class="n"><div class="k">الراتب الأساسي</div><div class="v">${fmt(d.baseSalary)}</div></div>
+                            ${isAdmin ? `<div class="n"><div class="k">الراتب الأساسي</div><div class="v">${fmt(d.baseSalary)}</div></div>` : ''}
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
-                            <div class="n net"><div class="k">الصافي المستحق</div><div class="v">${fmt(net)}</div></div>
-                            <div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>
+                            <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
+                            ${isAdmin ? `<div class="n net"><div class="k">الصافي المستحق</div><div class="v">${fmt(net)}</div></div>` : ''}
+                            ${isAdmin ? `<div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>` : ''}
                             <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
                         </div>
                         <div class="driver-actions">
                             <button class="icon-btn" data-toggle="${d.id}" data-type="adv"><i class="fa-solid fa-plus"></i> سلفة</button>
+                            <button class="icon-btn violet-btn" data-toggle="${d.id}" data-type="absence"><i class="fa-solid fa-user-slash"></i> غياب</button>
                             <button class="icon-btn danger-btn" data-toggle="${d.id}" data-type="deficit"><i class="fa-solid fa-triangle-exclamation"></i> العجز</button>
                             ${isAdmin ? `<button class="icon-btn danger-btn" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
@@ -652,7 +685,7 @@
 
                     <!-- لوحة السلف -->
                     <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
-                        <h3>تسجيل سلفة — ${monthLabel(currentMonth)} (الحد المسموح حتى الآن: ${fmt(maxAdv)})</h3>
+                        <h3>تسجيل سلفة — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="مبلغ السلفة" id="advAmount-${d.id}">
                             <input type="date" id="advDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
@@ -660,6 +693,18 @@
                             <button class="btn btn-brand" data-add-adv="${d.id}">إضافة سلفة</button>
                         </div>
                         <div class="adv-list">${advItemsHtml}</div>
+                    </div>
+
+                    <!-- لوحة الغياب المميزة -->
+                    <div class="advances-panel ${activePanel === 'absence' ? 'open' : ''}" style="background:#faf5ff; border-top: 1px solid #ddd6fe;">
+                        <h3 style="color: var(--violet);">تسجيل أسبوع/أيام غياب — ${monthLabel(currentMonth)}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="قيمة الخصم أو اليومية" id="absenceAmount-${d.id}">
+                            <input type="date" id="absenceDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="ملاحظة (مثال: غياب بدون إذن)" id="absenceNote-${d.id}">
+                            <button class="btn btn-violet" data-add-absence="${d.id}">تسجيل غياب</button>
+                        </div>
+                        <div class="adv-list">${absenceItemsHtml}</div>
                     </div>
 
                     <!-- لوحة العجز المميزة -->
@@ -702,6 +747,9 @@
         });
         document.querySelectorAll('[data-add-deficit]').forEach(btn => {
             btn.onclick = () => addDeficit(btn.getAttribute('data-add-deficit'));
+        });
+        document.querySelectorAll('[data-add-absence]').forEach(btn => {
+            btn.onclick = () => addAbsence(btn.getAttribute('data-add-absence'));
         });
         document.querySelectorAll('[data-del-adv]').forEach(btn => {
             btn.onclick = () => {
@@ -761,7 +809,7 @@
         }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'adv');
         }catch(e){
             alert('تعذرت إضافة السلفة، حاول مرة أخرى');
@@ -769,7 +817,7 @@
         }
     };
 
-    // إضافة عجز كقيد مستقل بنفس نظام السلفة
+    // إضافة عجز
     window.addDeficit = async function(driverId){
         const amountEl = document.getElementById(`deficitAmount-${driverId}`);
         const dateEl = document.getElementById(`deficitDate-${driverId}`);
@@ -780,10 +828,29 @@
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: true, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: true, isAbsence: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'deficit');
         }catch(e){
             alert('تعذر تسجيل العجز، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    // إضافة غياب
+    window.addAbsence = async function(driverId){
+        const amountEl = document.getElementById(`absenceAmount-${driverId}`);
+        const dateEl = document.getElementById(`absenceDate-${driverId}`);
+        const noteEl = document.getElementById(`absenceNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isAbsence: true, isDeficit: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'absence');
+        }catch(e){
+            alert('تعذر تسجيل الغياب، حاول مرة أخرى');
             console.error(e);
         }
     };
@@ -813,10 +880,8 @@
         const { driverId, amount, date, note, limit, newTotal } = pendingAdvance;
         const excess = Math.round(newTotal - limit);
         try{
-            // حفظ السلفة العادية المسموحة مع الاستثناء
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, exception: true, createdAt: serverTimestamp() });
-            // تسجيل قيد العجز بالفرق المتبقي بنفس النظام
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, exception: true, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, isAbsence: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'deficit');
         }catch(e){
             alert('تعذر تسجيل السلفة بالعجز');
