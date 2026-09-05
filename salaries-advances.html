@@ -520,7 +520,7 @@
 
         document.getElementById('driversTitle').textContent = `القائمة (${displayDrivers.length})`;
 
-        let totalSalary = 0, totalAdv = 0;
+        let totalSalary = 0, totalAdv = 0, totalNet = 0;
         const list = document.getElementById('driversList');
 
         if(displayDrivers.length === 0){
@@ -535,10 +535,12 @@
                 const deficitSum = deficitsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const absenceSum = absencesMonth.reduce((s,a)=>s+Number(a.amount),0);
 
-                const net = Number(d.baseSalary||0) - advSum - absenceSum;
+                // 🟢 إدخال (الغياب + العجز + السلف) في حسبة صافي الراتب
+                const net = Number(d.baseSalary||0) - advSum - absenceSum - deficitSum;
 
                 totalSalary += Number(d.baseSalary||0);
                 totalAdv += advSum;
+                totalNet += net;
 
                 const maxAdv = displayLimitForDriver(d);
                 
@@ -600,9 +602,9 @@
                             ${isAdmin ? `<div class="n"><div class="k">الراتب الأساسي</div><div class="v">${fmt(d.baseSalary)}</div></div>` : ''}
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
                             <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
+                            <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
                             ${isAdmin ? `<div class="n net"><div class="k">الصافي المستحق</div><div class="v">${fmt(net)}</div></div>` : ''}
                             ${isAdmin ? `<div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>` : ''}
-                            <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
                         </div>
                         <div class="driver-actions">
                             <button class="icon-btn" data-toggle="${d.id}" data-type="adv"><i class="fa-solid fa-plus"></i> سلفة</button>
@@ -653,7 +655,7 @@
 
         document.getElementById('statSalary').textContent = fmt(totalSalary);
         document.getElementById('statAdv').textContent = fmt(totalAdv);
-        document.getElementById('statNet').textContent = fmt(totalSalary - totalAdv);
+        document.getElementById('statNet').textContent = fmt(totalNet);
 
         bindDynamicEvents();
     }
