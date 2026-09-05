@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>رواتب وسلف السواقين | شركة الزيادى</title>
+    <title>رواتب وسلف | شركة الزيادى</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#075E3D">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -349,7 +349,7 @@
     <div class="header-logo">
         <div class="logo-mark"><i class="fa-solid fa-hand-holding-dollar"></i></div>
         <div class="logo-text">
-            <div class="brand-name">رواتب وسلف السواقين</div>
+            <div class="brand-name">رواتب وسلف</div>
             <div class="sub">شركة الزيادى</div>
         </div>
     </div>
@@ -375,7 +375,7 @@
         <a href="vouchers-hub.html?type=client" class="drawer-link"><i class="fa-solid fa-receipt"></i> سندات العملاء</a>
         <a href="banknote.html" class="drawer-link"><i class="fa-solid fa-vault"></i> النقدية</a>
         <a href="add-shortages.html" class="drawer-link"><i class="fa-solid fa-store-slash"></i> النواقص</a>
-        <a href="salaries-advances.html" class="drawer-link current"><i class="fa-solid fa-hand-holding-dollar"></i> رواتب وسلف السواقين</a>
+        <a href="salaries-advances.html" class="drawer-link current"><i class="fa-solid fa-hand-holding-dollar"></i> رواتب وسلف</a>
         <div class="drawer-divider"></div>
         <a href="reports.html" class="drawer-link"><i class="fa-solid fa-chart-pie"></i> التقارير</a>
         <a href="quotation-history.html" class="drawer-link"><i class="fa-solid fa-clipboard-list"></i> الجرد</a>
@@ -386,14 +386,14 @@
 
 <div class="hero-panel">
     <div class="hero-top">
-        <div class="hero-eyebrow"><i class="fa-solid fa-truck-fast"></i> رواتب وسلف السواقين</div>
+        <div class="hero-eyebrow"><i class="fa-solid fa-truck-fast"></i> رواتب وسلف</div>
         <div class="month-nav">
             <button id="prevMonth">‹</button>
             <div class="label" id="monthLabel">—</div>
             <button id="nextMonth">›</button>
         </div>
     </div>
-    <div class="stats-row" id="statsRow">
+    <div class="stats-row" id="statsRow" style="display: none;">
         <div class="stat-chip">
             <div class="chip-icon gold-bg"><i class="fa-solid fa-sack-dollar"></i></div>
             <span class="chip-num" id="statSalary">٠</span>
@@ -412,7 +412,7 @@
     </div>
 </div>
 
-<div class="section-block" id="addDriverBlock">
+<div class="section-block" id="addDriverBlock" style="display: none;">
     <div class="section-label">
         <div class="mark"><i class="fa-solid fa-user-plus"></i></div>
         <span class="title">إضافة سائق جديد</span>
@@ -430,7 +430,7 @@
 <div class="section-block">
     <div class="section-label">
         <div class="mark"><i class="fa-solid fa-users"></i></div>
-        <span class="title" id="driversTitle">السواقين</span>
+        <span class="title" id="driversTitle">القائمة</span>
     </div>
     <div id="driversList">
         <div class="empty">جاري تحميل البيانات…</div>
@@ -487,16 +487,18 @@
     let currentMonth = new Date().toISOString().slice(0,7);
     let openPanels = new Set();
 
-    // فحص المستخدم الحالي لمعرفة إذا كان "فكري"
+    // الصلاحيات وقراءة بيانات المستخدم
     const currentUser = (localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "").trim();
+    const userRole = (sessionStorage.getItem('role') || localStorage.getItem('role') || '').toLowerCase();
+    const isAdmin = userRole === 'admin';
     const isFekry = currentUser.includes("فكري") || currentUser.toLowerCase().includes("fekry");
 
-    // إخفاء إمكانية إضافة سواقين أو شريط الإحصائيات العامة لو كان المستخدم هو فكري
-    if (isFekry) {
+    // إظهار إضافة السائق والكروت العليا للأدمن فقط
+    if (isAdmin) {
         const addBlock = document.getElementById('addDriverBlock');
         const statsRow = document.getElementById('statsRow');
-        if (addBlock) addBlock.style.display = 'none';
-        if (statsRow) statsRow.style.display = 'none';
+        if (addBlock) addBlock.style.display = 'block';
+        if (statsRow) statsRow.style.display = 'grid';
     }
 
     function fmt(n){
@@ -540,8 +542,8 @@
         drivers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         render();
     }, (err) => {
-        console.error("خطأ في جلب السواقين:", err);
-        document.getElementById('driversList').innerHTML = `<div class="empty">تعذر تحميل بيانات السواقين، تأكد من الاتصال بالإنترنت</div>`;
+        console.error("خطأ في جلب البيانات:", err);
+        document.getElementById('driversList').innerHTML = `<div class="empty">تعذر تحميل البيانات، تأكد من الاتصال بالإنترنت</div>`;
     });
 
     onSnapshot(collection(db, ADVANCES_COL), (snap) => {
@@ -553,19 +555,19 @@
     function render(){
         document.getElementById('monthLabel').textContent = monthLabel(currentMonth);
 
-        // تصفية السواقين: لو المستخدم هو فكري يظهر فقط السائق "فكري"
+        // تصفية السواقين: لو المستخدم هو فكري يظهر فقط "فكري"
         let displayDrivers = drivers;
         if (isFekry) {
             displayDrivers = drivers.filter(d => (d.name || '').includes('فكري'));
         }
 
-        document.getElementById('driversTitle').textContent = `السواقين (${displayDrivers.length})`;
+        document.getElementById('driversTitle').textContent = `القائمة (${displayDrivers.length})`;
 
         let totalSalary = 0, totalAdv = 0;
         const list = document.getElementById('driversList');
 
         if(displayDrivers.length === 0){
-            list.innerHTML = `<div class="empty">لا يوجد بيانات سواقين متاحة لعرضها</div>`;
+            list.innerHTML = `<div class="empty">لا يوجد بيانات متاحة لعرضها</div>`;
         } else {
             list.innerHTML = displayDrivers.map(d => {
                 const advsMonth = advancesOfMonth(d.id, currentMonth);
@@ -577,7 +579,6 @@
                 const maxAdv = displayLimitForDriver(d);
                 const deficit = Number(d.deficit) || 0;
                 
-                // لليوزر فكري نفتح له اللوحة تلقائياً
                 if (isFekry) openPanels.add(d.id);
                 const isOpen = openPanels.has(d.id);
 
@@ -615,7 +616,7 @@
                         <div class="driver-actions">
                             <button class="icon-btn" data-toggle="${d.id}"><i class="fa-solid fa-plus"></i> سلفة</button>
                             <button class="icon-btn" data-edit-deficit="${d.id}"><i class="fa-solid fa-pen"></i> العجز</button>
-                            ${!isFekry ? `<button class="icon-btn danger" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
+                            ${isAdmin ? `<button class="icon-btn danger" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
                     </div>
                     <div class="advances-panel ${isOpen ? 'open' : ''}" id="panel-${d.id}">
@@ -678,7 +679,7 @@
                 document.getElementById('newPhone').value = '';
                 document.getElementById('newSalary').value = '';
             }catch(e){
-                alert('تعذرت إضافة السائق، حاول مرة أخرى');
+                alert('تعذرت الإضافة، حاول مرة أخرى');
                 console.error(e);
             }
         });
@@ -721,7 +722,7 @@
     function openExceptionModal(driver, p){
         const excess = p.newTotal - p.limit;
         document.getElementById('exceptionModalRows').innerHTML = `
-            <div class="modal-row"><span>السائق</span><b>${escapeHtml(driver.name)}</b></div>
+            <div class="modal-row"><span>الاسم</span><b>${escapeHtml(driver.name)}</b></div>
             <div class="modal-row"><span>الحد المسموح به بتاريخ ${p.date}</span><b>${fmt(p.limit)}</b></div>
             <div class="modal-row"><span>سلف الشهر الحالية</span><b>${fmt(p.existingMonthTotal)}</b></div>
             <div class="modal-row"><span>السلفة الجديدة</span><b>${fmt(p.amount)}</b></div>
@@ -761,14 +762,14 @@
 
     async function deleteDriver(driverId){
         const driver = drivers.find(d => d.id === driverId);
-        if(!confirm(`هل تريد حذف السائق "${driver ? driver.name : ''}" وكل بيانات سلفه؟`)) return;
+        if(!confirm(`هل تريد الحذف وكل بيانات سلفه؟`)) return;
         try{
             const q = query(collection(db, ADVANCES_COL), where("driverId", "==", driverId));
             const snap = await getDocs(q);
             await Promise.all(snap.docs.map(d => deleteDoc(doc(db, ADVANCES_COL, d.id))));
             await deleteDoc(doc(db, DRIVERS_COL, driverId));
         }catch(e){
-            alert('تعذر حذف السائق');
+            alert('تعذر الحذف');
             console.error(e);
         }
     }
