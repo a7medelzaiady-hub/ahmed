@@ -228,6 +228,8 @@
         .btn:active { transform: scale(.96); }
         .btn-brand { background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark)); color: #fff; box-shadow: var(--shadow-sm); }
         .btn-brand:hover { filter: brightness(1.07); }
+        .btn-coral { background: linear-gradient(135deg, #ef4444, var(--coral)); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-coral:hover { filter: brightness(1.07); }
         .btn-ghost { background: var(--brand-tint); color: var(--brand-dark); }
         .btn-ghost:hover { background: #d7f0e3; }
 
@@ -295,7 +297,7 @@
             padding: 7px 10px; transition: all .15s; font-family: 'Cairo', sans-serif;
         }
         .icon-btn:hover { color: var(--brand-dark); border-color: var(--brand-mid); background: var(--brand-tint); }
-        .icon-btn.danger:hover { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
+        .icon-btn.danger-btn:hover { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
 
         .advances-panel { border-top: 1px solid var(--border-subtle); padding: 14px 15px 16px; display: none; background: var(--surface); }
         .advances-panel.open { display: block; }
@@ -303,15 +305,27 @@
         .adv-form { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
         .adv-form input { flex: 1; min-width: 100px; }
         .adv-list { display: flex; flex-direction: column; gap: 6px; }
+        
         .adv-item {
             display: flex; align-items: center; justify-content: space-between;
             background: var(--card-bg); border: 1px solid var(--border-subtle); border-radius: 99px;
             padding: 8px 12px; font-size: 12.5px;
         }
-        .adv-item .info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .adv-item.is-deficit {
+            border-color: #fca5a5;
+            background: #fff5f5;
+        }
+        .adv-item .info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .adv-item .amount { color: var(--coral); font-weight: 800; font-variant-numeric: tabular-nums; }
         .adv-item .date { color: var(--text-mid); font-size: 11px; font-variant-numeric: tabular-nums; }
         .adv-item .note { color: var(--text-mid); font-size: 11.5px; }
+        
+        .badge-tag {
+            padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800;
+        }
+        .badge-deficit { background: var(--coral-tint); color: var(--coral); border: 1px solid #f87171; }
+        .badge-exception { background: var(--amber-tint); color: var(--amber); }
+
         .adv-item button { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 13px; padding: 2px 6px; }
         .adv-item button:hover { color: var(--coral); }
         .no-adv { font-size: 12px; color: var(--text-mid); padding: 6px 2px; }
@@ -485,15 +499,13 @@
     let drivers = [];
     let advances = [];
     let currentMonth = new Date().toISOString().slice(0,7);
-    let openPanels = new Set();
+    let openPanels = new Map(); // التخزين الآن يحفظ نوع اللوحة المفصلة (adv / deficit)
 
-    // الصلاحيات وقراءة بيانات المستخدم
     const currentUser = (localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "").trim();
     const userRole = (sessionStorage.getItem('role') || localStorage.getItem('role') || '').toLowerCase();
     const isAdmin = userRole === 'admin';
     const isFekry = currentUser.includes("فكري") || currentUser.toLowerCase().includes("fekry");
 
-    // إظهار إضافة السائق والكروت العليا للأدمن فقط
     if (isAdmin) {
         const addBlock = document.getElementById('addDriverBlock');
         const statsRow = document.getElementById('statsRow');
@@ -513,7 +525,9 @@
         return ARABIC_MONTHS[m-1] + ' ' + y;
     }
     function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
-    function advancesOfMonth(driverId, ym){ return advancesOf(driverId).filter(a => a.date && a.date.slice(0,7) === ym); }
+    function itemsOfMonth(driverId, ym, type){ 
+        return advancesOf(driverId).filter(a => a.date && a.date.slice(0,7) === ym && (type === 'deficit' ? a.isDeficit : !a.isDeficit)); 
+    }
 
     function calcAllowedLimit(baseSalary, dateStr){
         const d = new Date(dateStr + 'T00:00:00');
@@ -549,13 +563,12 @@
     onSnapshot(collection(db, ADVANCES_COL), (snap) => {
         advances = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         render();
-    }, (err) => console.error("خطأ في جلب السلف:", err));
+    }, (err) => console.error("خطأ في جلب السلف/العجز:", err));
 
     // ---------- Render ----------
     function render(){
         document.getElementById('monthLabel').textContent = monthLabel(currentMonth);
 
-        // تصفية السواقين: لو المستخدم هو فكري يظهر فقط "فكري"
         let displayDrivers = drivers;
         if (isFekry) {
             displayDrivers = drivers.filter(d => (d.name || '').includes('فكري'));
@@ -570,31 +583,48 @@
             list.innerHTML = `<div class="empty">لا يوجد بيانات متاحة لعرضها</div>`;
         } else {
             list.innerHTML = displayDrivers.map(d => {
-                const advsMonth = advancesOfMonth(d.id, currentMonth);
+                const advsMonth = itemsOfMonth(d.id, currentMonth, 'adv');
+                const deficitsMonth = itemsOfMonth(d.id, currentMonth, 'deficit');
+
                 const advSum = advsMonth.reduce((s,a)=>s+Number(a.amount),0);
+                const deficitSum = deficitsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const net = Number(d.baseSalary||0) - advSum;
+
                 totalSalary += Number(d.baseSalary||0);
                 totalAdv += advSum;
 
                 const maxAdv = displayLimitForDriver(d);
-                const deficit = Number(d.deficit) || 0;
                 
-                if (isFekry) openPanels.add(d.id);
-                const isOpen = openPanels.has(d.id);
+                if (isFekry && !openPanels.has(d.id)) openPanels.set(d.id, 'adv');
+                const activePanel = openPanels.get(d.id);
 
                 const initial = (d.name||'؟').trim().charAt(0);
 
+                // قائمة السلف
                 const advItemsHtml = advsMonth.length ? advsMonth.map(a => `
                     <div class="adv-item">
                         <div class="info">
                             <span class="amount">${fmt(a.amount)}</span>
                             <span class="date">${a.date||''}</span>
-                            ${a.exception ? `<span class="note" style="color:var(--coral); font-weight:700;">استثناء</span>` : ''}
+                            ${a.exception ? `<span class="badge-tag badge-exception">استثناء</span>` : ''}
                             ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
                         </div>
                         <button data-del-adv="${a.id}" title="حذف">✕</button>
                     </div>
                 `).join('') : `<div class="no-adv">لا توجد سلف مسجلة في هذا الشهر</div>`;
+
+                // قائمة العجز المميزة
+                const deficitItemsHtml = deficitsMonth.length ? deficitsMonth.map(a => `
+                    <div class="adv-item is-deficit">
+                        <div class="info">
+                            <span class="badge-tag badge-deficit">عجز</span>
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        <button data-del-adv="${a.id}" title="حذف">✕</button>
+                    </div>
+                `).join('') : `<div class="no-adv">لا يوجد عجز مسجل في هذا الشهر</div>`;
 
                 return `
                 <div class="driver">
@@ -611,23 +641,37 @@
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
                             <div class="n net"><div class="k">الصافي المستحق</div><div class="v">${fmt(net)}</div></div>
                             <div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>
-                            <div class="n deficit"><div class="k">العجز</div><div class="v">${fmt(deficit)}</div></div>
+                            <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
                         </div>
                         <div class="driver-actions">
-                            <button class="icon-btn" data-toggle="${d.id}"><i class="fa-solid fa-plus"></i> سلفة</button>
-                            <button class="icon-btn" data-edit-deficit="${d.id}"><i class="fa-solid fa-pen"></i> العجز</button>
-                            ${isAdmin ? `<button class="icon-btn danger" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
+                            <button class="icon-btn" data-toggle="${d.id}" data-type="adv"><i class="fa-solid fa-plus"></i> سلفة</button>
+                            <button class="icon-btn danger-btn" data-toggle="${d.id}" data-type="deficit"><i class="fa-solid fa-triangle-exclamation"></i> العجز</button>
+                            ${isAdmin ? `<button class="icon-btn danger-btn" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
                     </div>
-                    <div class="advances-panel ${isOpen ? 'open' : ''}" id="panel-${d.id}">
-                        <h3>سلف ${monthLabel(currentMonth)} — الحد المسموح حتى الآن: ${fmt(maxAdv)}</h3>
+
+                    <!-- لوحة السلف -->
+                    <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
+                        <h3>تسجيل سلفة — ${monthLabel(currentMonth)} (الحد المسموح حتى الآن: ${fmt(maxAdv)})</h3>
                         <div class="adv-form">
-                            <input type="number" min="0" placeholder="المبلغ" id="advAmount-${d.id}">
+                            <input type="number" min="0" placeholder="مبلغ السلفة" id="advAmount-${d.id}">
                             <input type="date" id="advDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
                             <input type="text" placeholder="ملاحظة (اختياري)" id="advNote-${d.id}">
-                            <button class="btn btn-brand" data-add-adv="${d.id}">إضافة</button>
+                            <button class="btn btn-brand" data-add-adv="${d.id}">إضافة سلفة</button>
                         </div>
                         <div class="adv-list">${advItemsHtml}</div>
+                    </div>
+
+                    <!-- لوحة العجز المميزة -->
+                    <div class="advances-panel ${activePanel === 'deficit' ? 'open' : ''}" style="background:#fff3f3; border-top: 1px solid #fca5a5;">
+                        <h3 style="color: var(--coral);">تسجيل عجز مالي مميز — ${monthLabel(currentMonth)}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="مبلغ العجز" id="deficitAmount-${d.id}">
+                            <input type="date" id="deficitDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="سبب/ملاحظة العجز (اختياري)" id="deficitNote-${d.id}">
+                            <button class="btn btn-coral" data-add-deficit="${d.id}">تسجيل عجز</button>
+                        </div>
+                        <div class="adv-list">${deficitItemsHtml}</div>
                     </div>
                 </div>`;
             }).join('');
@@ -644,12 +688,20 @@
         document.querySelectorAll('[data-toggle]').forEach(btn => {
             btn.onclick = () => {
                 const id = btn.getAttribute('data-toggle');
-                if(openPanels.has(id)) openPanels.delete(id); else openPanels.add(id);
+                const type = btn.getAttribute('data-type');
+                if(openPanels.get(id) === type) {
+                    openPanels.delete(id);
+                } else {
+                    openPanels.set(id, type);
+                }
                 render();
             };
         });
         document.querySelectorAll('[data-add-adv]').forEach(btn => {
             btn.onclick = () => addAdvance(btn.getAttribute('data-add-adv'));
+        });
+        document.querySelectorAll('[data-add-deficit]').forEach(btn => {
+            btn.onclick = () => addDeficit(btn.getAttribute('data-add-deficit'));
         });
         document.querySelectorAll('[data-del-adv]').forEach(btn => {
             btn.onclick = () => {
@@ -659,9 +711,6 @@
         });
         document.querySelectorAll('[data-del-driver]').forEach(btn => {
             btn.onclick = () => deleteDriver(btn.getAttribute('data-del-driver'));
-        });
-        document.querySelectorAll('[data-edit-deficit]').forEach(btn => {
-            btn.onclick = () => editDeficit(btn.getAttribute('data-edit-deficit'));
         });
     }
 
@@ -674,7 +723,7 @@
             const baseSalary = Number(document.getElementById('newSalary').value) || 0;
             if(!name){ document.getElementById('newName').focus(); return; }
             try{
-                await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, deficit: 0, createdAt: serverTimestamp() });
+                await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, createdAt: serverTimestamp() });
                 document.getElementById('newName').value = '';
                 document.getElementById('newPhone').value = '';
                 document.getElementById('newSalary').value = '';
@@ -687,6 +736,7 @@
 
     let pendingAdvance = null;
 
+    // إضافة سلفة
     window.addAdvance = async function(driverId){
         const amountEl = document.getElementById(`advAmount-${driverId}`);
         const dateEl = document.getElementById(`advDate-${driverId}`);
@@ -700,7 +750,7 @@
         if(!driver) return;
 
         const monthOfDate = date.slice(0,7);
-        const existingMonthTotal = advancesOfMonth(driverId, monthOfDate).reduce((s,a)=>s+Number(a.amount),0);
+        const existingMonthTotal = itemsOfMonth(driverId, monthOfDate, 'adv').reduce((s,a)=>s+Number(a.amount),0);
         const newTotal = existingMonthTotal + amount;
         const limit = calcAllowedLimit(driver.baseSalary, date);
 
@@ -711,10 +761,29 @@
         }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, exception: false, createdAt: serverTimestamp() });
-            openPanels.add(driverId);
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'adv');
         }catch(e){
             alert('تعذرت إضافة السلفة، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    // إضافة عجز كقيد مستقل بنفس نظام السلفة
+    window.addDeficit = async function(driverId){
+        const amountEl = document.getElementById(`deficitAmount-${driverId}`);
+        const dateEl = document.getElementById(`deficitDate-${driverId}`);
+        const noteEl = document.getElementById(`deficitNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: true, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'deficit');
+        }catch(e){
+            alert('تعذر تسجيل العجز، حاول مرة أخرى');
             console.error(e);
         }
     };
@@ -727,7 +796,7 @@
             <div class="modal-row"><span>سلف الشهر الحالية</span><b>${fmt(p.existingMonthTotal)}</b></div>
             <div class="modal-row"><span>السلفة الجديدة</span><b>${fmt(p.amount)}</b></div>
             <div class="modal-row"><span>الإجمالي بعد الإضافة</span><b>${fmt(p.newTotal)}</b></div>
-            <div class="modal-row excess"><span>مقدار التجاوز (هيتسجل كعجز)</span><b>${fmt(excess)}</b></div>
+            <div class="modal-row excess"><span>مقدار التجاوز (سيتسجل كعجز تلقائياً)</span><b>${fmt(excess)}</b></div>
         `;
         document.getElementById('exceptionModal').classList.add('open');
     }
@@ -743,13 +812,14 @@
         if(!pendingAdvance) return;
         const { driverId, amount, date, note, limit, newTotal } = pendingAdvance;
         const excess = Math.round(newTotal - limit);
-        const driver = drivers.find(d => d.id === driverId);
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, exception: true, createdAt: serverTimestamp() });
-            await updateDoc(doc(db, DRIVERS_COL, driverId), { deficit: (Number(driver.deficit)||0) + excess });
-            openPanels.add(driverId);
+            // حفظ السلفة العادية المسموحة مع الاستثناء
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, exception: true, createdAt: serverTimestamp() });
+            // تسجيل قيد العجز بالفرق المتبقي بنفس النظام
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'deficit');
         }catch(e){
-            alert('تعذر تسجيل السلفة بالاستثناء');
+            alert('تعذر تسجيل السلفة بالعجز');
             console.error(e);
         }
         closeExceptionModal();
@@ -757,12 +827,12 @@
 
     async function deleteAdvance(advId){
         try{ await deleteDoc(doc(db, ADVANCES_COL, advId)); }
-        catch(e){ alert('تعذر حذف السلفة'); console.error(e); }
+        catch(e){ alert('تعذر الحذف'); console.error(e); }
     }
 
     async function deleteDriver(driverId){
         const driver = drivers.find(d => d.id === driverId);
-        if(!confirm(`هل تريد الحذف وكل بيانات سلفه؟`)) return;
+        if(!confirm(`هل تريد الحذف وكل البيانات الخاصة به؟`)) return;
         try{
             const q = query(collection(db, ADVANCES_COL), where("driverId", "==", driverId));
             const snap = await getDocs(q);
@@ -770,22 +840,6 @@
             await deleteDoc(doc(db, DRIVERS_COL, driverId));
         }catch(e){
             alert('تعذر الحذف');
-            console.error(e);
-        }
-    }
-
-    async function editDeficit(driverId){
-        const driver = drivers.find(d => d.id === driverId);
-        if(!driver) return;
-        const current = Number(driver.deficit) || 0;
-        const input = prompt(`تعديل العجز المسجل على ${driver.name}:`, current || 0);
-        if(input === null) return;
-        const value = Number(input);
-        if(isNaN(value) || value < 0){ alert('من فضلك ادخل رقم صحيح'); return; }
-        try{
-            await updateDoc(doc(db, DRIVERS_COL, driverId), { deficit: value });
-        }catch(e){
-            alert('تعذر تحديث العجز');
             console.error(e);
         }
     }
