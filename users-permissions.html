@@ -185,7 +185,8 @@
         const roleVal = document.getElementById('userRole').value;
         const targetId = editingUserIdInput.value;
 
-        const userId = targetId ? targetId : ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
+        // مطابقة معرف المستند مع الاسم المدخل لمنع إنشاء مستند جديد
+        const userId = targetId ? targetId : username.trim();
 
         try {
             await setDoc(doc(db, "users", userId), {
@@ -197,6 +198,13 @@
                 updatedAt: serverTimestamp()
             }, { merge: true });
 
+            // تحديث الكاش المحلي لمنع التعارض عند انقطاع الإنترنت
+            try {
+                let localUsers = JSON.parse(localStorage.getItem('zaiady_users_credentials_cache')) || {};
+                localUsers[userId] = { pass: password, role: roleVal };
+                localStorage.setItem('zaiady_users_credentials_cache', JSON.stringify(localUsers));
+            } catch (_) {}
+
             alert(targetId ? 'تم تحديث بيانات المستخدم بنجاح' : 'تم إضافة المستخدم بنجاح');
             resetForm();
         } catch (err) {
@@ -205,7 +213,7 @@
         }
     });
 
-    // جلب المستخدمين وحل مشكلة جلب البيانات الفارغة
+    // جلب المستخدمين مباشرة من Firestore
     onSnapshot(collection(db, "users"), (snapshot) => {
         usersTableBody.innerHTML = '';
         usersDataMap = {};
@@ -219,9 +227,8 @@
             const data = docSnap.data();
             const id = docSnap.id;
 
-            // جلب المسميات المرنة لضمان تعبئة البيانات في كل الحالات
-            const parsedName = data.username || data.userName || data.name || data.user || id;
-            const parsedPass = data.password || data.pass || data.passWord || '';
+            const parsedName = data.username || data.userName || data.name || id;
+            const parsedPass = data.pass || data.password || data.passWord || '';
             const parsedRole = data.role || data.userRole || 'employee';
 
             usersDataMap[id] = {
