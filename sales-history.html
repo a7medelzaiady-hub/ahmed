@@ -545,6 +545,7 @@
 
     let allInvoices = [];
     let customersData = {};
+    let customersNameMap = {};
     let currentFilterType = null;
     let currentSourceFilter = 'van_sales'; 
     let currentRenderedInvoices = [];
@@ -664,7 +665,7 @@
         if (!tr) return "";
         if (tr.date) {
             let dateStr = convertToEnglishNumbers(tr.date);
-            let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+            let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{4})/);
             if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
             m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
             if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
@@ -690,24 +691,46 @@
     };
 
     /**
-     * تم تحديث طريقة جلب الحساب السابق للعميل بنفس المنطق الدقيق لملف sales-invoice.html (getRealBalance)
+     * تحديث شامل وطريقة متطابقة 100% لملف كشف الحساب لجلب الرصيد التراكمي والسابق
      */
     function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
-        const customerInvoicesMap = {};
-        
+
+        // تجميع الفواتير حسب المعرف الصريح أو الاسم المحول لربط المعاملات
+        const customerGroupMap = {};
+
         allInvoices.forEach(inv => {
-            if (!inv.customerId) return;
-            if (!customerInvoicesMap[inv.customerId]) customerInvoicesMap[inv.customerId] = [];
+            let groupKey = inv.customerId;
+            if (!groupKey && inv.customerName) {
+                groupKey = customersNameMap[normalizeName(inv.customerName)];
+            }
+            if (!groupKey && inv.customerName) {
+                groupKey = "NAME_" + normalizeName(inv.customerName);
+            }
+            if (!groupKey) return;
+
+            if (!customerGroupMap[groupKey]) customerGroupMap[groupKey] = [];
             let timeMs = inv.timestamp?.seconds ? (inv.timestamp.seconds * 1000) : parseArabicDateToMs(inv.time || inv.date);
-            customerInvoicesMap[inv.customerId].push({ inv, timeMs });
+            customerGroupMap[groupKey].push({ inv, timeMs });
         });
 
-        Object.keys(customerInvoicesMap).forEach(custId => {
-            const list = customerInvoicesMap[custId];
+        Object.keys(customerGroupMap).forEach(groupKey => {
+            const list = customerGroupMap[groupKey];
             list.sort((a, b) => a.timeMs - b.timeMs);
-            const baseBalance = customersData[custId] ? Number(customersData[custId].initialBalance || 0) : 0;
-            const custTrans = rawTransactionsList.filter(t => t.partyId === custId || t.customerId === custId);
+
+            let realCustId = groupKey.startsWith("NAME_") ? null : groupKey;
+            let baseBalance = 0;
+            if (realCustId && customersData[realCustId]) {
+                baseBalance = Number(customersData[realCustId].initialBalance || 0);
+            }
+
+            // تصفية المعاملات المالية (سندات القبض/الصرف) المرتبطة بهذا العميل
+            const custTrans = rawTransactionsList.filter(t => {
+                if (realCustId && (t.partyId === realCustId || t.customerId === realCustId)) return true;
+                if (t.customerName && normalizeName(t.customerName) === normalizeName(list[0].inv.customerName)) return true;
+                if (t.partyName && normalizeName(t.partyName) === normalizeName(list[0].inv.customerName)) return true;
+                return false;
+            });
 
             list.forEach(item => {
                 const targetTimeMs = item.timeMs;
@@ -716,13 +739,12 @@
 
                 for (const prior of list) {
                     if (prior.inv.id === item.inv.id) continue;
-                    
-                    // الاعتماد الصارم على التوقيت الزمني لكون الفاتورة سابقة
+
                     if (prior.timeMs < targetTimeMs) {
                         const total = Number(prior.inv.total) || 0;
                         const paid = Number(prior.inv.calculatedCash + prior.inv.calculatedWallet) || Number(prior.inv.paid) || 0;
                         const rem = prior.inv.remaining !== undefined ? Number(prior.inv.remaining) : (total - paid);
-                        
+
                         if (rem > 0) {
                             lastPendingDate = parseInvoiceDate(prior.inv);
                         }
@@ -734,9 +756,9 @@
                 custTrans.forEach(tr => {
                     const trTimeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
                     if (trTimeMs < targetTimeMs) {
-                        const amt = Number(tr.amount) || 0;
-                        if (tr.type === 'قبض') prevTransEffect -= amt;
-                        else if (tr.type === 'صرف') prevTransEffect += amt;
+                        const amt = Number(tr.amount || tr.total || 0);
+                        if (tr.type === 'قبض') prevTransEffect -= Math.abs(amt);
+                        else if (tr.type === 'صرف') prevTransEffect += Math.abs(amt);
                     }
                 });
 
@@ -996,11 +1018,11 @@
                 invQuery.get().catch(async () => await db.collection("invoices").orderBy("timestamp", "desc").limit(100).get())
             ]);
 
-            customersData = {}; const customersNameIndex = {};
+            customersData = {}; customersNameMap = {};
             if (custSnap) {
                 custSnap.forEach(d => {
                     customersData[d.id] = { id: d.id, name: d.data().name, initialBalance: Number(d.data().initialBalance) || 0 };
-                    if (d.data().name) customersNameIndex[normalizeName(d.data().name)] = d.id;
+                    if (d.data().name) customersNameMap[normalizeName(d.data().name)] = d.id;
                 });
             }
 
@@ -1012,7 +1034,7 @@
                     const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
                     if (tr.type === 'قبض' && !isInvoicePayment) {
                         let partyId = tr.partyId || tr.customerId || ""; let partyName = tr.customerName || tr.partyName || "";
-                        if (!partyId && partyName && customersNameIndex[normalizeName(partyName)]) partyId = customersNameIndex[normalizeName(partyName)];
+                        if (!partyId && partyName && customersNameMap[normalizeName(partyName)]) partyId = customersNameMap[normalizeName(partyName)];
                         if (partyId || partyName) {
                             let amt = Number(tr.amount || tr.total || 0), method = tr.method || tr.paymentMethod || 'نقدى';
                             let cashAmt = (method === 'محفظة' || method === 'محفظه') ? 0 : amt, walletAmt = (method === 'محفظة' || method === 'محفظه') ? amt : 0;
@@ -1032,7 +1054,7 @@
             });
             allInvoices = tempInvoices.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
-            // الحساب التراكمي المحدث
+            // تطبيق الحساب التراكمي الشامل
             calculateCumulativeBalances();
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
             filterBySource(currentSourceFilter);
