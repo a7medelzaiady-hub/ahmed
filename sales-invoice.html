@@ -473,6 +473,75 @@
     </div>
 </div>
 
+<!-- نافذة إضافة صنف جديد بالكامل للمخزن -->
+<div id="newProductModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); z-index: 100000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: white; width: 90%; max-width: 400px; padding: 20px; border-radius: var(--card-radius); box-shadow: 0 10px 25px rgba(0,0,0,0.25); animation: scaleUp 0.2s ease;">
+        <div class="text-center mb-3">
+            <div style="width: 50px; height: 50px; background: #ebf9eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px;">
+                <i class="fas fa-box-open" style="color: var(--accent); font-size: 1.5rem;"></i>
+            </div>
+            <h5 class="fw-bold m-0" style="color: var(--text-primary);">إضافة صنف جديد للمخزن</h5>
+            <small class="text-muted">سيتم تسجيل الصنف في قواعد البيانات لاستخدامه فوراً</small>
+        </div>
+
+        <input type="hidden" id="npTargetRowId">
+
+        <div class="mb-2">
+            <label class="sub-lbl" style="text-align:right;">اسم الصنف</label>
+            <input type="text" id="npName" class="form-control text-start fw-bold">
+        </div>
+
+        <div class="row g-2 mb-2">
+            <div class="col-6">
+                <label class="sub-lbl" style="text-align:right;">الوحدة</label>
+                <select id="npUnit" class="form-select">
+                    <option value="box" selected>كرتونة</option>
+                    <option value="pcs">جركن / قطعة</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label class="sub-lbl" style="text-align:right;">معامل الوحدة (قطع/كرتونة)</label>
+                <input type="number" id="npFactor" class="form-control" value="12">
+            </div>
+        </div>
+
+        <div class="row g-2 mb-2">
+            <div class="col-6">
+                <label class="sub-lbl" style="text-align:right;">سعر التكلفة (الشراء)</label>
+                <input type="number" id="npBuy" class="form-control" value="0">
+            </div>
+            <div class="col-6">
+                <label class="sub-lbl" style="text-align:right;">سعر البيع</label>
+                <input type="number" id="npSell" class="form-control" value="0">
+            </div>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <label class="sub-lbl" style="text-align:right;">أدنى سعر بيع مسموح</label>
+                <input type="number" id="npMinPrice" class="form-control" value="0">
+            </div>
+            <div class="col-6">
+                <label class="sub-lbl" style="text-align:right;">الرصيد المتاح (بالقطع)</label>
+                <input type="number" id="npTotalPcs" class="form-control" value="0">
+            </div>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-7">
+                <button type="button" id="btnConfirmSaveNewProduct" class="btn btn-success w-100 fw-bold py-2" style="border-radius: 10px;">
+                    <i class="fas fa-plus-circle me-1"></i> إضافة للمخزن
+                </button>
+            </div>
+            <div class="col-5">
+                <button type="button" class="btn btn-light w-100 fw-bold py-2 text-danger" style="border-radius: 10px; border: 1px solid #ddd;" onclick="closeNewProductModal()">
+                    إلغاء
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="customAlertModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
     <div style="background: white; width: 88%; max-width: 380px; padding: 22px; border-radius: var(--card-radius); text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: scaleUp 0.2s ease;">
         <div style="width: 55px; height: 55px; background: #fff3cd; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px;">
@@ -1118,13 +1187,109 @@
     window.searchProduct = (input) => {
         const term = input.value.toLowerCase().trim();
         const resultadosDiv = input.parentElement.querySelector('.search-results');
+        const rowId = input.closest('.product-row').id;
+
         if (term.length < 1) { resultadosDiv.style.display = 'none'; return; }
+        
         const filtered = inventory.filter(i => i.name.toLowerCase().includes(term)).slice(0, 15);
-        resultadosDiv.innerHTML = filtered.map(p => `
-            <div class="search-item" onclick="selectProduct('${input.closest('.product-row').id}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
+        
+        let itemsHtml = filtered.map(p => `
+            <div class="search-item" onclick="selectProduct('${rowId}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
                 <b>${p.name}</b> <span style="font-size:0.7rem; color:#6c757d; display:block; margin-top:2px;">المخزن: ${p.totalPcs} قطعة</span>
             </div>`).join('');
-        resultadosDiv.style.display = filtered.length > 0 ? 'block' : 'none';
+
+        // زر إضافة صنف جديد في حال عدم توفره بـ الداتابيز
+        const safeName = input.value.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        itemsHtml += `
+            <div class="search-item bg-light text-success fw-bold border-top" onclick="openNewProductModal('${rowId}', '${safeName}')">
+                <i class="fas fa-plus-circle me-1"></i> إضافة "${input.value}" كصنف جديد للمخزن
+            </div>`;
+
+        resultadosDiv.innerHTML = itemsHtml;
+        resultadosDiv.style.display = 'block';
+    };
+
+    window.openNewProductModal = (rowId, initialName) => {
+        document.getElementById('npTargetRowId').value = rowId;
+        document.getElementById('npName').value = initialName || '';
+        document.getElementById('npUnit').value = 'box';
+        document.getElementById('npFactor').value = 12;
+        document.getElementById('npBuy').value = 0;
+        document.getElementById('npSell').value = 0;
+        document.getElementById('npMinPrice').value = 0;
+        document.getElementById('npTotalPcs').value = 0;
+
+        const row = document.getElementById(rowId);
+        if (row) {
+            const searchRes = row.querySelector('.search-results');
+            if (searchRes) searchRes.style.display = 'none';
+        }
+
+        document.getElementById('newProductModal').style.display = 'flex';
+    };
+
+    window.closeNewProductModal = () => {
+        document.getElementById('newProductModal').style.display = 'none';
+    };
+
+    document.getElementById('btnConfirmSaveNewProduct').onclick = async () => {
+        const rowId = document.getElementById('npTargetRowId').value;
+        const name = document.getElementById('npName').value.trim();
+        const unit = document.getElementById('npUnit').value;
+        const unitFactor = parseFloat(document.getElementById('npFactor').value) || 1;
+        const buy = parseFloat(document.getElementById('npBuy').value) || 0;
+        const sell = parseFloat(document.getElementById('npSell').value) || 0;
+        const minPrice = parseFloat(document.getElementById('npMinPrice').value) || 0;
+        const totalPcs = parseFloat(document.getElementById('npTotalPcs').value) || 0;
+
+        if (!name) {
+            return window.showCustomAlert("يرجى كتابة اسم الصنف الجديد");
+        }
+
+        const btn = document.getElementById('btnConfirmSaveNewProduct');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري الحفظ...';
+
+        try {
+            const newDocRef = await addDoc(collection(db, "inventory"), {
+                name,
+                unit,
+                unitFactor,
+                buy,
+                sell,
+                minPrice,
+                totalPcs,
+                createdAt: serverTimestamp()
+            });
+
+            const newProductObj = {
+                id: newDocRef.id,
+                name,
+                unit,
+                unitFactor,
+                buy,
+                sell,
+                minPrice,
+                totalPcs
+            };
+
+            inventory.push(newProductObj);
+            persistCache();
+
+            window.closeNewProductModal();
+            window.showCustomAlert(`تمت إضافة الصنف "${name}" إلى المخزن بنجاح!`, false);
+
+            if (rowId) {
+                await window.selectProduct(rowId, newProductObj.id, name);
+            }
+
+        } catch (e) {
+            console.error(e);
+            window.showCustomAlert("حدث خطأ أثناء حفظ الصنف الجديد بالمخزن.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus-circle me-1"></i> إضافة للمخزن';
+        }
     };
 
     window.selectProduct = async (rowId, pid, pname) => {
@@ -1556,9 +1721,6 @@
 
             const currentInvoiceTime = document.getElementById('invTime').value || originalInvoiceTime || new Date().toLocaleString('ar-EG');
             
-            // =========================================================================
-            // حل المشكلة: تحويل نص التاريخ في الشاشة إلى Date Object لحفظ Timestamp صحيح
-            // =========================================================================
             let parsedTimeMs = parseArabicDate(currentInvoiceTime);
             let finalDateObj = parsedTimeMs > 0 ? new Date(parsedTimeMs) : new Date();
             let finalTimestampObj = Timestamp.fromDate(finalDateObj);
@@ -1587,7 +1749,7 @@
                 cashAmount: Number(finalCash) || 0,
                 walletAmount: Number(finalWallet) || 0,
                 items, time: currentInvoiceTime, 
-                timestamp: finalTimestampObj, // التحديث هنا: الحفظ بالتاريخ الموجود بالشاشة
+                timestamp: finalTimestampObj,
                 notes: finalNotes
             };
 
@@ -1985,7 +2147,6 @@
 
                     originalInvoiceTime = data.time || "";
                     document.getElementById('invTime').value = originalInvoiceTime;
-                    // السماح بتعديل التاريخ إن لزم الأمر
 
                     document.getElementById('cashAmount').value = data.cashAmount || 0;
                     document.getElementById('walletAmount').value = data.walletAmount || 0;
