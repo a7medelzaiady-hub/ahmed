@@ -104,6 +104,13 @@
             filter: brightness(1.1);
         }
 
+        .btn-login:disabled {
+            background: #4a5568;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
         .logo-icon { 
             width: 75px;
             height: 75px;
@@ -118,7 +125,7 @@
             border: 1px solid var(--border-color);
         }
 
-        #errMsg { font-weight: 700; min-height: 22px; font-size: 0.8rem; }
+        #errMsg { font-weight: 700; min-height: 22px; font-size: 0.8rem; line-height: 1.5; }
 
         .custom-popup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }  
         .custom-popup-box { background: #ffffff; width: 88%; max-width: 350px; padding: 22px; border-radius: 16px; text-align: center; font-family: 'Cairo'; box-shadow: 0 10px 25px rgba(0,0,0,0.3); color: #1b2e26; }  
@@ -145,16 +152,18 @@
     <h5 class="fw-bold mb-1" style="font-weight: 800; letter-spacing: 0.5px;">الزيادي لزيوت السيارات</h5>
     <p class="small mb-4" style="color: var(--text-muted); font-weight: 600;">بوابة تسجيل الدخول للنظام</p>
     
-    <div>
-        <input type="text" id="username" class="form-control" placeholder="اسم المستخدم" autocomplete="off">
-    </div>
-    <div>
-        <input type="password" id="password" class="form-control" placeholder="كلمة المرور">
-    </div>
-    
-    <button class="btn-login" id="btnLogin">
-        <i class="fas fa-sign-in-alt me-1"></i> دخول النظام
-    </button>
+    <form id="loginForm" onsubmit="return false;">
+        <div>
+            <input type="text" id="username" class="form-control" placeholder="اسم المستخدم" autocomplete="username" maxlength="50" required>
+        </div>
+        <div>
+            <input type="password" id="password" class="form-control" placeholder="كلمة المرور" autocomplete="current-password" maxlength="50" required>
+        </div>
+        
+        <button type="submit" class="btn-login" id="btnLogin">
+            <i class="fas fa-sign-in-alt me-1"></i> دخول النظام
+        </button>
+    </form>
     <div id="errMsg" class="text-danger mt-3"></div>
 </div>
 
@@ -195,11 +204,47 @@
     const loader = document.getElementById('loader');
     const loginContent = document.getElementById('loginContent');
     const CACHE_KEY_USERS = 'zaiady_users_credentials_cache';
+    const ATTEMPTS_KEY = 'zaiady_login_attempts';
 
-    // دالة مساعدة لحفظ بيانات الجلسة كاملة لحل مشكلة الطرد المباشر
+    // حماية من الهجمات: نظام قفل المحاولات الفاشلة Rate-Limiting
+    function checkBruteForceLockout() {
+        try {
+            const attempts = JSON.parse(localStorage.getItem(ATTEMPTS_KEY)) || { count: 0, lockUntil: 0 };
+            if (attempts.lockUntil && Date.now() < attempts.lockUntil) {
+                const remainingSecs = Math.ceil((attempts.lockUntil - Date.now()) / 1000);
+                return { isLocked: true, remainingSecs };
+            }
+            if (attempts.lockUntil && Date.now() >= attempts.lockUntil) {
+                localStorage.removeItem(ATTEMPTS_KEY);
+            }
+        } catch (_) {}
+        return { isLocked: false, remainingSecs: 0 };
+    }
+
+    function recordFailedAttempt() {
+        try {
+            let attempts = JSON.parse(localStorage.getItem(ATTEMPTS_KEY)) || { count: 0, lockUntil: 0 };
+            attempts.count += 1;
+            if (attempts.count >= 5) { // بعد 5 محاولات خاطئة يتم الحظر لمرحلة مؤقتة (60 ثانية)
+                attempts.lockUntil = Date.now() + (60 * 1000); 
+            }
+            localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(attempts));
+        } catch (_) {}
+    }
+
+    function resetFailedAttempts() {
+        localStorage.removeItem(ATTEMPTS_KEY);
+    }
+
+    // تنظيف المدخلات للحماية
+    function sanitizeInput(str) {
+        return String(str || '').replace(/[<>'"/]/g, '').trim();
+    }
+
+    // حفظ بيانات الجلسة بأسلوب آمن
     function saveSessionData(username, role, userId = null) {
         const generatedUserId = userId || ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
-        const token = 'token_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        const token = 'token_' + Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
 
         sessionStorage.setItem('isLoggedIn', 'true');
         sessionStorage.setItem('username', username);
@@ -257,32 +302,12 @@
     window.addEventListener('online',  () => showOfflineBanner(false));
     window.addEventListener('offline', () => showOfflineBanner(true));
 
-    async function autoInitializeUser() {
-        let localUsers = {};
-        try {
-            localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
-        } catch(_) {}
-
-        localUsers["user"] = { pass: "010277", role: "restricted" };
-        localUsers["admin"] = { pass: "01000222", role: "admin" };
-        localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
-
-        if (navigator.onLine) {
-            try {
-                await setDoc(doc(db, "users", "user"), { pass: "010277", role: "restricted" }, { merge: true });
-                await setDoc(doc(db, "users", "admin"), { pass: "01000222", role: "admin" }, { merge: true });
-            } catch (e) { console.error(e); }
-        }
-    }
-
     document.addEventListener("DOMContentLoaded", () => {
         if (!navigator.onLine) { showOfflineBanner(true); }
-        autoInitializeUser(); 
         
         const loggedUser = sessionStorage.getItem('isLoggedIn');
         const authToken = sessionStorage.getItem('authToken');
         
-        // التحقق المزدوج لتجنب التكرار والتحويل غير المكتمل
         if (loggedUser === 'true' && authToken) {
             window.location.href = "index1.html";
         } else {
@@ -296,11 +321,20 @@
         }
     });
 
-    document.getElementById('btnLogin').onclick = async function() {
-        const userVal = document.getElementById('username').value.trim();
+    document.getElementById('loginForm').onsubmit = async function(e) {
+        e.preventDefault();
+        
+        const userVal = sanitizeInput(document.getElementById('username').value);
         const passVal = document.getElementById('password').value.trim();
         const err = document.getElementById('errMsg');
-        const btn = this;
+        const btn = document.getElementById('btnLogin');
+
+        // فحص حالة الحظر من الهجمات المتكررة
+        const lockStatus = checkBruteForceLockout();
+        if (lockStatus.isLocked) {
+            err.innerText = `⛔ تم حظر المحاولات مؤقتاً لحماية الحساب. انتظر ${lockStatus.remainingSecs} ثانية.`;
+            return;
+        }
 
         if(!userVal || !passVal) {
             err.innerText = "⚠️ برجاء ملء الحقول المطلوبة أولاً";
@@ -311,17 +345,20 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري التحقق...';
         err.innerText = ""; 
 
+        // 🟢 الدخول في حالة عدم وجود إنترنت (Offline Mode)
         if (!navigator.onLine) {
             try {
                 const localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
                 const cachedUser = localUsers[userVal];
 
                 if (cachedUser) {
-                    if (String(cachedUser.pass).trim() === String(passVal).trim()) {
-                        // حفظ التوكن وبيانات الجلسة للعمل بدون إنترنت
+                    const storedPass = String(cachedUser.pass || cachedUser.password || '').trim();
+                    if (storedPass === passVal) {
+                        resetFailedAttempts();
                         saveSessionData(userVal, cachedUser.role || 'restricted');
                         window.location.href = "index1.html";
                     } else {
+                        recordFailedAttempt();
                         err.innerText = "❌ كلمة المرور غير صحيحة (فحص الكاش المحلي)";
                     }
                 } else {
@@ -336,13 +373,19 @@
             return;
         }
 
+        // 🟢 الدخول أونلاين من الفايربيس (Online Mode)
         try {
             const userRef = doc(db, "users", userVal);
             const userSnap = await getDoc(userRef);
 
             if (userSnap.exists()) {
                 const userData = userSnap.data();
-                if (String(userData.pass).trim() === String(passVal).trim()) {
+                
+                // قراءة كلمة المرور بأمان سواء كانت في pass أو password
+                const dbPass = String(userData.pass || userData.password || '').trim();
+
+                if (dbPass === passVal) {
+                    resetFailedAttempts();
                     
                     const nowIso = new Date().toISOString();
                     await setDoc(userRef, { 
@@ -350,19 +393,21 @@
                         lastLogin: nowIso 
                     }, { merge: true });
 
+                    // تحديث الكاش المحلي فقط بالكلمة الصحيحة التي تم التحقق منها
                     try {
                         let localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
-                        localUsers[userVal] = { pass: String(passVal).trim(), role: userData.role || 'restricted' };
+                        localUsers[userVal] = { pass: passVal, role: userData.role || 'restricted' };
                         localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
                     } catch(_) {}
 
-                    // حفظ كافة قيم الجلسة بما فيها authToken و userId
                     saveSessionData(userVal, userData.role || 'restricted', userSnap.id);
                     window.location.href = "index1.html";
                 } else {
+                    recordFailedAttempt();
                     err.innerText = "❌ كلمة المرور المدخلة غير صحيحة";
                 }
             } else {
+                recordFailedAttempt();
                 err.innerText = "❌ اسم المستخدم غير مسجل بالنظام";
             }
         } catch (e) {
