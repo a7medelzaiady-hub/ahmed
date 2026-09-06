@@ -12,7 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-    <!-- مكاتب فايربيز (تم إضافة Storage) -->
+    <!-- مكاتب فايربيز -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
@@ -391,11 +391,8 @@
         <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <h6 class="m-0"><i class="fas fa-history me-1"></i> سجل المبيعات</h6>
         <div class="header-actions">
-            <!-- زر الانتقال لسجل النقدية والخزينة -->
             <a href="cash-register.html" class="add-btn" style="background: #252525; border-color: rgba(255,255,255,0.2);" title="سجل النقدية والخزينة"><i class="fas fa-cash-register"></i></a>
-            <!-- زر الانتقال لأرشيف الصور الجديد (للأدمن) -->
             <a href="archive-images.html" class="add-btn admin-item" style="background:#5b21b6; border-color:rgba(255,255,255,0.2);" title="أرشيف صور الفواتير"><i class="fas fa-photo-video"></i></a>
-            <!-- زر سلة المحذوفات للآدمن -->
             <a href="trashi.html" class="add-btn trash-nav-btn admin-item" id="trashNavBtn" title="فتح سلة المحذوفات"><i class="fas fa-trash-alt"></i></a>
             <button class="add-btn" id="exportExcelBtn" title="تصدير كل الأرشيف إكسيل"><i class="fas fa-file-excel"></i></button>
             <a href="sales-invoice.html" class="add-btn add-nav-btn" title="فاتورة جديدة"><i class="fas fa-plus"></i></a>
@@ -422,7 +419,6 @@
                 </div>
             </div>
 
-            <!-- زر تصفير النظام المُعدّل للآدمن -->
             <button class="panel-btn btn-reset-danger admin-item" id="deleteAllCustomersBtn" onclick="clearAllSalesAdmin()">
                 <i class="fas fa-camera"></i> تصوير وتصفير النظام لسلة المحذوفات (للآدمن فقط)
             </button>
@@ -644,19 +640,6 @@
         } catch (e) { } return 0;
     }
 
-    function toArabicDigits(num) {
-        const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-        return String(num).replace(/[0-9]/g, d => arabicDigits[d]);
-    }
-
-    function formatArabicDayMonth(dateStr) {
-        if (!dateStr || !dateStr.includes('-')) return dateStr || "";
-        const parts = dateStr.split('-');
-        if (parts.length !== 3) return dateStr;
-        const monthNames = ["يناير", "فبراير", "مارس", "ابريل", "مايو", "يونيو", "يوليو", "اغسطس", "سبتمبر", "اكتوبر", "نوفمبر", "ديسمبر"];
-        return `${toArabicDigits(parseInt(parts[2]))}-${monthNames[parseInt(parts[1])-1] || ""}-${toArabicDigits(parseInt(parts[0]))}`;
-    }
-
     function cleanDateString(dateStr) {
         if (!dateStr) return "";
         dateStr = convertToEnglishNumbers(dateStr);
@@ -706,6 +689,9 @@
         if (box) box.style.display = (box.style.display === "none" || box.style.display === "") ? "block" : "none";
     };
 
+    /**
+     * تم تحديث طريقة جلب الحساب السابق للعميل بنفس المنطق الدقيق لملف sales-invoice.html (getRealBalance)
+     */
     function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
         const customerInvoicesMap = {};
@@ -721,7 +707,7 @@
             const list = customerInvoicesMap[custId];
             list.sort((a, b) => a.timeMs - b.timeMs);
             const baseBalance = customersData[custId] ? Number(customersData[custId].initialBalance || 0) : 0;
-            const custTrans = rawTransactionsList.filter(t => t.partyId === custId);
+            const custTrans = rawTransactionsList.filter(t => t.partyId === custId || t.customerId === custId);
 
             list.forEach(item => {
                 const targetTimeMs = item.timeMs;
@@ -730,9 +716,11 @@
 
                 for (const prior of list) {
                     if (prior.inv.id === item.inv.id) continue;
+                    
+                    // الاعتماد الصارم على التوقيت الزمني لكون الفاتورة سابقة
                     if (prior.timeMs < targetTimeMs) {
                         const total = Number(prior.inv.total) || 0;
-                        const paid = Number(prior.inv.calculatedCash + prior.inv.calculatedWallet) || 0;
+                        const paid = Number(prior.inv.calculatedCash + prior.inv.calculatedWallet) || Number(prior.inv.paid) || 0;
                         const rem = prior.inv.remaining !== undefined ? Number(prior.inv.remaining) : (total - paid);
                         
                         if (rem > 0) {
@@ -801,7 +789,6 @@
             const prevBalAmt = Number(inv.previousBalance || 0);
             const netAccountTotal = prevBalAmt + remainingAmt;
 
-            // تحديد المسمى الدقيق وتاريخ آخر فاتورة للحساب السابق
             let prevBalanceLabel = "حساب سابق";
             if (inv.lastPendingInvoiceDate) {
                 let parts = inv.lastPendingInvoiceDate.split('-');
@@ -828,14 +815,12 @@
                         <div class="fin-box text-dark">إجمالي الفاتورة <span class="num">${(Number(inv.total) || 0).toFixed(2)}</span></div>
                         ${discountAmount > 0 ? `<div class="fin-box" style="color: var(--germany-red);">الخصم <span class="num">${discountAmount.toFixed(2)}</span></div>` : ''}
                         
-                        <!-- إظهار سداد نقدي ومحفظة شرط أن يكون أحدهما أكبر من صفر -->
                         ${inv.calculatedCash > 0 ? `<div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>` : ''}
                         ${inv.calculatedWallet > 0 ? `<div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>` : ''}
 
                         <div class="fin-box text-dark fw-bold">المسدد الشامل <span class="num">${totalPaid.toFixed(2)}</span></div>
                         <div class="fin-box text-danger">الأجل (المتبقي) <span class="num">${remainingAmt.toFixed(2)}</span></div>
                         
-                        <!-- إخفاء كلمة "حساب سابق" تماماً لو كان الحساب السابق يساوي صفر -->
                         ${prevBalAmt !== 0 ? `<div class="fin-box text-secondary" style="grid-column: span 2;">${prevBalanceLabel} <span class="num">${prevBalAmt.toFixed(2)}</span></div>` : ''}
                         
                         <div class="fin-box text-dark fw-bold" style="grid-column: span 2; background: #e2e8f0; padding: 6px; border-radius: 8px; text-align: center;">
@@ -922,8 +907,6 @@
 
     window.saveDailyCashRegister = async () => {
         const targetDate = document.getElementById('dateFilterInput')?.value || new Date().toLocaleDateString('en-CA');
-        
-        // استخراج قيم الإحصائيات الكاملة الظاهرة بالشاشة
         const todayCash = parseFloat(document.getElementById('todayCash')?.innerText || 0);
         const todayWallet = parseFloat(document.getElementById('todayWallet')?.innerText || 0);
         const todayRemaining = parseFloat(document.getElementById('todayRemaining')?.innerText || 0);
@@ -931,7 +914,6 @@
 
         const inputVal = document.getElementById('actualCashInput')?.value.trim() || "";
 
-        // حساب الكاش الفعلي بدقة وتفكيك الأرقام المكتوبة بمسافات
         let actualCash = 0;
         if (inputVal !== "") {
             convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => {
@@ -939,7 +921,7 @@
                 if (!isNaN(n)) actualCash += n;
             });
         } else {
-            actualCash = todayCash; // في حالة عدم الإدخال تفترض المطابقة
+            actualCash = todayCash;
         }
 
         const diff = actualCash - todayCash;
@@ -951,7 +933,6 @@
             icon: "info",
             onConfirm: async () => {
                 try {
-                    // حفظ كافة الحقول الشاملة بجميع مسمياتها لضمان مطابقة عرض cash-register.html
                     await db.collection("daily_cash_register").doc(targetDate).set({
                         date: targetDate, 
                         expectedCash: todayCash, 
@@ -960,17 +941,12 @@
                         cashAmount: actualCash,
                         actualCashInput: inputVal,
                         difference: diff,
-                        
-                        // الإحصائيات الإضافية الشاملة
                         totalSales: todayTotalSales,
                         todayTotalSales: todayTotalSales,
-                        
                         walletTotal: todayWallet,
                         todayWallet: todayWallet,
-                        
                         remainingTotal: todayRemaining,
                         todayRemaining: todayRemaining,
-                        
                         createdBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
                         closedBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -1056,6 +1032,7 @@
             });
             allInvoices = tempInvoices.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
+            // الحساب التراكمي المحدث
             calculateCumulativeBalances();
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
             filterBySource(currentSourceFilter);
@@ -1081,7 +1058,6 @@
         let walletAmount = Number(inv.calculatedWallet || 0);
         let prevBalAmt = Number(inv.previousBalance || 0);
         let remainingAmt = Number(inv.remaining || 0);
-        let totalPaid = cashAmount + walletAmount;
 
         let payMethodText = inv.paymentMethod || "آجل";
         if (cashAmount > 0 && walletAmount > 0) payMethodText = "سداد كاش ومحفظة";
