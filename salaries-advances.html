@@ -225,6 +225,49 @@
         .driver-nums .deficit .v { color: var(--coral); }
         .driver-nums .absence .v { color: var(--violet); }
 
+        /* كارت حساب الاستحقاق الفعلي حتى اليوم */
+        .accrual-box {
+            background: #f0fdf4;
+            border-top: 1px solid #bbf7d0;
+            border-bottom: 1px solid #bbf7d0;
+            padding: 10px 15px;
+            font-size: 12px;
+        }
+        .accrual-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 800;
+            color: var(--brand-dark);
+            margin-bottom: 6px;
+        }
+        .accrual-details {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--text-mid);
+            font-size: 11.5px;
+        }
+        .accrual-details b {
+            font-variant-numeric: tabular-nums;
+            color: var(--text-deep);
+        }
+        .accrual-status-positive {
+            color: var(--brand-dark);
+            font-weight: 900;
+            background: #dcfce7;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        .accrual-status-negative {
+            color: var(--coral);
+            font-weight: 900;
+            background: #fee2e2;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
         /* Exception modal */
         .modal-overlay {
             position: fixed; inset: 0; background: rgba(15,42,30,0.55);
@@ -360,7 +403,7 @@
         <div class="stat-chip">
             <div class="chip-icon black-bg"><i class="fa-solid fa-scale-balanced"></i></div>
             <span class="chip-num" id="statNet">٠</span>
-            <span class="chip-label">صافي المستحق</span>
+            <span class="chip-label">صافي المستحق النهائي</span>
         </div>
     </div>
 </div>
@@ -495,6 +538,41 @@
         return calcAllowedLimit(d.baseSalary, refDateStr);
     }
 
+    // ---------- حاسبة الأيام والعمل الفعلي ----------
+    function calcAccrualData(driver, ym) {
+        const now = new Date();
+        const [vy, vm] = ym.split('-').map(Number);
+        const daysInMonth = new Date(vy, vm, 0).getDate();
+        const dailyRate = Number(driver.baseSalary || 0) / daysInMonth;
+
+        let elapsedDays = 0;
+        if (vy < now.getFullYear() || (vy === now.getFullYear() && vm < (now.getMonth() + 1))) {
+            elapsedDays = daysInMonth;
+        } else if (vy === now.getFullYear() && vm === (now.getMonth() + 1)) {
+            elapsedDays = now.getDate();
+        } else {
+            elapsedDays = 0;
+        }
+
+        const earnedSoFar = elapsedDays * dailyRate;
+
+        const advSum = itemsOfMonth(driver.id, ym, 'adv').reduce((s, a) => s + Number(a.amount), 0);
+        const deficitSum = itemsOfMonth(driver.id, ym, 'deficit').reduce((s, a) => s + Number(a.amount), 0);
+        const absenceSum = itemsOfMonth(driver.id, ym, 'absence').reduce((s, a) => s + Number(a.amount), 0);
+        const totalDeductions = advSum + deficitSum + absenceSum;
+
+        const netBalance = earnedSoFar - totalDeductions;
+
+        return {
+            daysInMonth,
+            elapsedDays,
+            dailyRate,
+            earnedSoFar,
+            totalDeductions,
+            netBalance
+        };
+    }
+
     // ---------- Firestore listeners ----------
     onSnapshot(collection(db, DRIVERS_COL), (snap) => {
         drivers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -535,7 +613,6 @@
                 const deficitSum = deficitsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const absenceSum = absencesMonth.reduce((s,a)=>s+Number(a.amount),0);
 
-                // 🟢 إدخال (الغياب + العجز + السلف) في حسبة صافي الراتب
                 const net = Number(d.baseSalary||0) - advSum - absenceSum - deficitSum;
 
                 totalSalary += Number(d.baseSalary||0);
@@ -543,7 +620,8 @@
                 totalNet += net;
 
                 const maxAdv = displayLimitForDriver(d);
-                
+                const accrual = calcAccrualData(d, currentMonth);
+
                 if (isFekry && !openPanels.has(d.id)) openPanels.set(d.id, 'adv');
                 const activePanel = openPanels.get(d.id);
 
@@ -603,7 +681,7 @@
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
                             <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
                             <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
-                            ${isAdmin ? `<div class="n net"><div class="k">الصافي المستحق</div><div class="v">${fmt(net)}</div></div>` : ''}
+                            ${isAdmin ? `<div class="n net"><div class="k">الصافي النهائي</div><div class="v">${fmt(net)}</div></div>` : ''}
                             ${isAdmin ? `<div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>` : ''}
                         </div>
                         <div class="driver-actions">
@@ -611,6 +689,21 @@
                             <button class="icon-btn violet-btn" data-toggle="${d.id}" data-type="absence"><i class="fa-solid fa-user-slash"></i> غياب</button>
                             <button class="icon-btn danger-btn" data-toggle="${d.id}" data-type="deficit"><i class="fa-solid fa-triangle-exclamation"></i> العجز</button>
                             ${isAdmin ? `<button class="icon-btn danger-btn" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        </div>
+                    </div>
+
+                    <!-- كارت حسبة الأيام المنقضية حتى اليوم -->
+                    <div class="accrual-box">
+                        <div class="accrual-head">
+                            <span><i class="fa-solid fa-calculator"></i> حاسبة العمل الفعلي (حتى يوم ${accrual.elapsedDays} من ${accrual.daysInMonth})</span>
+                            <span class="${accrual.netBalance >= 0 ? 'accrual-status-positive' : 'accrual-status-negative'}">
+                                ${accrual.netBalance >= 0 ? `متبقي له: ${fmt(accrual.netBalance)}` : `مطلوب منه: ${fmt(Math.abs(accrual.netBalance))}`}
+                            </span>
+                        </div>
+                        <div class="accrual-details">
+                            <span>يومية العمل: <b>${fmt(accrual.dailyRate)}</b></span>
+                            <span>الاستحقاق الفعلي (${accrual.elapsedDays} يوم): <b>${fmt(accrual.earnedSoFar)}</b></span>
+                            <span>إجمالي الخصومات والسلف: <b>${fmt(accrual.totalDeductions)}</b></span>
                         </div>
                     </div>
 
