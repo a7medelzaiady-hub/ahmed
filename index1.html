@@ -309,12 +309,11 @@
             box-shadow: var(--shadow-sm);
         }
 
-        /* تعديل وتحسين خصائص زر الأصناف المطلوبة للعمل بكفاءة فورية */
         .fab-left-btn {
             position: fixed;
             left: 16px;
             bottom: 112px;
-            z-index: 3000 !important; /* ضمان التواجد في الطبقة العليا فوق أي عنصر آخر */
+            z-index: 3000 !important;
             width: 54px;
             height: 54px;
             border-radius: 50%;
@@ -358,7 +357,7 @@
         }
         .bottom-nav {
             background: var(--brand-dark); border-radius: 24px; padding: 8px 6px;
-            display: flex; justify-around: space-around;
+            display: flex; justify-content: space-around;
             box-shadow: var(--shadow-lg);
         }
         .nav-item {
@@ -432,7 +431,7 @@
         const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
         const isLoggedIn = sessionStorage.getItem("isLoggedIn") || localStorage.getItem("isLoggedIn");
         if (!loggedUser && isLoggedIn !== "true") {
-            window.location.replace("index1.html");
+            window.location.replace("index.html");
         }
     })();
 </script>
@@ -594,7 +593,6 @@
 
 <div class="bottom-spacer"></div>
 
-<!-- زر تجميع الأصناف المطلوبة المتواجد أسفل اليسار بعد المعالجة البرمجية -->
 <button class="fab-left-btn" type="button" id="btnRequiredItems" onclick="navigateToRequiredItems(event)" ontouchstart="navigateToRequiredItems(event)" title="تجميع الأصناف المطلوبة">
     <i class="fa-solid fa-boxes-stacked"></i>
 </button>
@@ -659,7 +657,6 @@
 </div>
 
 <script>
-    // دالة فتح صفحة الأصناف المطلوبة المباشرة والمخصصة للتفاعل اللمسي والسريع
     function navigateToRequiredItems(e) {
         if (e) {
             e.preventDefault();
@@ -681,7 +678,10 @@
 
     if (isLoggedIn !== 'true' && !userName) {
         sessionStorage.clear();
-        window.location.href = "index1.html";
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("username");
+        localStorage.removeItem("isLoggedIn");
+        window.location.href = "index.html";
     }
 
     if (!userName) userName = 'مستخدم';
@@ -759,29 +759,39 @@
         });
     }
 
-    async function handleLogout() {
+    function handleLogout() {
         if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+        const uid = currentUserId;
+        const uName = userName;
+
+        // 1. مسح جميع بيانات الجلسة من التخزين المحلي
+        sessionStorage.clear();
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("username");
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("role");
+        localStorage.removeItem("userId");
+
+        // 2. التوجيه الفوري والمستجيب لصفحة index.html
+        window.location.replace("index.html");
+
+        // 3. تحديث حالة الخروج في قاعدة البيانات Firebase في الخلفية
         try {
-            const sessionDocRef = doc(db, "sessions", currentUserId);
-            await updateDoc(sessionDocRef, {
+            const sessionDocRef = doc(db, "sessions", uid);
+            updateDoc(sessionDocRef, {
                 status: 'logged_out',
                 logoutTime: serverTimestamp()
-            });
+            }).catch(err => console.warn("Session update err:", err));
 
-            await addDoc(collection(db, "session_logs"), {
-                userId: currentUserId,
-                userName: userName,
+            addDoc(collection(db, "session_logs"), {
+                userId: uid,
+                userName: uName,
                 action: 'LOGOUT',
                 timestamp: serverTimestamp()
-            });
+            }).catch(err => console.warn("Session log err:", err));
         } catch (err) {
-            console.error("Logout error:", err);
-        } finally {
-            sessionStorage.clear();
-            localStorage.removeItem("currentUser");
-            localStorage.removeItem("username");
-            localStorage.removeItem("isLoggedIn");
-            window.location.href = "index1.html";
+            console.error("Logout background process error:", err);
         }
     }
 
