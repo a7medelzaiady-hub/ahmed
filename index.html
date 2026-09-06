@@ -179,7 +179,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, getDocFromServer, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -376,7 +376,20 @@
         // 🟢 الدخول أونلاين من الفايربيس (Online Mode)
         try {
             const userRef = doc(db, "users", userVal);
-            const userSnap = await getDoc(userRef);
+
+            // ✅ التعديل الأساسي: نجبر القراءة من السيرفر مباشرة (getDocFromServer)
+            // بدل getDoc العادي، لأن getDoc ممكن يرجّع نسخة قديمة من كاش فايرستور
+            // المحلي (IndexedDB) بدل آخر تحديث فعلي على السيرفر — وده كان سبب
+            // مشكلة "الدخول بالباسورد القديمة بعد تغييرها من صفحة الإدارة".
+            let userSnap;
+            try {
+                userSnap = await getDocFromServer(userRef);
+            } catch (serverErr) {
+                // لو فشلت القراءة من السيرفر فعلاً (انقطاع حقيقي أثناء محاولة الاتصال)
+                // نرجع لقراءة الكاش المحلي كحل بديل بدل ما نوقف تسجيل الدخول تمامًا
+                console.warn("تعذر القراءة من السيرفر مباشرة، جاري المحاولة عبر الكاش:", serverErr);
+                userSnap = await getDoc(userRef);
+            }
 
             if (userSnap.exists()) {
                 const userData = userSnap.data();
