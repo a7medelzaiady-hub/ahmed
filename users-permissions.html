@@ -38,28 +38,35 @@
         .container { max-width: 900px; margin: 20px auto; padding: 0 16px; }
 
         .card { background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); padding: 20px; box-shadow: var(--shadow-sm); margin-bottom: 20px; }
-        .card-title { font-size: 15px; font-weight: 800; color: var(--brand-dark); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-
+        .card-title { font-size: 15px; font-weight: 800; color: var(--brand-dark); margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; }
+        
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px; }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group label { font-size: 12px; font-weight: 700; color: var(--text-mid); }
         .form-control { padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; outline: none; background: #fff; }
         .form-control:focus { border-color: var(--brand); }
 
-        .btn-primary { background: var(--brand); color: #fff; border: none; padding: 12px 20px; border-radius: var(--radius-sm); font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.2s; }
-        .btn-primary:active { background: var(--brand-dark); }
+        .btn-group { display: flex; gap: 10px; }
+        .btn-primary { background: var(--brand); color: #fff; border: none; padding: 12px 20px; border-radius: var(--radius-sm); font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1; }
+        .btn-cancel { background: #E5E7EB; color: #374151; border: none; padding: 12px 20px; border-radius: var(--radius-sm); font-weight: 800; font-size: 13px; cursor: pointer; display: none; }
 
         .table-wrap { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: right; font-size: 13px; }
         th, td { padding: 12px; border-bottom: 1px solid var(--border-subtle); }
         th { background: var(--brand-tint); color: var(--brand-dark); font-weight: 800; }
 
+        tbody tr { cursor: pointer; transition: background 0.15s; }
+        tbody tr:hover { background: #F0FDF4; }
+
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; display: inline-block; }
         .badge-admin { background: #FEF3C7; color: var(--amber); }
         .badge-user { background: #E0F7FA; color: #0E7C86; }
 
         .btn-action { border: none; background: none; cursor: pointer; font-size: 15px; padding: 6px; }
+        .btn-edit { color: var(--brand); }
         .btn-delete { color: var(--coral); }
+
+        .editing-banner { background: var(--amber-tint, #FEF3C7); color: var(--amber); padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; display: none; }
     </style>
 </head>
 <body>
@@ -75,8 +82,12 @@
 <div class="container">
     <!-- نموذج إضافة/تعديل مستخدم -->
     <div class="card">
-        <div class="card-title"><i class="fa-solid fa-user-plus"></i> إضافة مستخدم جديد</div>
+        <div class="card-title">
+            <span id="formHeaderTitle"><i class="fa-solid fa-user-plus"></i> إضافة مستخدم جديد</span>
+            <span class="editing-banner" id="editingBanner"><i class="fa-solid fa-pen-to-square"></i> وضع التعديل</span>
+        </div>
         <form id="userForm">
+            <input type="hidden" id="editingUserId" value="">
             <div class="form-grid">
                 <div class="form-group">
                     <label>اسم المستخدم</label>
@@ -84,7 +95,7 @@
                 </div>
                 <div class="form-group">
                     <label>كلمة المرور</label>
-                    <input type="password" id="password" class="form-control" placeholder="أدخل كلمة المرور..." required>
+                    <input type="text" id="password" class="form-control" placeholder="أدخل كلمة المرور..." required>
                 </div>
                 <div class="form-group">
                     <label>الصلاحية الرئيسية (الدور)</label>
@@ -94,25 +105,33 @@
                     </select>
                 </div>
             </div>
-            <button type="submit" class="btn-primary"><i class="fa-solid fa-save"></i> حفظ المستخدم</button>
+            <div class="btn-group">
+                <button type="submit" class="btn-primary" id="btnSubmitForm">
+                    <i class="fa-solid fa-save"></i> <span id="btnSubmitText">حفظ المستخدم</span>
+                </button>
+                <button type="button" class="btn-cancel" id="btnCancelEdit" onclick="resetForm()">إلغاء التعديل</button>
+            </div>
         </form>
     </div>
 
     <!-- جدول عرض المستخدمين -->
     <div class="card">
-        <div class="card-title"><i class="fa-solid fa-users"></i> قائمة المستخدمين المسجلين</div>
+        <div class="card-title">
+            <span><i class="fa-solid fa-users"></i> قائمة المستخدمين المسجلين</span>
+            <small style="font-size: 11px; color: var(--text-mid); font-weight: normal;">(اضغط على أي صف لتعديل البيانات)</small>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
                         <th>اسم المستخدم</th>
+                        <th>كلمة المرور</th>
                         <th>الدور</th>
-                        <th>تاريخ الإنشاء</th>
                         <th>إجراءات</th>
                     </tr>
                 </thead>
                 <tbody id="usersTableBody">
-                    <tr><td colspan="4" style="text-align: center;">جاري تحصيل البيانات...</td></tr>
+                    <tr><td colspan="4" style="text-align: center;">جاري تحميل البيانات...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -123,7 +142,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // التحقق من الصلاحية: الأدمن فقط من يحق له الدخول
+    // حماية الصفحة: مخصصة لمدير النظام فقط
     const role = sessionStorage.getItem('role') || localStorage.getItem('role');
     if (role !== 'admin') {
         alert('عذراً، هذه الصفحة مخصصة لمدير النظام فقط.');
@@ -144,6 +163,13 @@
 
     const userForm = document.getElementById('userForm');
     const usersTableBody = document.getElementById('usersTableBody');
+    const editingUserIdInput = document.getElementById('editingUserId');
+    const formHeaderTitle = document.getElementById('formHeaderTitle');
+    const editingBanner = document.getElementById('editingBanner');
+    const btnSubmitText = document.getElementById('btnSubmitText');
+    const btnCancelEdit = document.getElementById('btnCancelEdit');
+
+    let usersDataMap = {}; // تخزين مؤقت للبيانات لسهولة الوصول للتعديل
 
     // حفظ / تحديث المستخدم
     userForm.addEventListener('submit', async (e) => {
@@ -151,19 +177,21 @@
         const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value.trim();
         const roleVal = document.getElementById('userRole').value;
+        const targetId = editingUserIdInput.value;
 
-        const userId = 'usr_' + username.toLowerCase().replace(/\s+/g, '_');
+        // في حالة التعديل نستخدم نفس ID، وفي الإضافة ننشئ ID جديد
+        const userId = targetId ? targetId : ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
 
         try {
             await setDoc(doc(db, "users", userId), {
                 username: username,
                 password: password,
                 role: roleVal,
-                createdAt: serverTimestamp()
+                updatedAt: serverTimestamp()
             }, { merge: true });
 
-            alert('تم حفظ بيانات المستخدم بنجاح');
-            userForm.reset();
+            alert(targetId ? 'تم تحديث بيانات المستخدم بنجاح' : 'تم إضافة المستخدم بنجاح');
+            resetForm();
         } catch (err) {
             console.error("خطأ في الحفظ:", err);
             alert('حدث خطأ أثناء حفظ المستخدم');
@@ -173,6 +201,8 @@
     // جلب مستخدمين النظام بشكل حي (Realtime)
     onSnapshot(collection(db, "users"), (snapshot) => {
         usersTableBody.innerHTML = '';
+        usersDataMap = {};
+
         if (snapshot.empty) {
             usersTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">لا يوجد مستخدمون حالياً</td></tr>';
             return;
@@ -181,30 +211,68 @@
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const id = docSnap.id;
-            const tr = document.createElement('tr');
+            usersDataMap[id] = data;
 
+            const tr = document.createElement('tr');
             const isRoleAdmin = data.role === 'admin';
             const badgeClass = isRoleAdmin ? 'badge-admin' : 'badge-user';
             const roleText = isRoleAdmin ? 'مدير نظام' : 'موظف';
 
             tr.innerHTML = `
                 <td><b>${data.username || ''}</b></td>
+                <td><code>${data.password || '••••••'}</code></td>
                 <td><span class="badge ${badgeClass}">${roleText}</span></td>
-                <td>${data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString('ar-EG') : '—'}</td>
                 <td>
-                    <button class="btn-action btn-delete" onclick="deleteUser('${id}')" title="حذف"><i class="fa-solid fa-trash"></i></button>
+                    <button class="btn-action btn-edit" onclick="event.stopPropagation(); editUser('${id}')" title="تعديل"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="btn-action btn-delete" onclick="event.stopPropagation(); deleteUser('${id}')" title="حذف"><i class="fa-solid fa-trash"></i></button>
                 </td>
             `;
+
+            // عند النقر على أي مكان بالصف يتم فتح التعديل فوراً
+            tr.addEventListener('click', () => editUser(id));
+
             usersTableBody.appendChild(tr);
         });
     });
 
+    // دالة تعبئة بيانات المستخدم في النموذج للتعديل
+    window.editUser = function(userId) {
+        const userData = usersDataMap[userId];
+        if (!userData) return;
+
+        editingUserIdInput.value = userId;
+        document.getElementById('username').value = userData.username || '';
+        document.getElementById('password').value = userData.password || '';
+        document.getElementById('userRole').value = userData.role || 'employee';
+
+        // تغيير الواجهة لوضع التعديل
+        formHeaderTitle.innerHTML = '<i class="fa-solid fa-user-pen"></i> تعديل بيانات المستخدم';
+        editingBanner.style.display = 'inline-block';
+        btnSubmitText.textContent = 'تحديث البيانات';
+        btnCancelEdit.style.display = 'inline-block';
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // إعادة ضبط النموذج للوضع الطبيعي
+    window.resetForm = function() {
+        userForm.reset();
+        editingUserIdInput.value = '';
+        formHeaderTitle.innerHTML = '<i class="fa-solid fa-user-plus"></i> إضافة مستخدم جديد';
+        editingBanner.style.display = 'none';
+        btnSubmitText.textContent = 'حفظ المستخدم';
+        btnCancelEdit.style.display = 'none';
+    };
+
     // دالة حذف المستخدم
     window.deleteUser = async function(userId) {
-        if (confirm('هل أنت تأكد من رغبتك في حذف هذا المستخدم؟')) {
+        if (confirm('هل أنت متأكد من رغبتك في حذف هذا المستخدم؟')) {
             try {
                 await deleteDoc(doc(db, "users", userId));
                 alert('تم حذف المستخدم بنجاح');
+                if (editingUserIdInput.value === userId) {
+                    resetForm();
+                }
             } catch (err) {
                 alert('حدث خطأ أثناء الحذف');
             }
