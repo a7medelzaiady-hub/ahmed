@@ -744,7 +744,7 @@
             customerGroupMap[groupKey].push({ inv, timeMs });
         });
 
-        // 3. حساب الرصيد التراكمي بالترتيب الزمني وتحديث الفواتير المعروضة
+        // 3. حساب الرصيد التراكمي وتتبع تاريخ آخر فاتورة آجل لكل فاتورة
         Object.keys(customerGroupMap).forEach(groupKey => {
             const list = customerGroupMap[groupKey];
             list.sort((a, b) => a.timeMs - b.timeMs);
@@ -763,16 +763,23 @@
             });
 
             let runningBalance = baseBalance;
+            let lastPendingDate = null;
 
             list.forEach(item => {
                 const targetInvoice = allInvoices.find(i => i.id === item.inv.id);
                 if (targetInvoice) {
                     targetInvoice.previousBalance = runningBalance;
+                    targetInvoice.lastPendingInvoiceDate = lastPendingDate;
                 }
 
                 const total = Number(item.inv.total) || 0;
                 const paid = Number(item.inv.calculatedCash + item.inv.calculatedWallet) || Number(item.inv.paid) || 0;
                 const remaining = total - paid;
+                
+                if (remaining > 0) {
+                    lastPendingDate = parseInvoiceDate(item.inv);
+                }
+
                 runningBalance += remaining;
 
                 // خصم/إضافة السندات الزمانية بين هذه الفاتورة والتي تليها
@@ -1076,7 +1083,7 @@
 
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
 
-            // تفعيل دالة الحساب المالي الدقيق وتحديث الحسابات السابقة بالكامل
+            // حساب التراكم المالي ومطابقة التواريخ بدقة
             await calculateCumulativeBalances();
 
             filterBySource(currentSourceFilter);
