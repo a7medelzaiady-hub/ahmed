@@ -692,21 +692,51 @@
 
     /**
      * حساب الرصيد المتراكم الفعلي الحقيقي لكل الفواتير
-     * يطابق تماماً دالة كشف حساب العملاء (الرصيد الافتتاحي + إجمالي الفواتير - المسدد الشامل)
      */
-    function calculateCumulativeBalances() {
+    async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
+        // 1. جلب كافة فواتير وسندات النظام إذا لم تكن محمولة بالكامل
+        let fullInvoicesList = [...allInvoices];
+        let fullTransactionsList = [...rawTransactionsList];
+
+        if (loadedScope !== 'ARCHIVE') {
+            try {
+                const [allInvSnap, allTransSnap] = await Promise.all([
+                    db.collection("invoices").get(),
+                    db.collection("transactions").get()
+                ]);
+
+                fullInvoicesList = [];
+                allInvSnap.forEach(d => {
+                    const data = d.data();
+                    if (!data.isDeleted) {
+                        fullInvoicesList.push({
+                            id: d.id,
+                            ...data,
+                            calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0,
+                            calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0
+                        });
+                    }
+                });
+
+                fullTransactionsList = [];
+                allTransSnap.forEach(d => {
+                    const tr = d.data();
+                    if (!tr.isDeleted) fullTransactionsList.push({ id: d.id, ...tr });
+                });
+            } catch (e) {
+                console.error("خطأ في جلب الأرشيف التراكمي للرصيد:", e);
+            }
+        }
+
+        // 2. تجميع الحركة المالية حسب كل عميل
         const customerGroupMap = {};
 
-        allInvoices.forEach(inv => {
+        fullInvoicesList.forEach(inv => {
             let groupKey = inv.customerId;
-            if (!groupKey && inv.customerName) {
-                groupKey = customersNameMap[normalizeName(inv.customerName)];
-            }
-            if (!groupKey && inv.customerName) {
-                groupKey = "NAME_" + normalizeName(inv.customerName);
-            }
+            if (!groupKey && inv.customerName) groupKey = customersNameMap[normalizeName(inv.customerName)];
+            if (!groupKey && inv.customerName) groupKey = "NAME_" + normalizeName(inv.customerName);
             if (!groupKey) return;
 
             if (!customerGroupMap[groupKey]) customerGroupMap[groupKey] = [];
@@ -714,6 +744,7 @@
             customerGroupMap[groupKey].push({ inv, timeMs });
         });
 
+        // 3. حساب الرصيد التراكمي بالترتيب الزمني وتحديث الفواتير المعروضة
         Object.keys(customerGroupMap).forEach(groupKey => {
             const list = customerGroupMap[groupKey];
             list.sort((a, b) => a.timeMs - b.timeMs);
@@ -724,46 +755,35 @@
                 baseBalance = Number(customersData[realCustId].initialBalance || 0);
             }
 
-            const custTrans = rawTransactionsList.filter(t => {
+            const custTrans = fullTransactionsList.filter(t => {
                 if (realCustId && (t.partyId === realCustId || t.customerId === realCustId)) return true;
                 if (t.customerName && normalizeName(t.customerName) === normalizeName(list[0].inv.customerName)) return true;
                 if (t.partyName && normalizeName(t.partyName) === normalizeName(list[0].inv.customerName)) return true;
                 return false;
             });
 
+            let runningBalance = baseBalance;
+
             list.forEach(item => {
-                const targetTimeMs = item.timeMs;
-                let runningBalance = baseBalance;
-                let lastPendingDate = null;
-
-                // تتبع حركة الحساب التاريخية خطوة بخطوة بالخصم والإضافة
-                for (const prior of list) {
-                    if (prior.inv.id === item.inv.id) continue;
-
-                    if (prior.timeMs < targetTimeMs) {
-                        const total = Number(prior.inv.total) || 0;
-                        const paid = Number(prior.inv.calculatedCash + prior.inv.calculatedWallet) || Number(prior.inv.paid) || 0;
-                        const remaining = total - paid; // يحسب زيادة أو نقص المسدد بكسور الجنيهات
-
-                        if (remaining > 0) {
-                            lastPendingDate = parseInvoiceDate(prior.inv);
-                        }
-                        runningBalance += remaining;
-                    }
+                const targetInvoice = allInvoices.find(i => i.id === item.inv.id);
+                if (targetInvoice) {
+                    targetInvoice.previousBalance = runningBalance;
                 }
 
-                // تطبيق السندات المالية السابقة
+                const total = Number(item.inv.total) || 0;
+                const paid = Number(item.inv.calculatedCash + item.inv.calculatedWallet) || Number(item.inv.paid) || 0;
+                const remaining = total - paid;
+                runningBalance += remaining;
+
+                // خصم/إضافة السندات الزمانية بين هذه الفاتورة والتي تليها
                 custTrans.forEach(tr => {
                     const trTimeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
-                    if (trTimeMs < targetTimeMs) {
+                    if (trTimeMs === item.timeMs) {
                         const amt = Number(tr.amount || tr.total || 0);
                         if (tr.type === 'قبض') runningBalance -= Math.abs(amt);
                         else if (tr.type === 'صرف') runningBalance += Math.abs(amt);
                     }
                 });
-
-                item.inv.previousBalance = runningBalance;
-                item.inv.lastPendingInvoiceDate = lastPendingDate;
             });
         });
     }
@@ -1054,9 +1074,11 @@
             });
             allInvoices = tempInvoices.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
-            // تفعيل دالة الحساب المالي الدقيق
-            calculateCumulativeBalances();
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
+
+            // تفعيل دالة الحساب المالي الدقيق وتحديث الحسابات السابقة بالكامل
+            await calculateCumulativeBalances();
+
             filterBySource(currentSourceFilter);
         } catch (e) {
             console.error(e);
