@@ -215,7 +215,7 @@
         .driver-name { font-weight: 800; font-size: 14.5px; color: var(--text-deep); }
         .driver-phone { font-size: 11.5px; color: var(--text-mid); margin-top: 2px; }
 
-        .driver-nums { display: flex; gap: 14px; flex-wrap: wrap; }
+        .driver-nums { display: flex; gap: 12px; flex-wrap: wrap; }
         .driver-nums .n { text-align: center; }
         .driver-nums .n .k { font-size: 10px; color: var(--text-mid); font-weight: 700; margin-bottom: 3px; }
         .driver-nums .n .v { font-weight: 800; font-size: 13.5px; font-variant-numeric: tabular-nums; }
@@ -224,8 +224,12 @@
         .driver-nums .limit .v { color: var(--text-mid); font-size: 12px; }
         .driver-nums .deficit .v { color: var(--coral); }
         .driver-nums .absence .v { color: var(--violet); }
+        
+        /* لون ديناميكي لحسبة اليومية المنقضية داخل الكارت العلوي */
+        .driver-nums .accrual-status .v.due-pos { color: var(--brand); }
+        .driver-nums .accrual-status .v.due-neg { color: var(--coral); }
 
-        /* كارت حساب الاستحقاق الفعلي حتى اليوم */
+        /* كارت تفاصيل الحاسبة للإدمن فقط */
         .accrual-box {
             background: #f0fdf4;
             border-top: 1px solid #bbf7d0;
@@ -252,20 +256,6 @@
         .accrual-details b {
             font-variant-numeric: tabular-nums;
             color: var(--text-deep);
-        }
-        .accrual-status-positive {
-            color: var(--brand-dark);
-            font-weight: 900;
-            background: #dcfce7;
-            padding: 2px 8px;
-            border-radius: 6px;
-        }
-        .accrual-status-negative {
-            color: var(--coral);
-            font-weight: 900;
-            background: #fee2e2;
-            padding: 2px 8px;
-            border-radius: 6px;
         }
 
         /* Exception modal */
@@ -681,6 +671,13 @@
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
                             <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
                             <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
+                            
+                            <!-- إضافة خانة المستحق حسب الأيام المنقضية داخل الكارت العلوي للجميع -->
+                            <div class="n accrual-status">
+                                <div class="k">${accrual.netBalance >= 0 ? `متبقي له (يوم ${accrual.elapsedDays})` : `مطلوب منه (يوم ${accrual.elapsedDays})`}</div>
+                                <div class="v ${accrual.netBalance >= 0 ? 'due-pos' : 'due-neg'}">${fmt(Math.abs(accrual.netBalance))}</div>
+                            </div>
+
                             ${isAdmin ? `<div class="n net"><div class="k">الصافي النهائي</div><div class="v">${fmt(net)}</div></div>` : ''}
                             ${isAdmin ? `<div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>` : ''}
                         </div>
@@ -692,13 +689,11 @@
                         </div>
                     </div>
 
-                    <!-- كارت حسبة الأيام المنقضية حتى اليوم -->
+                    <!-- كارت التفاصيل للحاسبة يظهر للأدمن فقط -->
+                    ${isAdmin ? `
                     <div class="accrual-box">
                         <div class="accrual-head">
-                            <span><i class="fa-solid fa-calculator"></i> حاسبة العمل الفعلي (حتى يوم ${accrual.elapsedDays} من ${accrual.daysInMonth})</span>
-                            <span class="${accrual.netBalance >= 0 ? 'accrual-status-positive' : 'accrual-status-negative'}">
-                                ${accrual.netBalance >= 0 ? `متبقي له: ${fmt(accrual.netBalance)}` : `مطلوب منه: ${fmt(Math.abs(accrual.netBalance))}`}
-                            </span>
+                            <span><i class="fa-solid fa-calculator"></i> تفاصيل العمل الفعلي (حتى يوم ${accrual.elapsedDays} من ${accrual.daysInMonth})</span>
                         </div>
                         <div class="accrual-details">
                             <span>يومية العمل: <b>${fmt(accrual.dailyRate)}</b></span>
@@ -706,6 +701,7 @@
                             <span>إجمالي الخصومات والسلف: <b>${fmt(accrual.totalDeductions)}</b></span>
                         </div>
                     </div>
+                    ` : ''}
 
                     <!-- لوحة السلف -->
                     <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
