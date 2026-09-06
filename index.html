@@ -136,7 +136,7 @@
 <!-- ═══ BANNER OFFLINE ═══ -->
 <div id="offlineBanner" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999; background:#92400e; color:#fef3c7; padding:8px 16px; text-align:center; font-family:'Cairo',sans-serif; font-size:0.8rem; font-weight:700; align-items:center; justify-content:center; gap:8px;">
   <i class="fas fa-wifi" style="opacity:.7"></i>
-  <span>أنت تعمل حالياً بدون إنترنت — سيتم التحقق من الكاش المحلي</span>
+  <span>أنت غير متصل بالإنترنت — يجب الاتصال بالإنترنت لتسجيل الدخول</span>
 </div>
 
 <!-- شاشة التحميل الاستهلالية -->
@@ -179,7 +179,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, getDocFromServer, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, doc, getDocFromServer, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -192,21 +192,16 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+    // ✅ تم إلغاء أي كاش محلي لفايرستور (persistentLocalCache) بالكامل.
+    // الاتصال هنا دايمًا هيروح للسيرفر مباشرة، مفيش أي نسخة محفوظة على الجهاز.
+    const db = getFirestore(app);
 
     const loader = document.getElementById('loader');
     const loginContent = document.getElementById('loginContent');
-    const CACHE_KEY_USERS = 'zaiady_users_credentials_cache';
     const ATTEMPTS_KEY = 'zaiady_login_attempts';
 
     // حماية من الهجمات: نظام قفل المحاولات الفاشلة Rate-Limiting
+    // (ده عداد محاولات فقط، مش تخزين لباسورد أو بيانات دخول - فمفيش مشكلة إنه يفضل موجود)
     function checkBruteForceLockout() {
         try {
             const attempts = JSON.parse(localStorage.getItem(ATTEMPTS_KEY)) || { count: 0, lockUntil: 0 };
@@ -241,7 +236,7 @@
         return String(str || '').replace(/[<>'"/]/g, '').trim();
     }
 
-    // حفظ بيانات الجلسة بأسلوب آمن
+    // حفظ بيانات الجلسة بأسلوب آمن (Session فقط، بتتمسح لما التاب يتقفل)
     function saveSessionData(username, role, userId = null) {
         const generatedUserId = userId || ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
         const token = 'token_' + Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
@@ -290,12 +285,15 @@
 
     function showOfflineBanner(show) {
         const banner = document.getElementById('offlineBanner');
+        const btn = document.getElementById('btnLogin');
         if (show) {
             banner.style.display = 'flex';
             document.body.style.paddingTop = '38px';
+            if (btn) btn.disabled = true;
         } else {
             banner.style.display = 'none';
             document.body.style.paddingTop = '0';
+            if (btn) btn.disabled = false;
         }
     }
 
@@ -341,55 +339,23 @@
             return;
         }
 
+        // ✅ لازم يكون فيه إنترنت فعلي عشان يسجل دخول - مفيش أي دخول بدون نت
+        if (!navigator.onLine) {
+            err.innerText = "📡 لازم تكون متصل بالإنترنت لتسجيل الدخول";
+            return;
+        }
+
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري التحقق...';
         err.innerText = ""; 
 
-        // 🟢 الدخول في حالة عدم وجود إنترنت (Offline Mode)
-        if (!navigator.onLine) {
-            try {
-                const localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
-                const cachedUser = localUsers[userVal];
-
-                if (cachedUser) {
-                    const storedPass = String(cachedUser.pass || cachedUser.password || '').trim();
-                    if (storedPass === passVal) {
-                        resetFailedAttempts();
-                        saveSessionData(userVal, cachedUser.role || 'restricted');
-                        window.location.href = "index1.html";
-                    } else {
-                        recordFailedAttempt();
-                        err.innerText = "❌ كلمة المرور غير صحيحة (فحص الكاش المحلي)";
-                    }
-                } else {
-                    err.innerText = "❌ اسم المستخدم غير محفوظ في ذاكرة المتصفح للعمل بدون إنترنت";
-                }
-            } catch (_) {
-                err.innerText = "❌ فشل فحص الكاش المحلي أثناء انقطاع الإنترنت";
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-sign-in-alt me-1"></i> دخول النظام';
-            }
-            return;
-        }
-
-        // 🟢 الدخول أونلاين من الفايربيس (Online Mode)
+        // 🟢 الدخول أونلاين من الفايربيس فقط - قراءة مباشرة من السيرفر بدون أي كاش
         try {
             const userRef = doc(db, "users", userVal);
 
-            // ✅ التعديل الأساسي: نجبر القراءة من السيرفر مباشرة (getDocFromServer)
-            // بدل getDoc العادي، لأن getDoc ممكن يرجّع نسخة قديمة من كاش فايرستور
-            // المحلي (IndexedDB) بدل آخر تحديث فعلي على السيرفر — وده كان سبب
-            // مشكلة "الدخول بالباسورد القديمة بعد تغييرها من صفحة الإدارة".
-            let userSnap;
-            try {
-                userSnap = await getDocFromServer(userRef);
-            } catch (serverErr) {
-                // لو فشلت القراءة من السيرفر فعلاً (انقطاع حقيقي أثناء محاولة الاتصال)
-                // نرجع لقراءة الكاش المحلي كحل بديل بدل ما نوقف تسجيل الدخول تمامًا
-                console.warn("تعذر القراءة من السيرفر مباشرة، جاري المحاولة عبر الكاش:", serverErr);
-                userSnap = await getDoc(userRef);
-            }
+            // getDocFromServer: يجبر القراءة من السيرفر مباشرة ويرفض أي نسخة محفوظة محليًا.
+            // لو مفيش اتصال فعلي بالسيرفر، هيرمي error، وده مقصود (مفيش fallback لكاش).
+            const userSnap = await getDocFromServer(userRef);
 
             if (userSnap.exists()) {
                 const userData = userSnap.data();
@@ -405,13 +371,6 @@
                         isOnline: true, 
                         lastLogin: nowIso 
                     }, { merge: true });
-
-                    // تحديث الكاش المحلي فقط بالكلمة الصحيحة التي تم التحقق منها
-                    try {
-                        let localUsers = JSON.parse(localStorage.getItem(CACHE_KEY_USERS)) || {};
-                        localUsers[userVal] = { pass: passVal, role: userData.role || 'restricted' };
-                        localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(localUsers));
-                    } catch(_) {}
 
                     saveSessionData(userVal, userData.role || 'restricted', userSnap.id);
                     window.location.href = "index1.html";
@@ -432,7 +391,7 @@
                     icon: "danger" 
                 });
             } else {
-                err.innerText = "📡 فشل الاتصال بالسيرفر. تم تحويلك للتحقق عبر الكاش";
+                err.innerText = "📡 تعذر الاتصال بالسيرفر. تأكد من اتصالك بالإنترنت وحاول مرة أخرى";
             }
         } finally {
             btn.disabled = false;
