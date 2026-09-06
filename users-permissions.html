@@ -41,10 +41,13 @@
         .card-title { font-size: 15px; font-weight: 800; color: var(--brand-dark); margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; }
         
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px; }
-        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; position: relative; }
         .form-group label { font-size: 12px; font-weight: 700; color: var(--text-mid); }
-        .form-control { padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; outline: none; background: #fff; }
+        .form-control { padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; outline: none; background: #fff; width: 100%; }
         .form-control:focus { border-color: var(--brand); }
+
+        .pass-input-wrap { position: relative; display: flex; align-items: center; }
+        .toggle-pass-btn { position: absolute; left: 10px; background: none; border: none; color: var(--text-mid); cursor: pointer; font-size: 14px; }
 
         .btn-group { display: flex; gap: 10px; }
         .btn-primary { background: var(--brand); color: #fff; border: none; padding: 12px 20px; border-radius: var(--radius-sm); font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1; }
@@ -66,7 +69,7 @@
         .btn-edit { color: var(--brand); }
         .btn-delete { color: var(--coral); }
 
-        .editing-banner { background: var(--amber-tint, #FEF3C7); color: var(--amber); padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; display: none; }
+        .editing-banner { background: #FEF3C7; color: var(--amber); padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; display: none; }
     </style>
 </head>
 <body>
@@ -95,7 +98,10 @@
                 </div>
                 <div class="form-group">
                     <label>كلمة المرور</label>
-                    <input type="text" id="password" class="form-control" placeholder="أدخل كلمة المرور..." required>
+                    <div class="pass-input-wrap">
+                        <input type="password" id="password" class="form-control" placeholder="أدخل كلمة المرور..." required>
+                        <button type="button" class="toggle-pass-btn" onclick="togglePasswordVisibility()"><i class="fa-solid fa-eye" id="passEyeIcon"></i></button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>الصلاحية الرئيسية (الدور)</label>
@@ -169,7 +175,7 @@
     const btnSubmitText = document.getElementById('btnSubmitText');
     const btnCancelEdit = document.getElementById('btnCancelEdit');
 
-    let usersDataMap = {}; // تخزين مؤقت للبيانات لسهولة الوصول للتعديل
+    let usersDataMap = {}; 
 
     // حفظ / تحديث المستخدم
     userForm.addEventListener('submit', async (e) => {
@@ -179,13 +185,14 @@
         const roleVal = document.getElementById('userRole').value;
         const targetId = editingUserIdInput.value;
 
-        // في حالة التعديل نستخدم نفس ID، وفي الإضافة ننشئ ID جديد
         const userId = targetId ? targetId : ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
 
         try {
             await setDoc(doc(db, "users", userId), {
                 username: username,
+                name: username,
                 password: password,
+                pass: password,
                 role: roleVal,
                 updatedAt: serverTimestamp()
             }, { merge: true });
@@ -198,7 +205,7 @@
         }
     });
 
-    // جلب مستخدمين النظام بشكل حي (Realtime)
+    // جلب المستخدمين وحل مشكلة جلب البيانات الفارغة
     onSnapshot(collection(db, "users"), (snapshot) => {
         usersTableBody.innerHTML = '';
         usersDataMap = {};
@@ -211,16 +218,26 @@
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const id = docSnap.id;
-            usersDataMap[id] = data;
+
+            // جلب المسميات المرنة لضمان تعبئة البيانات في كل الحالات
+            const parsedName = data.username || data.userName || data.name || data.user || id;
+            const parsedPass = data.password || data.pass || data.passWord || '';
+            const parsedRole = data.role || data.userRole || 'employee';
+
+            usersDataMap[id] = {
+                username: parsedName,
+                password: parsedPass,
+                role: parsedRole
+            };
 
             const tr = document.createElement('tr');
-            const isRoleAdmin = data.role === 'admin';
+            const isRoleAdmin = parsedRole === 'admin';
             const badgeClass = isRoleAdmin ? 'badge-admin' : 'badge-user';
             const roleText = isRoleAdmin ? 'مدير نظام' : 'موظف';
 
             tr.innerHTML = `
-                <td><b>${data.username || ''}</b></td>
-                <td><code>${data.password || '••••••'}</code></td>
+                <td><b>${parsedName}</b></td>
+                <td><code style="font-size:14px;">${parsedPass ? '••••••' : '—'}</code></td>
                 <td><span class="badge ${badgeClass}">${roleText}</span></td>
                 <td>
                     <button class="btn-action btn-edit" onclick="event.stopPropagation(); editUser('${id}')" title="تعديل"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -228,14 +245,12 @@
                 </td>
             `;
 
-            // عند النقر على أي مكان بالصف يتم فتح التعديل فوراً
             tr.addEventListener('click', () => editUser(id));
-
             usersTableBody.appendChild(tr);
         });
     });
 
-    // دالة تعبئة بيانات المستخدم في النموذج للتعديل
+    // تعبئة البيانات في المدخلات فوراً عند الضغط
     window.editUser = function(userId) {
         const userData = usersDataMap[userId];
         if (!userData) return;
@@ -243,9 +258,8 @@
         editingUserIdInput.value = userId;
         document.getElementById('username').value = userData.username || '';
         document.getElementById('password').value = userData.password || '';
-        document.getElementById('userRole').value = userData.role || 'employee';
+        document.getElementById('userRole').value = userData.role === 'admin' ? 'admin' : 'employee';
 
-        // تغيير الواجهة لوضع التعديل
         formHeaderTitle.innerHTML = '<i class="fa-solid fa-user-pen"></i> تعديل بيانات المستخدم';
         editingBanner.style.display = 'inline-block';
         btnSubmitText.textContent = 'تحديث البيانات';
@@ -254,7 +268,6 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // إعادة ضبط النموذج للوضع الطبيعي
     window.resetForm = function() {
         userForm.reset();
         editingUserIdInput.value = '';
@@ -264,7 +277,6 @@
         btnCancelEdit.style.display = 'none';
     };
 
-    // دالة حذف المستخدم
     window.deleteUser = async function(userId) {
         if (confirm('هل أنت متأكد من رغبتك في حذف هذا المستخدم؟')) {
             try {
@@ -276,6 +288,20 @@
             } catch (err) {
                 alert('حدث خطأ أثناء الحذف');
             }
+        }
+    };
+
+    window.togglePasswordVisibility = function() {
+        const passInput = document.getElementById('password');
+        const eyeIcon = document.getElementById('passEyeIcon');
+        if (passInput.type === 'password') {
+            passInput.type = 'text';
+            eyeIcon.classList.remove('fa-eye');
+            eyeIcon.classList.add('fa-eye-slash');
+        } else {
+            passInput.type = 'password';
+            eyeIcon.classList.remove('fa-eye-slash');
+            eyeIcon.classList.add('fa-eye');
         }
     };
 </script>
