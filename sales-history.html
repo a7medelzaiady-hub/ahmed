@@ -691,12 +691,11 @@
     };
 
     /**
-     * حساب الرصيد المتراكم الفعلي الحقيقي لكل الفواتير
+     * حساب الرصيد المتراكم الفعلي الحقيقي وتحديد تواريخ الفواتير السابقة
      */
     async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
-        // 1. جلب كافة فواتير وسندات النظام إذا لم تكن محمولة بالكامل
         let fullInvoicesList = [...allInvoices];
         let fullTransactionsList = [...rawTransactionsList];
 
@@ -730,7 +729,6 @@
             }
         }
 
-        // 2. تجميع الحركة المالية حسب كل عميل
         const customerGroupMap = {};
 
         fullInvoicesList.forEach(inv => {
@@ -744,7 +742,6 @@
             customerGroupMap[groupKey].push({ inv, timeMs });
         });
 
-        // 3. حساب الرصيد التراكمي وتتبع تاريخ آخر فاتورة آجل لكل فاتورة
         Object.keys(customerGroupMap).forEach(groupKey => {
             const list = customerGroupMap[groupKey];
             list.sort((a, b) => a.timeMs - b.timeMs);
@@ -763,26 +760,23 @@
             });
 
             let runningBalance = baseBalance;
-            let lastPendingDate = null;
+            let lastInvoiceDate = null;
 
             list.forEach(item => {
                 const targetInvoice = allInvoices.find(i => i.id === item.inv.id);
+                
                 if (targetInvoice) {
                     targetInvoice.previousBalance = runningBalance;
-                    targetInvoice.lastPendingInvoiceDate = lastPendingDate;
+                    targetInvoice.lastPendingInvoiceDate = lastInvoiceDate;
                 }
 
                 const total = Number(item.inv.total) || 0;
                 const paid = Number(item.inv.calculatedCash + item.inv.calculatedWallet) || Number(item.inv.paid) || 0;
                 const remaining = total - paid;
                 
-                if (remaining > 0) {
-                    lastPendingDate = parseInvoiceDate(item.inv);
-                }
-
+                lastInvoiceDate = parseInvoiceDate(item.inv);
                 runningBalance += remaining;
 
-                // خصم/إضافة السندات الزمانية بين هذه الفاتورة والتي تليها
                 custTrans.forEach(tr => {
                     const trTimeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
                     if (trTimeMs === item.timeMs) {
@@ -838,13 +832,12 @@
             const prevBalAmt = Number(inv.previousBalance || 0);
             const netAccountTotal = prevBalAmt + remainingAmt;
 
+            // تحديد تسمية الحساب السابق
             let prevBalanceLabel = "حساب سابق";
             if (inv.lastPendingInvoiceDate) {
                 let parts = inv.lastPendingInvoiceDate.split('-');
                 let lastShortDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : inv.lastPendingInvoiceDate;
-                prevBalanceLabel = `حساب سابق (${lastShortDate})`;
-            } else if (prevBalAmt > 0) {
-                prevBalanceLabel = "حساب سابق (رصيد مستحق)";
+                prevBalanceLabel = `حساب سابق (فاتورة ${lastShortDate})`;
             }
 
             return `
@@ -864,8 +857,8 @@
                         <div class="fin-box text-dark">إجمالي الفاتورة <span class="num">${(Number(inv.total) || 0).toFixed(2)}</span></div>
                         ${discountAmount > 0 ? `<div class="fin-box" style="color: var(--germany-red);">الخصم <span class="num">${discountAmount.toFixed(2)}</span></div>` : ''}
                         
-                        ${inv.calculatedCash > 0 ? `<div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>` : ''}
-                        ${inv.calculatedWallet > 0 ? `<div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>` : ''}
+                        <div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>
+                        <div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>
 
                         <div class="fin-box text-dark fw-bold">المسدد الشامل <span class="num">${totalPaid.toFixed(2)}</span></div>
                         <div class="fin-box text-danger">الأجل (المتبقي) <span class="num">${remainingAmt.toFixed(2)}</span></div>
@@ -908,8 +901,8 @@
                     </div>
                 </div>
                 <div class="financial-grid">
-                    ${v.cashAmount > 0 ? `<div class="fin-box text-dark">نقدى مستلم <span class="num">${v.cashAmount.toFixed(2)}</span></div>` : ''}
-                    ${v.walletAmount > 0 ? `<div class="fin-box text-primary">محفظه مستلمة <span class="num">${v.walletAmount.toFixed(2)}</span></div>` : ''}
+                    <div class="fin-box text-dark">نقدى مستلم <span class="num">${v.cashAmount.toFixed(2)}</span></div>
+                    <div class="fin-box text-primary">محفظه مستلمة <span class="num">${v.walletAmount.toFixed(2)}</span></div>
                 </div>
             </div>`).join('');
 
@@ -1083,7 +1076,6 @@
 
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
 
-            // حساب التراكم المالي ومطابقة التواريخ بدقة
             await calculateCumulativeBalances();
 
             filterBySource(currentSourceFilter);
@@ -1119,9 +1111,7 @@
         if (inv.lastPendingInvoiceDate) {
             let parts = inv.lastPendingInvoiceDate.split('-');
             let lastShortDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : inv.lastPendingInvoiceDate;
-            prevBalanceLabel = `حساب سابق (${lastShortDate})`;
-        } else if (prevBalAmt > 0) {
-            prevBalanceLabel = "حساب سابق (رصيد مستحق)";
+            prevBalanceLabel = `حساب سابق (فاتورة ${lastShortDate})`;
         }
 
         return `
@@ -1143,8 +1133,9 @@
                 <div style="font-size:11px; line-height:1.6; border-top:1px solid #000; padding-top:6px;">
                     <div style="display:flex; justify-content:space-between;"><span>إجمالي الفاتورة:</span><b>${(Number(inv.total) || 0).toFixed(2)}</b></div>
                     
-                    ${cashAmount > 0 ? `<div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد نقدي:</span><b>${cashAmount.toFixed(2)}</b></div>` : ''}
-                    ${walletAmount > 0 ? `<div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد محفظة:</span><b>${walletAmount.toFixed(2)}</b></div>` : ''}
+                    <div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد نقدي:</span><b>${cashAmount.toFixed(2)}</b></div>
+                    <div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد محفظة:</span><b>${walletAmount.toFixed(2)}</b></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:bold;"><span>- المسدد الشامل:</span><b>${(cashAmount + walletAmount).toFixed(2)}</b></div>
 
                     ${prevBalAmt !== 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
                     
