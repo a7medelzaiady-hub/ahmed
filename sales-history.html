@@ -665,7 +665,7 @@
         if (!tr) return "";
         if (tr.date) {
             let dateStr = convertToEnglishNumbers(tr.date);
-            let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{4})/);
+            let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
             if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
             m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
             if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
@@ -691,12 +691,12 @@
     };
 
     /**
-     * تحديث شامل وطريقة متطابقة 100% لملف كشف الحساب لجلب الرصيد التراكمي والسابق
+     * حساب الرصيد المتراكم الفعلي الحقيقي لكل الفواتير
+     * يطابق تماماً دالة كشف حساب العملاء (الرصيد الافتتاحي + إجمالي الفواتير - المسدد الشامل)
      */
     function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
-        // تجميع الفواتير حسب المعرف الصريح أو الاسم المحول لربط المعاملات
         const customerGroupMap = {};
 
         allInvoices.forEach(inv => {
@@ -724,7 +724,6 @@
                 baseBalance = Number(customersData[realCustId].initialBalance || 0);
             }
 
-            // تصفية المعاملات المالية (سندات القبض/الصرف) المرتبطة بهذا العميل
             const custTrans = rawTransactionsList.filter(t => {
                 if (realCustId && (t.partyId === realCustId || t.customerId === realCustId)) return true;
                 if (t.customerName && normalizeName(t.customerName) === normalizeName(list[0].inv.customerName)) return true;
@@ -734,35 +733,36 @@
 
             list.forEach(item => {
                 const targetTimeMs = item.timeMs;
-                let prevInvoiceDebt = 0;
+                let runningBalance = baseBalance;
                 let lastPendingDate = null;
 
+                // تتبع حركة الحساب التاريخية خطوة بخطوة بالخصم والإضافة
                 for (const prior of list) {
                     if (prior.inv.id === item.inv.id) continue;
 
                     if (prior.timeMs < targetTimeMs) {
                         const total = Number(prior.inv.total) || 0;
                         const paid = Number(prior.inv.calculatedCash + prior.inv.calculatedWallet) || Number(prior.inv.paid) || 0;
-                        const rem = prior.inv.remaining !== undefined ? Number(prior.inv.remaining) : (total - paid);
+                        const remaining = total - paid; // يحسب زيادة أو نقص المسدد بكسور الجنيهات
 
-                        if (rem > 0) {
+                        if (remaining > 0) {
                             lastPendingDate = parseInvoiceDate(prior.inv);
                         }
-                        prevInvoiceDebt += rem;
+                        runningBalance += remaining;
                     }
                 }
 
-                let prevTransEffect = 0;
+                // تطبيق السندات المالية السابقة
                 custTrans.forEach(tr => {
                     const trTimeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
                     if (trTimeMs < targetTimeMs) {
                         const amt = Number(tr.amount || tr.total || 0);
-                        if (tr.type === 'قبض') prevTransEffect -= Math.abs(amt);
-                        else if (tr.type === 'صرف') prevTransEffect += Math.abs(amt);
+                        if (tr.type === 'قبض') runningBalance -= Math.abs(amt);
+                        else if (tr.type === 'صرف') runningBalance += Math.abs(amt);
                     }
                 });
 
-                item.inv.previousBalance = baseBalance + prevInvoiceDebt + prevTransEffect;
+                item.inv.previousBalance = runningBalance;
                 item.inv.lastPendingInvoiceDate = lastPendingDate;
             });
         });
@@ -817,7 +817,7 @@
                 let lastShortDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : inv.lastPendingInvoiceDate;
                 prevBalanceLabel = `حساب سابق (${lastShortDate})`;
             } else if (prevBalAmt > 0) {
-                prevBalanceLabel = "حساب سابق (رصيد افتتاحي)";
+                prevBalanceLabel = "حساب سابق (رصيد مستحق)";
             }
 
             return `
@@ -1054,7 +1054,7 @@
             });
             allInvoices = tempInvoices.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
-            // تطبيق الحساب التراكمي الشامل
+            // تفعيل دالة الحساب المالي الدقيق
             calculateCumulativeBalances();
             loadedScope = loadAllArchive ? 'ARCHIVE' : targetDate;
             filterBySource(currentSourceFilter);
@@ -1092,7 +1092,7 @@
             let lastShortDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : inv.lastPendingInvoiceDate;
             prevBalanceLabel = `حساب سابق (${lastShortDate})`;
         } else if (prevBalAmt > 0) {
-            prevBalanceLabel = "حساب سابق (رصيد افتتاحي)";
+            prevBalanceLabel = "حساب سابق (رصيد مستحق)";
         }
 
         return `
@@ -1119,7 +1119,7 @@
 
                     ${prevBalAmt !== 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
                     
-                    <div style="display:flex; justify-content:space-between; font-weight:800; font-size:12.5px; border-top:1px solid #000; padding-top:3px; margin-top:2px;"><span>باقى الحساب  :</span><b>${(prevBalAmt + remainingAmt).toFixed(2)}</b></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; font-size:12.5px; border-top:1px solid #000; padding-top:3px; margin-top:2px;"><span>صافي الحساب النهائي:</span><b>${(prevBalAmt + remainingAmt).toFixed(2)}</b></div>
                 </div>
                 <div style="text-align:center; margin-top:15px; border-top:1px dashed #000; padding-top:6px; font-size:10px; font-weight:700;">
                     <p style="margin:0;">شكراً لتعاملكم معنا 🙏</p>
