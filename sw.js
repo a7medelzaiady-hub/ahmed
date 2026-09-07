@@ -1,6 +1,6 @@
-const CACHE_NAME = "elzaiady-cache-v8";
+const CACHE_NAME = "elzaiady-cache-v9";
 
-// 🔥 قائمة شاملة ومحدّثة بكافة صفحات وملفات المشروع الحقيقية
+// 🔥 قائمة شاملة بكل صفحات وملفات المشروع الحقيقية (يتم تحديثها تلقائياً مع كل نسخة)
 const STATIC_FILES = [
   "./",
   "./index.html",
@@ -12,6 +12,7 @@ const STATIC_FILES = [
   "./icon-192.jpg",
   "./icon-512.png",
 
+  "./#U200badd-shortages.html",
   "./add-customer.html",
   "./add-product.html",
   "./add-shortages.html",
@@ -20,9 +21,14 @@ const STATIC_FILES = [
   "./all-orders.html",
   "./all-receipts.html",
   "./allfile.html",
+  "./allfiles.html",
+  "./allfiles1.html",
+  "./archive-images.html",
+  "./backup.html",
   "./balances.html",
   "./banknote.html",
   "./cash-flow.html",
+  "./cash-register.html",
   "./client-vouchers.html",
   "./client_menu.html",
   "./customer-details.html",
@@ -45,6 +51,7 @@ const STATIC_FILES = [
   "./inventory-list.html",
   "./inventory-menu.html",
   "./inventory.html",
+  "./inventory2.html",
   "./invoice-details.html",
   "./low_stock1.html",
   "./mabiat-menu.html",
@@ -56,7 +63,9 @@ const STATIC_FILES = [
   "./overdue-debts.html",
   "./price-search.html",
   "./product-details.html",
+  "./profit-details.html",
   "./profit.html",
+  "./profits.html",
   "./purchase-invoices-list.html",
   "./purchase-mgmt.html",
   "./purchase-orders-list.html",
@@ -70,6 +79,7 @@ const STATIC_FILES = [
   "./reports3.html",
   "./required-items-summary.html",
   "./returns-list.html",
+  "./salaries-advances.html",
   "./sales-history.html",
   "./sales-invoice.html",
   "./sales-return.html",
@@ -97,10 +107,13 @@ const STATIC_FILES = [
   "./upload-supplier.html",
   "./upload_customers.html",
   "./upload_excel.html",
+  "./user-monitor.html",
+  "./users-permissions.html",
   "./vouchers-hub.html",
   "./vouchers.html",
   "./whatsapp-campaigns.html",
 
+  "./auth-guard.js",
   "./cloud-backup.js",
   "./delete-all-customers.js",
   "./firebase-compat-shim.js",
@@ -150,7 +163,7 @@ self.addEventListener("activate", event => {
 });
 
 /* ===========================
-   FETCH (استراتيجية التشغيل أوفلاين)
+   FETCH (استراتيجية التشغيل أوفلاين + تسريع الصفحات + تقليل الاستهلاك)
 =========================== */
 self.addEventListener("fetch", event => {
   const request = event.request;
@@ -160,23 +173,28 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // 2. استراتيجية تحديث صفحات الـ HTML أولاً، مع الرجوع لصفحة "بدون إنترنت" عند الفشل الكامل
+  // 2. صفحات الـ HTML: نعرض النسخة المخزنة فوراً (سرعة فائقة + بيانات أقل)
+  //    ثم نحدّث الكاش فى الخلفية بصمت لو فيه إنترنت (Stale-While-Revalidate)
   if (request.headers.get("accept")?.includes("text/html")) {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, responseClone));
-          return response;
+      caches.open(CACHE_NAME).then(cache =>
+        cache.match(request).then(cachedResponse => {
+          const networkFetch = fetch(request)
+            .then(networkResponse => {
+              cache.put(request, networkResponse.clone());
+              return networkResponse;
+            })
+            .catch(() => cachedResponse || caches.match("./offline.html"));
+
+          // لو الصفحة موجودة بالكاش، رجّعها فوراً بدون انتظار الشبكة
+          return cachedResponse || networkFetch;
         })
-        .catch(() =>
-          caches.match(request).then(cached => cached || caches.match("./offline.html"))
-        )
+      )
     );
     return;
   }
 
-  // 3. استراتيجية الكاش أولاً للملفات الثابتة (CSS/JS/Images)
+  // 3. استراتيجية الكاش أولاً للملفات الثابتة (CSS/JS/Images) لتقليل استهلاك البيانات
   event.respondWith(
     caches.match(request).then(cachedResponse => {
       return cachedResponse || fetch(request).then(networkResponse => {
