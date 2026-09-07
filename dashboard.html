@@ -604,8 +604,8 @@
                 /* ---- 3. حركات الصندوق اليدوية (cash_logs) ---- */
                 cashLogsSnap.forEach(docItem => {
                     const data = docItem.data();
-                    // استثناء الفواتير والمصروفات لمنع التكرار
-                    if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف') return; 
+                    // استثناء الفواتير والمصروفات بالكامل لمنع التكرار
+                    if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return; 
 
                     processedMovements.add(docItem.id);
 
@@ -631,7 +631,7 @@
                     
                     const data = docItem.data();
                     // استثناء سداد الفواتير والمصروفات لمنع التكرار
-                    if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف') return;
+                    if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
                     
                     processedMovements.add(docItem.id);
 
@@ -651,7 +651,8 @@
                 /* ---- 5. المصروفات ---- */
                 expensesSnap.forEach(docItem => {
                     const data = docItem.data();
-                    const amt = num(data.amount || data.total);
+                    // استخدام Math.abs لضمان أن قيم المصروفات دائما موجبة وتطرح من النقدية
+                    const amt = Math.abs(num(data.amount || data.total));
                     const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
 
                     if (toWallet) {
@@ -676,17 +677,15 @@
                     actualInv += (totalPcs / factor) * buyPrice;
                 });
 
-                /* ---- 7. العملاء (محدث ليطابق شاشة كشف حساب العملاء بدقة 100%) ---- */
+                /* ---- 7. العملاء ---- */
                 const custBalances = new Map();
 
-                // 1. تهيئة أرصدة أول المدة لكل عميل
                 customersSnap.forEach(docItem => {
                     const data = docItem.data();
                     const initBal = num(data.openingBalance || data.initialBalance || 0);
                     custBalances.set(docItem.id, initBal);
                 });
 
-                // 2. إضافات وخصومات الفواتير (المتبقي غير المسدد)
                 invoicesSnap.forEach(docItem => {
                     const data = docItem.data();
                     const cId = data.customerId || data.partyId;
@@ -708,25 +707,22 @@
                     }
                 });
 
-                // 3. معالجة سندات القبض والصرف اليدوية غير المرتبطة بفواتير مباشرة
                 transactionsSnap.forEach(docItem => {
                     const data = docItem.data();
                     const cId = data.partyId || data.customerId;
                     if (!cId || !custBalances.has(cId)) return;
 
-                    // تجنب تكرار السداد المرتبط بالفاتورة
                     if (data.isInvoicePayment || data.invoiceId) return;
 
                     const amt = num(data.amount || data.total);
 
                     if (data.type === 'قبض') {
-                        custBalances.set(cId, custBalances.get(cId) - amt); // القبض يقلل الدين
+                        custBalances.set(cId, custBalances.get(cId) - amt);
                     } else if (data.type === 'صرف') {
-                        custBalances.set(cId, custBalances.get(cId) + amt); // الصرف يزيد الدين
+                        custBalances.set(cId, custBalances.get(cId) + amt);
                     }
                 });
 
-                // 4. تجميع صافي المديونيات وإحصائيات الداشبورد
                 actualCust = 0;
                 let totalCustDebit = 0;
                 let totalCustCredit = 0;
@@ -735,11 +731,11 @@
                 custBalances.forEach((bal) => {
                     if (bal > 0.01) {
                         totalCustDebit += bal;
-                        analytics.customers.count++; // عدد العملاء المديونين فعلياً
+                        analytics.customers.count++;
                     } else if (bal < -0.01) {
                         totalCustCredit += Math.abs(bal);
                     }
-                    actualCust += bal; // الصافي النهائي
+                    actualCust += bal;
                 });
 
                 analytics.customers.totalDebt = totalCustDebit;
