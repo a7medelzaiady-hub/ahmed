@@ -493,7 +493,7 @@
 <div class="hero-panel" id="heroPanel">
     <div class="floating-cards-grid">
         <!-- كارت النقدية -->
-        <a href="banknote.html" class="floating-card">
+        <a href="banknote.html" class="floating-card" data-perm="admin_only">
             <div class="card-info">
                 <span class="label"><i class="fa-solid fa-vault" style="color:var(--brand);"></i> النقدية</span>
                 <div class="amount" id="statCashVal">0.00 <span>ج.م</span></div>
@@ -504,7 +504,7 @@
         </a>
 
         <!-- كارت المحفظة -->
-        <a href="banknote.html" class="floating-card">
+        <a href="banknote.html" class="floating-card" data-perm="admin_only">
             <div class="card-info">
                 <span class="label"><i class="fa-solid fa-mobile-screen-button" style="color:var(--teal);"></i> المحفظة</span>
                 <div class="amount" id="statWalletVal">0.00 <span>ج.م</span></div>
@@ -828,6 +828,9 @@
     }
 
     async function loadRealtimeDashboardCash() {
+        // إذا لم يكن أدمن لا داعي لاستهلاك القراءات
+        if (userRole !== 'admin') return;
+
         try {
             const initDoc = await getDoc(doc(db, 'settings', 'initial_balances'));
             const initVals = initDoc.exists() ? initDoc.data() : { cash: 0, wallet: 0 };
@@ -1112,12 +1115,14 @@
             groupEl.style.display = anyVisible ? '' : 'none';
         });
 
-        // تأمين الهيرو كارد حسب الصلاحية
+        // إخفاء الهيرو بانل بالكامل إذا لم يكن أدمن وتنسيق واجهة المستخدم
         const heroPanel = document.getElementById('heroPanel');
-        if (role === 'admin') {
-            if (heroPanel) heroPanel.style.display = '';
-        } else {
-            if (heroPanel) heroPanel.style.display = '';
+        if (heroPanel) {
+            if (role === 'admin') {
+                heroPanel.style.display = '';
+            } else {
+                heroPanel.style.display = 'none';
+            }
         }
     });
 </script>
