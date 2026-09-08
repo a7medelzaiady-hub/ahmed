@@ -448,7 +448,7 @@ max-width: 320px;
 
 <div class="search-bar-wrap">
 <i class="fas fa-search search-icon"></i>
-<input type="text" id="searchInput" placeholder="ابحث باسم العميل أو الصنف..." oninput="filterOrders()">
+<input type="text" id="searchInput" placeholder="ابحث باسم العميل/المورد أو الصنف..." oninput="filterOrders()">
 </div>
 
 <div class="stats-bar" id="statsBar">
@@ -509,7 +509,7 @@ max-width: 320px;
 <div class="receipt-info">
 <div class="receipt-info-row"><span>تاريخ الطلبية: <span id="thOrderDate">0000</span></span></div>
 <div class="receipt-info-row"><span>موعد التسليم: <strong id="thRemainingDays">—</strong></span></div>
-<div class="receipt-info-row"><span>العميل: <strong id="thCustomerName">—</strong></span></div>
+<div class="receipt-info-row"><span>المورد/العميل: <strong id="thCustomerName">—</strong></span></div>
 </div>
 <table class="receipt-table">
 <thead>
@@ -523,9 +523,9 @@ max-width: 320px;
 <tbody id="thReceiptItems"></tbody>
 </table>
 <div class="receipt-totals">
-    <div class="receipt-total-row"><span>الإجمالي:</span><span id="thFinalTotal">0.00 ج.م</span></div>
-    <div class="receipt-total-row"><span>الحساب السابق:</span><span id="thPreviousBalance">0.00 ج.م</span></div>
-    <div class="receipt-total-row grand-total"><span>إجمالي الحساب:</span><span id="thGrandTotal">0.00 ج.م</span></div>
+    <div class="receipt-total-row"><span>إجمالي الطلبية:</span><span id="thFinalTotal">0.00 ج.م</span></div>
+    <div class="receipt-total-row"><span>الرصيد السابق للمورد:</span><span id="thPreviousBalance">0.00 ج.م</span></div>
+    <div class="receipt-total-row grand-total"><span>إجمالي حساب المورد:</span><span id="thGrandTotal">0.00 ج.م</span></div>
 </div>
 <div class="receipt-footer-note">
 برجاء مراجعة الأصناف والأعداد والأسعار جيدا وتأكيدها معنا
@@ -559,21 +559,75 @@ let db;
     }
 
 let allOrders = [];
-let customerBalancesMap = {}; 
+let supplierBalancesMap = {}; 
+let customerBalancesMap = {};
 let currentFilter = 'all';
 let pendingOrderForConvert = null;
 
+// دالة فحص العناصر المحذوفة لعدم إدراجها في الحسابات
+function isDocDeleted(data) {
+    if (!data) return false;
+    return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
+}
+
 async function loadBalances() {
     try {
-        const [custSnap, invSnap, transSnap] = await Promise.all([
+        const [suppSnap, suppTransSnap, custSnap, invSnap, transSnap] = await Promise.all([
+            getDocs(collection(db, "suppliers")),
+            getDocs(collection(db, "supplier_transactions")),
             getDocs(collection(db, "customers")),
             getDocs(collection(db, "invoices")),
             getDocs(collection(db, "transactions"))
         ]);
 
+        // 1. حساب أرصدة الموردين الدقيقة
+        supplierBalancesMap = {};
+        const supplierMovements = {};
+
+        suppTransSnap.forEach(d => {
+            const data = d.data();
+            if (isDocDeleted(data)) return;
+
+            const sid = data.supplierId || data.partyId;
+            if (sid) {
+                if (!supplierMovements[sid]) supplierMovements[sid] = 0;
+                
+                // حساب المسدد وقيمة الفاتورة المشتراة
+                const totalInvoice = Number(data.total || data.invoiceTotal || 0);
+                const paidCash = Number(data.cashPaid || data.paid || 0);
+                const paidWallet = Number(data.walletPaid || 0);
+                const totalPaid = paidCash + paidWallet;
+
+                if (data.type === 'صرف' || data.type === 'سداد') {
+                    supplierMovements[sid] -= Number(data.amount || totalPaid);
+                } else if (data.type === 'قبض') {
+                    supplierMovements[sid] += Number(data.amount || 0);
+                } else {
+                    supplierMovements[sid] += (totalInvoice - totalPaid);
+                }
+            }
+        });
+
+        suppSnap.docs.forEach(docSnap => {
+            const data = docSnap.data();
+            if (isDocDeleted(data)) return;
+
+            const id = docSnap.id;
+            const opening = Number(data.initialBalance || data.balance || 0);
+            const moveDebt = supplierMovements[id] || 0;
+            const finalBalance = opening + moveDebt;
+
+            supplierBalancesMap[id] = finalBalance;
+            if (data.name) {
+                supplierBalancesMap[data.name.trim()] = finalBalance;
+            }
+        });
+
+        // 2. حساب أرصدة العملاء الاحتياطية
         const invoiceBalances = {};
         invSnap.forEach(d => {
             const data = d.data();
+            if (isDocDeleted(data)) return;
             const cid = data.customerId;
             if (cid) {
                 invoiceBalances[cid] = (invoiceBalances[cid] || 0) + (Number(data.remaining) || 0);
@@ -583,7 +637,8 @@ async function loadBalances() {
         const transBalances = {};
         transSnap.forEach(d => {
             const data = d.data();
-            const cid = data.partyId;
+            if (isDocDeleted(data)) return;
+            const cid = data.partyId || data.customerId;
             if (cid) {
                 let effect = 0;
                 if (data.type === 'قبض') effect = -(Number(data.amount) || 0);
@@ -595,20 +650,21 @@ async function loadBalances() {
         customerBalancesMap = {};
         custSnap.docs.forEach(docSnap => {
             const data = docSnap.data();
+            if (isDocDeleted(data)) return;
             const id = docSnap.id;
-            const opening = Number(data.initialBalance) || 0;
+            const opening = Number(data.initialBalance || data.balance || 0);
             const invDebt = invoiceBalances[id] || 0;
             const transDebt = transBalances[id] || 0;
             const finalBalance = opening + invDebt + transDebt;
 
-            // الربط بحسب ID العميل والاسم
             customerBalancesMap[id] = finalBalance;
             if (data.name) {
                 customerBalancesMap[data.name.trim()] = finalBalance;
             }
         });
+
     } catch (e) {
-        console.error("خطأ حظر جلب المديونيات:", e);
+        console.error("خطأ حرج في جلب الأرصدة:", e);
     }
 }
 
@@ -686,7 +742,7 @@ let filtered = [...allOrders];
 
 if (currentFilter !== 'all') { filtered = filtered.filter(o => o.status === currentFilter); }
 if (term) {
-filtered = filtered.filter(o => o.customerName?.toLowerCase().includes(term) || o.items?.some(i => i.name?.toLowerCase().includes(term)));
+filtered = filtered.filter(o => o.customerName?.toLowerCase().includes(term) || o.supplierName?.toLowerCase().includes(term) || o.items?.some(i => i.name?.toLowerCase().includes(term)));
 }
 
 const container = document.getElementById('ordersList');
@@ -704,7 +760,8 @@ return calculateRemainingDays(a.date) - calculateRemainingDays(b.date);
 let html = '';
 filtered.forEach(order => {
 const isDone = order.status === 'done';
-const initials = (order.customerName || 'ع').charAt(0);
+const displayName = order.supplierName || order.customerName || '—';
+const initials = displayName.charAt(0);
 const total = Number(order.total || 0).toFixed(2);
 const daysRemaining = calculateRemainingDays(order.date);
 
@@ -732,7 +789,7 @@ html += `
 <div class="card-header-row">
 <div class="customer-name">
 <div class="customer-avatar">${initials}</div>
-<span>${order.customerName || '—'}</span>
+<span>${displayName}</span>
 </div>
 <div class="header-actions-wrap">
 <span class="status-badge ${isDone?'status-done':'status-pending'}">${isDone?'تم الفوترة':'قيد التنفيذ'}</span>
@@ -740,7 +797,7 @@ html += `
 <button class="action-btn btn-view-items" onclick="event.stopPropagation(); toggleItemsDropdown('${order.id}', this)"><i class="fas fa-chevron-down"></i></button>
 <button class="action-btn btn-share" onclick="event.stopPropagation(); shareAsThermalInvoice('${order.id}')"><i class="fas fa-share-alt"></i></button>
 ${!isDone ? `<button class="action-btn btn-edit" onclick="event.stopPropagation(); editOrder('${order.id}')"><i class="fas fa-edit"></i></button>` : ''}
-<button class="action-btn btn-delete" onclick="event.stopPropagation(); confirmDelete('${order.id}', '${order.customerName}')"><i class="fas fa-trash"></i></button>
+<button class="action-btn btn-delete" onclick="event.stopPropagation(); confirmDelete('${order.id}', '${displayName}')"><i class="fas fa-trash"></i></button>
 </div>
 </div>
 </div>
@@ -797,9 +854,10 @@ window.onOrderClick = (orderId) => {
 const order = allOrders.find(o => o.id === orderId);
 if (!order || order.status === 'done') return;
 pendingOrderForConvert = order;
-document.getElementById('convertModalText').innerHTML = `هل تريد تحويل طلبية <b>${order.customerName}</b> إلى فاتورة مبيعات؟`;
+const name = order.supplierName || order.customerName || 'المورد';
+document.getElementById('convertModalText').innerHTML = `هل تريد تحويل طلبية <b>${name}</b> إلى فاتورة مبيعات؟`;
 document.getElementById('confirmConvertBtn').onclick = () => {
-const params = new URLSearchParams({ fromOrder: order.id, customerName: order.customerName, total: order.total, items: JSON.stringify(order.items || []), deleteOrderAfterSave: "true" });
+const params = new URLSearchParams({ fromOrder: order.id, customerName: name, total: order.total, items: JSON.stringify(order.items || []), deleteOrderAfterSave: "true" });
 window.location.href = `sales-invoice.html?${params.toString()}`;
 };
 document.getElementById('convertModal').style.display = 'flex';
@@ -819,15 +877,20 @@ window.shareAsThermalInvoice = (orderId) => {
 const order = allOrders.find(o => o.id === orderId);
 if (!order) return;
 
-// جلب الرصيد التراكمي المحسوب بالمعرف أو الاسم المباشر
-const cId = order.customerId;
-const cName = order.customerName ? order.customerName.trim() : '';
+// جلب الرصيد التراكمي المباشر والدقيق للمورد أولاً (أو العميل كاحتياطي)
+const sId = order.supplierId || order.customerId;
+const sName = (order.supplierName || order.customerName || '').trim();
 
 let prevBalance = 0;
-if (cId && customerBalancesMap[cId] !== undefined) {
-    prevBalance = customerBalancesMap[cId];
-} else if (cName && customerBalancesMap[cName] !== undefined) {
-    prevBalance = customerBalancesMap[cName];
+
+if (sId && supplierBalancesMap[sId] !== undefined) {
+    prevBalance = supplierBalancesMap[sId];
+} else if (sName && supplierBalancesMap[sName] !== undefined) {
+    prevBalance = supplierBalancesMap[sName];
+} else if (sId && customerBalancesMap[sId] !== undefined) {
+    prevBalance = customerBalancesMap[sId];
+} else if (sName && customerBalancesMap[sName] !== undefined) {
+    prevBalance = customerBalancesMap[sName];
 }
 
 const currentTotal = Number(order.total || 0);
@@ -835,9 +898,9 @@ const grandTotal = prevBalance + currentTotal;
 
 document.getElementById('shareLoadingModal').style.display = 'flex';
 document.getElementById('thOrderDate').innerText = order.date ? order.date.split(' ')[0] : '—';
-document.getElementById('thCustomerName').innerText = order.customerName || 'عميل';
+document.getElementById('thCustomerName').innerText = sName || 'مورد/عميل';
 
-// حساب الأيام المتبقية كنص
+// حساب الأيام المتبقية
 const daysRemaining = calculateRemainingDays(order.date);
 let remainingText = '';
 if (daysRemaining === 9999) remainingText = 'غير محدد';
@@ -849,7 +912,7 @@ else if (daysRemaining < 0) remainingText = `متأخر منذ ${Math.abs(daysRe
 
 document.getElementById('thRemainingDays').innerText = remainingText;
 
-// كتابة الأرقام الإنجليزية بدون toLocaleString تجنباً للشاشة الرمادية أو الأرقام العربية
+// طباعة قيم الأرقام بشكل موحد وصحيح
 document.getElementById('thFinalTotal').innerText = `${currentTotal.toFixed(2)} ج.م`;
 document.getElementById('thPreviousBalance').innerText = `${prevBalance.toFixed(2)} ج.م`; 
 document.getElementById('thGrandTotal').innerText = `${grandTotal.toFixed(2)} ج.م`;
