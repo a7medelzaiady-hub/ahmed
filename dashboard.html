@@ -449,6 +449,12 @@
                    t.includes('فودافون') || t.includes('فوري') || t.includes('انستاباي') || t.includes('instapay');
         }
 
+        // دالة المساعدة للتحقق من أن الحركة أو الفاتورة محذوفة
+        function isDocDeleted(data) {
+            if (!data) return false;
+            return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
+        }
+
         function showStatus(msg, ok = true) {
             const el = document.getElementById('statusAlert');
             el.textContent = msg;
@@ -513,7 +519,7 @@
             }
         };
 
-        /* ============ Optimized Load & Compute (In-Memory Processing to save Firestore reads) ============ */
+        /* ============ Optimized Load & Compute (In-Memory Processing with Deleted Record Checks) ============ */
 
         window.loadAllData = async function () {
             try {
@@ -562,8 +568,12 @@
                 /* ---- 1. المبيعات ---- */
                 invoicesSnap.forEach(docItem => {
                     const data = docItem.data();
-                    const cAmt = num(data.cashAmount);
-                    const wAmt = num(data.walletAmount);
+                    
+                    // استثناء الفواتير المحذوفة
+                    if (isDocDeleted(data)) return;
+
+                    const cAmt = num(data.cashAmount ?? data.cashPaid ?? data.paid);
+                    const wAmt = num(data.walletAmount ?? data.walletPaid);
 
                     netCashFlow += cAmt;
                     netWalletFlow += wAmt;
@@ -582,6 +592,10 @@
                 /* ---- 2. المشتريات والمرتجعات عبر supplier_transactions ---- */
                 supplierTransSnap.forEach(docItem => {
                     const data = docItem.data();
+                    
+                    // استثناء المعاملات المحذوفة
+                    if (isDocDeleted(data)) return;
+
                     const cPaid = num(data.cashPaid);
                     const wPaid = num(data.walletPaid);
 
@@ -604,7 +618,9 @@
                 /* ---- 3. حركات الصندوق اليدوية (cash_logs) ---- */
                 cashLogsSnap.forEach(docItem => {
                     const data = docItem.data();
-                    // استثناء الفواتير والمصروفات بالكامل لمنع التكرار
+                    
+                    // استثناء الحركات المحذوفة والفواتير/المصروفات المربوطة لمنع التكرار
+                    if (isDocDeleted(data)) return;
                     if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return; 
 
                     processedMovements.add(docItem.id);
@@ -627,10 +643,11 @@
 
                 /* ---- 4. سندات القبض والصرف اليدوية (transactions) ---- */
                 transactionsSnap.forEach(docItem => {
-                    if (processedMovements.has(docItem.id)) return;
-                    
                     const data = docItem.data();
-                    // استثناء سداد الفواتير والمصروفات لمنع التكرار
+                    
+                    // استثناء المعاملات المحذوفة أو المسجلة سابقاً
+                    if (isDocDeleted(data)) return;
+                    if (processedMovements.has(docItem.id)) return;
                     if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
                     
                     processedMovements.add(docItem.id);
@@ -651,7 +668,10 @@
                 /* ---- 5. المصروفات ---- */
                 expensesSnap.forEach(docItem => {
                     const data = docItem.data();
-                    // استخدام Math.abs لضمان أن قيم المصروفات دائما موجبة وتطرح من النقدية
+                    
+                    // استثناء المصروفات المحذوفة
+                    if (isDocDeleted(data)) return;
+
                     const amt = Math.abs(num(data.amount || data.total));
                     const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
 
@@ -668,7 +688,7 @@
                 actualInv = 0;
                 inventorySnap.forEach(docItem => {
                     const data = docItem.data();
-                    if (data.isDeleted === true) return;
+                    if (isDocDeleted(data)) return;
 
                     const factor = num(data.unitFactor) || 1;
                     const totalPcs = num(data.totalPcs);
@@ -682,12 +702,15 @@
 
                 customersSnap.forEach(docItem => {
                     const data = docItem.data();
+                    if (isDocDeleted(data)) return;
                     const initBal = num(data.openingBalance || data.initialBalance || 0);
                     custBalances.set(docItem.id, initBal);
                 });
 
                 invoicesSnap.forEach(docItem => {
                     const data = docItem.data();
+                    if (isDocDeleted(data)) return;
+
                     const cId = data.customerId || data.partyId;
                     if (!cId || !custBalances.has(cId)) return;
 
@@ -709,6 +732,8 @@
 
                 transactionsSnap.forEach(docItem => {
                     const data = docItem.data();
+                    if (isDocDeleted(data)) return;
+
                     const cId = data.partyId || data.customerId;
                     if (!cId || !custBalances.has(cId)) return;
 
@@ -744,6 +769,7 @@
                 const transByParty = new Map();
                 transactionsSnap.forEach(docSnap => {
                     const d = docSnap.data();
+                    if (isDocDeleted(d)) return;
                     const pId = d.partyId || d.supplierId;
                     if (pId) {
                         if (!transByParty.has(pId)) transByParty.set(pId, []);
@@ -754,6 +780,7 @@
                 const supTransBySup = new Map();
                 supplierTransSnap.forEach(docSnap => {
                     const d = docSnap.data();
+                    if (isDocDeleted(d)) return;
                     const sId = d.supplierId;
                     if (sId) {
                         if (!supTransBySup.has(sId)) supTransBySup.set(sId, []);
@@ -765,6 +792,8 @@
                 suppliersSnap.forEach(docItem => {
                     const sId = docItem.id;
                     const data = docItem.data();
+                    if (isDocDeleted(data)) return;
+
                     let totalDebit = num(data.openingBalance);
                     let totalCredit = 0;
                     const processedTransIds = new Set();
@@ -798,7 +827,7 @@
                 });
 
                 window.calculateFinancialTotals();
-                showStatus("تمت مزامنة الأرصدة الفعلية بنجاح.", true);
+                showStatus("تمت مزامنة الأرصدة الفعلية وتصفية الفواتير المحذوفة بنجاح.", true);
             } catch (err) {
                 console.error(err);
                 showStatus("حدث خطأ أثناء تحميل البيانات: " + err.message, false);
