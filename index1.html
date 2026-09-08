@@ -491,7 +491,7 @@
 
         <a href="client_menu.html" class="floating-card">
             <div class="card-info">
-                <span class="label"><i class="fa-solid fa-users" style="color:var(--coral);"></i> ديون العملاء</span>
+                <span class="label"><i class="fa-solid fa-users" style="color:var(--coral);"></i> صافي العملاء</span>
                 <div class="amount" id="statDebtsVal">0.00 <span>ج.م</span></div>
             </div>
             <div class="card-badge badge-debts">
@@ -996,7 +996,7 @@
                 }
             });
 
-            // 7. حساب إجمالي مديونيات العملاء بالتطابق التام مع صفحة (كشف حساب العملاء)
+            // 7. حساب صافي مديونيات العملاء بالتطابق التام مع الشاشة الرئيسية لكشف حساب العملاء (الصافي)
             let debtMap = {};
 
             invoicesSnap.forEach(docItem => {
@@ -1021,18 +1021,24 @@
                 }
             });
 
-            let totalDebtsVal = 0;
+            let totalOwedVal = 0;
+            let totalCreditVal = 0;
+
             clientsSnap.forEach(docItem => {
                 const data = docItem.data();
                 const initial = num(data.initialBalance ?? data.balance ?? data.debt ?? 0);
                 const ledgerEffect = debtMap[docItem.id] || 0;
                 const realBalance = initial + ledgerEffect;
 
-                // مطابقة ديون العملاء تماماً لحقل "إجمالي عليه" 
                 if (realBalance > 0) {
-                    totalDebtsVal += realBalance;
+                    totalOwedVal += realBalance;
+                } else if (realBalance < 0) {
+                    totalCreditVal += Math.abs(realBalance);
                 }
             });
+
+            // حساب صافي ديون العملاء (إجمالي عليه - إجمالي له)
+            const netDebtsVal = totalOwedVal - totalCreditVal;
 
             // تحديث قيم الواجهة المباشرة
             const statCashValEl = document.getElementById('statCashVal');
@@ -1052,7 +1058,7 @@
 
             const statDebtsValEl = document.getElementById('statDebtsVal');
             if (statDebtsValEl) {
-                statDebtsValEl.innerHTML = `${totalDebtsVal.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
+                statDebtsValEl.innerHTML = `${netDebtsVal.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
             }
 
         } catch (err) {
