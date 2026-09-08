@@ -564,7 +564,13 @@ let customerBalancesMap = {};
 let currentFilter = 'all';
 let pendingOrderForConvert = null;
 
-// دالة فحص العناصر المحذوفة لعدم إدراجها في الحسابات
+function num(v) {
+    if (v === null || v === undefined) return 0;
+    const cleaned = String(v).replace(/[^0-9.-]/g, '');
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? 0 : n;
+}
+
 function isDocDeleted(data) {
     if (!data) return false;
     return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
@@ -572,65 +578,84 @@ function isDocDeleted(data) {
 
 async function loadBalances() {
     try {
-        const [suppSnap, suppTransSnap, custSnap, invSnap, transSnap] = await Promise.all([
+        const [suppSnap, suppTransSnap, transSnap, custSnap, invSnap] = await Promise.all([
             getDocs(collection(db, "suppliers")),
             getDocs(collection(db, "supplier_transactions")),
+            getDocs(collection(db, "transactions")),
             getDocs(collection(db, "customers")),
-            getDocs(collection(db, "invoices")),
-            getDocs(collection(db, "transactions"))
+            getDocs(collection(db, "invoices"))
         ]);
 
-        // 1. حساب أرصدة الموردين الدقيقة
         supplierBalancesMap = {};
         const supplierMovements = {};
 
+        // 1. تجميع كافة معاملات المشتريات والسداد من supplier_transactions
         suppTransSnap.forEach(d => {
             const data = d.data();
             if (isDocDeleted(data)) return;
 
             const sid = data.supplierId || data.partyId;
-            if (sid) {
-                if (!supplierMovements[sid]) supplierMovements[sid] = 0;
-                
-                // حساب المسدد وقيمة الفاتورة المشتراة
-                const totalInvoice = Number(data.total || data.invoiceTotal || 0);
-                const paidCash = Number(data.cashPaid || data.paid || 0);
-                const paidWallet = Number(data.walletPaid || 0);
-                const totalPaid = paidCash + paidWallet;
+            const sName = data.supplierName ? data.supplierName.trim() : '';
 
-                if (data.type === 'صرف' || data.type === 'سداد') {
-                    supplierMovements[sid] -= Number(data.amount || totalPaid);
-                } else if (data.type === 'قبض') {
-                    supplierMovements[sid] += Number(data.amount || 0);
-                } else {
-                    supplierMovements[sid] += (totalInvoice - totalPaid);
-                }
+            const totalInvoice = num(data.total || data.invoiceTotal);
+            const paidCash = num(data.cashPaid || data.paid);
+            const paidWallet = num(data.walletPaid);
+            const totalPaid = paidCash + paidWallet;
+
+            let netEffect = 0;
+            if (data.type === 'صرف' || data.type === 'سداد' || data.type === 'out') {
+                netEffect = -num(data.amount || totalPaid);
+            } else if (data.type === 'قبض' || data.type === 'in') {
+                netEffect = num(data.amount);
+            } else {
+                netEffect = (totalInvoice - totalPaid);
             }
+
+            if (sid) supplierMovements[sid] = (supplierMovements[sid] || 0) + netEffect;
+            if (sName) supplierMovements[sName] = (supplierMovements[sName] || 0) + netEffect;
         });
 
+        // 2. تجميع السندات اليدوية غير المربوطة بالمشتريات من مجموعة transactions
+        transSnap.forEach(d => {
+            const data = d.data();
+            if (isDocDeleted(data)) return;
+
+            const sid = data.partyId || data.supplierId;
+            const sName = data.partyName || data.supplierName ? (data.partyName || data.supplierName).trim() : '';
+            const amt = num(data.amount || data.total);
+
+            let netEffect = 0;
+            if (data.type === 'صرف' || data.type === 'سداد') netEffect = -amt;
+            else if (data.type === 'قبض') netEffect = amt;
+
+            if (sid) supplierMovements[sid] = (supplierMovements[sid] || 0) + netEffect;
+            if (sName) supplierMovements[sName] = (supplierMovements[sName] || 0) + netEffect;
+        });
+
+        // 3. احتساب الرصيد النهائي لكل مورد بدمج الرصيد الافتتاحي مع الحركة الحسابية
         suppSnap.docs.forEach(docSnap => {
             const data = docSnap.data();
             if (isDocDeleted(data)) return;
 
             const id = docSnap.id;
-            const opening = Number(data.initialBalance || data.balance || 0);
-            const moveDebt = supplierMovements[id] || 0;
-            const finalBalance = opening + moveDebt;
+            const name = data.name ? data.name.trim() : '';
+            const initial = num(data.initialBalance ?? data.balance ?? data.debt);
+
+            const movements = (supplierMovements[id] || 0) + (name ? (supplierMovements[name] || 0) : 0);
+            const finalBalance = initial + movements;
 
             supplierBalancesMap[id] = finalBalance;
-            if (data.name) {
-                supplierBalancesMap[data.name.trim()] = finalBalance;
-            }
+            if (name) supplierBalancesMap[name] = finalBalance;
         });
 
-        // 2. حساب أرصدة العملاء الاحتياطية
+        // 4. تجميع أرصدة العملاء الاحتياطية
         const invoiceBalances = {};
         invSnap.forEach(d => {
             const data = d.data();
             if (isDocDeleted(data)) return;
             const cid = data.customerId;
             if (cid) {
-                invoiceBalances[cid] = (invoiceBalances[cid] || 0) + (Number(data.remaining) || 0);
+                invoiceBalances[cid] = (invoiceBalances[cid] || 0) + num(data.remaining);
             }
         });
 
@@ -641,8 +666,8 @@ async function loadBalances() {
             const cid = data.partyId || data.customerId;
             if (cid) {
                 let effect = 0;
-                if (data.type === 'قبض') effect = -(Number(data.amount) || 0);
-                else if (data.type === 'صرف') effect = (Number(data.amount) || 0);
+                if (data.type === 'قبض') effect = -num(data.amount);
+                else if (data.type === 'صرف') effect = num(data.amount);
                 transBalances[cid] = (transBalances[cid] || 0) + effect;
             }
         });
@@ -652,10 +677,10 @@ async function loadBalances() {
             const data = docSnap.data();
             if (isDocDeleted(data)) return;
             const id = docSnap.id;
-            const opening = Number(data.initialBalance || data.balance || 0);
+            const initial = num(data.initialBalance ?? data.balance ?? data.debt);
             const invDebt = invoiceBalances[id] || 0;
             const transDebt = transBalances[id] || 0;
-            const finalBalance = opening + invDebt + transDebt;
+            const finalBalance = initial + invDebt + transDebt;
 
             customerBalancesMap[id] = finalBalance;
             if (data.name) {
@@ -664,7 +689,7 @@ async function loadBalances() {
         });
 
     } catch (e) {
-        console.error("خطأ حرج في جلب الأرصدة:", e);
+        console.error("خطأ حرج في جلب الأرصدة المطابقة:", e);
     }
 }
 
@@ -762,7 +787,7 @@ filtered.forEach(order => {
 const isDone = order.status === 'done';
 const displayName = order.supplierName || order.customerName || '—';
 const initials = displayName.charAt(0);
-const total = Number(order.total || 0).toFixed(2);
+const total = num(order.total).toFixed(2);
 const daysRemaining = calculateRemainingDays(order.date);
 
 let badgeHTML = '';
@@ -814,8 +839,8 @@ ${!isDone ? `<button class="action-btn btn-edit" onclick="event.stopPropagation(
 </thead>
 <tbody>
 ${order.items?.map(i => {
-    const qty = Number(i.quantity || i.qty || 0);
-    const price = Number(i.price || 0);
+    const qty = num(i.quantity || i.qty);
+    const price = num(i.price);
     const itemTotal = qty * price;
     return `<tr>
         <td>${i.name || '—'}</td>
@@ -877,7 +902,6 @@ window.shareAsThermalInvoice = (orderId) => {
 const order = allOrders.find(o => o.id === orderId);
 if (!order) return;
 
-// جلب الرصيد التراكمي المباشر والدقيق للمورد أولاً (أو العميل كاحتياطي)
 const sId = order.supplierId || order.customerId;
 const sName = (order.supplierName || order.customerName || '').trim();
 
@@ -893,14 +917,13 @@ if (sId && supplierBalancesMap[sId] !== undefined) {
     prevBalance = customerBalancesMap[sName];
 }
 
-const currentTotal = Number(order.total || 0);
+const currentTotal = num(order.total);
 const grandTotal = prevBalance + currentTotal;
 
 document.getElementById('shareLoadingModal').style.display = 'flex';
 document.getElementById('thOrderDate').innerText = order.date ? order.date.split(' ')[0] : '—';
 document.getElementById('thCustomerName').innerText = sName || 'مورد/عميل';
 
-// حساب الأيام المتبقية
 const daysRemaining = calculateRemainingDays(order.date);
 let remainingText = '';
 if (daysRemaining === 9999) remainingText = 'غير محدد';
@@ -912,14 +935,13 @@ else if (daysRemaining < 0) remainingText = `متأخر منذ ${Math.abs(daysRe
 
 document.getElementById('thRemainingDays').innerText = remainingText;
 
-// طباعة قيم الأرقام بشكل موحد وصحيح
 document.getElementById('thFinalTotal').innerText = `${currentTotal.toFixed(2)} ج.م`;
 document.getElementById('thPreviousBalance').innerText = `${prevBalance.toFixed(2)} ج.م`; 
 document.getElementById('thGrandTotal').innerText = `${grandTotal.toFixed(2)} ج.م`;
 
 document.getElementById('thReceiptItems').innerHTML = order.items?.map(i => {
-    const qty = Number(i.quantity || i.qty || 0);
-    const price = Number(i.price || 0);
+    const qty = num(i.quantity || i.qty);
+    const price = num(i.price);
     const itemTotal = qty * price;
     return `<tr>
         <td style="text-align:right;">${i.name || '—'}</td>
