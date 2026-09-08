@@ -819,7 +819,7 @@
                t.includes('فودافون') || t.includes('فوري') || t.includes('انستاباي') || t.includes('instapay');
     }
 
-    // دالة فحص المعاملات والسجلات المحذوفة لضمان استبعادها بشكل نهائي دقيق
+    // دالة فحص المعاملات والسجلات المحذوفة لضمان استبعادها بشكل نهائي ودقيق
     function isDocDeleted(data) {
         if (!data) return false;
         return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
@@ -829,11 +829,13 @@
         if (userRole !== 'admin') return;
 
         try {
+            // 1. جلب رصيد أول المدة
             const initDoc = await getDoc(doc(db, 'settings', 'initial_balances'));
             const initVals = initDoc.exists() ? initDoc.data() : { cash: 0, wallet: 0 };
             const iCash = num(initVals.cash);
             const iWallet = num(initVals.wallet);
 
+            // 2. جلب الحسابات والمعاملات
             const [invoicesSnap, supplierSnap, cashLogsSnap, expensesSnap, transactionsSnap, inventorySnap, transSnap, clientsSnap] = await Promise.all([
                 getDocs(collection(db, 'invoices')),
                 getDocs(collection(db, 'supplier_transactions')),
@@ -855,37 +857,55 @@
             let netCashFlow = 0;
             let netWalletFlow = 0;
 
-            // 1. حساب فواتير المبيعات السليمة
+            // --- أ. المبيعات (حساب الكاش والمحفظة للفواتير النشطة فقط) ---
             invoicesSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
 
-                netCashFlow += num(data.cashAmount ?? data.cashPaid ?? data.paid);
-                netWalletFlow += num(data.walletAmount ?? data.walletPaid);
+                const cAmt = num(data.calculatedCash ?? data.cashAmount ?? data.cashPaid ?? data.paid);
+                const wAmt = num(data.calculatedWallet ?? data.walletAmount ?? data.walletPaid);
+
+                netCashFlow += cAmt;
+                netWalletFlow += wAmt;
             });
 
-            // 2. حساب معاملات المشتريات السليمة
+            // --- ب. المشتريات والموردين (المعاملات النشطة فقط) ---
             supplierSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
 
-                netCashFlow -= num(data.cashPaid);
-                netWalletFlow -= num(data.walletPaid);
+                netCashFlow -= num(data.cashPaid ?? data.cashAmount);
+                netWalletFlow -= num(data.walletPaid ?? data.walletAmount);
             });
 
-            const processedMovements = new Set();
+            // --- ج. المصروفات غير المحذوفة ---
+            expensesSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (isDocDeleted(data)) return;
 
-            // 3. حساب حركات الدرج والصندوق السليمة واكتشاف الربط بالفواتير المحذوفة
+                const amt = Math.abs(num(data.amount || data.total));
+                const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
+
+                if (toWallet) {
+                    netWalletFlow -= amt;
+                } else {
+                    netCashFlow -= amt;
+                }
+            });
+
+            // --- د. حركات الدرج والصندوق اليدوية المستقلة ---
+            const processedTxIds = new Set();
+
             cashLogsSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
 
-                // التثبت من عدم ربط الحركة بسند/فاتورة/مصروف تم حذفه
+                // استبعاد الحركة المربوطة بفاتورة أو مصروف حية أو محذوفة لتفادي الازدواج
                 if (data.invoiceId && deletedInvoicesSet.has(data.invoiceId)) return;
                 if (data.expenseId && deletedExpensesSet.has(data.expenseId)) return;
                 if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
 
-                processedMovements.add(docItem.id);
+                processedTxIds.add(docItem.id);
 
                 const amt = num(data.amount);
                 const toWallet = isWalletMethod(data.method || data.paymentMethod) || isWalletMethod(data.note);
@@ -899,17 +919,17 @@
                 }
             });
 
-            // 4. حساب المعاملات المالية والسندات اليدوية السليمة
+            // --- هـ. المعاملات المالية والسندات اليدوية غير المربوطة بالفواتير ---
             transactionsSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
 
                 if (data.invoiceId && deletedInvoicesSet.has(data.invoiceId)) return;
                 if (data.expenseId && deletedExpensesSet.has(data.expenseId)) return;
-                if (processedMovements.has(docItem.id)) return;
+                if (processedTxIds.has(docItem.id)) return;
                 if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
 
-                processedMovements.add(docItem.id);
+                processedTxIds.add(docItem.id);
 
                 const amt = num(data.amount || data.total);
                 const toWallet = isWalletMethod(data.method || data.paymentMethod) || isWalletMethod(data.note);
@@ -918,21 +938,6 @@
                     if (toWallet) netWalletFlow += amt; else netCashFlow += amt;
                 } else if (data.type === 'صرف') {
                     if (toWallet) netWalletFlow -= amt; else netCashFlow -= amt;
-                }
-            });
-
-            // 5. حساب المصروفات غير المحذوفة
-            expensesSnap.forEach(docItem => {
-                const data = docItem.data();
-                if (isDocDeleted(data)) return;
-
-                const amt = Math.abs(num(data.amount || data.total));
-                const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
-
-                if (toWallet) {
-                    netWalletFlow -= amt;
-                } else {
-                    netCashFlow -= amt;
                 }
             });
 
