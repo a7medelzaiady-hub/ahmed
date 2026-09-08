@@ -1,179 +1,476 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>دفتر حركة النقدية</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Cairo', sans-serif; background-color: #f8fafc; padding: 20px; }
-        .num { font-family: 'JetBrains Mono', monospace; }
-        .card-custom { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .table th { background-color: #0f172a; color: white; text-align: center; }
-        .table td { text-align: center; vertical-align: middle; font-weight: 700; }
-        .text-in { color: #16a34a; }
-        .text-out { color: #dc2626; }
-    </style>
+<meta charset="UTF-8">
+<script src="auth-guard.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>دفتر النقدية - شركة الزيادي</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b5e3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root {
+    --primary: #0b5e3d;
+    --primary-light: #eefdf6;
+    --primary-gradient: linear-gradient(135deg, #064e3b, #0b5e3d, #14532d);
+    --bg-light: #f4f6f8;
+    --text-dark: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --white: #ffffff;
+    --danger: #ef4444;
+    --danger-light: #fee2e2;
+    --success: #10b981;
+    --success-light: #d1fae5;
+    --warning: #f59e0b;
+    --warning-light: #fef3c7;
+    --card-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05);
+    --radius-sm: 12px; --radius-md: 16px; --radius-lg: 24px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px; -webkit-font-smoothing:antialiased; }
+.app-container { max-width:560px; margin:0 auto; background:var(--bg-light); min-height:100vh; box-shadow:0 0 40px rgba(0,0,0,0.1); position:relative; }
+.num { font-family:'Montserrat','Cairo',sans-serif !important; font-weight:800; }
+.force-ltr { direction:ltr !important; display:inline-block; }
+
+.header-nav { background:var(--primary-gradient); color:#fff; padding:18px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:1000; border-radius:0 0 var(--radius-lg) var(--radius-lg); box-shadow:0 10px 25px rgba(6,78,59,0.2); }
+.back-btn, .sync-btn { color:#fff; background:rgba(255,255,255,0.12); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none !important; border:none; }
+.header-title { text-align:center; }
+.header-title span { font-size:0.65rem; letter-spacing:1.5px; opacity:0.85; font-weight:800; color:#fcd34d; display:block; }
+.header-title h1 { font-size:1.1rem; font-weight:900; margin:3px 0 0; }
+
+.section-pad { padding:16px; }
+
+.opening-card { background:linear-gradient(135deg,#0b5e3d,#148054); color:#fff; border-radius:var(--radius-lg); padding:18px; margin:16px; box-shadow:var(--card-shadow); display:flex; justify-content:space-between; align-items:center; }
+.opening-card .lbl { font-size:0.75rem; font-weight:800; opacity:0.85; }
+.opening-card .val { font-size:1.4rem; font-weight:900; margin-top:2px; }
+.opening-card button { background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:10px; padding:8px 14px; font-weight:800; font-size:0.75rem; }
+
+.stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 16px; }
+.stat-card { background:#fff; border:1px solid rgba(0,0,0,0.04); border-radius:var(--radius-md); padding:12px 4px; text-align:center; box-shadow:var(--card-shadow); position:relative; }
+.stat-card::before { content:''; position:absolute; top:0; right:0; left:0; height:3px; border-radius:10px 10px 0 0; }
+.stat-card.in::before { background:var(--success); }
+.stat-card.out::before { background:var(--danger); }
+.stat-card.net::before { background:var(--primary); }
+.stat-val { font-size:0.9rem; font-weight:800; margin-top:3px; display:block; }
+.stat-label { font-size:0.68rem; color:var(--text-muted); font-weight:800; display:block; }
+
+.toolbar-box { display:flex; gap:8px; margin:0 16px 14px; flex-wrap:wrap; }
+.tbtn { flex:1; min-width:120px; display:inline-flex; align-items:center; justify-content:center; gap:6px; border:none; padding:11px; border-radius:var(--radius-sm); font-weight:800; font-size:0.8rem; color:#fff; }
+.tbtn-in { background:var(--success); }
+.tbtn-out { background:var(--danger); }
+.tbtn-excel { background:#0284c7; }
+
+.entry-card { background:#fff; border-radius:var(--radius-lg); margin:16px; padding:18px; box-shadow:var(--card-shadow); display:none; }
+.entry-card.show { display:block; }
+.label-custom { display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:6px; font-weight:800; }
+.input-field { width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:#f8fafc; font-weight:700; font-size:0.85rem; color:var(--text-dark); outline:none; }
+.input-field:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(11,94,61,0.08); background:#fff; }
+.input-group-custom { margin-bottom:14px; }
+.btn-save-entry { width:100%; border:none; padding:13px; border-radius:var(--radius-sm); font-weight:800; font-size:0.9rem; color:#fff; }
+
+.filter-row { display:flex; gap:8px; margin:0 16px 14px; }
+.filter-row input { flex:1; }
+
+.movement-item { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:14px; border-radius:var(--radius-md); margin:0 16px 12px; border:1px solid rgba(0,0,0,0.03); box-shadow:var(--card-shadow); position:relative; }
+.movement-item::before { content:''; position:absolute; top:0; bottom:0; right:0; width:4px; border-radius:0 var(--radius-md) var(--radius-md) 0; }
+.movement-item.in::before { background:var(--success); }
+.movement-item.out::before { background:var(--danger); }
+.mv-info { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; padding-right:8px; }
+.mv-note { font-weight:800; color:var(--text-dark); font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mv-meta { font-size:0.7rem; color:var(--text-muted); font-weight:700; }
+.mv-badge { font-size:0.65rem; padding:2px 7px; border-radius:6px; font-weight:800; display:inline-block; margin-top:3px; }
+.badge-in { background:var(--success-light); color:#065f46; }
+.badge-out { background:var(--danger-light); color:#991b1b; }
+.mv-right { text-align:left; flex-shrink:0; }
+.mv-amount { font-weight:900; font-size:1rem; }
+.mv-balance { font-size:0.68rem; color:var(--text-muted); font-weight:700; margin-top:2px; }
+.mv-del { border:none; background:none; color:#cbd5e1; font-size:0.85rem; margin-right:8px; }
+
+.loading-wrapper { text-align:center; padding:60px 0; color:var(--primary); }
+.loading-wrapper p { font-weight:800; margin-top:12px; font-size:0.85rem; }
+.empty-msg { text-align:center; color:var(--text-muted); font-weight:800; padding:40px 10px; }
+</style>
 </head>
 <body>
 
-<div class="container" style="max-width: 900px;">
-    <h4 class="fw-bold mb-4 text-center">📒 دفتر حركة النقدية (وارد وصادر سطر بسطر)</h4>
+<div class="app-container">
+    <div class="header-nav">
+        <button class="sync-btn" onclick="init()" title="تحديث"><i class="fas fa-sync-alt"></i></button>
+        <div class="header-title">
+            <span>شركة الزيادي</span>
+            <h1>دفتر النقدية (الخزينة)</h1>
+        </div>
+        <a href="index1.html" class="back-btn"><i class="fas fa-home"></i></a>
+    </div>
 
-    <!-- إدخال رصيد أول الفترة -->
-    <div class="card-custom">
-        <div class="row align-items-center">
-            <div class="col-md-8">
-                <label class="fw-bold mb-1">رصيد أول الفترة (الرصيد الافتتاحي):</label>
-                <input type="number" id="initialBalance" class="form-control num fw-bold" value="0" placeholder="أدخل رصيد بداية المدة">
-            </div>
-            <div class="col-md-4 mt-3 mt-md-0">
-                <button class="btn btn-dark w-100 fw-bold mt-md-4" onclick="setInitialBalance()">تثبيت رصيد أول المدة</button>
-            </div>
+    <div class="opening-card">
+        <div>
+            <div class="lbl">الرصيد الافتتاحي</div>
+            <div class="val num" id="openingBalanceDisplay">0.00</div>
+        </div>
+        <button onclick="editOpeningBalance()"><i class="fas fa-edit me-1"></i> تعديل</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card in">
+            <span class="stat-label">إجمالي الوارد</span>
+            <span class="stat-val text-success num force-ltr" id="totalIn">0.00</span>
+        </div>
+        <div class="stat-card out">
+            <span class="stat-label">إجمالي الصادر</span>
+            <span class="stat-val text-danger num force-ltr" id="totalOut">0.00</span>
+        </div>
+        <div class="stat-card net">
+            <span class="stat-label">الرصيد الحالي</span>
+            <span class="stat-val num force-ltr" id="currentBalance" style="color:var(--primary);">0.00</span>
         </div>
     </div>
 
-    <!-- نموذج إضافة حركة جديدة -->
-    <div class="card-custom">
-        <h6 class="fw-bold mb-3">تسجيل حركة جديدة:</h6>
-        <div class="row g-2">
-            <div class="col-md-3">
-                <select id="transType" class="form-select fw-bold">
-                    <option value="in">وارد (+)</option>
-                    <option value="out">صادر (-)</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <input type="number" id="transAmount" class="form-control num" placeholder="المبلغ">
-            </div>
-            <div class="col-md-4">
-                <input type="text" id="transNote" class="form-control" placeholder="البيان / الشرح">
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100 fw-bold" onclick="addTransaction()">إضافة</button>
-            </div>
-        </div>
+    <div class="toolbar-box">
+        <button class="tbtn tbtn-in" onclick="openEntryForm('in')"><i class="fas fa-plus-circle"></i> إضافة وارد</button>
+        <button class="tbtn tbtn-out" onclick="openEntryForm('out')"><i class="fas fa-minus-circle"></i> إضافة صادر</button>
+        <button class="tbtn tbtn-excel" onclick="exportToExcel()"><i class="fas fa-file-excel"></i> تصدير</button>
     </div>
 
-    <!-- جدول دفتر النقدية -->
-    <div class="card-custom">
-        <div class="table-responsive">
-            <table class="table table-bordered align-middle">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>التاريخ/الوقت</th>
-                        <th>البيان</th>
-                        <th>الوارد (+)</th>
-                        <th>الصادر (-)</th>
-                        <th>الرصيد اللحظي</th>
-                    </tr>
-                </thead>
-                <tbody id="cashTableBody">
-                    <!-- تتولد الصفوف هنا تلقائياً -->
-                </tbody>
-            </table>
+    <div class="entry-card" id="entryCard">
+        <h6 class="fw-bold mb-3" id="entryCardTitle">إضافة حركة يدوية</h6>
+        <input type="hidden" id="entryType" value="in">
+        <div class="input-group-custom">
+            <label class="label-custom">القيمة (ج.م)</label>
+            <input type="number" id="entryAmount" class="input-field num" placeholder="0.00" step="0.01">
         </div>
+        <div class="input-group-custom">
+            <label class="label-custom">التاريخ</label>
+            <input type="date" id="entryDate" class="input-field num">
+        </div>
+        <div class="input-group-custom">
+            <label class="label-custom">البيان</label>
+            <textarea id="entryNote" class="input-field" rows="2" placeholder="سبب الحركة..."></textarea>
+        </div>
+        <button class="btn-save-entry" id="entrySaveBtn" onclick="saveManualEntry()">حفظ الحركة</button>
+    </div>
 
-        <!-- إجماليات الدفتر -->
-        <div class="row mt-3 text-center fw-bold">
-            <div class="col-md-4 text-success">إجمالي الوارد: <span id="totalIn" class="num">0.00</span></div>
-            <div class="col-md-4 text-danger">إجمالي الصادر: <span id="totalOut" class="num">0.00</span></div>
-            <div class="col-md-4 text-dark">صافي الرصيد الحالي: <span id="finalBalance" class="num">0.00</span></div>
+    <div class="filter-row">
+        <input type="text" id="searchInput" class="input-field" placeholder="بحث بالبيان..." onkeyup="renderMovements()">
+        <input type="date" id="dateFilter" class="input-field" onchange="renderMovements()">
+    </div>
+
+    <div id="movementsList">
+        <div class="loading-wrapper">
+            <div class="spinner-border text-success" role="status" style="width:2rem; height:2rem;"></div>
+            <p>جاري تجميع حركات الخزينة...</p>
         </div>
     </div>
 </div>
 
-<script>
-    let openingBalance = 0;
-    let transactions = [];
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+    initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
+    collection, getDocs, addDoc, doc, getDoc, setDoc, deleteDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    function setInitialBalance() {
-        openingBalance = parseFloat(document.getElementById('initialBalance').value) || 0;
-        renderCashBook();
+const firebaseConfig = {
+    apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+    authDomain: "ahmedelzaiady.firebaseapp.com",
+    projectId: "ahmedelzaiady",
+    storageBucket: "ahmedelzaiady.firebasestorage.app",
+    messagingSenderId: "300306825071",
+    appId: "1:300306825071:web:0426ddde56280fa090329a",
+    measurementId: "G-WE04GK5XZZ"
+};
+
+const app = initializeApp(firebaseConfig);
+let db;
+try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) }); }
+catch (e) { db = getFirestore(app); }
+
+let openingBalance = 0;
+let allMovements = []; // {id, direction:'in'/'out', amount, note, date, timeMs, source, balanceAfter}
+
+function convertArabicDigits(str) {
+    const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+    return String(str || '').replace(/[٠-٩]/g, d => map[d]);
+}
+
+function toMillis(item) {
+    if (item.timestamp?.seconds) return item.timestamp.seconds * 1000;
+    if (item.date) {
+        const p = Date.parse(convertArabicDigits(item.date));
+        if (!isNaN(p)) return p;
     }
+    return 0;
+}
 
-    function addTransaction() {
-        const type = document.getElementById('transType').value;
-        const amount = parseFloat(document.getElementById('transAmount').value);
-        const note = document.getElementById('transNote').value.trim();
-
-        if (!amount || amount <= 0) {
-            alert('يرجى إدخال مبلغ صحيح');
-            return;
-        }
-
-        const timeStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-
-        transactions.push({
-            type: type,
-            amount: amount,
-            note: note || (type === 'in' ? 'مقابوضات' : 'مصروفات'),
-            time: timeStr
-        });
-
-        document.getElementById('transAmount').value = '';
-        document.getElementById('transNote').value = '';
-        renderCashBook();
+function getDateStr(item) {
+    if (item.date) {
+        let s = convertArabicDigits(item.date);
+        let m = s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+        if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+        m = s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+        if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+        if (s) return s;
     }
+    if (item.timestamp?.seconds) return new Date(item.timestamp.seconds * 1000).toLocaleDateString('en-CA');
+    return '';
+}
 
-    function renderCashBook() {
-        const tbody = document.getElementById('cashTableBody');
-        tbody.innerHTML = '';
+function fmt(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-        let runningBalance = openingBalance;
-        let sumIn = 0;
-        let sumOut = 0;
+window.init = async function () {
+    document.getElementById('movementsList').innerHTML = `<div class="loading-wrapper"><div class="spinner-border text-success" role="status" style="width:2rem;height:2rem;"></div><p>جاري تجميع حركات الخزينة...</p></div>`;
+    try {
+        const [openingSnap, invSnap, transSnap, supTransSnap, expSnap, manualSnap, suppliersSnap] = await Promise.all([
+            getDoc(doc(db, "cash_settings", "opening")),
+            getDocs(collection(db, "invoices")),
+            getDocs(collection(db, "transactions")),
+            getDocs(collection(db, "supplier_transactions")),
+            getDocs(collection(db, "expenses")),
+            getDocs(collection(db, "cash_manual_entries")),
+            getDocs(collection(db, "suppliers"))
+        ]);
 
-        // سطر رصيد أول الفترة
-        tbody.innerHTML += `
-            <tr class="table-light">
-                <td>-</td>
-                <td>-</td>
-                <td class="text-start fw-bold">رصيد أول الفترة (الافتتاحي)</td>
-                <td>-</td>
-                <td>-</td>
-                <td class="num fw-bold">${openingBalance.toFixed(2)}</td>
-            </tr>
-        `;
+        openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
+        document.getElementById('openingBalanceDisplay').innerText = fmt(openingBalance);
 
-        // حساب الحركات سطر بسطر
-        transactions.forEach((item, index) => {
-            let inVal = 0;
-            let outVal = 0;
+        const suppliersMap = {};
+        suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
 
-            if (item.type === 'in') {
-                inVal = item.amount;
-                sumIn += inVal;
-                runningBalance += inVal;
-            } else {
-                outVal = item.amount;
-                sumOut += outVal;
-                runningBalance -= outVal;
+        const movements = [];
+
+        // مبيعات نقدية (وارد)
+        invSnap.forEach(d => {
+            const data = d.data();
+            if (data.isDeleted) return;
+            const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+            if (cash > 0) {
+                movements.push({
+                    id: 'inv_' + d.id, direction: 'in', amount: cash,
+                    note: `مبيعات نقدية - ${data.customerName || 'عميل نقدي'}`,
+                    date: getDateStr(data), timeMs: toMillis(data), source: 'sales'
+                });
             }
-
-            tbody.innerHTML += `
-                <tr>
-                    <td class="num">${index + 1}</td>
-                    <td>${item.time}</td>
-                    <td class="text-start">${item.note}</td>
-                    <td class="num text-in">${inVal > 0 ? inVal.toFixed(2) : '-'}</td>
-                    <td class="num text-out">${outVal > 0 ? outVal.toFixed(2) : '-'}</td>
-                    <td class="num fw-bold">${runningBalance.toFixed(2)}</td>
-                </tr>
-            `;
         });
 
-        // تحديث الإجماليات العامة
-        document.getElementById('totalIn').innerText = sumIn.toFixed(2);
-        document.getElementById('totalOut').innerText = sumOut.toFixed(2);
-        document.getElementById('finalBalance').innerText = runningBalance.toFixed(2);
+        // سندات القبض والصرف (غير المرتبطة بفاتورة)
+        transSnap.forEach(d => {
+            const tr = d.data();
+            if (tr.isDeleted) return;
+            const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
+            if (isInvoicePayment) return;
+            const method = tr.method || tr.paymentMethod || 'نقدى';
+            const isCashMethod = (method === 'نقدى' || method === 'نقدي' || method === 'كاش');
+            const cashAmt = tr.cashPaid !== undefined ? Number(tr.cashPaid) : (isCashMethod ? Number(tr.amount || tr.total || 0) : 0);
+            if (cashAmt <= 0) return;
+            if (tr.type === 'قبض') {
+                movements.push({
+                    id: 'trin_' + d.id, direction: 'in', amount: cashAmt,
+                    note: `سند قبض - ${tr.customerName || tr.partyName || 'عميل'}`,
+                    date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
+                });
+            } else if (tr.type === 'صرف') {
+                movements.push({
+                    id: 'trout_' + d.id, direction: 'out', amount: cashAmt,
+                    note: `سند صرف - ${tr.partyName || tr.customerName || 'جهة'}`,
+                    date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
+                });
+            }
+        });
+
+        // مشتريات نقدية (صادر) / مرتجعات (وارد)
+        supTransSnap.forEach(d => {
+            const data = d.data();
+            const cashPaid = Number(data.cashPaid || 0);
+            if (cashPaid <= 0) return;
+            const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
+            if (data.type === 'مرتجع شراء') {
+                movements.push({
+                    id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
+                    note: `مرتجع مشتريات نقدي - ${supName}`,
+                    date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
+                });
+            } else {
+                movements.push({
+                    id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
+                    note: `مشتريات نقدية - ${supName}`,
+                    date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
+                });
+            }
+        });
+
+        // المصروفات النقدية (صادر)
+        expSnap.forEach(d => {
+            const data = d.data();
+            if (data.paymentMethod !== 'نقدى' && data.paymentMethod !== 'نقدي') return;
+            const amt = Number(data.amount || 0);
+            if (amt <= 0) return;
+            movements.push({
+                id: 'exp_' + d.id, direction: 'out', amount: amt,
+                note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
+                date: getDateStr(data), timeMs: toMillis(data), source: 'expense'
+            });
+        });
+
+        // حركات يدوية
+        manualSnap.forEach(d => {
+            const data = d.data();
+            const amt = Number(data.amount || 0);
+            if (amt <= 0) return;
+            movements.push({
+                id: 'man_' + d.id, direction: data.type, amount: amt,
+                note: data.note || (data.type === 'in' ? 'إيداع يدوي' : 'سحب يدوي'),
+                date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
+            });
+        });
+
+        // ترتيب تصاعدي لحساب الرصيد المتراكم
+        movements.sort((a, b) => a.timeMs - b.timeMs);
+        let running = openingBalance;
+        movements.forEach(m => {
+            running += (m.direction === 'in' ? m.amount : -m.amount);
+            m.balanceAfter = running;
+        });
+
+        allMovements = movements;
+        renderMovements();
+    } catch (e) {
+        console.error(e);
+        document.getElementById('movementsList').innerHTML = `<div class="alert alert-danger text-center m-3">حدث خطأ أثناء تحميل حركات الخزينة!</div>`;
+    }
+};
+
+window.renderMovements = function () {
+    const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+    const dateFilter = document.getElementById('dateFilter').value;
+
+    let list = [...allMovements].reverse(); // الأحدث أولاً
+    if (search) list = list.filter(m => m.note.toLowerCase().includes(search));
+    if (dateFilter) list = list.filter(m => m.date === dateFilter);
+
+    const totalIn = allMovements.filter(m => m.direction === 'in' && (!dateFilter || m.date === dateFilter)).reduce((s, m) => s + m.amount, 0);
+    const totalOut = allMovements.filter(m => m.direction === 'out' && (!dateFilter || m.date === dateFilter)).reduce((s, m) => s + m.amount, 0);
+    const currentBalance = openingBalance + allMovements.reduce((s, m) => s + (m.direction === 'in' ? m.amount : -m.amount), 0);
+
+    document.getElementById('totalIn').innerText = fmt(totalIn);
+    document.getElementById('totalOut').innerText = fmt(totalOut);
+    document.getElementById('currentBalance').innerText = fmt(currentBalance);
+
+    const container = document.getElementById('movementsList');
+    if (list.length === 0) {
+        container.innerHTML = `<div class="empty-msg"><i class="fas fa-inbox fa-2x mb-2 d-block text-secondary"></i>لا توجد حركات مطابقة</div>`;
+        return;
     }
 
-    // التشغيل الأول
-    renderCashBook();
+    container.innerHTML = list.map(m => `
+        <div class="movement-item ${m.direction}">
+            <div class="mv-info">
+                <span class="mv-note">${m.note}</span>
+                <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${m.date || 'بلا تاريخ'}</span></span>
+                <span class="mv-badge ${m.direction === 'in' ? 'badge-in' : 'badge-out'}">${m.direction === 'in' ? 'وارد' : 'صادر'}</span>
+            </div>
+            <div class="d-flex align-items-center">
+                <div class="mv-right">
+                    <div class="mv-amount ${m.direction === 'in' ? 'text-success' : 'text-danger'} num">${m.direction === 'in' ? '+' : '-'}${fmt(m.amount)}</div>
+                    <div class="mv-balance num">الرصيد: ${fmt(m.balanceAfter)}</div>
+                </div>
+                ${m.source === 'manual' ? `<button class="mv-del" onclick="deleteManualEntry('${m.manualId}')" title="حذف"><i class="fas fa-trash-alt"></i></button>` : ''}
+            </div>
+        </div>
+    `).join('');
+};
+
+window.editOpeningBalance = async function () {
+    const current = openingBalance;
+    const val = prompt("أدخل قيمة الرصيد الافتتاحي الجديد:", current);
+    if (val === null) return;
+    const num = parseFloat(val);
+    if (isNaN(num)) return alert("قيمة غير صحيحة");
+    try {
+        await setDoc(doc(db, "cash_settings", "opening"), {
+            amount: num,
+            updatedAt: serverTimestamp(),
+            updatedBy: localStorage.getItem("username") || "أحمد محمود الزيادي"
+        }, { merge: true });
+        alert("تم تحديث الرصيد الافتتاحي بنجاح ✅");
+        init();
+    } catch (e) { alert("خطأ: " + e.message); }
+};
+
+window.openEntryForm = function (type) {
+    const card = document.getElementById('entryCard');
+    document.getElementById('entryType').value = type;
+    document.getElementById('entryDate').valueAsDate = new Date();
+    document.getElementById('entryCardTitle').innerText = type === 'in' ? 'إضافة حركة وارد يدوية' : 'إضافة حركة صادر يدوية';
+    const btn = document.getElementById('entrySaveBtn');
+    btn.style.background = type === 'in' ? 'var(--success)' : 'var(--danger)';
+    card.classList.add('show');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+window.saveManualEntry = async function () {
+    const type = document.getElementById('entryType').value;
+    const amount = parseFloat(document.getElementById('entryAmount').value);
+    const date = document.getElementById('entryDate').value;
+    const note = document.getElementById('entryNote').value.trim();
+
+    if (!amount || amount <= 0) return alert("برجاء إدخال مبلغ صحيح");
+    if (!date) return alert("برجاء اختيار التاريخ");
+    if (!note) return alert("برجاء كتابة بيان للحركة");
+
+    try {
+        await addDoc(collection(db, "cash_manual_entries"), {
+            type, amount, date, note,
+            createdBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
+            timestamp: serverTimestamp()
+        });
+        document.getElementById('entryAmount').value = '';
+        document.getElementById('entryNote').value = '';
+        document.getElementById('entryCard').classList.remove('show');
+        alert("تم حفظ الحركة بنجاح ✅");
+        init();
+    } catch (e) { alert("خطأ أثناء الحفظ: " + e.message); }
+};
+
+window.deleteManualEntry = async function (id) {
+    if (!confirm("هل تريد حذف هذه الحركة اليدوية؟")) return;
+    try {
+        await deleteDoc(doc(db, "cash_manual_entries", id));
+        init();
+    } catch (e) { alert("خطأ أثناء الحذف: " + e.message); }
+};
+
+window.exportToExcel = function () {
+    if (allMovements.length === 0) return alert("لا توجد حركات لتصديرها");
+    const rows = [["التاريخ", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]];
+    [...allMovements].reverse().forEach(m => {
+        rows.push([m.date, m.note, m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
+    });
+    rows.push([]);
+    rows.push(["الرصيد الافتتاحي", "", "", openingBalance, ""]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [15, 40, 12, 14, 16].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "دفتر النقدية");
+    XLSX.writeFile(wb, `دفتر_النقدية_${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+
+init();
 </script>
 
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
 </body>
 </html>
