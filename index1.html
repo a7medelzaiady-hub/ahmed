@@ -821,6 +821,12 @@
                t.includes('فودافون') || t.includes('فوري') || t.includes('انستاباي') || t.includes('instapay');
     }
 
+    // دالة فحص العناصر المحذوفة لضمان دقة العمليات الحسابية
+    function isDocDeleted(data) {
+        if (!data) return false;
+        return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
+    }
+
     async function loadRealtimeDashboardCash() {
         if (userRole !== 'admin') return;
 
@@ -844,22 +850,30 @@
             let netCashFlow = 0;
             let netWalletFlow = 0;
 
+            // 1. حساب مبيعات الفواتير غير المحذوفة
             invoicesSnap.forEach(docItem => {
                 const data = docItem.data();
-                netCashFlow += num(data.cashAmount);
-                netWalletFlow += num(data.walletAmount);
+                if (isDocDeleted(data)) return;
+
+                netCashFlow += num(data.cashAmount ?? data.cashPaid ?? data.paid);
+                netWalletFlow += num(data.walletAmount ?? data.walletPaid);
             });
 
+            // 2. حساب المشتريات غير المحذوفة
             supplierSnap.forEach(docItem => {
                 const data = docItem.data();
+                if (isDocDeleted(data)) return;
+
                 netCashFlow -= num(data.cashPaid);
                 netWalletFlow -= num(data.walletPaid);
             });
 
             const processedMovements = new Set();
 
+            // 3. حساب حركات الصندوق اليدوية غير المحذوفة
             cashLogsSnap.forEach(docItem => {
                 const data = docItem.data();
+                if (isDocDeleted(data)) return;
                 if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
                 processedMovements.add(docItem.id);
 
@@ -875,9 +889,11 @@
                 }
             });
 
+            // 4. حساب المعاملات اليدوية غير المحذوفة
             transactionsSnap.forEach(docItem => {
-                if (processedMovements.has(docItem.id)) return;
                 const data = docItem.data();
+                if (isDocDeleted(data)) return;
+                if (processedMovements.has(docItem.id)) return;
                 if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
                 processedMovements.add(docItem.id);
 
@@ -891,8 +907,11 @@
                 }
             });
 
+            // 5. حساب المصروفات غير المحذوفة
             expensesSnap.forEach(docItem => {
                 const data = docItem.data();
+                if (isDocDeleted(data)) return;
+
                 const amt = Math.abs(num(data.amount || data.total));
                 const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
 
@@ -910,6 +929,8 @@
             let namesMap = {};
             inventorySnap.forEach(d => {
                 const data = d.data();
+                if (isDocDeleted(data)) return;
+
                 const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
                 factorsMap[d.id] = f;
                 if (data.name) namesMap[data.name.trim()] = d.id;
@@ -921,13 +942,18 @@
 
             transSnap.forEach(docSnap => {
                 const data = docSnap.data();
+                if (isDocDeleted(data)) return;
+
                 if (data.productId) {
                     openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
                 }
             });
 
+            // حساب الكميات المباعة من الفواتير السليمة غير المحذوفة
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
+                if (isDocDeleted(data)) return;
+
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (id) {
@@ -945,8 +971,11 @@
                 });
             });
 
+            // حساب الكميات المشتراة من السجلات السليمة غير المحذوفة
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
+                if (isDocDeleted(data)) return;
+
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (id) {
@@ -968,7 +997,7 @@
             let totalStockVal = 0;
             inventorySnap.forEach(doc => {
                 const data = doc.data();
-                if (!data.isDeleted) {
+                if (!isDocDeleted(data)) {
                     const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                     
                     let openingTotalPcs = 0;
@@ -995,18 +1024,22 @@
 
             let debtMap = {};
 
+            // مديونيات الفواتير غير المحذوفة
             invoicesSnap.forEach(docItem => {
                 const data = docItem.data();
-                if (data.isDeleted) return;
+                if (isDocDeleted(data)) return;
+
                 const cid = data.customerId;
                 if (cid) {
                     debtMap[cid] = (debtMap[cid] || 0) + num(data.remaining);
                 }
             });
 
+            // مديونيات السندات غير المحذوفة
             transactionsSnap.forEach(docItem => {
                 const data = docItem.data();
-                if (data.isDeleted) return;
+                if (isDocDeleted(data)) return;
+
                 const pid = data.partyId || data.customerId;
                 if (pid) {
                     let effect = 0;
@@ -1022,6 +1055,8 @@
 
             clientsSnap.forEach(docItem => {
                 const data = docItem.data();
+                if (isDocDeleted(data)) return;
+
                 const initial = num(data.initialBalance ?? data.balance ?? data.debt ?? 0);
                 const ledgerEffect = debtMap[docItem.id] || 0;
                 const realBalance = initial + ledgerEffect;
@@ -1095,7 +1130,7 @@
         let pendingCount = 0;
         snapshot.forEach(docSnap => {
             const data = docSnap.data();
-            if (data.status !== 'done') {
+            if (!isDocDeleted(data) && data.status !== 'done') {
                 pendingCount++;
             }
         });
