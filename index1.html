@@ -60,7 +60,7 @@
             min-height: 100vh;
             overflow-x: hidden;
             width: 100%;
-            padding-bottom: 210px;
+            padding-bottom: 180px;
         }
 
         a:focus-visible, button:focus-visible {
@@ -204,29 +204,29 @@
         .badge-stock { background: linear-gradient(135deg, var(--amber-tint), #fef3c7); color: var(--amber); }
         .badge-debts { background: linear-gradient(135deg, var(--coral-tint), #fee2e2); color: var(--coral); }
 
-        .section-block { padding: 10px 12px 0; }
+        .section-block { padding: 12px 12px 0; }
         .section-label {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 0 2px 6px;
+            padding: 0 2px 8px;
         }
         .section-label .heading { display: flex; align-items: center; gap: 6px; }
         .section-label .mark {
-            width: 20px; height: 20px; border-radius: 6px;
+            width: 22px; height: 22px; border-radius: 6px;
             display: flex; align-items: center; justify-content: center;
             font-size: 11px; color: #fff;
         }
-        .section-label span.title { font-family: 'Tajawal', sans-serif; font-size: 13px; font-weight: 800; color: var(--brand-dark); }
+        .section-label span.title { font-family: 'Tajawal', sans-serif; font-size: 13.5px; font-weight: 800; color: var(--brand-dark); }
 
         .card-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
+            gap: 10px;
         }
 
         .grid-card {
             background: var(--card-bg); border-radius: var(--radius-md);
             border: 1px solid var(--border-subtle);
-            padding: 10px 12px;
+            padding: 12px 14px;
             text-align: center; text-decoration: none;
             display: flex; flex-direction: row; align-items: center; justify-content: space-between;
             position: relative; overflow: hidden;
@@ -237,6 +237,11 @@
         .grid-card:hover, .grid-card:focus-visible {
             box-shadow: var(--shadow-md);
             border-color: transparent;
+        }
+
+        /* تنسيق خاص لكروت المستخدم العادي لتظهر مجهزة وممتلئة بشكل متناسق */
+        body.user-mode .grid-card.single-spanned {
+            grid-column: span 2;
         }
 
         .card-icon-wrap {
@@ -252,12 +257,12 @@
         .icon-violet   { background: linear-gradient(135deg, #a78bfa, var(--violet)); }
         .icon-emerald  { background: linear-gradient(135deg, #10b981, var(--emerald)); }
 
-        .card-label    { font-size: 12.5px; font-weight: 800; color: var(--text-deep); text-align: right; line-height: 1.2; flex-grow: 1; margin-right: 8px; }
+        .card-label    { font-size: 13px; font-weight: 800; color: var(--text-deep); text-align: right; line-height: 1.2; flex-grow: 1; margin-right: 8px; }
 
         .fab-stack {
             position: fixed;
             right: 12px;
-            bottom: 130px;
+            bottom: 120px;
             z-index: 2500;
             display: flex;
             flex-direction: column;
@@ -303,7 +308,7 @@
         .fab-left-btn {
             position: fixed;
             left: 12px;
-            bottom: 130px;
+            bottom: 120px;
             z-index: 3000 !important;
             width: 46px;
             height: 46px;
@@ -508,7 +513,7 @@
             <span class="title">المبيعات والعملاء</span>
         </div>
     </div>
-    <div class="card-grid">
+    <div class="card-grid" id="gridSalesOps">
         <a href="mabiat-menu.html" class="grid-card" id="cardSales" data-perm="sales">
             <span class="card-label">المبيعات</span>
             <div class="card-icon-wrap icon-black"><i class="fa-solid fa-cash-register"></i></div>
@@ -539,7 +544,7 @@
             <span class="title">المخزون والسندات</span>
         </div>
     </div>
-    <div class="card-grid">
+    <div class="card-grid" id="gridInventoryDocs">
         <a href="inventory-menu.html" class="grid-card" id="cardInventory" data-perm="admin_only">
             <span class="card-label">المخزن</span>
             <div class="card-icon-wrap icon-black"><i class="fa-solid fa-boxes-packing"></i></div>
@@ -570,7 +575,7 @@
             <span class="title">الجرد والتقارير</span>
         </div>
     </div>
-    <div class="card-grid">
+    <div class="card-grid" id="gridReports">
         <a href="reports.html" class="grid-card" id="cardReports" data-perm="admin_only">
             <span class="card-label">التقارير</span>
             <div class="card-icon-wrap icon-violet"><i class="fa-solid fa-chart-pie"></i></div>
@@ -841,14 +846,12 @@
             let netCashFlow = 0;
             let netWalletFlow = 0;
 
-            // 1. المبيعات
             invoicesSnap.forEach(docItem => {
                 const data = docItem.data();
                 netCashFlow += num(data.cashAmount);
                 netWalletFlow += num(data.walletAmount);
             });
 
-            // 2. المشتريات والمرتجعات
             supplierSnap.forEach(docItem => {
                 const data = docItem.data();
                 netCashFlow -= num(data.cashPaid);
@@ -857,7 +860,6 @@
 
             const processedMovements = new Set();
 
-            // 3. حركات الصندوق اليدوية
             cashLogsSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
@@ -875,7 +877,6 @@
                 }
             });
 
-            // 4. سندات القبض والصرف اليدوية
             transactionsSnap.forEach(docItem => {
                 if (processedMovements.has(docItem.id)) return;
                 const data = docItem.data();
@@ -892,7 +893,6 @@
                 }
             });
 
-            // 5. المصروفات
             expensesSnap.forEach(docItem => {
                 const data = docItem.data();
                 const amt = Math.abs(num(data.amount || data.total));
@@ -908,7 +908,6 @@
             const currentCash = iCash + netCashFlow;
             const currentWallet = iWallet + netWalletFlow;
 
-            // 6. حساب إجمالي قيمة البضاعة بالمخزن بالتطابق التام مع صفحة الجرد
             let factorsMap = {};
             let namesMap = {};
             inventorySnap.forEach(d => {
@@ -996,7 +995,6 @@
                 }
             });
 
-            // 7. حساب صافي مديونيات العملاء بالتطابق التام مع الشاشة الرئيسية لكشف حساب العملاء (الصافي)
             let debtMap = {};
 
             invoicesSnap.forEach(docItem => {
@@ -1037,10 +1035,8 @@
                 }
             });
 
-            // حساب صافي ديون العملاء (إجمالي عليه - إجمالي له)
             const netDebtsVal = totalOwedVal - totalCreditVal;
 
-            // تحديث قيم الواجهة المباشرة
             const statCashValEl = document.getElementById('statCashVal');
             if (statCashValEl) {
                 statCashValEl.innerHTML = `${currentCash.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
@@ -1203,11 +1199,14 @@
         const role = sessionStorage.getItem('role') || localStorage.getItem('role') || 'employee';
         const allowedNonAdminPermissions = ['sales', 'quotation', 'customers', 'client_vouchers', 'vouchers', 'shortages', 'salaries'];
 
+        if (role !== 'admin') {
+            document.body.classList.add('user-mode');
+        }
+
         const elementsWithPerms = document.querySelectorAll('[data-perm]');
         elementsWithPerms.forEach(el => {
             const perm = el.getAttribute('data-perm');
             
-            // إخفاء سداد العملاء فقط للأدمن (الكارت والتاسك بار)
             if (role === 'admin' && perm === 'client_vouchers') {
                 el.style.display = 'none';
                 return;
@@ -1220,6 +1219,21 @@
                     el.style.display = 'none';
                 } else {
                     el.style.display = '';
+                }
+            }
+        });
+
+        // تنسيق وترتيب الكروت الظاهرة ديناميكياً لتلافي الفراغات لدى اليوزر العادي
+        const groupGrids = ['gridSalesOps', 'gridInventoryDocs', 'gridReports'];
+        groupGrids.forEach(gridId => {
+            const gridEl = document.getElementById(gridId);
+            if (!gridEl) return;
+            const visibleCards = Array.from(gridEl.children).filter(child => child.style.display !== 'none');
+            
+            if (role !== 'admin') {
+                visibleCards.forEach(card => card.classList.remove('single-spanned'));
+                if (visibleCards.length % 2 !== 0 && visibleCards.length > 0) {
+                    visibleCards[visibleCards.length - 1].classList.add('single-spanned');
                 }
             }
         });
