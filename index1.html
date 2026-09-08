@@ -908,7 +908,7 @@
             const currentCash = iCash + netCashFlow;
             const currentWallet = iWallet + netWalletFlow;
 
-            // 6. حساب الكمية الحقيقية لكل عنصر وقيمة المخزون الفعلية من مجموعة inventory
+            // 6. حساب إجمالي قيمة البضاعة بالمخزن بالتطابق التام مع صفحة الجرد
             let factorsMap = {};
             let namesMap = {};
             inventorySnap.forEach(d => {
@@ -987,11 +987,9 @@
                     const purchasesPcs = purchasesMap[doc.id] || 0;
                     const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
-                    // جلب سعر الشراء أو التكلفة (أو سعر البيع/العبوة إن وُجد)
-                    let unitPrice = num(data.buy ?? data.buyPrice ?? data.buyingPrice ?? data.costPrice ?? data.purchasePrice ?? 0);
-                    if (unitPrice === 0 && data.sell) {
-                        unitPrice = num(data.sell) / factor; // احتساب سعر الفردي
-                    }
+                    // حساب سعر القطعة الواحدة بدقة من حقل الشراء الإجمالي قسمة على معامل العبوة
+                    const buyPrice = num(data.buy ?? data.buyPrice ?? data.buyingPrice ?? data.costPrice ?? data.purchasePrice ?? 0);
+                    const unitPrice = buyPrice > 0 ? (buyPrice / factor) : 0;
 
                     if (calculatedRealPcs > 0) {
                         totalStockVal += (calculatedRealPcs * unitPrice);
