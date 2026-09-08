@@ -987,7 +987,6 @@
                     const purchasesPcs = purchasesMap[doc.id] || 0;
                     const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
-                    // حساب سعر القطعة الواحدة بدقة من حقل الشراء الإجمالي قسمة على معامل العبوة
                     const buyPrice = num(data.buy ?? data.buyPrice ?? data.buyingPrice ?? data.costPrice ?? data.purchasePrice ?? 0);
                     const unitPrice = buyPrice > 0 ? (buyPrice / factor) : 0;
 
@@ -997,13 +996,41 @@
                 }
             });
 
-            // 7. حساب إجمالي مديونيات العملاء لكافة مسميات الحقول
+            // 7. حساب إجمالي مديونيات العملاء بالتطابق التام مع صفحة (كشف حساب العملاء)
+            let debtMap = {};
+
+            invoicesSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (data.isDeleted) return;
+                const cid = data.customerId;
+                if (cid) {
+                    debtMap[cid] = (debtMap[cid] || 0) + num(data.remaining);
+                }
+            });
+
+            transactionsSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (data.isDeleted) return;
+                const pid = data.partyId || data.customerId;
+                if (pid) {
+                    let effect = 0;
+                    const amt = num(data.amount || data.total);
+                    if (data.type === 'قبض') effect = -Math.abs(amt);
+                    else if (data.type === 'صرف') effect = Math.abs(amt);
+                    debtMap[pid] = (debtMap[pid] || 0) + effect;
+                }
+            });
+
             let totalDebtsVal = 0;
             clientsSnap.forEach(docItem => {
                 const data = docItem.data();
-                const balance = num(data.balance ?? data.debt ?? data.currentBalance ?? data.totalDebt ?? data.debtAmount ?? 0);
-                if (balance > 0) {
-                    totalDebtsVal += balance;
+                const initial = num(data.initialBalance ?? data.balance ?? data.debt ?? 0);
+                const ledgerEffect = debtMap[docItem.id] || 0;
+                const realBalance = initial + ledgerEffect;
+
+                // مطابقة ديون العملاء تماماً لحقل "إجمالي عليه" 
+                if (realBalance > 0) {
+                    totalDebtsVal += realBalance;
                 }
             });
 
