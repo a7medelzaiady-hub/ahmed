@@ -376,18 +376,29 @@
             (i.barcode && String(i.barcode).includes(term))
         );
 
-        const getPriorityGroup = (qty) => {
-            if (qty < 0) return 1;  // السالب أولاً
-            if (qty > 0) return 2;  // الموجب (الأقل فالأكبر)
-            return 3;               // الصفر أخيرًا
+        const getPriorityGroup = (item) => {
+            const sellPrice = Number(item.sell || 0);
+            const qty = Number(item.totalPcs || 0);
+
+            // المجموعة 1: أصناف بدون سعر + كمية لا تساوي صفر (أكبر أو أقل من الصفر)
+            if (sellPrice <= 0 && qty !== 0) return 1;
+            
+            // المجموعة 2: الأعداد السالبة
+            if (qty < 0) return 2;
+            
+            // المجموعة 3: الأعداد الموجبة
+            if (qty > 0) return 3;
+            
+            // المجموعة 4: الرصيد الصفر
+            return 4;
         };
 
         filtered.sort((a, b) => {
             const qtyA = Number(a.totalPcs || 0);
             const qtyB = Number(b.totalPcs || 0);
 
-            const groupA = getPriorityGroup(qtyA);
-            const groupB = getPriorityGroup(qtyB);
+            const groupA = getPriorityGroup(a);
+            const groupB = getPriorityGroup(b);
 
             if (groupA !== groupB) {
                 return groupA - groupB;
