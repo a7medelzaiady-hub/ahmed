@@ -558,23 +558,88 @@
         }
     }
 
-    // === 1. دالة جلب رصيد الحساب المباشر للعميل أو المورد من قاعدة البيانات ===
-    async function getPartyCurrentBalance(partyId, partyType) {
+    // === 1. احتساب رصيد المورد الموحد والمطابق لقائمة الموردين بالضبط ===
+    async function calculateSupplierBalance(supId, openingBal) {
         try {
-            const collectionName = partyType === 'مورد' ? "suppliers" : "customers";
-            const docSnap = await getDoc(doc(db, collectionName, partyId));
-            if (!docSnap.exists()) return 0;
-            
-            const data = docSnap.data();
-            if (data.currentBalance !== undefined && data.currentBalance !== null) {
-                return Number(data.currentBalance) || 0;
-            }
-            if (data.balance !== undefined && data.balance !== null) {
-                return Number(data.balance) || 0;
-            }
-            return Number(data.openingBalance ?? data.initialBalance ?? 0);
+            const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
+                getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
+                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
+                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
+            ]);
+
+            let totalDebit = Number(openingBal || 0); // المدين (+)
+            let totalCredit = 0;                     // الدائن (-)
+
+            const processedTransIds = new Set();
+
+            const processTransDoc = (docSnap) => {
+                if (processedTransIds.has(docSnap.id)) return;
+                
+                const d = docSnap.data();
+                if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+
+                processedTransIds.add(docSnap.id);
+                const amt = Number(d.amount) || 0;
+
+                if (d.type === "صرف" || d.type === "سداد") {
+                    totalCredit += amt;
+                } else if (d.type === "قبض") {
+                    totalDebit += amt;
+                }
+            };
+
+            snapTransParty.forEach(processTransDoc);
+            snapTransSup.forEach(processTransDoc);
+
+            snapItems.forEach(docSnap => {
+                const d = docSnap.data();
+                const totalAmt = Number(d.total) || Number(d.amount) || 0;
+
+                if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                    totalDebit += totalAmt;
+
+                    const paidAmt = Number(d.paid) || 
+                        (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
+                        (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+
+                    if (paidAmt > 0) {
+                        totalCredit += paidAmt;
+                    }
+                } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
+                    totalCredit += totalAmt;
+                }
+            });
+
+            return totalDebit - totalCredit;
         } catch (e) {
-            console.error("خطأ في جلب رصيد الطرف:", e);
+            console.error("خطأ في احتساب رصيد المورد:", e);
+            return 0;
+        }
+    }
+
+    // === 2. احتساب رصيد العميل الموحد ===
+    async function calculateCustomerBalance(custId) {
+        try {
+            const cDoc = await getDoc(doc(db, "customers", custId));
+            if (!cDoc.exists()) return 0;
+            
+            let cBal = Number(cDoc.data()?.initialBalance ?? cDoc.data()?.openingBalance ?? 0);
+            
+            const [invoicesSnap, transSnap] = await Promise.all([
+                getDocs(query(collection(db, "invoices"), where("customerId", "==", custId))),
+                getDocs(query(collection(db, "transactions"), where("partyId", "==", custId)))
+            ]);
+            
+            invoicesSnap.forEach(inv => {
+                cBal += Number(inv.data().remaining || 0);
+            });
+            transSnap.forEach(tr => {
+                if (tr.data().type === 'قبض') cBal -= Number(tr.data().amount || 0);
+                if (tr.data().type === 'صرف') cBal += Number(tr.data().amount || 0);
+            });
+            return cBal;
+        } catch (e) {
+            console.error("خطأ في احتساب رصيد العميل:", e);
             return 0;
         }
     }
@@ -811,7 +876,7 @@
         updateMethodTotals(filtered);
     };
 
-    // === 2. فتح مودال الإيصال وتجهيز الرصيد السابق والمتبقي الموزون بالكامل ===
+    // === 3. فتح مودال الإيصال وتجهيز الرصيد السابق والمتبقي بدقة متناهية ===
     window.openReceiptModal = async (type, date, amount, partyId, resolvedName, voucherTimestamp = null, voucherId = null) => {
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
         let pName = resolvedName;
@@ -822,17 +887,23 @@
         document.getElementById('recAmount').innerText = `${Number(amount).toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recStatusText').innerText = type === 'قبض' ? 'تم الاستلام بنجاح' : 'تم الصرف بنجاح';
         
-        // جلب الرصيد الفعلي الحالي المعروض في كارت الحساب
-        let currentBalance = await getPartyCurrentBalance(partyId, pType);
+        let currentBalance = 0;
+        if (pType === 'مورد') {
+            const supObj = partiesMap[partyId]?.raw || {};
+            currentBalance = await calculateSupplierBalance(partyId, supObj.openingBalance);
+        } else {
+            currentBalance = await calculateCustomerBalance(partyId);
+        }
+
         let prevBalance = 0;
         let newBalance = 0;
 
         if (type === 'صرف') {
-            // سند الصرف يقلل المديونية المطالب بها، فالرصيد المتبقي الحقيقي هو currentBalance والرصيد السابق كان أكثر بمقدار المبلغ
+            // سند الصرف يقلل المديونية: الرصيد الحالي هو المتبقي بعد السداد، وكان الحساب السابق أكثر بمقدار المبلغ
             prevBalance = currentBalance + Number(amount);
             newBalance = currentBalance;
         } else { // قبض
-            // سند القبض يقلل المديونية المطالب بها من العميل
+            // سند القبض يقلل المديونية: الرصيد الحالي هو المتبقي بعد القبض، وكان الحساب السابق أكثر بمقدار المبلغ
             prevBalance = currentBalance + Number(amount);
             newBalance = currentBalance;
         }
@@ -1047,17 +1118,16 @@
                 const v = displayedVouchers[i];
                 const pType = partiesMap[v.partyId] ? partiesMap[v.partyId].type : 'عميل';
                 
-                let currentBalance = await getPartyCurrentBalance(v.partyId, pType);
-                let prevBalance = 0;
-                let newBalance = 0;
-
-                if (v.type === 'صرف') {
-                    prevBalance = currentBalance + v.amount;
-                    newBalance = currentBalance;
+                let currentBalance = 0;
+                if (pType === 'مورد') {
+                    const supObj = partiesMap[v.partyId]?.raw || {};
+                    currentBalance = await calculateSupplierBalance(v.partyId, supObj.openingBalance);
                 } else {
-                    prevBalance = currentBalance + v.amount;
-                    newBalance = currentBalance;
+                    currentBalance = await calculateCustomerBalance(v.partyId);
                 }
+
+                let prevBalance = currentBalance + v.amount;
+                let newBalance = currentBalance;
 
                 hiddenContainer.innerHTML = `
                     <div id="tempReceipt" class="receipt-preview-box" dir="rtl" style="box-shadow:none; margin:0; border:1px solid #000;">
