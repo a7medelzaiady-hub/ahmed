@@ -217,7 +217,6 @@
         }
         .section-label span.title { font-family: 'Tajawal', sans-serif; font-size: 14px; font-weight: 800; color: var(--brand-dark); }
 
-        /* الشبكة الرئيسية: كارتين دائماً جنب بعض بحجم بارز */
         .card-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -241,7 +240,6 @@
             border-color: transparent;
         }
 
-        /* تكبير ودعم الأيقونات البارزة */
         .card-icon-wrap {
             width: 50px; height: 50px; border-radius: 14px;
             display: flex; align-items: center; justify-content: center;
@@ -821,7 +819,7 @@
                t.includes('فودافون') || t.includes('فوري') || t.includes('انستاباي') || t.includes('instapay');
     }
 
-    // دالة فحص العناصر المحذوفة لضمان دقة العمليات الحسابية
+    // دالة فحص المعاملات والسجلات المحذوفة لضمان استبعادها بشكل نهائي دقيق
     function isDocDeleted(data) {
         if (!data) return false;
         return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
@@ -847,10 +845,17 @@
                 getDocs(collection(db, 'customers'))
             ]);
 
+            // بناء خريطة معُرفات المستندات المحذوفة لمنع التأثير العابر عبر مجموعات الربط المتقاطعة
+            const deletedInvoicesSet = new Set();
+            const deletedExpensesSet = new Set();
+
+            invoicesSnap.forEach(d => { if (isDocDeleted(d.data())) deletedInvoicesSet.add(d.id); });
+            expensesSnap.forEach(d => { if (isDocDeleted(d.data())) deletedExpensesSet.add(d.id); });
+
             let netCashFlow = 0;
             let netWalletFlow = 0;
 
-            // 1. حساب مبيعات الفواتير غير المحذوفة
+            // 1. حساب فواتير المبيعات السليمة
             invoicesSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
@@ -859,7 +864,7 @@
                 netWalletFlow += num(data.walletAmount ?? data.walletPaid);
             });
 
-            // 2. حساب المشتريات غير المحذوفة
+            // 2. حساب معاملات المشتريات السليمة
             supplierSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
@@ -870,11 +875,16 @@
 
             const processedMovements = new Set();
 
-            // 3. حساب حركات الصندوق اليدوية غير المحذوفة
+            // 3. حساب حركات الدرج والصندوق السليمة واكتشاف الربط بالفواتير المحذوفة
             cashLogsSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
+
+                // التثبت من عدم ربط الحركة بسند/فاتورة/مصروف تم حذفه
+                if (data.invoiceId && deletedInvoicesSet.has(data.invoiceId)) return;
+                if (data.expenseId && deletedExpensesSet.has(data.expenseId)) return;
                 if (data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
+
                 processedMovements.add(docItem.id);
 
                 const amt = num(data.amount);
@@ -889,12 +899,16 @@
                 }
             });
 
-            // 4. حساب المعاملات اليدوية غير المحذوفة
+            // 4. حساب المعاملات المالية والسندات اليدوية السليمة
             transactionsSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
+
+                if (data.invoiceId && deletedInvoicesSet.has(data.invoiceId)) return;
+                if (data.expenseId && deletedExpensesSet.has(data.expenseId)) return;
                 if (processedMovements.has(docItem.id)) return;
                 if (data.isInvoicePayment || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
+
                 processedMovements.add(docItem.id);
 
                 const amt = num(data.amount || data.total);
@@ -949,7 +963,6 @@
                 }
             });
 
-            // حساب الكميات المباعة من الفواتير السليمة غير المحذوفة
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 if (isDocDeleted(data)) return;
@@ -971,7 +984,6 @@
                 });
             });
 
-            // حساب الكميات المشتراة من السجلات السليمة غير المحذوفة
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 if (isDocDeleted(data)) return;
@@ -1024,7 +1036,6 @@
 
             let debtMap = {};
 
-            // مديونيات الفواتير غير المحذوفة
             invoicesSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
@@ -1035,7 +1046,6 @@
                 }
             });
 
-            // مديونيات السندات غير المحذوفة
             transactionsSnap.forEach(docItem => {
                 const data = docItem.data();
                 if (isDocDeleted(data)) return;
