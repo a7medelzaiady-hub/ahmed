@@ -365,7 +365,6 @@
     let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
-        localStorage.removeItem("cache_profits_inventory");
         window.location.reload(true);
     };
 
@@ -379,43 +378,34 @@
 
     async function loadData() {
         try {
-            let cachedInventory = localStorage.getItem("cache_profits_inventory");
-            if (cachedInventory) {
-                const parsed = JSON.parse(cachedInventory);
-                parsed.forEach(p => {
-                    productsMap[p.id] = p;
-                    if (p.name) namesMap[p.name.trim()] = p.id;
-                });
-            } else {
-                const inventorySnap = await getDocs(collection(db, "inventory"));
-                let listToCache = [];
-                inventorySnap.forEach(d => {
-                    const data = d.data();
-                    if (data.isDeleted) return;
-                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                    const rawBuy = Number(data.buy) || 0;
-                    const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
-                    
-                    const currentStockPcs = (data.totalPcs !== undefined && data.totalPcs !== null)
-                        ? Number(data.totalPcs) || 0
-                        : (Number(data.qty) || 0) * factor;
+            // ملاحظة: هذه صفحة تقارير مالية حساسة، لذلك لا نعتمد على أي تخزين مؤقت (localStorage)
+            // لبيانات المخزون - نجلبها دائمًا مباشرة من Firestore لضمان دقة سعر الشراء الحالي
+            // في كل مرة يتم فيها فتح الصفحة، حتى لو تم تحديث سعر شراء صنف للتو.
+            const inventorySnap = await getDocs(collection(db, "inventory"));
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                if (data.isDeleted) return;
+                const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                const rawBuy = Number(data.buy) || 0;
+                const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
 
-                    const pObj = {
-                        id: d.id,
-                        name: data.name || 'بدون اسم',
-                        barcode: data.barcode || '---',
-                        factor,
-                        fallbackBuy: currentBuyUnit,
-                        currentBuy: currentBuyUnit,
-                        currentStockPcs: currentStockPcs,
-                        raw: data
-                    };
-                    productsMap[d.id] = pObj;
-                    listToCache.push(pObj);
-                    if (data.name) namesMap[data.name.trim()] = d.id;
-                });
-                try { localStorage.setItem("cache_profits_inventory", JSON.stringify(listToCache)); } catch(e){}
-            }
+                const currentStockPcs = (data.totalPcs !== undefined && data.totalPcs !== null)
+                    ? Number(data.totalPcs) || 0
+                    : (Number(data.qty) || 0) * factor;
+
+                const pObj = {
+                    id: d.id,
+                    name: data.name || 'بدون اسم',
+                    barcode: data.barcode || '---',
+                    factor,
+                    fallbackBuy: currentBuyUnit,
+                    currentBuy: currentBuyUnit,
+                    currentStockPcs: currentStockPcs,
+                    raw: data
+                };
+                productsMap[d.id] = pObj;
+                if (data.name) namesMap[data.name.trim()] = d.id;
+            });
 
             const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
