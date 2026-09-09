@@ -317,6 +317,13 @@
         return new Date(0);
     }
 
+    function checkIsCarton(unitVal, unitNameVal, isCartonVal) {
+        if (isCartonVal === true) return true;
+        const u = String(unitVal || '').toLowerCase().trim();
+        const un = String(unitNameVal || '').toLowerCase().trim();
+        return u === 'box' || u === 'carton' || un.includes('كرتون');
+    }
+
     const params = new URLSearchParams(window.location.search);
     const productId = params.get('id');
     const paramFrom = params.get('from');
@@ -336,9 +343,9 @@
         const cartons = Math.floor(pcs / safeFactor);
         const rem = pcs % safeFactor;
         
-        if (cartons > 0 && rem > 0) return `${cartons} كرتونة و ${rem} قطعة`;
+        if (cartons > 0 && rem > 0) return `${cartons} كرتونة و ${rem} قطعة/جركن`;
         if (cartons > 0) return `${cartons} كرتونة`;
-        return `${rem} قطعة`;
+        return `${rem} قطعة/جركن`;
     }
 
     async function loadDetails() {
@@ -370,7 +377,7 @@
 
             document.getElementById('productHeader').innerHTML = `
                 <div class="name">${productInfo.name}</div>
-                <div class="barcode">باركود: ${productInfo.barcode}</div>
+                <div class="barcode">باركود: ${productInfo.barcode} | معامل الكرتونة: ${productFactor}</div>
             `;
 
             const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
@@ -406,7 +413,7 @@
                 events.push({ type: 'purchase', label: 'عند التأسيس', date: new Date(0), qty: openingPcs, price: openingPrice, partyName: 'رصيد افتتاحي' });
             }
 
-            // 2. فواتير التوريد
+            // 2. فواتير التوريد (الموردين)
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const date = getDocDate(data);
@@ -416,19 +423,36 @@
                     if (id !== productId && !(!id && nameMatch)) return;
                     
                     const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
+                    const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
+                    
                     let pcs = 0;
-                    if (item.unit === 'box') {
+                    if (isCarton) {
                         pcs = (Number(item.qty) || 0) * itemFactor;
                     } else {
                         pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : Number(item.qty) || 0;
                     }
                     
                     let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
-                    let buyPrice = itemBuy > 0 ? (itemBuy / itemFactor) : currentBuyPrice;
+                    let buyPricePerPcs = 0;
+                    if (itemBuy > 0) {
+                        buyPricePerPcs = isCarton ? (itemBuy / itemFactor) : itemBuy;
+                    } else {
+                        buyPricePerPcs = currentBuyPrice;
+                    }
 
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
                     if (isReturn) pcs = -Math.abs(pcs);
-                    events.push({ type: 'purchase', label: 'شراء', date, qty: pcs, price: buyPrice, partyName: data.supplierName || 'مورد غير محدد' });
+                    events.push({ 
+                        type: 'purchase', 
+                        label: 'شراء', 
+                        date, 
+                        qty: pcs, 
+                        price: buyPricePerPcs, 
+                        partyName: data.supplierName || 'مورد غير محدد',
+                        rawUnit: isCarton ? 'كرتونة' : (item.unitName || item.unit || 'جركن/قطعة'),
+                        rawQty: Number(item.qty) || 0,
+                        rawBuy: itemBuy
+                    });
                 });
             });
 
@@ -437,7 +461,7 @@
                 currentBuyPrice = lastPurchase.price;
             }
 
-            // 3. فواتير المبيعات (فحص شامل لكافة الحقول المحتملة لحساب الإيراد الصحيح)
+            // 3. فواتير المبيعات
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 const invDate = getDocDate(data);
@@ -447,16 +471,17 @@
                     if (id !== productId && !(!id && nameMatch)) return;
 
                     const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
+                    const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
+                    
                     let pcs = 0;
                     let rawQty = Number(item.qty || item.quantity) || 0;
                     
-                    if (item.unit === 'box') {
+                    if (isCarton) {
                         pcs = rawQty * itemFactor;
                     } else {
                         pcs = rawQty;
                     }
 
-                    // البحث عن سعر البيع بكل المسميات المحتملة
                     let unitSellPrice = Number(item.sell || item.price || item.sellPrice || item.unitPrice) || 0;
                     let revenue = 0;
 
@@ -467,18 +492,15 @@
                     } else if (unitSellPrice > 0) {
                         revenue = unitSellPrice * rawQty;
                     } else if (currentSellPrice > 0) {
-                        // استخدام سعر البيع من كارت الصنف في حالة خلو الفاتورة منه
                         revenue = currentSellPrice * pcs;
-                        unitSellPrice = currentSellPrice;
+                        unitSellPrice = isCarton ? (currentSellPrice * itemFactor) : currentSellPrice;
                     }
 
                     if (!unitSellPrice && pcs > 0 && revenue > 0) {
-                        unitSellPrice = revenue / pcs;
+                        unitSellPrice = revenue / rawQty;
                     }
 
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
-
-                    console.log("صنف مباع:", item.name, "كمية:", pcs, "إيراد:", revenue, "سعر وحدة:", unitSellPrice);
 
                     events.push({ 
                         type: 'sale', 
@@ -487,7 +509,7 @@
                         revenue, 
                         partyName: data.customerName || 'عميل نقدي', 
                         unitPrice: unitSellPrice,
-                        rawUnit: item.unit,
+                        rawUnit: isCarton ? 'كرتونة' : (item.unitName || item.unit || 'جركن/قطعة'),
                         rawQty: rawQty
                     });
                 });
@@ -543,18 +565,19 @@
                 }
             });
 
-            document.getElementById('avgVsCurrVal').innerText = `${currentBuyPrice.toFixed(2)} ج.م`;
+            document.getElementById('avgVsCurrVal').innerText = `${currentBuyPrice.toFixed(2)} ج.م / قطعة`;
 
             let pLinesHtml = '';
             purchaseEvents.forEach((p, idx) => {
                 const dateStr = p.date.getTime() === 0 ? 'عند التأسيس' : p.date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                const unitLabel = p.rawUnit ? p.rawUnit : 'جركن/قطعة';
                 pLinesHtml += `
                     <div class="purchase-item" onclick="showPurchaseDetails(${idx})">
                         <div>
                             <div>${dateStr}</div>
-                            <div class="text-muted" style="font-size:0.75rem;">الكمية: ${formatQtyDisplay(p.qty, productFactor)} | ${p.partyName}</div>
+                            <div class="text-muted" style="font-size:0.75rem;">الكمية: ${p.rawQty ? p.rawQty + ' ' + unitLabel : formatQtyDisplay(p.qty, productFactor)} | ${p.partyName}</div>
                         </div>
-                        <div class="badge-buy">${p.price.toFixed(2)} ج.م</div>
+                        <div class="badge-buy">${p.price.toFixed(2)} ج.م/قطعة</div>
                     </div>
                 `;
             });
@@ -613,7 +636,7 @@
 
             const unitProfitDayAvg = d.qty > 0 ? ((d.profitAvg / d.qty) * productFactor) : 0;
             const displayDate = key === 'بدون تاريخ' ? key : new Date(key).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
-            const unitText = productFactor > 1 ? 'الكرتونة' : 'القطعة';
+            const unitText = productFactor > 1 ? 'الكرتونة' : 'الجركن/القطعة';
 
             html += `
                 <div class="day-card" onclick="showDaySalesDetails('${key}')">
@@ -636,7 +659,7 @@
 
         const avgUnitProfitAll = totalQty > 0 ? ((totalProfitAvg / totalQty) * productFactor) : 0;
         const currUnitProfitAll = totalQty > 0 ? ((totalProfitCurrent / totalQty) * productFactor) : 0;
-        const unitText = productFactor > 1 ? 'الكرتونة' : 'القطعة';
+        const unitText = productFactor > 1 ? 'الكرتونة' : 'الجركن/القطعة';
 
         document.getElementById('daysContainer').innerHTML = html;
         document.getElementById('totalProfitVal').innerText = `${totalProfitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
@@ -653,14 +676,15 @@
         const p = purchaseEvents[idx];
         if (!p) return;
         const dateStr = p.date.getTime() === 0 ? 'عند التأسيس' : p.date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+        const unitLabel = p.rawUnit ? p.rawUnit : 'جركن/قطعة';
         
         document.getElementById('modalTitle').innerText = `تفاصيل الشراء - ${dateStr}`;
         document.getElementById('modalBody').innerHTML = `
             <div class="p-2 border-bottom">
                 <div><b>جهة التوريد:</b> ${p.partyName}</div>
                 <div><b>نوع الحركة:</b> ${p.label}</div>
-                <div><b>الكمية الواردة:</b> ${formatQtyDisplay(p.qty, productFactor)}</div>
-                <div><b>تكلفة وحدة الشراء:</b> ${p.price.toFixed(2)} ج.م</div>
+                <div><b>الكمية الواردة:</b> ${p.rawQty ? p.rawQty + ' ' + unitLabel : formatQtyDisplay(p.qty, productFactor)}</div>
+                <div><b>تكلفة وحدة القطعة/الجركن:</b> ${p.price.toFixed(2)} ج.م</div>
                 <div class="fw-bold text-success mt-1"><b>إجمالي التكلفة:</b> ${(p.qty * p.price).toFixed(2)} ج.م</div>
             </div>
         `;
@@ -676,7 +700,8 @@
         
         let html = '';
         data.items.forEach((item, i) => {
-            const qtyStr = item.rawUnit === 'box' ? `${item.rawQty} كرتونة` : `${item.rawQty} قطعة/جركن`;
+            const unitText = item.rawUnit ? item.rawUnit : 'جركن/قطعة';
+            const qtyStr = `${item.rawQty} ${unitText}`;
             html += `
                 <div class="p-2 border-bottom text-start mb-1" style="font-size:0.82rem;">
                     <div class="d-flex justify-content-between">
@@ -684,7 +709,7 @@
                         <span class="badge bg-success">${qtyStr}</span>
                     </div>
                     <div class="text-muted mt-1">
-                        سعر البيع: ${item.unitPrice ? item.unitPrice.toFixed(2) + ' ج.م' : '---'} | الإجمالي: ${item.revenue.toFixed(2)} ج.م
+                        سعر البيع: ${item.unitPrice ? item.unitPrice.toFixed(2) + ' ج.م/' + unitText : '---'} | الإجمالي: ${item.revenue.toFixed(2)} ج.م
                     </div>
                     <div class="text-primary fw-bold mt-1">
                         الربح المحقق: ${item.profitAvg.toFixed(2)} ج.م
