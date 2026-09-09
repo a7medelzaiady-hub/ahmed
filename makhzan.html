@@ -58,16 +58,6 @@
         }
         .top-nav .nav-icon:active { transform: scale(0.9); }
 
-        .offline-banner {
-            background-color: #f59e0b;
-            color: white;
-            text-align: center;
-            font-size: 0.8rem;
-            padding: 4px;
-            font-weight: bold;
-            display: none;
-        }
-
         .search-section {
             padding: 20px;
             display: flex;
@@ -226,10 +216,6 @@
     <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
 </div>
 
-<div id="offlineBanner" class="offline-banner">
-    <i class="fas fa-wifi-slash me-1"></i> أنت تعمل بدون اتصال بالإنترنت (البيانات المعروضة محلية)
-</div>
-
 <div class="search-section">
     <button class="qr-btn" aria-label="مسح الباركود"><i class="fas fa-qrcode"></i></button>
     <div class="search-wrapper">
@@ -247,7 +233,7 @@
 
 <div id="itemsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل وتحضير البيانات...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري ترتيب الأصناف بالمخزن...
     </div>
 </div>
 
@@ -261,15 +247,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { 
-        initializeFirestore, 
-        persistentLocalCache, 
-        persistentMultipleTabManager, 
-        collection, 
-        onSnapshot, 
-        query, 
-        where 
-    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, getFirestore, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -282,33 +260,8 @@
     };
 
     const app = initializeApp(firebaseConfig);
-
-    // تفعيل التخزين المحلي والدائم (Offline Persistence) لدعم العمل بدون إنترنت
-    const db = initializeFirestore(app, {
-        localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager()
-        })
-    });
-
+    const db = getFirestore(app);
     let allData = [];
-    const salesMap = new Map();
-    const purchasesMap = new Map();
-    const openingMap = new Map();
-    const factorsMap = new Map();
-    const namesMap = new Map();
-
-    // متابعة حالة الاتصال بالإنترنت لعرض التنبيه
-    function updateOnlineStatus() {
-        const banner = document.getElementById('offlineBanner');
-        if (!navigator.onLine) {
-            banner.style.display = 'block';
-        } else {
-            banner.style.display = 'none';
-        }
-    }
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    updateOnlineStatus();
 
     // التحقق الفعلي مما إذا كانت الوحدة مباعة/مشتراة ككرتونة
     function isCartonUnit(unitValue, isCartonFlag) {
@@ -318,36 +271,41 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
-    function calculateAndRender() {
-        // إعادة معالجة حساب الكميات بناءً على أحدث بيانات مسجلة محلياً أو من السيرفر
-        allData.forEach(item => {
-            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
-            
-            let openingTotalPcs = 0;
-            if (item.openingTotalPcs != null) {
-                openingTotalPcs = Number(item.openingTotalPcs);
-            } else if (item.openingQty != null) {
-                openingTotalPcs = Math.round(Number(item.openingQty) * factor);
-            } else if (openingMap.has(item.id)) {
-                openingTotalPcs = openingMap.get(item.id);
-            }
+    async function loadLiveInventory() {
+        try {
+            // جلب المجموعات دفعة واحدة لسرعة الأداء
+            const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(collection(db, "inventory")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+            ]);
 
-            const salesPcs = salesMap.get(item.id) || 0;
-            const purchasesPcs = purchasesMap.get(item.id) || 0;
-            const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+            const factorsMap = new Map();
+            const namesMap = new Map();
 
-            item.totalPcs = calculatedRealPcs;
-            item.qty = calculatedRealPcs;
-        });
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                factorsMap.set(d.id, f);
+                if (data.name) namesMap.set(data.name.trim(), d.id);
+            });
 
-        renderItems();
-    }
+            const salesMap = new Map();
+            const purchasesMap = new Map();
+            const openingMap = new Map();
 
-    function setupRealtimeListeners() {
-        // الاستماع الدائم للفواتير (Invoices)
-        onSnapshot(collection(db, "invoices"), (snap) => {
-            salesMap.clear();
-            snap.forEach(docSnap => {
+            // أرصدة بداية المدة
+            transSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.productId) {
+                    const current = openingMap.get(data.productId) || 0;
+                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
+                }
+            });
+
+            // حساب المبيعات بسرعة أداء عالية
+            invoicesSnap.forEach(docSnap => {
                 const items = docSnap.data().items || [];
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
@@ -363,13 +321,9 @@
                     }
                 }
             });
-            calculateAndRender();
-        }, (e) => console.log("تنبيه الفواتير (حالة أوفلاين):", e));
 
-        // الاستماع الدائم لمشتريات الموردين (Supplier Transactions)
-        onSnapshot(collection(db, "supplier_transactions"), (snap) => {
-            purchasesMap.clear();
-            snap.forEach(docSnap => {
+            // حساب المشتريات
+            supplierSnap.forEach(docSnap => {
                 const items = docSnap.data().items || [];
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
@@ -386,53 +340,46 @@
                     }
                 }
             });
-            calculateAndRender();
-        }, (e) => console.log("تنبيه المشتريات (حالة أوفلاين):", e));
 
-        // الاستماع لعمليات الرصيد الافتتاحي
-        const qOpening = query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance"));
-        onSnapshot(qOpening, (snap) => {
-            openingMap.clear();
-            snap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.productId) {
-                    const current = openingMap.get(data.productId) || 0;
-                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
-                }
+            // الاستماع المباشر للتغيرات في المخزون
+            onSnapshot(collection(db, "inventory"), (snap) => {
+                allData = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.isDeleted) {
+                        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                        
+                        let openingTotalPcs = 0;
+                        if (data.openingTotalPcs != null) {
+                            openingTotalPcs = Number(data.openingTotalPcs);
+                        } else if (data.openingQty != null) {
+                            openingTotalPcs = Math.round(Number(data.openingQty) * factor);
+                        } else if (openingMap.has(doc.id)) {
+                            openingTotalPcs = openingMap.get(doc.id);
+                        }
+
+                        const salesPcs = salesMap.get(doc.id) || 0;
+                        const purchasesPcs = purchasesMap.get(doc.id) || 0;
+                        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+                        allData.push({ 
+                            id: doc.id, 
+                            ...data,
+                            totalPcs: calculatedRealPcs,
+                            qty: calculatedRealPcs
+                        });
+                    }
+                });
+                renderItems();
             });
-            calculateAndRender();
-        }, (e) => console.log("تنبيه الرصيد الافتتاحي (حالة أوفلاين):", e));
 
-        // الاستماع الدائم للمخزون (Inventory)
-        onSnapshot(collection(db, "inventory"), (snap) => {
-            allData = [];
-            factorsMap.clear();
-            namesMap.clear();
-
-            snap.forEach(doc => {
-                const data = doc.data();
-                if (!data.isDeleted) {
-                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                    factorsMap.set(doc.id, factor);
-                    if (data.name) namesMap.set(data.name.trim(), doc.id);
-
-                    allData.push({ 
-                        id: doc.id, 
-                        ...data,
-                        totalPcs: 0,
-                        qty: 0
-                    });
-                }
-            });
-            calculateAndRender();
-        }, (e) => console.log("تنبيه الأصناف (حالة أوفلاين):", e));
+        } catch (e) {
+            console.error("خطأ في تجميع البيانات:", e);
+        }
     }
 
     window.renderItems = function() {
-        const searchInput = document.getElementById('searchInput');
-        if (!searchInput) return;
-
-        const term = searchInput.value.toLowerCase().trim();
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
         const container = document.getElementById('itemsContainer');
         
         let filtered = allData.filter(i => 
@@ -517,8 +464,7 @@
         window.location.href = `product-details.html?id=${id}`;
     };
 
-    // تشغيل المستمعين الحيين
-    setupRealtimeListeners();
+    loadLiveInventory();
 </script>
 <script>
 if ("serviceWorker" in navigator) {
