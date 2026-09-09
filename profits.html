@@ -389,6 +389,9 @@
                 const rawBuy = Number(data.buy) || 0;
                 const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
 
+                const rawSell = Number(data.sell || data.price || data.sellPrice) || 0;
+                const currentSellUnit = rawSell > 0 ? (rawSell / factor) : 0;
+
                 const currentStockPcs = (data.totalPcs !== undefined && data.totalPcs !== null)
                     ? Number(data.totalPcs) || 0
                     : (Number(data.qty) || 0) * factor;
@@ -400,6 +403,7 @@
                     factor,
                     fallbackBuy: currentBuyUnit,
                     currentBuy: currentBuyUnit,
+                    currentSell: currentSellUnit,
                     currentStockPcs: currentStockPcs,
                     raw: data
                 };
@@ -474,7 +478,7 @@
                         pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0);
                     }
 
-                    let itemBuy = Number(item.buy) || 0;
+                    let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
                     // إصلاح سعر شراء القطعة: إذا كانت الوحدة كرتونة نقسم على المعامل، وإذا كانت قطعة ناخذ السعر مباشرة
                     let buyPrice = 0;
                     if (itemBuy > 0) {
@@ -500,14 +504,30 @@
                     const factor = Math.max(1, Number(productsMap[id].factor) || 1);
                     let pcs = 0;
                     const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
-                    
+                    const rawQty = Number(item.qty || item.quantity) || 0;
+
                     if (isCarton) {
-                        pcs = (Number(item.qty) || 0) * factor;
+                        pcs = rawQty * factor;
                     } else {
-                        pcs = Number(item.qty) || 0;
+                        pcs = rawQty;
                     }
 
-                    let revenue = (Number(item.price) || 0) * (Number(item.qty) || 0);
+                    // نفس منطق profit-details.html: نبحث عن السعر/الإجمالي بعدة أسماء حقول محتملة
+                    // قبل اللجوء لسعر البيع الحالي، عشان متطلعش الإيرادات صفر غلط وتظهر خسارة وهمية
+                    let unitSellPrice = Number(item.sell || item.price || item.sellPrice || item.unitPrice) || 0;
+                    let revenue = 0;
+                    const currentSellPrice = productsMap[id].currentSell || 0;
+
+                    if (item.totalPrice !== undefined && item.totalPrice !== null && Number(item.totalPrice) > 0) {
+                        revenue = Number(item.totalPrice);
+                    } else if (item.total !== undefined && item.total !== null && Number(item.total) > 0) {
+                        revenue = Number(item.total);
+                    } else if (unitSellPrice > 0) {
+                        revenue = unitSellPrice * rawQty;
+                    } else if (currentSellPrice > 0) {
+                        revenue = currentSellPrice * pcs;
+                    }
+
                     if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
                     pushEvent(id, { type: 'sale', date, qty: pcs, revenue, invoiceId });
                 });
