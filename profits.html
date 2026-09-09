@@ -351,6 +351,7 @@
         return null;
     }
 
+    // التحقق المطابق تماماً لشاشة المخزن والمشتريات والمبيعات
     function checkIsCarton(unitVal, unitNameVal, isCartonVal) {
         if (isCartonVal === true) return true;
         const u = String(unitVal || '').toLowerCase().trim();
@@ -381,7 +382,8 @@
             const inventorySnap = await getDocs(collection(db, "inventory"));
             inventorySnap.forEach(d => {
                 const data = d.data();
-                if (data.isDeleted) return;
+                if (data.isDeleted) return; // حظر المحذوفات
+                
                 const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                 const rawBuy = Number(data.buy) || 0;
                 const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
@@ -418,6 +420,7 @@
             let openingValueMap = {};
             openingSnap.forEach(docSnap => {
                 const data = docSnap.data();
+                if (data.isDeleted) return; // حظر المحذوفات
                 if (!data.productId) return;
                 const qty = Number(data.quantityPcs) || 0;
                 let value = (data.totalAmount !== undefined && data.totalAmount !== null) ? Number(data.totalAmount) || 0 : (Number(data.unitPrice) || 0) * qty;
@@ -458,8 +461,11 @@
                 }
             });
 
+            // قراءة المشتريات وتجاهل المحذوفة
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
+                if (data.isDeleted) return; // حظر المحذوفات
+                
                 const date = getDocDate(data);
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
@@ -484,8 +490,11 @@
                 });
             });
 
+            // قراءة المبيعات وتجاهل المحذوفة
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
+                if (data.isDeleted) return; // حظر المحذوفات
+
                 const date = getDocDate(data);
                 const invoiceId = docSnap.id;
                 data.items?.forEach(item => {
