@@ -319,7 +319,7 @@
         if (isCartonVal === true) return true;
         const u = String(unitVal || '').toLowerCase().trim();
         const un = String(unitNameVal || '').toLowerCase().trim();
-        return u === 'box' || u === 'carton' || un.includes('كرتون');
+        return u === 'box' || u === 'carton' || un.includes('كرتون') || un.includes('علب');
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -424,7 +424,7 @@
                     const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
                     
                     let pcs = 0;
-                    if (isCarton) {
+                    if (isCarton || (Number(item.buy || item.buyPrice || item.price) > 100 && itemFactor > 1)) {
                         pcs = (Number(item.qty) || 0) * itemFactor;
                     } else {
                         pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : Number(item.qty) || 0;
@@ -432,19 +432,12 @@
                     
                     let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
                     let buyPricePerPcs = 0;
-                    if (itemBuy > 0) {
-                        if (isCarton) {
-                            buyPricePerPcs = itemBuy / itemFactor;
-                        } else {
-                            // فحص أمان للحد من الأخطاء البشرية: إذا أدخل السعر على أنه قطعة وهو أعلى بكثير من سعر القطعة الحالي، يقسم على معامل الكرتونة تلقائياً
-                            if (currentBuyPrice > 0 && itemBuy > (currentBuyPrice * 5)) {
-                                buyPricePerPcs = itemBuy / itemFactor;
-                            } else {
-                                buyPricePerPcs = itemBuy;
-                            }
-                        }
+                    
+                    // تحويل تلقائي لسعر الشراء إذا تجاوز 100 ج.م في الأصناف ذات معامل الكرتونة
+                    if (isCarton || (itemBuy > 100 && itemFactor > 1)) {
+                        buyPricePerPcs = itemBuy / itemFactor;
                     } else {
-                        buyPricePerPcs = currentBuyPrice;
+                        buyPricePerPcs = itemBuy > 0 ? itemBuy : currentBuyPrice;
                     }
 
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
