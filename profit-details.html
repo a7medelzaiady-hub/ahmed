@@ -319,7 +319,7 @@
         if (isCartonVal === true) return true;
         const u = String(unitVal || '').toLowerCase().trim();
         const un = String(unitNameVal || '').toLowerCase().trim();
-        return u === 'box' || u === 'carton' || un.includes('كرتون') || un.includes('علب');
+        return u === 'box' || u === 'carton' || u.includes('كرتون') || u.includes('علب') || un.includes('كرتون') || un.includes('علب');
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -420,11 +420,11 @@
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
                     
-                    const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
+                    const itemFactor = productFactor;
                     const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
                     
                     let pcs = 0;
-                    if (isCarton || (Number(item.buy || item.buyPrice || item.price) > 100 && itemFactor > 1)) {
+                    if (isCarton) {
                         pcs = (Number(item.qty) || 0) * itemFactor;
                     } else {
                         pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : Number(item.qty) || 0;
@@ -433,8 +433,8 @@
                     let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
                     let buyPricePerPcs = 0;
                     
-                    // تحويل تلقائي لسعر الشراء إذا تجاوز 100 ج.م في الأصناف ذات معامل الكرتونة
-                    if (isCarton || (itemBuy > 100 && itemFactor > 1)) {
+                    // تحويل تلقائي لسعر الشراء إذا كانت الوحدة كرتونة
+                    if (isCarton) {
                         buyPricePerPcs = itemBuy / itemFactor;
                     } else {
                         buyPricePerPcs = itemBuy > 0 ? itemBuy : currentBuyPrice;
@@ -470,7 +470,7 @@
                     const nameMatch = item.name && item.name.trim() === productInfo.name.trim();
                     if (id !== productId && !(!id && nameMatch)) return;
 
-                    const itemFactor = Math.max(1, Number(item.unitFactor || productFactor) || 1);
+                    const itemFactor = productFactor;
                     const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
                     
                     let pcs = 0;
