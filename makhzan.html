@@ -263,8 +263,17 @@
     const db = getFirestore(app);
     let allData = [];
 
+    // التحقق الفعلي مما إذا كانت الوحدة مباعة/مشتراة ككرتونة
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
+
     async function loadLiveInventory() {
         try {
+            // جلب المجموعات دفعة واحدة لسرعة الأداء
             const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
@@ -272,65 +281,67 @@
                 getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
             ]);
 
-            let factorsMap = {};
-            let namesMap = {};
+            const factorsMap = new Map();
+            const namesMap = new Map();
+
             inventorySnap.forEach(d => {
                 const data = d.data();
                 const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-                factorsMap[d.id] = f;
-                if (data.name) namesMap[data.name.trim()] = d.id;
+                factorsMap.set(d.id, f);
+                if (data.name) namesMap.set(data.name.trim(), d.id);
             });
 
-            let salesMap = {};
-            let purchasesMap = {};
-            let openingMap = {};
+            const salesMap = new Map();
+            const purchasesMap = new Map();
+            const openingMap = new Map();
 
+            // أرصدة بداية المدة
             transSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 if (data.productId) {
-                    openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
+                    const current = openingMap.get(data.productId) || 0;
+                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
                 }
             });
 
+            // حساب المبيعات بسرعة أداء عالية
             invoicesSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                data.items?.forEach(item => {
-                    const id = item.stockId || namesMap[item.name?.trim()];
+                const items = docSnap.data().items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
                     if (id) {
-                        if (!salesMap[id]) salesMap[id] = 0;
-                        const factor = factorsMap[id] || 1;
-                        let rawQty = Number(item.qty) || 0;
-                        let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
+                        const factor = factorsMap.get(id) || 1;
+                        const rawQty = Number(item.qty) || 0;
+                        const isCarton = isCartonUnit(item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
                         
-                        if (item.isReturn) {
-                            salesMap[id] -= pcs;
-                        } else {
-                            salesMap[id] += pcs;
-                        }
+                        const current = salesMap.get(id) || 0;
+                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
                     }
-                });
+                }
             });
 
+            // حساب المشتريات
             supplierSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                data.items?.forEach(item => {
-                    const id = item.stockId || namesMap[item.name?.trim()];
+                const items = docSnap.data().items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
                     if (id) {
-                        if (!purchasesMap[id]) purchasesMap[id] = 0;
-                        const factor = factorsMap[id] || 1;
+                        const factor = factorsMap.get(id) || 1;
                         const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                        let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
+                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
 
-                        if (isReturn) {
-                            purchasesMap[id] -= pcs;
-                        } else {
-                            purchasesMap[id] += pcs;
-                        }
+                        const current = purchasesMap.get(id) || 0;
+                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
                     }
-                });
+                }
             });
 
+            // الاستماع المباشر للتغيرات في المخزون
             onSnapshot(collection(db, "inventory"), (snap) => {
                 allData = [];
                 snap.forEach(doc => {
@@ -339,16 +350,16 @@
                         const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                         
                         let openingTotalPcs = 0;
-                        if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
+                        if (data.openingTotalPcs != null) {
                             openingTotalPcs = Number(data.openingTotalPcs);
-                        } else if (data.openingQty !== undefined && data.openingQty !== null) {
+                        } else if (data.openingQty != null) {
                             openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-                        } else if (openingMap[doc.id]) {
-                            openingTotalPcs = openingMap[doc.id];
+                        } else if (openingMap.has(doc.id)) {
+                            openingTotalPcs = openingMap.get(doc.id);
                         }
 
-                        const salesPcs = salesMap[doc.id] || 0;
-                        const purchasesPcs = purchasesMap[doc.id] || 0;
+                        const salesPcs = salesMap.get(doc.id) || 0;
+                        const purchasesPcs = purchasesMap.get(doc.id) || 0;
                         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
                         allData.push({ 
@@ -380,16 +391,9 @@
             const sellPrice = Number(item.sell || 0);
             const qty = Number(item.totalPcs || 0);
 
-            // المجموعة 1: أصناف بدون سعر + كمية لا تساوي صفر (أكبر أو أقل من الصفر)
             if (sellPrice <= 0 && qty !== 0) return 1;
-            
-            // المجموعة 2: الأعداد السالبة
             if (qty < 0) return 2;
-            
-            // المجموعة 3: الأعداد الموجبة
             if (qty > 0) return 3;
-            
-            // المجموعة 4: الرصيد الصفر
             return 4;
         };
 
@@ -400,13 +404,8 @@
             const groupA = getPriorityGroup(a);
             const groupB = getPriorityGroup(b);
 
-            if (groupA !== groupB) {
-                return groupA - groupB;
-            }
-
-            if (qtyA !== qtyB) {
-                return qtyA - qtyB;
-            }
+            if (groupA !== groupB) return groupA - groupB;
+            if (qtyA !== qtyB) return qtyA - qtyB;
 
             return (a.name || '').localeCompare(b.name || '', 'ar');
         });
@@ -419,6 +418,7 @@
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
 
+            // تحويل قطع الكلي إلى (كرتونة + جركن/قطعة)
             const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
             const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
 
