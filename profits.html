@@ -378,9 +378,6 @@
 
     async function loadData() {
         try {
-            // ملاحظة: هذه صفحة تقارير مالية حساسة، لذلك لا نعتمد على أي تخزين مؤقت (localStorage)
-            // لبيانات المخزون - نجلبها دائمًا مباشرة من Firestore لضمان دقة سعر الشراء الحالي
-            // في كل مرة يتم فيها فتح الصفحة، حتى لو تم تحديث سعر شراء صنف للتو.
             const inventorySnap = await getDocs(collection(db, "inventory"));
             inventorySnap.forEach(d => {
                 const data = d.data();
@@ -472,19 +469,18 @@
                     let pcs = 0;
                     const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
                     
-                    if (isCarton) {
+                    if (isCarton || (Number(item.buy || item.buyPrice || item.price) > 100 && factor > 1)) {
                         pcs = (Number(item.qty) || 0) * factor;
                     } else {
                         pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0);
                     }
 
                     let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
-                    // إصلاح سعر شراء القطعة: إذا كانت الوحدة كرتونة نقسم على المعامل، وإذا كانت قطعة ناخذ السعر مباشرة
                     let buyPrice = 0;
-                    if (itemBuy > 0) {
-                        buyPrice = isCarton ? (itemBuy / factor) : itemBuy;
+                    if (isCarton || (itemBuy > 100 && factor > 1)) {
+                        buyPrice = itemBuy / factor;
                     } else {
-                        buyPrice = productsMap[id].currentBuy;
+                        buyPrice = itemBuy > 0 ? itemBuy : productsMap[id].currentBuy;
                     }
 
                     const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
@@ -512,8 +508,6 @@
                         pcs = rawQty;
                     }
 
-                    // نفس منطق profit-details.html: نبحث عن السعر/الإجمالي بعدة أسماء حقول محتملة
-                    // قبل اللجوء لسعر البيع الحالي، عشان متطلعش الإيرادات صفر غلط وتظهر خسارة وهمية
                     let unitSellPrice = Number(item.sell || item.price || item.sellPrice || item.unitPrice) || 0;
                     let revenue = 0;
                     const currentSellPrice = productsMap[id].currentSell || 0;
@@ -543,20 +537,19 @@
                 let runQty = 0, runAvg = 0;
                 saleLines[id] = [];
                 
-                let lastP = list.filter(e => e.type === 'purchase' && e.price > 0).slice(-1)[0];
-                let currentBuy = (productsMap[id].currentBuy > 0) ? productsMap[id].currentBuy : (lastP ? lastP.price : 0);
+                let currentBuy = productsMap[id].currentBuy > 0 ? productsMap[id].currentBuy : 0;
 
                 list.forEach(ev => {
                     if (ev.type === 'purchase') {
-                        if (ev.qty > 0) {
+                        if (ev.qty > 0 && ev.price > 0) {
                             const newQty = runQty + ev.qty;
-                            runAvg = newQty > 0 ? (runQty * runAvg + ev.qty * ev.price) / newQty : 0;
+                            runAvg = newQty > 0 ? ((runQty * runAvg) + (ev.qty * ev.price)) / newQty : ev.price;
                             runQty = newQty;
                         } else {
                             runQty = Math.max(0, runQty + ev.qty);
                         }
                     } else {
-                        let effectiveCostUnit = runAvg > 0 ? runAvg : currentBuy;
+                        let effectiveCostUnit = (runAvg > 0) ? runAvg : currentBuy;
 
                         const costAvg = effectiveCostUnit * ev.qty;
                         const profitAvg = ev.revenue - costAvg;
