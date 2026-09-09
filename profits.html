@@ -351,6 +351,13 @@
         return null;
     }
 
+    function checkIsCarton(unitVal, unitNameVal, isCartonVal) {
+        if (isCartonVal === true) return true;
+        const u = String(unitVal || '').toLowerCase().trim();
+        const un = String(unitNameVal || '').toLowerCase().trim();
+        return u === 'box' || u === 'carton' || u.includes('كرتون') || u.includes('علب') || un.includes('كرتون') || un.includes('علب');
+    }
+
     let productsMap = {}; 
     let namesMap = {};
     let saleLines = {}; 
@@ -466,10 +473,10 @@
                 data.items?.forEach(item => {
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
-                    const factor = Math.max(1, Number(item.unitFactor || productsMap[id].factor) || 1);
+                    const factor = Math.max(1, Number(productsMap[id].factor) || 1);
                     
                     let pcs = 0;
-                    const isCarton = (item.unit === 'box' || item.unitName === 'كرتونة' || item.isCarton === true);
+                    const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
                     
                     if (isCarton) {
                         pcs = (Number(item.qty) || 0) * factor;
@@ -500,9 +507,9 @@
                     const id = item.stockId || namesMap[item.name?.trim()];
                     if (!id || !productsMap[id]) return;
                     
-                    const factor = Math.max(1, Number(item.unitFactor || productsMap[id].factor) || 1);
+                    const factor = Math.max(1, Number(productsMap[id].factor) || 1);
                     let pcs = 0;
-                    const isCarton = (item.unit === 'box' || item.unitName === 'كرتونة' || item.isCarton === true);
+                    const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
                     
                     if (isCarton) {
                         pcs = (Number(item.qty) || 0) * factor;
