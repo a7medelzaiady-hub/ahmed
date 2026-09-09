@@ -205,30 +205,6 @@
         .profit-box.current-buy .p-val { color: #0284c7; }
         .profit-box.current-buy .p-unit { color: #0369a1; }
 
-        .item-analysis-box {
-            background: #fdfbf7;
-            border: 1px dashed #f59e0b;
-            border-radius: 12px;
-            padding: 8px 12px;
-            margin-top: 8px;
-        }
-        .analysis-header {
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: #b45309;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-bottom: 4px;
-        }
-        .analysis-bullet {
-            font-size: 0.7rem;
-            color: #334155;
-            font-weight: 600;
-            line-height: 1.4;
-            margin-bottom: 2px;
-        }
-
         .item-card-footer {
             display: flex;
             justify-content: space-between;
@@ -379,7 +355,6 @@
     let namesMap = {};
     let saleLines = {}; 
     let firstStockDateMap = {}; 
-    let computedStockMap = {}; // stock balance as calculated from purchase/sale history, to cross-check against the raw inventory field
     let currentSortMode = 'profit';
 
     window.forceRefreshData = function() {
@@ -581,13 +556,6 @@
                         }
                     }
                 });
-
-                // Stock balance as derived purely from purchase/sale history —
-                // used to cross-check against the raw "currentStockPcs" field
-                // that comes directly from the inventory document, so we can
-                // tell the user when the two disagree (e.g. balance not
-                // updated after a restock) instead of silently showing "0".
-                computedStockMap[id] = runQty;
             });
 
             renderItems();
@@ -610,96 +578,6 @@
 
         const totalCartons = safePcs / safeFactor;
         return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
-    }
-
-    function generateFairAnalysis(invoicePct, daysPct, profitAvg, grandPositiveProfit, daysInStock, currentStockPcs, qtySold, factor, computedStockPcs) {
-        const safeFactor = Math.max(1, Number(factor) || 1);
-        const safeStockPcs = Number(currentStockPcs) || 0;
-        const currentStockDisplay = formatSoldQuantityInCartons(safeStockPcs, safeFactor);
-
-        const dailyRatePcs = daysInStock > 0 ? (qtySold / daysInStock) : 0;
-        
-        let stockCoverDaysStr = "غير محدد";
-        let stockCoverDays = 999;
-        if (dailyRatePcs > 0) {
-            stockCoverDays = Math.round(safeStockPcs / dailyRatePcs);
-            stockCoverDaysStr = `${stockCoverDays} يوم`;
-        } else if (safeStockPcs === 0) {
-            stockCoverDaysStr = "0 يوم";
-            stockCoverDays = 0;
-        }
-
-        let ageTxt = "";
-        if (daysInStock <= 15) ageTxt = `منتج جديد بالمخزن (بقاله ${daysInStock} يوم).`;
-        else if (daysInStock <= 45) ageTxt = `موجود بالمخزن منذ ${daysInStock} يوم.`;
-        else ageTxt = `صنف قديم بالمخزن (بقاله ${daysInStock} يوم).`;
-
-        let advice = "";
-        let adviceColor = "text-dark";
-
-        // FIX: out-of-stock items with active recent sales must win over the
-        // "new/promising item" message below. Previously an item with
-        // safeStockPcs === 0 skipped the urgent-reorder branch entirely
-        // (it required stock > 0) and fell through to a soft "watch it"
-        // message even though it had completely run out.
-        if (safeStockPcs === 0 && dailyRatePcs > 0) {
-            advice = `🚨 الصنف نفد من المخزن بالكامل وما زال عليه طلب (${dailyRatePcs.toFixed(1)} قطعة/يوم). يُوصى **بالطلب فوراً**.`;
-            adviceColor = "text-danger";
-        } else if (stockCoverDays <= 10 && safeStockPcs > 0 && dailyRatePcs > 0) {
-            advice = `⚠️ الرصيد الحالي (${currentStockDisplay}) يكفي لحوالي ${stockCoverDaysStr} فقط. يُوصى **بالطلب فوراً**.`;
-            adviceColor = "text-danger";
-        } else if (stockCoverDays > 90 && safeStockPcs > 0 && dailyRatePcs > 0) {
-            let suggestPcs = Math.ceil(dailyRatePcs * 30);
-            let suggestDisplay = formatSoldQuantityInCartons(suggestPcs, safeFactor);
-            advice = `✋ المخزون الحالي كبير جداً ويكفي ${stockCoverDaysStr}! يُنصح **بتقليل الكميات** (الكمية المثالية للشراء تكفي ${suggestDisplay}).`;
-            adviceColor = "text-warning";
-        } else if (daysInStock <= 15 && qtySold > 0) {
-            advice = `✨ صنف جديد ذو سحب واعد، يُفضل متابعته لتحديد إعادة الطلب.`;
-            adviceColor = "text-success";
-        } else {
-            advice = `✅ الكمية الحالية مناسبة لمعدل البيع وتكفي لـ ${stockCoverDaysStr} تقريباً.`;
-            adviceColor = "text-success";
-        }
-
-        // === FIX: profit-share calculation ===
-        // Previously this divided profitAvg by the NET total profit of all items
-        // (grandAvg), which includes loss-making / return items. When those
-        // losses drag the net total down near zero (or negative), the check
-        // `grandAvgTotal > 0` fails and the code silently prints a literal "0%"
-        // even for an item that is genuinely the #2 most profitable item.
-        // Fix: compare each item's profit against the pool of POSITIVE profit
-        // only (the actual "profit pie" being split), and show a proper
-        // negative/loss badge for items that are actually losing money.
-        let profitShareHtml;
-        if (profitAvg < 0) {
-            const lossShare = grandPositiveProfit > 0 ? ((Math.abs(profitAvg) / grandPositiveProfit) * 100).toFixed(1) : '0.0';
-            profitShareHtml = `<span class="text-danger fw-bold">خسارة (يقلل الأرباح بنسبة ${lossShare}%)</span>`;
-        } else {
-            const profitShare = grandPositiveProfit > 0 ? ((profitAvg / grandPositiveProfit) * 100).toFixed(1) : '0.0';
-            profitShareHtml = `يساهم بـ ${profitShare}% من إجمالي الأرباح`;
-        }
-
-        // ADDITION: warn when the raw inventory balance disagrees with what
-        // purchase/sale history implies the stock should be — this is how a
-        // user can tell whether a "0" balance is real or just an un-updated
-        // record.
-        let stockMismatchHtml = '';
-        const safeComputedStock = Number(computedStockPcs) || 0;
-        if (Math.abs(safeComputedStock - safeStockPcs) >= Math.max(1, safeFactor)) {
-            const computedDisplay = formatSoldQuantityInCartons(safeComputedStock, safeFactor);
-            stockMismatchHtml = `<div class="analysis-bullet">• <span class="text-danger fw-bold">⚠️ تنبيه:</span> الرصيد المسجل بالمخزون (${currentStockDisplay}) يختلف عن الرصيد المتوقع من حركة الشراء/البيع (${computedDisplay}) — يُنصح بمراجعة الجرد الفعلي.</div>`;
-        }
-
-        return `
-            <div class="item-analysis-box">
-                <div class="analysis-header"><i class="fas fa-balance-scale me-1"></i> التحليل العادل وتدفق المخزون:</div>
-                <div class="analysis-bullet">• <b>عمر الصنف بالمخزن:</b> ${ageTxt}</div>
-                <div class="analysis-bullet">• <b>معدل البيع اليومي:</b> ${(dailyRatePcs).toFixed(1)} قطعة/يوم.</div>
-                <div class="analysis-bullet">• <b>المساهمة المالية:</b> ${profitShareHtml}</div>
-                <div class="analysis-bullet">• <b>التوصية والكميات:</b> <span class="${adviceColor} fw-bold">${advice}</span></div>
-                ${stockMismatchHtml}
-            </div>
-        `;
     }
 
     window.renderItems = function() {
@@ -780,15 +658,6 @@
             };
         });
 
-        // === FIX: item count ("أصناف") ===
-        // Previously this kept any product whose NET quantity across the period
-        // was non-zero (`qtySold !== 0`). That means a product with ONLY return
-        // events in the selected period (e.g. a customer returned something
-        // bought earlier, outside this date range) ends up with a NEGATIVE
-        // qtySold and still gets counted as one of the "أصناف" — even though
-        // nothing was actually sold in the period. That inflated/skewed the
-        // item count shown at the bottom. Now we only count items that were
-        // actually sold (net quantity > 0) in the period.
         list = list.filter(p => p.qtySold > 0);
 
         if (term) {
@@ -797,16 +666,9 @@
 
         let grandAvg = 0;
         let grandCurrent = 0;
-        let grandPositiveProfit = 0; // sum of profit from items that ARE profitable — used for fair % contribution
-        let lossItemsCount = 0;
         list.forEach(p => {
             grandAvg += p.profitAvg;
             grandCurrent += p.profitCurrent;
-            if (p.profitAvg > 0) {
-                grandPositiveProfit += p.profitAvg;
-            } else if (p.profitAvg < 0) {
-                lossItemsCount++;
-            }
         });
 
         if (list.length > 0) {
@@ -861,8 +723,6 @@
             }
 
             const safeStock = Number(p.currentStockPcs) || 0;
-            const computedStock = Number(computedStockMap[p.id]) || 0;
-            const analysisHtml = generateFairAnalysis(invoicePercentage, daysPercentage, p.profitAvg, grandPositiveProfit, p.daysInStock, safeStock, p.qtySold, factor, computedStock);
 
             html += `
                 <div class="item-card">
@@ -927,8 +787,6 @@
                         </div>
                     </div>
 
-                    ${analysisHtml}
-
                     <div class="item-card-footer">
                         <span class="text-muted" style="font-size:0.7rem;">الرصيد بالمخزن الآن: <b>${formatSoldQuantityInCartons(safeStock, factor)}</b></span>
                         <button class="btn-details" onclick="goToDetails('${p.id}')">
@@ -949,23 +807,6 @@
         document.getElementById('totalActiveDays').innerText = totalPeriodDays;
         document.getElementById('grandTotalProfit').innerText = `${grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('grandTotalProfitCurrent').innerText = `بالسعر الحالي: ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
-
-        // === ADDITION: loss-items indicator ===
-        // Surfaces items dragging the net total down, and shows the "clean"
-        // positive-profit pool so numbers on screen are self-explanatory.
-        let lossNote = document.getElementById('lossItemsNote');
-        if (!lossNote) {
-            lossNote = document.createElement('div');
-            lossNote.id = 'lossItemsNote';
-            lossNote.style.cssText = 'margin:0 15px 10px;font-size:0.72rem;font-weight:700;color:#be123c;';
-            document.querySelector('.summary-strip').insertAdjacentElement('afterend', lossNote);
-        }
-        if (lossItemsCount > 0) {
-            lossNote.innerHTML = `<i class="fas fa-triangle-exclamation me-1"></i> يوجد ${lossItemsCount} صنف بربح سالب (خسارة) ضمن الفترة الحالية، وهو ما يقلل صافي الإجمالي أعلاه. إجمالي الأرباح الإيجابية فقط: ${grandPositiveProfit.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
-            lossNote.style.display = 'block';
-        } else {
-            lossNote.style.display = 'none';
-        }
     };
 
     window.goToDetails = function(id) {
