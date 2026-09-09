@@ -357,16 +357,12 @@
         btnExportPDF: document.getElementById('btnExportPDF')
     };
 
-    const loadTimeout = setTimeout(() => {
-        if (dom.listBody.querySelector('.loading')) {
-            dom.listBody.classList.add('full-width');
-            dom.listBody.innerHTML = `
-                <div class="err-box">
-                    <i class="fas fa-wifi"></i> الاتصال يستغرق وقتاً أطول من المعتاد<br>
-                    <small style="opacity:0.8">تأكد من الاتصال بالإنترنت، جاري الاستعادة من الكاش المحلي...</small>
-                </div>`;
-        }
-    }, 7000);
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
 
     function getItemPriority(item) {
         const factor = Number(item.unitFactor || item.factor) || 1;
@@ -416,7 +412,8 @@
                         if (!salesMap[id]) salesMap[id] = 0;
                         const factor = factorsMap[id] || 1;
                         let rawQty = Number(item.qty) || 0;
-                        let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
+                        let isCarton = isCartonUnit(item.unit, item.isCarton);
+                        let pcs = isCarton ? (rawQty * factor) : rawQty;
                         if (item.isReturn) salesMap[id] -= pcs;
                         else salesMap[id] += pcs;
                     }
@@ -432,7 +429,8 @@
                         const factor = factorsMap[id] || 1;
                         const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
                         let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
+                        let isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                        let pcs = isCarton ? (rawQty * factor) : rawQty;
                         if (isReturn) purchasesMap[id] -= pcs;
                         else purchasesMap[id] += pcs;
                     }
@@ -440,7 +438,6 @@
             });
 
             onSnapshot(collection(db, "inventory"), snap => {
-                clearTimeout(loadTimeout);
                 allItems = [];
                 
                 snap.forEach(d => {
@@ -490,13 +487,11 @@
                     (isFromCache ? " (كاش محلي)" : " (مباشر)");
 
             }, err => {
-                clearTimeout(loadTimeout);
                 dom.listBody.classList.add('full-width');
                 dom.listBody.innerHTML = `<div class="err-box"><i class="fas fa-wifi"></i>خطأ في جلب البيانات<br><small>${err.message}</small></div>`;
             });
         } catch (e) {
             console.error("Error in loadLiveInventory:", e);
-            clearTimeout(loadTimeout);
             dom.listBody.classList.add('full-width');
             dom.listBody.innerHTML = `<div class="err-box"><i class="fas fa-exclamation-triangle"></i>فشل في تجميع حركات المخزن.<br><small>${e.message}</small></div>`;
         }
@@ -675,10 +670,9 @@
 
         try {
             const currentItemObj = allItems.find(i => i.id === itemId) || {};
-            const capacity = Number(currentItemObj.unitFactor || currentItemObj.factor) || 1;
+            const capacity = Math.max(1, Number(currentItemObj.unitFactor || currentItemObj.factor || currentItemObj.pcsPerCarton) || 1);
             const rawUnit = (currentItemObj.unitName || currentItemObj.unit || '').trim();
             const unit = (rawUnit && normalizeAr(rawUnit) !== normalizeAr('كرتونة')) ? rawUnit : 'جركن';
-            const currentStockPcs = Number(currentItemObj.totalPcs !== undefined ? currentItemObj.totalPcs : (currentItemObj.qty || 0));
 
             const targetId = String(itemId || '').trim().toLowerCase();
             const targetName = String(itemName || '').trim().toLowerCase();
@@ -700,29 +694,9 @@
                 }
 
                 if (match) {
-                    if (obj.totalPieces !== undefined && obj.totalPieces !== null && obj.totalPieces !== '') {
-                        extractedQty = parseFloat(obj.totalPieces) || 0;
-                    } else if (obj.totalPcs !== undefined && obj.totalPcs !== null && obj.totalPcs !== '') {
-                        extractedQty = parseFloat(obj.totalPcs) || 0;
-                    } else {
-                        let rawVal = parseFloat(obj.qty || obj.quantity || obj.count || obj.cartons || obj.boxes || 0);
-                        const itemUnit = String(obj.unit || obj.unitName || obj.selectedUnit || obj.unit_type || '').toLowerCase().trim();
-                        
-                        const isPieceUnit = itemUnit.includes('جركن') || itemUnit.includes('قطعة') || itemUnit.includes('قطعه') || itemUnit.includes('عبوة') || itemUnit.includes('عبوه') || itemUnit.includes('علبة') || itemUnit.includes('علبه') || itemUnit.includes('فرادي') || itemUnit.includes('فرادى') || itemUnit.includes('piece') || itemUnit.includes('pcs');
-                        const isCartonUnit = itemUnit.includes('كرتون') || itemUnit.includes('كرت') || itemUnit.includes('box') || itemUnit.includes('carton') || itemUnit.includes('ctn') || itemUnit.includes('pack');
-
-                        if (isPieceUnit) {
-                            extractedQty = rawVal;
-                        } else if (isCartonUnit) {
-                            extractedQty = rawVal * capacity;
-                        } else {
-                            if (obj.isCarton === true || capacity > 1) {
-                                extractedQty = rawVal * capacity;
-                            } else {
-                                extractedQty = rawVal;
-                            }
-                        }
-                    }
+                    let rawVal = parseFloat(obj.qty || obj.quantity || obj.count || obj.cartons || obj.boxes || 0);
+                    const isCarton = isCartonUnit(obj.unit || obj.unitName || obj.selectedUnit, obj.isCarton);
+                    extractedQty = isCarton ? (rawVal * capacity) : rawVal;
                 }
                 return { match, qty: extractedQty, isReturn: obj.isReturn === true };
             };
@@ -774,27 +748,15 @@
                 else totalSalesPcs += qty;
             });
 
-            // جلب رصيد أول المدة بدقة من كارت الصنف أو سجلات الحركات الافتتاحية
             let initialStockPcs = 0;
             if (currentItemObj.openingTotalPcs !== undefined && currentItemObj.openingTotalPcs !== null) {
                 initialStockPcs = Number(currentItemObj.openingTotalPcs);
             } else if (currentItemObj.openingQty !== undefined && currentItemObj.openingQty !== null) {
                 initialStockPcs = Math.round(Number(currentItemObj.openingQty) * capacity);
-            } else if (currentItemObj.initQty !== undefined && currentItemObj.initQty !== null) {
-                initialStockPcs = Number(currentItemObj.initQty);
-            } else if (currentItemObj.initialQty !== undefined && currentItemObj.initialQty !== null) {
-                initialStockPcs = Number(currentItemObj.initialQty);
-            } else if (currentItemObj.openingBalance !== undefined && currentItemObj.openingBalance !== null) {
-                initialStockPcs = Number(currentItemObj.openingBalance);
-            } else {
-                try {
-                    const qTrans = query(collection(db, "inventory_transactions"), where("productId", "==", itemId), where("type", "==", "opening_balance"));
-                    const snapTrans = await getDocs(qTrans);
-                    if (!snapTrans.empty) {
-                        initialStockPcs = Number(snapTrans.docs[0].data().quantityPcs) || 0;
-                    }
-                } catch(e) {}
             }
+
+            // حساب الرصيد الحقيقي من واقع الحركات بدلاً من اعتماد الحقل القديم
+            const realCalculatedStockPcs = initialStockPcs + totalPurchasesPcs - totalSalesPcs + totalReturnsPcs - totalLossesPcs;
 
             uniqueTransactions.sort((a, b) => {
                 const parseDate = (item) => {
@@ -810,8 +772,8 @@
                 <div class="mini-card mc-init"><i class="fas fa-hourglass-start"></i><div class="mini-info"><span class="mini-val">${formatQuantityDetailed(initialStockPcs, capacity, unit)}</span><span class="mini-lbl">رصيد أول المدة</span></div></div>
                 <div class="mini-card mc-buy"><i class="fas fa-circle-arrow-down"></i><div class="mini-info"><span class="mini-val">+${formatQuantityDetailed(totalPurchasesPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المشتريات</span></div></div>
                 <div class="mini-card mc-sell"><i class="fas fa-circle-arrow-up"></i><div class="mini-info"><span class="mini-val">-${formatQuantityDetailed(totalSalesPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المبيعات</span></div></div>
-                <div class="mini-card mc-ret"><i class="fas fa-rotate-left"></i><div class="mini-info"><span class="mini-val">+${formatQuantityDetailed(totalReturnsPcs + totalLossesPcs, capacity, unit)}</span><span class="mini-lbl">المرتجعات والتالف</span></div></div>
-                <div class="mini-card mc-current"><div class="mini-info" style="text-align: center;"><span class="mini-val">${formatQuantityDetailed(currentStockPcs, capacity, unit)}</span><span class="mini-lbl">الرصيد الحالي بالمخزن</span></div></div>
+                <div class="mini-card mc-ret"><i class="fas fa-rotate-left"></i><div class="mini-info"><span class="mini-val">+${formatQuantityDetailed(totalReturnsPcs - totalLossesPcs, capacity, unit)}</span><span class="mini-lbl">المرتجعات والتالف</span></div></div>
+                <div class="mini-card mc-current"><div class="mini-info" style="text-align: center;"><span class="mini-val">${formatQuantityDetailed(realCalculatedStockPcs, capacity, unit)}</span><span class="mini-lbl">الرصيد الحالي بالمخزن</span></div></div>
             </div>
             <div class="section-title"><i class="fas fa-clipboard-list"></i> تفاصيل الحركات التاريخية</div>`;
 
