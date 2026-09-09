@@ -351,7 +351,6 @@
         return null;
     }
 
-    // التحقق المطابق تماماً لشاشة المخزن والمشتريات والمبيعات
     function checkIsCarton(unitVal, unitNameVal, isCartonVal) {
         if (isCartonVal === true) return true;
         const u = String(unitVal || '').toLowerCase().trim();
@@ -382,7 +381,7 @@
             const inventorySnap = await getDocs(collection(db, "inventory"));
             inventorySnap.forEach(d => {
                 const data = d.data();
-                if (data.isDeleted) return; // حظر المحذوفات
+                if (data.isDeleted) return;
                 
                 const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                 const rawBuy = Number(data.buy) || 0;
@@ -420,7 +419,7 @@
             let openingValueMap = {};
             openingSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                if (data.isDeleted) return; // حظر المحذوفات
+                if (data.isDeleted) return;
                 if (!data.productId) return;
                 const qty = Number(data.quantityPcs) || 0;
                 let value = (data.totalAmount !== undefined && data.totalAmount !== null) ? Number(data.totalAmount) || 0 : (Number(data.unitPrice) || 0) * qty;
@@ -461,10 +460,9 @@
                 }
             });
 
-            // قراءة المشتريات وتجاهل المحذوفة
             supplierSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                if (data.isDeleted) return; // حظر المحذوفات
+                if (data.isDeleted) return;
                 
                 const date = getDocDate(data);
                 data.items?.forEach(item => {
@@ -474,26 +472,30 @@
                     
                     let pcs = 0;
                     const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
-                    
+                    const isReturn = item.isReturn === true || Number(item.returnQty) > 0 || data.type === "مرتجع شراء";
+                    const rawQty = isReturn ? (Number(item.returnQty || item.qty) || 0) : (Number(item.qty) || 0);
+
                     if (isCarton) {
-                        pcs = (Number(item.qty) || 0) * factor;
+                        pcs = rawQty * factor;
                     } else {
-                        pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : (Number(item.qty) || 0);
+                        pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : rawQty;
                     }
 
                     let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
                     let buyPrice = isCarton ? (itemBuy / factor) : (itemBuy > 0 ? itemBuy : productsMap[id].currentBuy);
 
-                    const isReturn = item.isReturn === true || Number(item.returnQty) > 0;
-                    if (isReturn) pcs = -Math.abs(pcs);
-                    pushEvent(id, { type: 'purchase', date, qty: pcs, price: buyPrice });
+                    if (isReturn) {
+                        // المرتجع يُسجل كحدث مستقل لتعديل المخزون دون خبط سعر الشراء كقيمة سالبة
+                        pushEvent(id, { type: 'return_purchase', date, qty: Math.abs(pcs), price: buyPrice });
+                    } else {
+                        pushEvent(id, { type: 'purchase', date, qty: Math.abs(pcs), price: buyPrice });
+                    }
                 });
             });
 
-            // قراءة المبيعات وتجاهل المحذوفة
             invoicesSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                if (data.isDeleted) return; // حظر المحذوفات
+                if (data.isDeleted) return;
 
                 const date = getDocDate(data);
                 const invoiceId = docSnap.id;
@@ -531,6 +533,7 @@
                 });
             });
 
+            // حساب التكلفة المتحركة مع معالجة الرصيد بالسالب والتسلسل الزمني الصحيح
             Object.keys(events).forEach(id => {
                 const list = events[id].slice().sort((a, b) => {
                     const timeA = a.date ? a.date.getTime() : 0;
@@ -538,7 +541,8 @@
                     return timeA - timeB;
                 });
 
-                let runQty = 0, runAvg = 0;
+                let runQty = 0;
+                let runAvg = productsMap[id].currentBuy > 0 ? productsMap[id].currentBuy : 0;
                 saleLines[id] = [];
                 
                 let currentBuy = productsMap[id].currentBuy > 0 ? productsMap[id].currentBuy : 0;
@@ -546,13 +550,22 @@
                 list.forEach(ev => {
                     if (ev.type === 'purchase') {
                         if (ev.qty > 0 && ev.price > 0) {
-                            const newQty = runQty + ev.qty;
-                            runAvg = newQty > 0 ? ((runQty * runAvg) + (ev.qty * ev.price)) / newQty : ev.price;
-                            runQty = newQty;
+                            if (runQty <= 0) {
+                                // في حالة البيع بالسالب قبل الشراء، يبدأ المتوسط مباشرة من السعر الجديد
+                                runAvg = ev.price;
+                                runQty = ev.qty;
+                            } else {
+                                const newQty = runQty + ev.qty;
+                                runAvg = ((runQty * runAvg) + (ev.qty * ev.price)) / newQty;
+                                runQty = newQty;
+                            }
                         } else {
-                            runQty = Math.max(0, runQty + ev.qty);
+                            runQty += ev.qty;
                         }
+                    } else if (ev.type === 'return_purchase') {
+                        runQty = Math.max(0, runQty - ev.qty);
                     } else {
+                        // في حالة مبيعات
                         let effectiveCostUnit = (runAvg > 0) ? runAvg : currentBuy;
 
                         const costAvg = effectiveCostUnit * ev.qty;
