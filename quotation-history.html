@@ -481,6 +481,10 @@ let lastFetchedDate = null;
 let cachedCalculatedRows = [];
 let isInventoryLoadedOnce = false;
 
+// خرائط مرونة ربط المنتجات بالـ ID والاسم
+let factorsMap = {};
+let namesMap = {};
+
 const today = new Date();
 const offset = today.getTimezoneOffset();
 const localToday = new Date(today.getTime() - (offset*60*1000));
@@ -500,7 +504,7 @@ function saveSession() {
 }
 
 function getUnitName(name) {
-  const n = name.toLowerCase();
+  const n = (name || '').toLowerCase();
   if (n.includes('قطعة') || n.includes('قطعه')) return 'قطعة';
   if (n.includes('كرتونة') || n.includes('كرtونه')) return 'كرتونة';
   return 'جركن';
@@ -563,11 +567,23 @@ function parseDate(df,ts){
 }
 
 function isCarton(item){
-  const u=(item.unit||"").trim();
-  if(u==="box")return true;
+  const u=(item.unit||"").trim().toLowerCase();
+  if(u==="box" || u==="carton")return true;
   if(u==="pcs")return false;
   const un=(item.unitName||"").trim();
-  return un==="كرتونة"||un==="كرtونه";
+  return un==="كرتونة"||un==="كرtونه"||item.isCarton===true;
+}
+
+function getProductIdForItem(item) {
+  if (item.stockId && factorsMap[item.stockId]) return item.stockId;
+  if (item.productId && factorsMap[item.productId]) return item.productId;
+  if (item.id && factorsMap[item.id]) return item.id;
+  
+  if (item.name) {
+    const cleanName = cleanItemName(item.name);
+    if (namesMap[cleanName]) return namesMap[cleanName];
+  }
+  return item.stockId || item.productId || item.id || null;
 }
 
 window.showPage = function(id, btn) {
@@ -665,13 +681,13 @@ window.fetchInventoryFresh = async function() {
       getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
     ]);
 
-    let factorsMap = {};
-    let namesMap = {};
+    factorsMap = {};
+    namesMap = {};
     inventorySnap.forEach(d => {
       const data = d.data();
       const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
       factorsMap[d.id] = f;
-      if (data.name) namesMap[data.name.trim()] = d.id;
+      if (data.name) namesMap[cleanItemName(data.name)] = d.id;
     });
 
     let salesMap = {};
@@ -687,15 +703,19 @@ window.fetchInventoryFresh = async function() {
 
     invoicesSnap.forEach(docSnap => {
       const data = docSnap.data();
+      if (data.isDeleted) return;
       data.items?.forEach(item => {
-        const id = item.stockId || namesMap[item.name?.trim()];
+        const id = getProductIdForItem(item);
         if (id) {
           if (!salesMap[id]) salesMap[id] = 0;
-          const factor = factorsMap[id] || 1;
-          let rawQty = Number(item.qty) || 0;
-          let pcs = (item.unit === 'box' || item.isCarton === true) ? (rawQty * factor) : rawQty;
+          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
+          const rawQty = Math.abs(Number(item.qty) || 0);
+          const isCartonItem = isCarton(item);
+          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
           
-          if (item.isReturn) {
+          const isReturn = docSnap.data().type === 'return' || docSnap.data().isReturn === true || item.isReturn === true || Number(item.qty) < 0;
+
+          if (isReturn) {
             salesMap[id] -= pcs;
           } else {
             salesMap[id] += pcs;
@@ -707,13 +727,13 @@ window.fetchInventoryFresh = async function() {
     supplierSnap.forEach(docSnap => {
       const data = docSnap.data();
       data.items?.forEach(item => {
-        const id = item.stockId || namesMap[item.name?.trim()];
+        const id = getProductIdForItem(item);
         if (id) {
           if (!purchasesMap[id]) purchasesMap[id] = 0;
-          const factor = factorsMap[id] || 1;
-          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-          let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-          let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
+          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
+          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true || Number(item.qty) < 0;
+          const rawQty = Math.abs(isReturn ? Number(item.returnQty || item.qty) : Number(item.qty || 0));
+          const pcs = isCarton(item) ? (rawQty * factor) : rawQty;
 
           if (isReturn) {
             purchasesMap[id] -= pcs;
@@ -964,14 +984,19 @@ window.refreshSummaryData = async function(forceFetch = false) {
       const sSnap = await getDocs(collection(db, "invoices"));
       sSnap.forEach(doc => {
         const inv = doc.data(); if (inv.isDeleted) return; if (parseDate(inv.date, inv.timestamp) !== selectedDate) return; if (!Array.isArray(inv.items)) return;
+        
         inv.items.forEach(itm => {
-          const name = (itm.name || "").trim(); if (!name) return; const cleanedKey = cleanItemName(name);
-          const truckItem = firebaseItems.find(v => v.name.trim() === name || cleanItemName(v.name) === cleanedKey);
-          if (truckItem) {
-            const itemId = truckItem.id; const cap = truckItem.capacity || 1; const itemQty = Number(itm.qty) || 0;
-            const totalPcsSold = isCarton(itm) ? (itemQty * cap) : itemQty;
+          const itemId = getProductIdForItem(itm);
+          if (itemId) {
+            const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
+            const rawQty = Math.abs(Number(itm.qty) || 0);
+            const isCartonItem = isCarton(itm);
+            const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
+
+            const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true || Number(itm.qty) < 0;
+
             if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
-            memorySalesCache[itemId] += itm.isReturn ? -totalPcsSold : totalPcsSold;
+            memorySalesCache[itemId] += isReturn ? -totalPcsSold : totalPcsSold;
           }
         });
       });
