@@ -178,7 +178,6 @@
         .purchase-item:last-child { margin-bottom: 0; }
         .badge-buy { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
 
-        /* Modal Styles */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -275,7 +274,6 @@
     </div>
 </div>
 
-<!-- Modal لعرض التفاصيل عند الضغط -->
 <div class="modal-overlay" id="detailsModal">
     <div class="modal-card">
         <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
@@ -435,7 +433,16 @@
                     let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
                     let buyPricePerPcs = 0;
                     if (itemBuy > 0) {
-                        buyPricePerPcs = isCarton ? (itemBuy / itemFactor) : itemBuy;
+                        if (isCarton) {
+                            buyPricePerPcs = itemBuy / itemFactor;
+                        } else {
+                            // فحص أمان للحد من الأخطاء البشرية: إذا أدخل السعر على أنه قطعة وهو أعلى بكثير من سعر القطعة الحالي، يقسم على معامل الكرتونة تلقائياً
+                            if (currentBuyPrice > 0 && itemBuy > (currentBuyPrice * 5)) {
+                                buyPricePerPcs = itemBuy / itemFactor;
+                            } else {
+                                buyPricePerPcs = itemBuy;
+                            }
+                        }
                     } else {
                         buyPricePerPcs = currentBuyPrice;
                     }
