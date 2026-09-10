@@ -341,7 +341,6 @@
             margin-bottom: 14px;
         }
 
-        /* النافذة المنبثقة الشاملة لكشف الحساب - متجاوبة تماماً مع شاشات الموبايل */
         .statement-modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -387,7 +386,6 @@
             gap: 8px;
         }
 
-        /* كروت الحركات المخصصة للموبايل داخل كشف الحساب */
         .statement-card-item {
             background: white;
             border: 1px solid var(--border);
@@ -598,7 +596,6 @@
 
 <div id="thermalPrintSection"></div>
 
-<!-- النافذة المنبثقة التفصيلية لكشف الحساب المصممة خصيصاً للموبايل -->
 <div id="customerStatementModal" class="statement-modal-overlay">
     <div class="statement-modal-box">
         <div class="statement-modal-header">
@@ -917,7 +914,7 @@
                     walletPaid: calculatedWallet,
                     items: data.items || [],
                     total: total,
-                    debit: remaining > 0 ? remaining : 0,
+                    debit: remaining, // الاحتفاظ بالقيم السالبة في حالة الدفع الزائد لتصفية الرصيد
                     credit: 0
                 });
             });
@@ -1010,7 +1007,7 @@
                             ` : '<div class="text-muted text-center py-1" style="font-size:0.72rem;">بلا أصناف تفصيلية</div>'}
 
                             <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
-                                <span class="text-danger fw-bold">الأجل المضاف: <span class="num">${ev.debit > 0 ? ev.debit.toFixed(2) : '0.00'}</span></span>
+                                <span class="${ev.debit >= 0 ? 'text-danger' : 'text-success'} fw-bold">الأجل المضاف: <span class="num">${ev.debit.toFixed(2)}</span></span>
                                 <span class="fw-bold">الرصيد بعدها: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${running.toFixed(2)}</span></span>
                             </div>
                         </div>`;
@@ -1167,19 +1164,25 @@
                         targetInvoice.lastPendingInvoiceId = lastInvoiceId;
                     }
 
-                    window.invoiceBalanceCache[inv.id] = {
-                        previousBalance: runningBalance,
-                        lastPendingInvoiceDate: lastInvoiceDate,
-                        lastPendingInvoiceId: lastInvoiceId
-                    };
-
                     const total = Number(inv.total) || 0;
                     const paid = Number(inv.calculatedCash + inv.calculatedWallet) || Number(inv.paid) || 0;
                     const remaining = total - paid;
 
+                    runningBalance += remaining;
+
+                    if (targetInvoice) {
+                        targetInvoice.netAccountTotal = runningBalance;
+                    }
+
+                    window.invoiceBalanceCache[inv.id] = {
+                        previousBalance: targetInvoice ? targetInvoice.previousBalance : runningBalance - remaining,
+                        netAccountTotal: runningBalance,
+                        lastPendingInvoiceDate: lastInvoiceDate,
+                        lastPendingInvoiceId: lastInvoiceId
+                    };
+
                     lastInvoiceDate = parseInvoiceDate(inv);
                     lastInvoiceId = inv.id;
-                    runningBalance += remaining;
                 } else if (event.type === 'transaction') {
                     const tr = event.data;
                     const amt = Number(tr.amount || tr.total || 0);
@@ -1234,7 +1237,7 @@
 
             const remainingAmt = Number(inv.remaining || 0);
             const prevBalAmt = Number(inv.previousBalance || 0);
-            const netAccountTotal = prevBalAmt + remainingAmt;
+            const netAccountTotal = inv.netAccountTotal !== undefined ? inv.netAccountTotal : (prevBalAmt + remainingAmt);
 
             let prevBalanceLabel = "حساب سابق";
             if (inv.lastPendingInvoiceDate) {
@@ -1262,7 +1265,7 @@
             }
 
             let prevBalanceHtml = '';
-            if (prevBalAmt > 0) {
+            if (prevBalAmt !== 0) {
                 prevBalanceHtml = `
                     <div class="fin-box text-secondary" style="grid-column: span 2;">
                         <span class="prev-balance-link" role="button" tabindex="0" onclick="openPreviousInvoiceImage('${inv.lastPendingInvoiceId || ''}', '${inv.customerId || ''}')" onkeydown="if(event.key==='Enter'){openPreviousInvoiceImage('${inv.lastPendingInvoiceId || ''}', '${inv.customerId || ''}')}" title="اضغط لفتح صورة الفاتورة السابقة">
@@ -1544,11 +1547,8 @@
         let invoiceTotal = Number(inv.total || 0);
         
         let remainingAmt = Number(inv.remaining ?? (invoiceTotal - totalPaid)) || 0;
-        if (remainingAmt < 0) remainingAmt = 0;
-
         let prevBalAmt = Number(inv.previousBalance || 0);
-
-        let netAccountTotal = prevBalAmt + remainingAmt;
+        let netAccountTotal = inv.netAccountTotal !== undefined ? inv.netAccountTotal : (prevBalAmt + remainingAmt);
 
         let payMethodText = inv.paymentMethod || "آجل";
         if (cashAmount > 0 && walletAmount > 0) payMethodText = "سداد كاش ومحفظة";
@@ -1591,9 +1591,9 @@
                     
                     ${thermalPaymentRows}
                     ${totalPaid > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold;"><span>- إجمالي السداد:</span><b>${totalPaid.toFixed(2)}</b></div>` : ''}
-                    ${remainingAmt > 0 ? `<div style="display:flex; justify-content:space-between; color:#dc2626;"><span>- الأجل (المتبقي):</span><b>${remainingAmt.toFixed(2)}</b></div>` : ''}
+                    ${remainingAmt !== 0 ? `<div style="display:flex; justify-content:space-between; color:${remainingAmt > 0 ? '#dc2626' : '#16a34a'};"><span>- الأجل (المتبقي):</span><b>${remainingAmt.toFixed(2)}</b></div>` : ''}
 
-                    ${prevBalAmt > 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
+                    ${prevBalAmt !== 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
                     
                     <div style="display:flex; justify-content:space-between; font-weight:800; font-size:12.5px; border-top:1px solid #000; padding-top:3px; margin-top:2px;"><span>صافي الحساب النهائي:</span><b>${netAccountTotal.toFixed(2)}</b></div>
                 </div>
