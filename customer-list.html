@@ -14,6 +14,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <!-- Font Awesome 6 -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<!-- SheetJS للتصدير -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
 <style>
   :root{
     /* الهوية اللونية الفخمة المدمجة: ألوان علم المانيا وإيطاليا المحاسبية */
@@ -21,6 +24,7 @@
     --germany-gold: #FFCC00;        /* الذهبي الألماني اللامع للتنبيهات وعناصر التمييز */
     --italy-green: #178a4a;         /* الأخضر الإيطالي الزمردي لـ "له" */
     --germany-red: #FF0000;         /* الأحمر الصريح لـ "عليه" والنواقص */
+    --purple: #5b21b6;
     
     --ink: #000000;
     --paper: #f4f6f8;
@@ -77,7 +81,7 @@
     overflow:hidden;
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); 
-    border-bottom: 4px solid var(--germany-red); /* دمج الشريط الأحمر الإيطالي/الألماني أسفل الهيدر */
+    border-bottom: 4px solid var(--germany-red);
   }
   header::after{
     content:""; position:absolute; inset:0;
@@ -216,15 +220,15 @@
   .tag.credit{ background:var(--credit-bg); color:var(--credit); }
   .tag.zero{ background:#e2e8f0; color:var(--mute); }
 
-  /* شريط أزرار التحكم الفخم بالموبايل */
+  /* شريط أزرار التحكم بالموبايل */
   .action-container{ 
-    display:flex; 
+    display:grid; 
+    grid-template-columns: repeat(2, 1fr);
     gap:8px; 
     border-top: 1px solid var(--line);
     padding-top: 12px;
   }
   .action-btn{
-    flex: 1;
     height: 38px; 
     border-radius: var(--radius-sm); 
     display:flex; 
@@ -232,20 +236,87 @@
     justify-content:center;
     gap: 6px;
     text-decoration:none !important; 
-    font-size:.8rem; 
+    font-size:.75rem; 
     font-weight: 800;
     transition:.15s; 
     border:1px solid transparent;
+    cursor: pointer;
   }
   .action-btn:active{ transform:scale(0.95); }
   
-  /* جعل أزرار الإجراءات بالأسود والأخضر المتناسق */
+  .btn-log{ background:#ffffff; color:var(--germany-black); border-color:var(--germany-black); }
   .btn-info{ background:var(--germany-black); color:#ffffff; border-color:var(--germany-black); }
   .btn-pay{ background:var(--credit); color:#ffffff; border-color:var(--credit); }
   .btn-del{ background:var(--owed-bg); color:var(--owed); border-color:rgba(255, 0, 0, 0.15); }
 
   .empty-state{ text-align:center; padding:60px 20px; color:var(--mute); }
   .empty-state i{ font-size:2.5rem; opacity:.4; margin-bottom:12px; display:block; color: var(--germany-gold); }
+
+  /* النافذة المنبثقة التفصيلية لكشف الحساب المصممة للموبايل */
+  .statement-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10500;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      backdrop-filter: blur(5px);
+  }
+  .statement-modal-box {
+      background: #ffffff;
+      width: 100%;
+      max-width: 500px;
+      height: 90vh;
+      border-radius: 24px 24px 0 0;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 -10px 40px rgba(0,0,0,0.3);
+      font-family: 'Cairo';
+      overflow: hidden;
+  }
+  .statement-modal-header {
+      padding: 14px 18px;
+      background: var(--germany-black);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid var(--germany-red);
+  }
+  .statement-modal-body {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+      background: #f8fafc;
+  }
+  .statement-modal-footer {
+      padding: 12px 16px;
+      background: white;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+  }
+
+  .statement-card-item {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 10px;
+      box-shadow: var(--card-shadow);
+  }
+  .statement-card-item.invoice-card { border-right: 4px solid var(--germany-black); }
+  .statement-card-item.voucher-card { border-right: 4px solid var(--purple); background: #fcfbfe; }
+  
+  .statement-item-table {
+      width: 100%;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      border-collapse: collapse;
+  }
+  .statement-item-table th { background: #f1f5f9; padding: 4px 6px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center; }
+  .statement-item-table td { padding: 4px 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -304,6 +375,22 @@
   </div>
 </div>
 
+<!-- النافذة المنبثقة التفصيلية لكشف حساب السجل -->
+<div id="customerStatementModal" class="statement-modal-overlay">
+    <div class="statement-modal-box">
+        <div class="statement-modal-header">
+            <h6 class="fw-bold mb-0" id="customerStatementTitle" style="font-size: 0.95rem; margin:0;">
+                <i class="fas fa-file-invoice-dollar me-1" style="color:var(--germany-gold);"></i> كشف حساب السجل
+            </h6>
+            <button class="icon-link" onclick="closeCustomerStatement()" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="statement-modal-body" id="customerStatementBody"></div>
+        <div class="statement-modal-footer">
+            <button class="action-btn btn-info" onclick="exportCustomerStatementExcel()" style="width:100%;"><i class="fas fa-file-excel me-1"></i> تصدير إكسيل Excel</button>
+        </div>
+    </div>
+</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -320,18 +407,84 @@
 
   const app = initializeApp(firebaseConfig);
   let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+  try {
+      db = initializeFirestore(app, {
+          localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+      });
+  } catch (e) {
+      db = getFirestore(app);
+  }
 
   let allCustomers = [];
+  let customersData = {};
+  let customersNameMap = {};
   let currentFilter = 'all';
 
   const fmt = (n) => Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function normalizeName(str) {
+      return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+  }
+
+  function convertToEnglishNumbers(str) {
+      if (!str) return "";
+      const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+      let res = str.toString();
+      for (let i = 0; i < 10; i++) { res = res.replace(arabicNumbers[i], i); }
+      return res;
+  }
+
+  function parseArabicDateToMs(dateStr) {
+      if (!dateStr) return 0;
+      try {
+          let cleanStr = convertToEnglishNumbers(String(dateStr)).replace(/ص/g, 'AM').replace(/م/g, 'PM');
+          const parsed = Date.parse(cleanStr);
+          if (!isNaN(parsed)) return parsed;
+          const parts = cleanStr.match(/(\d+)/g);
+          if (parts && parts.length >= 3) {
+              let year = parseInt(parts[0]), month = parseInt(parts[1]) - 1, day = parseInt(parts[2]);
+              if (year < 1000) { day = parseInt(parts[0]); month = parseInt(parts[1]) - 1; year = parseInt(parts[2]); }
+              let hour = parts[3] ? parseInt(parts[3]) : 0, minute = parts[4] ? parseInt(parts[4]) : 0;
+              if (cleanStr.includes('PM') && hour < 12) hour += 12;
+              if (cleanStr.includes('AM') && hour === 12) hour = 0;
+              return new Date(year, month, day, hour, minute).getTime();
+          }
+      } catch (e) { } return 0;
+  }
+
+  function cleanDateString(dateStr) {
+      if (!dateStr) return "";
+      dateStr = convertToEnglishNumbers(dateStr);
+      const match = dateStr.match(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/) || dateStr.match(/\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/);
+      return match ? match[0] : dateStr;
+  }
+
+  function parseInvoiceDate(inv) {
+      let dateStr = "";
+      if (inv.date) { dateStr = cleanDateString(inv.date); }
+      else if (inv.timestamp?.seconds) { return new Date(inv.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
+      if (!dateStr) return "";
+      dateStr = convertToEnglishNumbers(dateStr);
+      let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+      if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+      m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+      if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      return dateStr;
+  }
+
+  function parseVoucherDate(tr) {
+      if (!tr) return "";
+      if (tr.date) {
+          let dateStr = convertToEnglishNumbers(tr.date);
+          let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+          if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+          m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+          if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+          if (dateStr) return dateStr;
+      }
+      if (tr.timestamp?.seconds) { return new Date(tr.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
+      return "";
+  }
 
   function parseSignedNumber(val) {
     if (val === null || val === undefined || val === '') return 0;
@@ -383,10 +536,17 @@
       const q = query(collection(db, "customers"), orderBy("name"));
       const [custSnap, debtMap] = await Promise.all([getDocs(q), loadAllLedgerData()]);
 
+      customersData = {};
+      customersNameMap = {};
+
       allCustomers = custSnap.docs.map(d => {
         const data = d.data();
         const initial = parseSignedNumber(data.initialBalance);
         const ledgerEffect = debtMap[d.id] || 0;
+        
+        customersData[d.id] = { id: d.id, name: data.name, initialBalance: initial };
+        if (data.name) customersNameMap[normalizeName(data.name)] = d.id;
+
         return {
           id: d.id,
           ...data,
@@ -441,6 +601,7 @@
     container.innerHTML = list.map(cust => {
       const balance = cust.realBalance;
       const meta = balanceMeta(balance);
+      const safeName = (cust.name || '').replace(/'/g, "\\'");
       return `
         <div id="card-${cust.id}" class="customer-card ${meta.cls}">
           <div class="row-main">
@@ -461,13 +622,250 @@
           </div>
           
           <div class="action-container">
+            <button class="action-btn btn-log" onclick="openCustomerStatement('${cust.id}', '${safeName}')"><i class="fas fa-history"></i> كشف السجل</button>
             <a href="customer-details.html?id=${cust.id}" class="action-btn btn-info"><i class="fas fa-user-tag"></i> كشف الحساب</a>
             <a href="customer-payment.html?id=${cust.id}" class="action-btn btn-pay"><i class="fas fa-hand-holding-dollar"></i> دفعة</a>
-            <button class="action-btn btn-del" onclick="deleteCustomer('${cust.id}', '${(cust.name || '').replace(/'/g, "\\'")}')"><i class="fas fa-trash-alt"></i> حذف</button>
+            <button class="action-btn btn-del" onclick="deleteCustomer('${cust.id}', '${safeName}')"><i class="fas fa-trash-alt"></i> حذف</button>
           </div>
         </div>
       `;
     }).join('');
+  };
+
+  /* دالة فتح كشف حساب السجل المتطابقة تماماً مع سجل المبيعات */
+  window.currentStatementRows = [];
+  window.currentStatementCustomerName = '';
+
+  window.closeCustomerStatement = () => {
+      document.getElementById('customerStatementModal').style.display = 'none';
+  };
+
+  window.openCustomerStatement = async (customerId, customerName) => {
+      const isCashCustomer = !customerId && (!customerName || customerName.trim() === '' || customerName.trim() === 'عميل نقدى');
+      if (isCashCustomer) {
+          alert("هذه فاتورة عميل نقدي عابر، ولا يوجد له كشف حساب متراكم.");
+          return;
+      }
+
+      const modal = document.getElementById('customerStatementModal');
+      const body = document.getElementById('customerStatementBody');
+      const titleEl = document.getElementById('customerStatementTitle');
+
+      titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-1" style="color:var(--germany-gold);"></i> كشف حساب السجل: ${customerName || 'عميل'}`;
+      body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري جلب كافة الأصناف والحركات...</p></div>`;
+      modal.style.display = 'flex';
+
+      try {
+          const [invSnap, transSnap] = await Promise.all([
+              getDocs(collection(db, "invoices")),
+              getDocs(collection(db, "transactions"))
+          ]);
+
+          const targetKey = customerId || ("NAME_" + normalizeName(customerName));
+          let events = [];
+
+          invSnap.forEach(d => {
+              const data = d.data();
+              if (data.isDeleted) return;
+              let key = data.customerId;
+              if (!key && data.customerName) key = customersNameMap[normalizeName(data.customerName)];
+              if (!key && data.customerName) key = "NAME_" + normalizeName(data.customerName);
+              if (!key || key !== targetKey) return;
+
+              const calculatedCash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+              const calculatedWallet = Number(data.walletAmount ?? data.walletPaid) || 0;
+              const total = Number(data.total) || 0;
+              const paid = calculatedCash + calculatedWallet;
+              const remaining = total - paid;
+              const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseArabicDateToMs(data.time || data.date);
+
+              events.push({
+                  type: 'invoice',
+                  timeMs,
+                  date: parseInvoiceDate(data),
+                  paymentMethod: data.paymentMethod || 'غير محدد',
+                  cashPaid: calculatedCash,
+                  walletPaid: calculatedWallet,
+                  items: data.items || [],
+                  total: total,
+                  debit: remaining,
+                  credit: 0
+              });
+          });
+
+          transSnap.forEach(d => {
+              const tr = d.data();
+              if (tr.isDeleted) return;
+              const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
+              if (isInvoicePayment) return;
+
+              let key = tr.partyId || tr.customerId;
+              let partyName = tr.customerName || tr.partyName;
+              if (!key && partyName) key = customersNameMap[normalizeName(partyName)];
+              if (!key && partyName) key = "NAME_" + normalizeName(partyName);
+              if (!key || key !== targetKey) return;
+
+              const amt = Math.abs(Number(tr.amount || tr.total || 0));
+              const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
+
+              events.push({
+                  type: 'voucher',
+                  timeMs,
+                  date: parseVoucherDate(tr),
+                  voucherType: tr.type,
+                  method: tr.method || 'نقدى',
+                  note: tr.note || '',
+                  amt: amt,
+                  debit: tr.type === 'صرف' ? amt : 0,
+                  credit: tr.type === 'قبض' ? amt : 0
+              });
+          });
+
+          // الفرز التراكمي للرصيد
+          events.sort((a, b) => a.timeMs - b.timeMs);
+
+          let baseBalance = 0;
+          if (customerId && customersData[customerId]) baseBalance = Number(customersData[customerId].initialBalance || 0);
+
+          let running = baseBalance;
+          window.currentStatementRows = [];
+          window.currentStatementCustomerName = customerName || 'عميل';
+
+          let renderedCards = [];
+
+          if (baseBalance !== 0) {
+              renderedCards.push({
+                  timeMs: 0,
+                  html: `
+                  <div class="statement-card-item bg-light">
+                      <div class="d-flex justify-content-between align-items-center">
+                          <span class="fw-bold text-secondary">رصيد افتتاحي سابق</span>
+                          <span class="num fw-bold text-dark">${baseBalance.toFixed(2)}</span>
+                      </div>
+                  </div>`
+              });
+              window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', items: '-', payDetails: '-', debit: '', credit: '', balance: baseBalance });
+          }
+
+          events.forEach(ev => {
+              running += ev.debit - ev.credit;
+
+              const remainingLabel = ev.debit >= 0 ? "المتبقي عليه من فاتورة اليوم" : "المتبقي له من فاتورة اليوم";
+              const balanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
+
+              if (ev.type === 'invoice') {
+                  let itemsRowsHtml = (ev.items || []).map(i => `
+                      <tr>
+                          <td style="text-align:right;">${i.name}</td>
+                          <td>${i.qty}</td>
+                          <td>${(Number(i.price)||0).toFixed(1)}</td>
+                          <td class="num">${((Number(i.qty)||0)*(Number(i.price)||0)).toFixed(1)}</td>
+                      </tr>`).join('');
+
+                  let payInfoHtml = [];
+                  if (ev.cashPaid > 0) payInfoHtml.push(`كاش: <b>${ev.cashPaid.toFixed(2)}</b>`);
+                  if (ev.walletPaid > 0) payInfoHtml.push(`محفظة: <b>${ev.walletPaid.toFixed(2)}</b>`);
+
+                  renderedCards.push({
+                      timeMs: ev.timeMs,
+                      html: `
+                      <div class="statement-card-item invoice-card">
+                          <div class="d-flex justify-content-between align-items-center mb-1">
+                              <span class="badge bg-dark" style="font-size:0.75rem; color:white; padding:2px 8px; border-radius:6px;"><i class="fas fa-file-invoice me-1"></i> فاتورة مبيعات</span>
+                              <span class="text-muted fw-bold" style="font-size:0.72rem;"><i class="far fa-clock"></i> ${ev.date || '-'}</span>
+                          </div>
+                          
+                          <div class="d-flex justify-content-between align-items-center my-2 p-2 bg-light rounded" style="font-size:0.8rem;">
+                              <span>إجمالي الفاتورة: <b class="num">${ev.total.toFixed(2)}</b></span>
+                              <span>طريقة السداد: <b class="text-primary">${ev.paymentMethod}</b></span>
+                          </div>
+
+                          ${payInfoHtml.length > 0 ? `<div class="text-muted mb-2" style="font-size:0.73rem;">مدفوعات الفاتورة: ${payInfoHtml.join(' | ')}</div>` : ''}
+
+                          ${ev.items && ev.items.length > 0 ? `
+                              <table class="statement-item-table">
+                                  <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+                                  <tbody>${itemsRowsHtml}</tbody>
+                              </table>
+                          ` : '<div class="text-muted text-center py-1" style="font-size:0.72rem;">بلا أصناف تفصيلية</div>'}
+
+                          <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
+                              <span class="${ev.debit >= 0 ? 'text-danger' : 'text-success'} fw-bold">${remainingLabel}: <span class="num">${Math.abs(ev.debit).toFixed(2)}</span></span>
+                              <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${Math.abs(running).toFixed(2)}</span></span>
+                          </div>
+                      </div>`
+                  });
+
+              } else {
+                  renderedCards.push({
+                      timeMs: ev.timeMs,
+                      html: `
+                      <div class="statement-card-item voucher-card">
+                          <div class="d-flex justify-content-between align-items-center mb-1">
+                              <span class="badge" style="background:var(--purple); color:white; font-size:0.75rem; padding:2px 8px; border-radius:6px;"><i class="fas fa-hand-holding-usd me-1"></i> ${ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض'} (${ev.method})</span>
+                              <span class="text-muted fw-bold" style="font-size:0.72rem;"><i class="far fa-clock"></i> ${ev.date || '-'}</span>
+                          </div>
+                          ${ev.note ? `<div class="text-dark my-1 fw-bold" style="font-size:0.78rem;"><i class="fas fa-comment-alt me-1 text-muted"></i> ${ev.note}</div>` : ''}
+                          
+                          <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
+                              <span class="text-success fw-bold">المبلغ المستلم: <span class="num">${ev.credit.toFixed(2)}</span></span>
+                              <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${Math.abs(running).toFixed(2)}</span></span>
+                          </div>
+                      </div>`
+                  });
+              }
+
+              window.currentStatementRows.push({ 
+                  date: ev.date, 
+                  desc: ev.type === 'invoice' ? `فاتورة (${ev.total})` : `سند قبض (${ev.amt})`, 
+                  items: ev.type === 'invoice' ? (ev.items || []).map(i => `${i.name} (${i.qty}×${i.price})`).join(' ، ') : '-',
+                  payDetails: ev.type === 'invoice' ? `${ev.paymentMethod} (كاش: ${ev.cashPaid} | محفظة: ${ev.walletPaid})` : ev.method,
+                  debit: ev.debit || '', 
+                  credit: ev.credit || '', 
+                  balance: running 
+              });
+          });
+
+          if (events.length === 0 && baseBalance === 0) {
+              body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-folder-open fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات تسديد أو فواتير لهذا العميل.</p></div>`;
+              return;
+          }
+
+          // العرض تنازلياً من الأحدث للأقدم
+          renderedCards.sort((a, b) => b.timeMs - a.timeMs);
+          let cardsHtml = renderedCards.map(c => c.html).join('');
+
+          const globalBalanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
+
+          body.innerHTML = `
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-white border" style="font-size:0.8rem; font-weight:800;">
+                  <span>إجمالي الحركات: ${events.length}</span>
+                  <span>${globalBalanceLabel}: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1rem;">${Math.abs(running).toFixed(2)}</span></span>
+              </div>
+              ${cardsHtml}`;
+
+      } catch (err) {
+          console.error("خطأ في تجهيز كشف الحساب:", err);
+          body.innerHTML = `<div class="alert alert-danger text-center p-3 my-2" style="border-radius:14px; font-weight:700;">تعذر تحميل كشف الحساب: ${err.message}</div>`;
+      }
+  };
+
+  window.exportCustomerStatementExcel = () => {
+      if (!window.currentStatementRows || window.currentStatementRows.length === 0) {
+          alert("لا توجد بيانات لتصديرها بعد.");
+          return;
+      }
+      try {
+          const wsData = [["التاريخ", "الحركة", "الأصناف", "طريقة السداد", "مستحق", "مسدد", "الرصيد"]];
+          window.currentStatementRows.forEach(r => wsData.push([r.date, r.desc, r.items, r.payDetails, r.debit, r.credit, r.balance]));
+          const ws = XLSX.utils.aoa_to_sheet(wsData);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "كشف حساب تفصيلي");
+          XLSX.writeFile(wb, `كشف_حساب_السجل_${window.currentStatementCustomerName}.xlsx`);
+      } catch (err) {
+          console.error("خطأ في تصدير كشف الحساب:", err);
+          alert("تعذر تصدير الملف: " + err.message);
+      }
   };
 
   function applyFilters() {
