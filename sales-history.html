@@ -1390,12 +1390,42 @@
 
     window.printThermalInvoice = (id) => { const inv = allInvoices.find(i => i.id === id); if (!inv) return; document.getElementById('thermalPrintSection').innerHTML = generateThermalInvoiceHtml(inv); window.print(); };
     window.shareThermalInvoice = async (id) => {
-        const inv = allInvoices.find(i => i.id === id); if (!inv) return;
+        const inv = allInvoices.find(i => i.id === id);
+        if (!inv) return;
+
+        let blob;
         try {
-            const blob = await getInvoiceImageBlob(inv); const file = new File([blob], `فاتورة_${inv.customerName || 'نقدى'}.png`, { type: 'image/png' });
-            if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: `فاتورة ${inv.customerName || 'نقدى'}` }); } 
-            else { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `فاتورة_${inv.customerName || 'نقدى'}.png`; a.click(); URL.revokeObjectURL(url); }
-        } catch (err) { alert("حدث خطأ أثناء مشاركة الفاتورة."); }
+            blob = await getInvoiceImageBlob(inv);
+        } catch (err) {
+            console.error("خطأ في توليد صورة الفاتورة:", err);
+            window.showCustomUi({ title: "خطأ", message: "تعذر إنشاء صورة الفاتورة: " + err.message, icon: "danger" });
+            return;
+        }
+
+        const fileName = `فاتورة_${inv.customerName || 'نقدى'}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        try {
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: `فاتورة ${inv.customerName || 'نقدى'}` });
+                return;
+            }
+        } catch (err) {
+            // المستخدم ألغى نافذة المشاركة بنفسه - هذا ليس خطأ ولا داعي لإظهار أي رسالة
+            if (err.name === 'AbortError') return;
+            console.warn("تعذرت المشاركة عبر نظام التشغيل، سيتم تحميل الصورة مباشرة كبديل:", err);
+        }
+
+        // بديل: تحميل الصورة مباشرة لو المشاركة غير مدعومة أو فشلت لسبب غير الإلغاء
+        try {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = fileName; a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("خطأ في تحميل صورة الفاتورة:", err);
+            window.showCustomUi({ title: "خطأ", message: "تعذرت مشاركة أو تحميل الفاتورة: " + err.message, icon: "danger" });
+        }
     };
     window.filterByStat = (type, cardElement) => { document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter')); cardElement.classList.add('active-filter'); currentFilterType = type; applyCurrentView(); };
     function executeFilterLogic(type, dateStr, invoicesList = allInvoices) {
