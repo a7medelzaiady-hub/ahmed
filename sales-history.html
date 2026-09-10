@@ -277,6 +277,12 @@
             text-decoration: underline;
             cursor: pointer;
             transition: color 0.2s;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+            display: inline-block;
         }
         .prev-balance-link:hover {
             color: #000000;
@@ -580,6 +586,7 @@
     let rawTransactionsList = [];
     let loadedScope = null;
     window.globalExpectedTodayCash = 0;
+    window.invoiceBalanceCache = {};
 
     function checkAdminPermissions() {
         try {
@@ -727,7 +734,18 @@
             if (lastInvoiceId) {
                 const invDoc = await db.collection("invoices").doc(lastInvoiceId).get();
                 if (invDoc.exists && !invDoc.data().isDeleted) {
-                    const invData = { id: invDoc.id, ...invDoc.data(), calculatedCash: Number(invDoc.data().cashAmount ?? invDoc.data().cashPaid ?? invDoc.data().paid) || 0, calculatedWallet: Number(invDoc.data().walletAmount ?? invDoc.data().walletPaid) || 0 };
+                    const docData = invDoc.data();
+                    // استرجاع رصيد الحساب السابق المحسوب مسبقاً لهذه الفاتورة (إن وُجد) حتى تظهر السلسلة كاملة على الصورة
+                    const cachedBalance = window.invoiceBalanceCache[invDoc.id] || {};
+                    const invData = {
+                        id: invDoc.id,
+                        ...docData,
+                        calculatedCash: Number(docData.cashAmount ?? docData.cashPaid ?? docData.paid) || 0,
+                        calculatedWallet: Number(docData.walletAmount ?? docData.walletPaid) || 0,
+                        previousBalance: docData.previousBalance ?? cachedBalance.previousBalance ?? 0,
+                        lastPendingInvoiceDate: docData.lastPendingInvoiceDate ?? cachedBalance.lastPendingInvoiceDate ?? null,
+                        lastPendingInvoiceId: docData.lastPendingInvoiceId ?? cachedBalance.lastPendingInvoiceId ?? null
+                    };
                     const blob = await getInvoiceImageBlob(invData);
                     const url = URL.createObjectURL(blob);
                     window.open(url, "_blank");
@@ -847,6 +865,12 @@
                         targetInvoice.lastPendingInvoiceId = lastInvoiceId;
                     }
 
+                    window.invoiceBalanceCache[inv.id] = {
+                        previousBalance: runningBalance,
+                        lastPendingInvoiceDate: lastInvoiceDate,
+                        lastPendingInvoiceId: lastInvoiceId
+                    };
+
                     const total = Number(inv.total) || 0;
                     const paid = Number(inv.calculatedCash + inv.calculatedWallet) || Number(inv.paid) || 0;
                     const remaining = total - paid;
@@ -939,7 +963,7 @@
             if (prevBalAmt > 0) {
                 prevBalanceHtml = `
                     <div class="fin-box text-secondary" style="grid-column: span 2;">
-                        <span class="prev-balance-link" onclick="openPreviousInvoiceImage('${inv.lastPendingInvoiceId || ''}', '${inv.customerId || ''}')" title="اضغط لفتح صورة الفاتورة السابقة">
+                        <span class="prev-balance-link" role="button" tabindex="0" onclick="openPreviousInvoiceImage('${inv.lastPendingInvoiceId || ''}', '${inv.customerId || ''}')" onkeydown="if(event.key==='Enter'){openPreviousInvoiceImage('${inv.lastPendingInvoiceId || ''}', '${inv.customerId || ''}')}" title="اضغط لفتح صورة الفاتورة السابقة">
                             <i class="fas fa-image me-1"></i>${prevBalanceLabel}
                         </span>
                         <span class="num">${prevBalAmt.toFixed(2)}</span>
@@ -1205,10 +1229,14 @@
         let totalPaid = cashAmount + walletAmount;
         let invoiceTotal = Number(inv.total || 0);
         
+        // المتبقي من الفاتورة الحالية فقط
         let remainingAmt = Number(inv.remaining ?? (invoiceTotal - totalPaid)) || 0;
         if (remainingAmt < 0) remainingAmt = 0;
 
+        // الحساب السابق التراكمي
         let prevBalAmt = Number(inv.previousBalance || 0);
+
+        // صافي الحساب النهائي المتبقي على العميل كلياً
         let netAccountTotal = prevBalAmt + remainingAmt;
 
         let payMethodText = inv.paymentMethod || "آجل";
@@ -1361,44 +1389,44 @@
     };
 
     window.printThermalInvoice = (id) => { const inv = allInvoices.find(i => i.id === id); if (!inv) return; document.getElementById('thermalPrintSection').innerHTML = generateThermalInvoiceHtml(inv); window.print(); };
-
     window.shareThermalInvoice = async (id) => {
-        const inv = allInvoices.find(i => i.id === id); 
+        const inv = allInvoices.find(i => i.id === id);
         if (!inv) return;
 
+        let blob;
         try {
-            const blob = await getInvoiceImageBlob(inv); 
-            const fileName = `فاتورة_${inv.customerName || 'نقدي'}.png`;
-            const file = new File([blob], fileName, { type: 'image/png' });
+            blob = await getInvoiceImageBlob(inv);
+        } catch (err) {
+            console.error("خطأ في توليد صورة الفاتورة:", err);
+            window.showCustomUi({ title: "خطأ", message: "تعذر إنشاء صورة الفاتورة: " + err.message, icon: "danger" });
+            return;
+        }
 
-            if (navigator.canShare && navigator.canShare({ files: [file] })) { 
-                await navigator.share({ 
-                    files: [file], 
-                    title: `فاتورة ${inv.customerName || 'نقدي'}`,
-                    text: `فاتورة المبيعات الخاصة بـ ${inv.customerName || 'عميل نقدي'}`
-                }); 
-            } else { 
-                const url = URL.createObjectURL(blob); 
-                const a = document.createElement('a'); 
-                a.href = url; 
-                a.download = fileName; 
-                a.click(); 
-                URL.revokeObjectURL(url); 
-            }
-        } catch (err) { 
-            // تجاهل نافذة الخطأ في حالة إلغاء المستخدم للمشاركة فقط
-            if (err.name === 'AbortError' || err.message?.includes('canceled')) {
+        const fileName = `فاتورة_${inv.customerName || 'نقدى'}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        try {
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: `فاتورة ${inv.customerName || 'نقدى'}` });
                 return;
             }
-            console.error("خطأ أثناء المشاركة:", err);
-            window.showCustomUi({
-                title: "تنبيه",
-                message: "تعذر مشاركة صورة الفاتورة عبر هذا المتصفح.",
-                icon: "danger"
-            });
+        } catch (err) {
+            // المستخدم ألغى نافذة المشاركة بنفسه - هذا ليس خطأ ولا داعي لإظهار أي رسالة
+            if (err.name === 'AbortError') return;
+            console.warn("تعذرت المشاركة عبر نظام التشغيل، سيتم تحميل الصورة مباشرة كبديل:", err);
+        }
+
+        // بديل: تحميل الصورة مباشرة لو المشاركة غير مدعومة أو فشلت لسبب غير الإلغاء
+        try {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = fileName; a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("خطأ في تحميل صورة الفاتورة:", err);
+            window.showCustomUi({ title: "خطأ", message: "تعذرت مشاركة أو تحميل الفاتورة: " + err.message, icon: "danger" });
         }
     };
-
     window.filterByStat = (type, cardElement) => { document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter')); cardElement.classList.add('active-filter'); currentFilterType = type; applyCurrentView(); };
     function executeFilterLogic(type, dateStr, invoicesList = allInvoices) {
         let filtered = invoicesList.filter(inv => {
