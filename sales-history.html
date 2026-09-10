@@ -536,6 +536,15 @@
 </div>
 
 <script>
+    // تسجيل الخدمة لأرشفة الصفحة وتفعيل وضع الأوفلاين بسرعة فائقة (Service Worker)
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker Registered Successfully'))
+                .catch(err => console.log('Service Worker Registration Failed: ', err));
+        });
+    }
+
     (function checkLoginGuard() {
         const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
         if (!loggedUser) { window.location.replace("login.html"); }
@@ -552,7 +561,16 @@
     };
 
     firebase.initializeApp(firebaseConfig);
+    
+    // تفعيل التخزين المحلى للفايربيز للعمل الأوفلاين وسرعة الاستجابة الخاطفة
     const db = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+        if (err.code == 'failed-precondition') {
+            console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+        } else if (err.code == 'unimplemented') {
+            console.warn('The current browser does not support all of the features required to enable persistence');
+        }
+    });
 
     let allInvoices = [];
     let customersData = {};
@@ -702,7 +720,7 @@
     };
 
     /**
-     * فتح صورة الفاتورة من الأرشيف بناء على معرف الفاتورة السابقة أو اسمها
+     * فتح صورة/تفاصيل الفاتورة السابقة بذكاء (يبحث أولاً في الفواتير الحية، ثم في أرشيف الصور)
      */
     window.openPreviousInvoiceImage = async (lastInvoiceId, customerId) => {
         if (!lastInvoiceId && !customerId) {
@@ -711,6 +729,19 @@
         }
 
         try {
+            // 1. البحث أولاً في الفواتير الحية في قاعدة البيانات
+            if (lastInvoiceId) {
+                const invDoc = await db.collection("invoices").doc(lastInvoiceId).get();
+                if (invDoc.exists && !invDoc.data().isDeleted) {
+                    const invData = { id: invDoc.id, ...invDoc.data(), calculatedCash: Number(invDoc.data().cashAmount ?? invDoc.data().cashPaid ?? invDoc.data().paid) || 0, calculatedWallet: Number(invDoc.data().walletAmount ?? invDoc.data().walletPaid) || 0 };
+                    const blob = await getInvoiceImageBlob(invData);
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, "_blank");
+                    return;
+                }
+            }
+
+            // 2. إذا لم يجدها في الفواتير الحية، يبحث عنها في أرشيف الصور السحابي
             let query = db.collection("customers_image_archive");
             if (lastInvoiceId) {
                 query = query.where("invoiceId", "==", lastInvoiceId);
@@ -746,8 +777,8 @@
         if (loadedScope !== 'ARCHIVE') {
             try {
                 const [allInvSnap, allTransSnap] = await Promise.all([
-                    db.collection("invoices").get(),
-                    db.collection("transactions").get()
+                    db.collection("invoices").get({ source: 'cache' }).catch(() => db.collection("invoices").get()),
+                    db.collection("transactions").get({ source: 'cache' }).catch(() => db.collection("transactions").get())
                 ]);
 
                 fullInvoicesList = [];
