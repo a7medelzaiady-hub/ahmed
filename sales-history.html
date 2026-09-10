@@ -914,7 +914,7 @@
                     walletPaid: calculatedWallet,
                     items: data.items || [],
                     total: total,
-                    debit: remaining, // الاحتفاظ بالقيم السالبة في حالة الدفع الزائد لتصفية الرصيد
+                    debit: remaining,
                     credit: 0
                 });
             });
@@ -947,6 +947,7 @@
                 });
             });
 
+            // الترتيب من الأقدم للأحدث أولاً لاحتساب الرصيد بشكل متراكم ومظبوط
             events.sort((a, b) => a.timeMs - b.timeMs);
 
             let baseBalance = 0;
@@ -956,21 +957,28 @@
             window.currentStatementRows = [];
             window.currentStatementCustomerName = customerName || 'عميل';
 
-            let cardsHtml = '';
+            let renderedCards = [];
 
             if (baseBalance !== 0) {
-                cardsHtml += `
+                renderedCards.push({
+                    timeMs: 0,
+                    html: `
                     <div class="statement-card-item bg-light">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold text-secondary">رصيد افتتاحي سابق</span>
                             <span class="num fw-bold text-dark">${baseBalance.toFixed(2)}</span>
                         </div>
-                    </div>`;
+                    </div>`
+                });
                 window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', items: '-', payDetails: '-', debit: '', credit: '', balance: baseBalance });
             }
 
             events.forEach(ev => {
                 running += ev.debit - ev.credit;
+
+                // التسمية الديناميكية للأجل المضاف والصافي بحسب حالة الحساب (عليه/له)
+                const remainingLabel = ev.debit >= 0 ? "المتبقي عليه من فاتورة اليوم" : "المتبقي له من فاتورة اليوم";
+                const balanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
 
                 if (ev.type === 'invoice') {
                     let itemsRowsHtml = (ev.items || []).map(i => `
@@ -985,7 +993,9 @@
                     if (ev.cashPaid > 0) payInfoHtml.push(`كاش: <b>${ev.cashPaid.toFixed(2)}</b>`);
                     if (ev.walletPaid > 0) payInfoHtml.push(`محفظة: <b>${ev.walletPaid.toFixed(2)}</b>`);
 
-                    cardsHtml += `
+                    renderedCards.push({
+                        timeMs: ev.timeMs,
+                        html: `
                         <div class="statement-card-item invoice-card">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="badge bg-dark" style="font-size:0.75rem;"><i class="fas fa-file-invoice me-1"></i> فاتورة مبيعات</span>
@@ -1007,13 +1017,16 @@
                             ` : '<div class="text-muted text-center py-1" style="font-size:0.72rem;">بلا أصناف تفصيلية</div>'}
 
                             <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
-                                <span class="${ev.debit >= 0 ? 'text-danger' : 'text-success'} fw-bold">الأجل المضاف: <span class="num">${ev.debit.toFixed(2)}</span></span>
-                                <span class="fw-bold">الرصيد بعدها: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${running.toFixed(2)}</span></span>
+                                <span class="${ev.debit >= 0 ? 'text-danger' : 'text-success'} fw-bold">${remainingLabel}: <span class="num">${Math.abs(ev.debit).toFixed(2)}</span></span>
+                                <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${Math.abs(running).toFixed(2)}</span></span>
                             </div>
-                        </div>`;
+                        </div>`
+                    });
 
                 } else {
-                    cardsHtml += `
+                    renderedCards.push({
+                        timeMs: ev.timeMs,
+                        html: `
                         <div class="statement-card-item voucher-card">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="badge" style="background:var(--purple); color:white; font-size:0.75rem;"><i class="fas fa-hand-holding-usd me-1"></i> ${ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض'} (${ev.method})</span>
@@ -1023,9 +1036,10 @@
                             
                             <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
                                 <span class="text-success fw-bold">المبلغ المستلم: <span class="num">${ev.credit.toFixed(2)}</span></span>
-                                <span class="fw-bold">الرصيد بعدها: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${running.toFixed(2)}</span></span>
+                                <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${Math.abs(running).toFixed(2)}</span></span>
                             </div>
-                        </div>`;
+                        </div>`
+                    });
                 }
 
                 window.currentStatementRows.push({ 
@@ -1044,10 +1058,16 @@
                 return;
             }
 
+            // إعادة الفرز للعرض من الأحدث للأقدم (تنازلياً حسب الوقت)
+            renderedCards.sort((a, b) => b.timeMs - a.timeMs);
+            let cardsHtml = renderedCards.map(c => c.html).join('');
+
+            const globalBalanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
+
             body.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-white border" style="font-size:0.8rem; font-weight:800;">
                     <span>إجمالي الحركات: ${events.length}</span>
-                    <span>الرصيد الحالي المتبقي: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1rem;">${running.toFixed(2)}</span></span>
+                    <span>${globalBalanceLabel}: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1rem;">${Math.abs(running).toFixed(2)}</span></span>
                 </div>
                 ${cardsHtml}`;
 
@@ -1781,7 +1801,7 @@
 
                     const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
                     for (const tr of relatedTrans) {
-                        await db.collection("transactions").doc(tr.id).update({
+                        await db.collection("transactions").doc(tr.id),update({
                             isDeleted: true,
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
