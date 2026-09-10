@@ -795,7 +795,6 @@
                 const invDoc = await db.collection("invoices").doc(lastInvoiceId).get();
                 if (invDoc.exists && !invDoc.data().isDeleted) {
                     const docData = invDoc.data();
-                    // استرجاع رصيد الحساب السابق المحسوب مسبقاً لهذه الفاتورة (إن وُجد) حتى تظهر السلسلة كاملة على الصورة
                     const cachedBalance = window.invoiceBalanceCache[invDoc.id] || {};
                     const invData = {
                         id: invDoc.id,
@@ -1176,6 +1175,9 @@
                     </div>`;
             }
 
+            const safeCustomerName = (inv.customerName || 'عميل نقدى').replace(/'/g, "\\'");
+            const safeCustomerId = inv.customerId || '';
+
             return `
                 <div class="invoice-item ${!originalDate ? 'no-date' : ''}" style="border-right-color: ${inv.paymentMethod === 'آجل' ? 'var(--germany-red)' : 'var(--germany-black)'}">
                     <div class="d-flex justify-content-between align-items-start">
@@ -1203,7 +1205,9 @@
                         </div>
                     </div>
                     <div class="invoice-actions-group">
-                        <button class="btn btn-outline-dark" data-customer-id="${inv.customerId || ''}" data-customer-name="${escAttr(inv.customerName || 'عميل نقدى')}" onclick="openCustomerStatement(this.dataset.customerId, this.dataset.customerName)" title="كشف حساب العميل"><i class="fas fa-file-invoice-dollar"></i></button>
+                        <button class="btn btn-outline-dark" onclick="openCustomerStatement('${safeCustomerId}', '${safeCustomerName}')" title="كشف حساب العميل">
+                            <i class="fas fa-file-invoice-dollar"></i> كشف حساب
+                        </button>
                         <button class="btn btn-outline-dark" onclick="toggleDetails('${inv.id}')" title="عرض الأصناف"><i class="fas fa-eye"></i></button>
                         ${viewModificationsBtn}
                         <button class="btn btn-outline-dark" onclick="window.printThermalInvoice('${inv.id}')" title="طباعة حرارية 80"><i class="fas fa-print"></i></button>
@@ -1222,7 +1226,9 @@
                 </div>`;
         }).join('');
 
-        const vouchersHtml = vouchers.map(v => `
+        const vouchersHtml = vouchers.map(v => {
+            const safeVoucherName = (v.customerName || 'عميل').replace(/'/g, "\\'");
+            return `
             <div class="invoice-item voucher-item">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
@@ -1233,12 +1239,16 @@
                         </div>
                         ${v.note ? `<div class="text-muted mt-2" style="font-size:0.78rem;"><i class="fas fa-sticky-note me-1"></i> ${v.note}</div>` : ''}
                     </div>
+                    <button class="btn btn-sm btn-outline-dark fw-bold" onclick="openCustomerStatement('', '${safeVoucherName}')" title="كشف حساب العميل">
+                        <i class="fas fa-file-invoice-dollar"></i> كشف حساب
+                    </button>
                 </div>
                 <div class="financial-grid">
                     ${v.cashAmount > 0 ? `<div class="fin-box text-dark">نقدى مستلم <span class="num">${v.cashAmount.toFixed(2)}</span></div>` : ''}
                     ${v.walletAmount > 0 ? `<div class="fin-box text-primary">محفظه مستلمة <span class="num">${v.walletAmount.toFixed(2)}</span></div>` : ''}
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
         let dividerHtml = (vouchers.length > 0 && invoices.length > 0) ? `<div class="vouchers-divider"><i class="fas fa-hand-holding-usd"></i> سندات القبض (${vouchers.length})</div>` : '';
         container.innerHTML = invoicesHtml + dividerHtml + vouchersHtml;
@@ -1436,14 +1446,11 @@
         let totalPaid = cashAmount + walletAmount;
         let invoiceTotal = Number(inv.total || 0);
         
-        // المتبقي من الفاتورة الحالية فقط
         let remainingAmt = Number(inv.remaining ?? (invoiceTotal - totalPaid)) || 0;
         if (remainingAmt < 0) remainingAmt = 0;
 
-        // الحساب السابق التراكمي
         let prevBalAmt = Number(inv.previousBalance || 0);
 
-        // صافي الحساب النهائي المتبقي على العميل كلياً
         let netAccountTotal = prevBalAmt + remainingAmt;
 
         let payMethodText = inv.paymentMethod || "آجل";
@@ -1618,12 +1625,10 @@
                 return;
             }
         } catch (err) {
-            // المستخدم ألغى نافذة المشاركة بنفسه - هذا ليس خطأ ولا داعي لإظهار أي رسالة
             if (err.name === 'AbortError') return;
             console.warn("تعذرت المشاركة عبر نظام التشغيل، سيتم تحميل الصورة مباشرة كبديل:", err);
         }
 
-        // بديل: تحميل الصورة مباشرة لو المشاركة غير مدعومة أو فشلت لسبب غير الإلغاء
         try {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
