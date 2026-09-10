@@ -341,22 +341,72 @@
             margin-bottom: 14px;
         }
 
-        /* تنسيقات قسم كشف الحساب المدمج داخل الصفحة */
-        .statement-section-card {
-            background: var(--white);
-            border: 2px solid var(--germany-black);
-            border-radius: var(--card-radius);
-            padding: 18px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-md);
+        /* النافذة المنبثقة الشاملة لكشف الحساب - متجاوبة تماماً مع شاشات الموبايل */
+        .statement-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10500;
             display: none;
+            align-items: flex-end;
+            justify-content: center;
+            backdrop-filter: blur(5px);
         }
-        .statement-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-        .statement-table th { background: #1e293b; color: white; padding: 10px 8px; border: 1px solid var(--border); font-weight: 800; text-align: center; white-space: nowrap; }
-        .statement-table td { padding: 10px 8px; border: 1px solid var(--border); text-align: center; font-weight: 700; vertical-align: middle; }
-        .statement-table td.desc-cell { text-align: right; }
-        .statement-items-list { list-style: none; padding: 0; margin: 4px 0 0 0; font-size: 0.73rem; color: #334155; }
-        .statement-items-list li { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 2px 6px; margin-top: 3px; display: flex; justify-content: space-between; }
+        .statement-modal-box {
+            background: #ffffff;
+            width: 100%;
+            max-width: 600px;
+            height: 92vh;
+            border-radius: 24px 24px 0 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.3);
+            font-family: 'Cairo';
+            overflow: hidden;
+        }
+        .statement-modal-header {
+            padding: 14px 18px;
+            background: var(--germany-black);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 3px solid var(--germany-red);
+        }
+        .statement-modal-body {
+            padding: 12px;
+            overflow-y: auto;
+            flex: 1;
+            background: #f8fafc;
+        }
+        .statement-modal-footer {
+            padding: 12px 16px;
+            background: white;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+        }
+
+        /* كروت الحركات المخصصة للموبايل داخل كشف الحساب */
+        .statement-card-item {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow-sm);
+        }
+        .statement-card-item.invoice-card { border-right: 4px solid var(--germany-black); }
+        .statement-card-item.voucher-card { border-right: 4px solid var(--purple); background: #fcfbfe; }
+        
+        .statement-item-table {
+            width: 100%;
+            margin-top: 8px;
+            font-size: 0.72rem;
+            border-collapse: collapse;
+        }
+        .statement-item-table th { background: #f1f5f9; padding: 4px 6px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center; }
+        .statement-item-table td { padding: 4px 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700; }
 
         .custom-popup-overlay {
             position: fixed;
@@ -537,18 +587,6 @@
             </div>
         </div>
 
-        <!-- قسم كشف الحساب التفصيلي المدمج داخل الصفحة -->
-        <div id="customerStatementInlineCard" class="statement-section-card">
-            <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
-                <h5 class="fw-bold mb-0 text-dark" id="customerStatementTitle"><i class="fas fa-file-invoice-dollar me-2" style="color:var(--germany-red);"></i> كشف حساب تفصيلي</h5>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-dark fw-bold" onclick="exportCustomerStatementExcel()"><i class="fas fa-file-excel me-1"></i> تصدير Excel</button>
-                    <button class="btn btn-sm btn-danger fw-bold" onclick="closeCustomerStatement()"><i class="fas fa-times me-1"></i> إغلاق</button>
-                </div>
-            </div>
-            <div id="customerStatementBody"></div>
-        </div>
-
         <div id="invoicesList">
             <div class="empty-state">
                 <i class="fas fa-spinner fa-spin fa-2x"></i>
@@ -559,6 +597,22 @@
 </div>
 
 <div id="thermalPrintSection"></div>
+
+<!-- النافذة المنبثقة التفصيلية لكشف الحساب المصممة خصيصاً للموبايل -->
+<div id="customerStatementModal" class="statement-modal-overlay">
+    <div class="statement-modal-box">
+        <div class="statement-modal-header">
+            <h6 class="fw-bold mb-0" id="customerStatementTitle" style="font-size: 0.95rem;">
+                <i class="fas fa-file-invoice-dollar me-1" style="color:var(--germany-gold);"></i> كشف حساب تفصيلي
+            </h6>
+            <button class="btn btn-sm btn-light py-0 px-2 fw-bold" onclick="closeCustomerStatement()" style="border-radius: 8px;"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="statement-modal-body" id="customerStatementBody"></div>
+        <div class="statement-modal-footer">
+            <button class="btn btn-outline-dark w-100 fw-bold py-2" onclick="exportCustomerStatementExcel()" style="border-radius: 12px; font-family: 'Cairo'; font-size: 0.85rem;"><i class="fas fa-file-excel me-1"></i> تصدير إكسيل Excel</button>
+        </div>
+    </div>
+</div>
 
 <div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">
     <div class="custom-popup-box">
@@ -812,8 +866,7 @@
     window.currentStatementCustomerName = '';
 
     window.closeCustomerStatement = () => {
-        const card = document.getElementById('customerStatementInlineCard');
-        if (card) card.style.display = 'none';
+        document.getElementById('customerStatementModal').style.display = 'none';
     };
 
     window.openCustomerStatement = async (customerId, customerName) => {
@@ -823,15 +876,13 @@
             return;
         }
 
-        const card = document.getElementById('customerStatementInlineCard');
+        const modal = document.getElementById('customerStatementModal');
         const body = document.getElementById('customerStatementBody');
         const titleEl = document.getElementById('customerStatementTitle');
 
-        titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-2" style="color:var(--germany-red);"></i> كشف حساب تفصيلي: ${customerName || 'عميل'}`;
-        body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري تجهيز كشف الحساب التفصيلي بالأصناف والسداد...</p></div>`;
-        
-        card.style.display = 'block';
-        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-1" style="color:var(--germany-gold);"></i> كشف حساب: ${customerName || 'عميل'}`;
+        body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري جلب كافة الأصناف والحركات...</p></div>`;
+        modal.style.display = 'flex';
 
         try {
             const [invSnap, transSnap] = await Promise.all([
@@ -908,55 +959,81 @@
             window.currentStatementRows = [];
             window.currentStatementCustomerName = customerName || 'عميل';
 
-            let rowsHtml = '';
+            let cardsHtml = '';
+
             if (baseBalance !== 0) {
-                rowsHtml += `<tr style="background:#f1f5f9; font-weight:800;"><td>-</td><td class="desc-cell">رصيد افتتاحي سابق</td><td>-</td><td>-</td><td>-</td><td class="num">${baseBalance.toFixed(2)}</td></tr>`;
+                cardsHtml += `
+                    <div class="statement-card-item bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-secondary">رصيد افتتاحي سابق</span>
+                            <span class="num fw-bold text-dark">${baseBalance.toFixed(2)}</span>
+                        </div>
+                    </div>`;
                 window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', items: '-', payDetails: '-', debit: '', credit: '', balance: baseBalance });
             }
 
             events.forEach(ev => {
                 running += ev.debit - ev.credit;
-                
-                let descText = '';
-                let itemsText = '-';
-                let payDetailsText = '-';
 
                 if (ev.type === 'invoice') {
-                    descText = `فاتورة مبيعات (${ev.total.toFixed(2)})`;
-                    
-                    if (ev.items && ev.items.length > 0) {
-                        itemsText = `<ul class="statement-items-list">` + 
-                            ev.items.map(i => `<li><span>${i.name}</span><span class="fw-bold">${i.qty} × ${(Number(i.price)||0).toFixed(1)} = ${((Number(i.qty)||0)*(Number(i.price)||0)).toFixed(1)}</span></li>`).join('') +
-                            `</ul>`;
-                    } else {
-                        itemsText = '<span class="text-muted">بلا أصناف</span>';
-                    }
+                    let itemsRowsHtml = (ev.items || []).map(i => `
+                        <tr>
+                            <td style="text-align:right;">${i.name}</td>
+                            <td>${i.qty}</td>
+                            <td>${(Number(i.price)||0).toFixed(1)}</td>
+                            <td class="num">${((Number(i.qty)||0)*(Number(i.price)||0)).toFixed(1)}</td>
+                        </tr>`).join('');
 
-                    let payParts = [];
-                    if (ev.cashPaid > 0) payParts.push(`كاش: ${ev.cashPaid.toFixed(2)}`);
-                    if (ev.walletPaid > 0) payParts.push(`محفظة: ${ev.walletPaid.toFixed(2)}`);
-                    payDetailsText = `<span class="badge bg-dark">${ev.paymentMethod}</span>` + (payParts.length > 0 ? `<br><small class="text-muted fw-bold">${payParts.join(' | ')}</small>` : '');
+                    let payInfoHtml = [];
+                    if (ev.cashPaid > 0) payInfoHtml.push(`كاش: <b>${ev.cashPaid.toFixed(2)}</b>`);
+                    if (ev.walletPaid > 0) payInfoHtml.push(`محفظة: <b>${ev.walletPaid.toFixed(2)}</b>`);
+
+                    cardsHtml += `
+                        <div class="statement-card-item invoice-card">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge bg-dark" style="font-size:0.75rem;"><i class="fas fa-file-invoice me-1"></i> فاتورة مبيعات</span>
+                                <span class="text-muted fw-bold" style="font-size:0.72rem;"><i class="far fa-clock"></i> ${ev.date || '-'}</span>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center my-2 p-2 bg-light rounded" style="font-size:0.8rem;">
+                                <span>إجمالي الفاتورة: <b class="num">${ev.total.toFixed(2)}</b></span>
+                                <span>طريقة السداد: <b class="text-primary">${ev.paymentMethod}</b></span>
+                            </div>
+
+                            ${payInfoHtml.length > 0 ? `<div class="text-muted mb-2" style="font-size:0.73rem;">مدفوعات الفاتورة: ${payInfoHtml.join(' | ')}</div>` : ''}
+
+                            ${ev.items && ev.items.length > 0 ? `
+                                <table class="statement-item-table">
+                                    <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+                                    <tbody>${itemsRowsHtml}</tbody>
+                                </table>
+                            ` : '<div class="text-muted text-center py-1" style="font-size:0.72rem;">بلا أصناف تفصيلية</div>'}
+
+                            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
+                                <span class="text-danger fw-bold">الأجل المضاف: <span class="num">${ev.debit > 0 ? ev.debit.toFixed(2) : '0.00'}</span></span>
+                                <span class="fw-bold">الرصيد بعدها: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${running.toFixed(2)}</span></span>
+                            </div>
+                        </div>`;
 
                 } else {
-                    descText = ev.voucherType === 'صرف' ? `سند صرف` : `سند قبض`;
-                    if (ev.note) descText += ` (${ev.note})`;
-                    payDetailsText = `<span class="badge bg-purple" style="background:var(--purple);">${ev.method}</span>`;
+                    cardsHtml += `
+                        <div class="statement-card-item voucher-card">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge" style="background:var(--purple); color:white; font-size:0.75rem;"><i class="fas fa-hand-holding-usd me-1"></i> ${ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض'} (${ev.method})</span>
+                                <span class="text-muted fw-bold" style="font-size:0.72rem;"><i class="far fa-clock"></i> ${ev.date || '-'}</span>
+                            </div>
+                            ${ev.note ? `<div class="text-dark my-1 fw-bold" style="font-size:0.78rem;"><i class="fas fa-comment-alt me-1 text-muted"></i> ${ev.note}</div>` : ''}
+                            
+                            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
+                                <span class="text-success fw-bold">المبلغ المستلم: <span class="num">${ev.credit.toFixed(2)}</span></span>
+                                <span class="fw-bold">الرصيد بعدها: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${running.toFixed(2)}</span></span>
+                            </div>
+                        </div>`;
                 }
-
-                rowsHtml += `
-                    <tr>
-                        <td>${ev.date || '-'}</td>
-                        <td class="desc-cell fw-bold">${descText}</td>
-                        <td class="desc-cell">${itemsText}</td>
-                        <td>${payDetailsText}</td>
-                        <td class="num" style="color:${ev.debit > 0 ? 'var(--germany-red)' : '#94a3b8'}">${ev.debit > 0 ? ev.debit.toFixed(2) : '-'}</td>
-                        <td class="num" style="color:${ev.credit > 0 ? '#16a34a' : '#94a3b8'}">${ev.credit > 0 ? ev.credit.toFixed(2) : '-'}</td>
-                        <td class="num fw-bold">${running.toFixed(2)}</td>
-                    </tr>`;
 
                 window.currentStatementRows.push({ 
                     date: ev.date, 
-                    desc: descText, 
+                    desc: ev.type === 'invoice' ? `فاتورة (${ev.total})` : `سند قبض (${ev.amt})`, 
                     items: ev.type === 'invoice' ? (ev.items || []).map(i => `${i.name} (${i.qty}×${i.price})`).join(' ، ') : '-',
                     payDetails: ev.type === 'invoice' ? `${ev.paymentMethod} (كاش: ${ev.cashPaid} | محفظة: ${ev.walletPaid})` : ev.method,
                     debit: ev.debit || '', 
@@ -966,31 +1043,17 @@
             });
 
             if (events.length === 0 && baseBalance === 0) {
-                body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-folder-open fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات لهذا العميل.</p></div>`;
+                body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-folder-open fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات تسديد أو فواتير لهذا العميل.</p></div>`;
                 return;
             }
 
             body.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background:#f1f5f9; font-size:0.85rem; font-weight:800;">
-                    <span>إجمالي عدد العمليات: ${events.length}</span>
-                    <span>الرصيد المتبقي النهائي: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1.1rem;">${running.toFixed(2)}</span></span>
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-white border" style="font-size:0.8rem; font-weight:800;">
+                    <span>إجمالي الحركات: ${events.length}</span>
+                    <span>الرصيد الحالي المتبقي: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1rem;">${running.toFixed(2)}</span></span>
                 </div>
-                <div style="overflow-x:auto;">
-                    <table class="statement-table">
-                        <thead>
-                            <tr>
-                                <th>التاريخ</th>
-                                <th>نوع الحركة</th>
-                                <th>تفاصيل الأصناف والكميات</th>
-                                <th>تفاصيل السداد</th>
-                                <th>مستحق (آجل)</th>
-                                <th>مسدد (واصل)</th>
-                                <th>الرصيد</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rowsHtml}</tbody>
-                    </table>
-                </div>`;
+                ${cardsHtml}`;
+
         } catch (err) {
             console.error("خطأ في تجهيز كشف الحساب:", err);
             body.innerHTML = `<div class="alert alert-danger text-center p-3 my-2" style="border-radius:14px; font-weight:700;">تعذر تحميل كشف الحساب: ${err.message}</div>`;
