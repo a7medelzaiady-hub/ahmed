@@ -854,6 +854,21 @@
                 prevBalanceLabel = `حساب سابق (فاتورة ${lastShortDate})`;
             }
 
+            // إعداد أسطر أنماط السداد (عرض القيم فقط الإيجابية فوق بعضها)
+            let paymentBoxesHtml = '';
+            if (inv.calculatedCash > 0) {
+                paymentBoxesHtml += `<div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>`;
+            }
+            if (inv.calculatedWallet > 0) {
+                paymentBoxesHtml += `<div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>`;
+            }
+
+            // إعداد سطر الحساب السابق (إذا كان أكبر من صفر فقط)
+            let prevBalanceHtml = '';
+            if (prevBalAmt > 0) {
+                prevBalanceHtml = `<div class="fin-box text-secondary" style="grid-column: span 2;">${prevBalanceLabel} <span class="num">${prevBalAmt.toFixed(2)}</span></div>`;
+            }
+
             return `
                 <div class="invoice-item ${!originalDate ? 'no-date' : ''}" style="border-right-color: ${inv.paymentMethod === 'آجل' ? 'var(--germany-red)' : 'var(--germany-black)'}">
                     <div class="d-flex justify-content-between align-items-start">
@@ -871,13 +886,12 @@
                         <div class="fin-box text-dark">إجمالي الفاتورة <span class="num">${(Number(inv.total) || 0).toFixed(2)}</span></div>
                         ${discountAmount > 0 ? `<div class="fin-box" style="color: var(--germany-red);">الخصم <span class="num">${discountAmount.toFixed(2)}</span></div>` : ''}
                         
-                        <div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>
-                        <div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>
+                        ${paymentBoxesHtml}
 
                         <div class="fin-box text-dark fw-bold">المسدد الشامل <span class="num">${totalPaid.toFixed(2)}</span></div>
                         <div class="fin-box text-danger">الأجل (المتبقي) <span class="num">${remainingAmt.toFixed(2)}</span></div>
                         
-                        ${prevBalAmt !== 0 ? `<div class="fin-box text-secondary" style="grid-column: span 2;">${prevBalanceLabel} <span class="num">${prevBalAmt.toFixed(2)}</span></div>` : ''}
+                        ${prevBalanceHtml}
                         
                         <div class="fin-box text-dark fw-bold" style="grid-column: span 2; background: #e2e8f0; padding: 6px; border-radius: 8px; text-align: center;">
                             صافي الحساب النهائي <span class="num" style="font-size: 1.1rem; color: #000;">${netAccountTotal.toFixed(2)}</span>
@@ -915,8 +929,8 @@
                     </div>
                 </div>
                 <div class="financial-grid">
-                    <div class="fin-box text-dark">نقدى مستلم <span class="num">${v.cashAmount.toFixed(2)}</span></div>
-                    <div class="fin-box text-primary">محفظه مستلمة <span class="num">${v.walletAmount.toFixed(2)}</span></div>
+                    ${v.cashAmount > 0 ? `<div class="fin-box text-dark">نقدى مستلم <span class="num">${v.cashAmount.toFixed(2)}</span></div>` : ''}
+                    ${v.walletAmount > 0 ? `<div class="fin-box text-primary">محفظه مستلمة <span class="num">${v.walletAmount.toFixed(2)}</span></div>` : ''}
                 </div>
             </div>`).join('');
 
@@ -1128,6 +1142,14 @@
             prevBalanceLabel = `حساب سابق (فاتورة ${lastShortDate})`;
         }
 
+        let thermalPaymentRows = '';
+        if (cashAmount > 0) {
+            thermalPaymentRows += `<div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد نقدي:</span><b>${cashAmount.toFixed(2)}</b></div>`;
+        }
+        if (walletAmount > 0) {
+            thermalPaymentRows += `<div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد محفظة:</span><b>${walletAmount.toFixed(2)}</b></div>`;
+        }
+
         return `
             <div style="width:100%; font-family:'Cairo', sans-serif; color:#000; direction:rtl; padding:8px; background:#fff; box-sizing: border-box;">
                 <div style="text-align:center; margin-bottom:12px;">
@@ -1147,11 +1169,10 @@
                 <div style="font-size:11px; line-height:1.6; border-top:1px solid #000; padding-top:6px;">
                     <div style="display:flex; justify-content:space-between;"><span>إجمالي الفاتورة:</span><b>${(Number(inv.total) || 0).toFixed(2)}</b></div>
                     
-                    <div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد نقدي:</span><b>${cashAmount.toFixed(2)}</b></div>
-                    <div style="display:flex; justify-content:space-between; color:#000;"><span>- سداد محفظة:</span><b>${walletAmount.toFixed(2)}</b></div>
+                    ${thermalPaymentRows}
                     <div style="display:flex; justify-content:space-between; font-weight:bold;"><span>- المسدد الشامل:</span><b>${(cashAmount + walletAmount).toFixed(2)}</b></div>
 
-                    ${prevBalAmt !== 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
+                    ${prevBalAmt > 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
                     
                     <div style="display:flex; justify-content:space-between; font-weight:800; font-size:12.5px; border-top:1px solid #000; padding-top:3px; margin-top:2px;"><span>صافي الحساب النهائي:</span><b>${(prevBalAmt + remainingAmt).toFixed(2)}</b></div>
                 </div>
