@@ -536,7 +536,6 @@
 </div>
 
 <script>
-    // تسجيل الخدمة لأرشفة الصفحة وتفعيل وضع الأوفلاين بسرعة فائقة (Service Worker)
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
@@ -562,7 +561,6 @@
 
     firebase.initializeApp(firebaseConfig);
     
-    // تفعيل التخزين المحلى للفايربيز للعمل الأوفلاين وسرعة الاستجابة الخاطفة
     const db = firebase.firestore();
     db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
         if (err.code == 'failed-precondition') {
@@ -719,9 +717,6 @@
         if (box) box.style.display = (box.style.display === "none" || box.style.display === "") ? "block" : "none";
     };
 
-    /**
-     * فتح صورة/تفاصيل الفاتورة السابقة بذكاء (يبحث أولاً في الفواتير الحية، ثم في أرشيف الصور)
-     */
     window.openPreviousInvoiceImage = async (lastInvoiceId, customerId) => {
         if (!lastInvoiceId && !customerId) {
             window.showCustomUi({ title: "تنبيه", message: "لا تتوفر تفاصيل كافية عن الفاتورة السابقة.", icon: "info" });
@@ -729,7 +724,6 @@
         }
 
         try {
-            // 1. البحث أولاً في الفواتير الحية في قاعدة البيانات
             if (lastInvoiceId) {
                 const invDoc = await db.collection("invoices").doc(lastInvoiceId).get();
                 if (invDoc.exists && !invDoc.data().isDeleted) {
@@ -741,7 +735,6 @@
                 }
             }
 
-            // 2. إذا لم يجدها في الفواتير الحية، يبحث عنها في أرشيف الصور السحابي
             let query = db.collection("customers_image_archive");
             if (lastInvoiceId) {
                 query = query.where("invoiceId", "==", lastInvoiceId);
@@ -765,9 +758,6 @@
         }
     };
 
-    /**
-     * حساب الرصيد المتراكم الفعلي الحقيقي بتدميج الفواتير والسندات في خط زمني موحد
-     */
     async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
@@ -806,7 +796,6 @@
 
         const customerGroupMap = {};
 
-        // 1. تجميع الفواتير حسب العميل
         fullInvoicesList.forEach(inv => {
             let groupKey = inv.customerId;
             if (!groupKey && inv.customerName) groupKey = customersNameMap[normalizeName(inv.customerName)];
@@ -818,7 +807,6 @@
             customerGroupMap[groupKey].push({ type: 'invoice', data: inv, timeMs });
         });
 
-        // 2. تجميع السندات حسب العميل وإضافتها لخط الزمن
         fullTransactionsList.forEach(tr => {
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (isInvoicePayment) return;
@@ -834,7 +822,6 @@
             customerGroupMap[groupKey].push({ type: 'transaction', data: tr, timeMs });
         });
 
-        // 3. ترتيب أحداث كل عميل زمنياً وحساب الرصيد التراكمي
         Object.keys(customerGroupMap).forEach(groupKey => {
             const events = customerGroupMap[groupKey];
             events.sort((a, b) => a.timeMs - b.timeMs);
@@ -923,7 +910,6 @@
             const prevBalAmt = Number(inv.previousBalance || 0);
             const netAccountTotal = prevBalAmt + remainingAmt;
 
-            // تحديد تسمية الحساب السابق
             let prevBalanceLabel = "حساب سابق";
             if (inv.lastPendingInvoiceDate) {
                 let parts = inv.lastPendingInvoiceDate.split('-');
@@ -931,7 +917,6 @@
                 prevBalanceLabel = `حساب سابق (فاتورة ${lastShortDate})`;
             }
 
-            // أسطر أنماط السداد (عرض القيم الإيجابية فقط فوق بعضها)
             let paymentBoxesHtml = '';
             if (inv.calculatedCash > 0) {
                 paymentBoxesHtml += `<div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>`;
@@ -940,19 +925,16 @@
                 paymentBoxesHtml += `<div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>`;
             }
 
-            // إجمالي السداد (يظهر إذا كان أكبر من صفر فقط)
             let totalPaidHtml = '';
             if (totalPaid > 0) {
                 totalPaidHtml = `<div class="fin-box text-dark fw-bold">إجمالي السداد <span class="num">${totalPaid.toFixed(2)}</span></div>`;
             }
 
-            // الأجل (يظهر إذا كان أكبر من صفر فقط)
             let remainingHtml = '';
             if (remainingAmt > 0) {
                 remainingHtml = `<div class="fin-box text-danger">الأجل (المتبقي) <span class="num">${remainingAmt.toFixed(2)}</span></div>`;
             }
 
-            // الحساب السابق (يظهر إذا كان أكبر من صفر فقط ورابط لفتح الصورة)
             let prevBalanceHtml = '';
             if (prevBalAmt > 0) {
                 prevBalanceHtml = `
@@ -1220,9 +1202,18 @@
         
         let cashAmount = Number(inv.calculatedCash || 0);
         let walletAmount = Number(inv.calculatedWallet || 0);
-        let prevBalAmt = Number(inv.previousBalance || 0);
-        let remainingAmt = Number(inv.remaining || 0);
         let totalPaid = cashAmount + walletAmount;
+        let invoiceTotal = Number(inv.total || 0);
+        
+        // المتبقي من الفاتورة الحالية فقط
+        let remainingAmt = Number(inv.remaining ?? (invoiceTotal - totalPaid)) || 0;
+        if (remainingAmt < 0) remainingAmt = 0;
+
+        // الحساب السابق التراكمي
+        let prevBalAmt = Number(inv.previousBalance || 0);
+
+        // صافي الحساب النهائي المتبقي على العميل كلياً
+        let netAccountTotal = prevBalAmt + remainingAmt;
 
         let payMethodText = inv.paymentMethod || "آجل";
         if (cashAmount > 0 && walletAmount > 0) payMethodText = "سداد كاش ومحفظة";
@@ -1261,14 +1252,15 @@
                     <tbody>${itemsRows}</tbody>
                 </table>
                 <div style="font-size:11px; line-height:1.6; border-top:1px solid #000; padding-top:6px;">
-                    <div style="display:flex; justify-content:space-between;"><span>إجمالي الفاتورة:</span><b>${(Number(inv.total) || 0).toFixed(2)}</b></div>
+                    <div style="display:flex; justify-content:space-between;"><span>إجمالي الفاتورة:</span><b>${invoiceTotal.toFixed(2)}</b></div>
                     
                     ${thermalPaymentRows}
                     ${totalPaid > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold;"><span>- إجمالي السداد:</span><b>${totalPaid.toFixed(2)}</b></div>` : ''}
+                    ${remainingAmt > 0 ? `<div style="display:flex; justify-content:space-between; color:#dc2626;"><span>- الأجل (المتبقي):</span><b>${remainingAmt.toFixed(2)}</b></div>` : ''}
 
                     ${prevBalAmt > 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
                     
-                    <div style="display:flex; justify-content:space-between; font-weight:800; font-size:12.5px; border-top:1px solid #000; padding-top:3px; margin-top:2px;"><span>صافي الحساب النهائي:</span><b>${(prevBalAmt + remainingAmt).toFixed(2)}</b></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; font-size:12.5px; border-top:1px solid #000; padding-top:3px; margin-top:2px;"><span>صافي الحساب النهائي:</span><b>${netAccountTotal.toFixed(2)}</b></div>
                 </div>
                 <div style="text-align:center; margin-top:15px; border-top:1px dashed #000; padding-top:6px; font-size:10px; font-weight:700;">
                     <p style="margin:0;">شكراً لتعاملكم معنا 🙏</p>
