@@ -341,6 +341,49 @@
             margin-bottom: 14px;
         }
 
+        .statement-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            z-index: 10500;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .statement-modal-box {
+            background: white;
+            width: 100%;
+            max-width: 480px;
+            max-height: 88vh;
+            border-radius: 22px 22px 0 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
+            font-family: 'Cairo';
+        }
+        .statement-modal-header {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .statement-modal-body {
+            padding: 14px 18px;
+            overflow-y: auto;
+        }
+        .statement-modal-footer {
+            padding: 12px 18px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+        }
+        .statement-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+        .statement-table th { background: #f1f5f9; padding: 8px 6px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; white-space: nowrap; }
+        .statement-table td { padding: 8px 6px; border: 1px solid var(--border); text-align: center; font-weight: 700; }
+        .statement-table td:nth-child(2) { text-align: right; }
+
         .custom-popup-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -531,6 +574,19 @@
 
 <div id="thermalPrintSection"></div>
 
+<div id="customerStatementModal" class="statement-modal-overlay">
+    <div class="statement-modal-box">
+        <div class="statement-modal-header">
+            <h6 class="fw-bold mb-0" id="customerStatementTitle" style="font-size: 1rem;"><i class="fas fa-file-invoice-dollar me-1"></i> كشف حساب</h6>
+            <button class="btn btn-sm btn-light" onclick="closeCustomerStatement()" style="border-radius: 10px;"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="statement-modal-body" id="customerStatementBody"></div>
+        <div class="statement-modal-footer">
+            <button class="btn btn-outline-dark w-100 fw-bold" onclick="exportCustomerStatementExcel()" style="border-radius: 12px; font-family: 'Cairo'; font-size: 0.85rem;"><i class="fas fa-file-excel me-1"></i> تصدير Excel</button>
+        </div>
+    </div>
+</div>
+
 <div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">
     <div class="custom-popup-box">
         <div id="customModalIcon" style="width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;"></div>
@@ -595,6 +651,10 @@
             const isAdmin = (role === "admin" || username === "admin" || username.includes("أحمد") || localStorage.getItem("isAdmin") === "true");
             if (isAdmin) document.body.classList.add("admin-mode");
         } catch (e) { console.error(e); }
+    }
+
+    function escAttr(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function normalizeName(str) {
@@ -735,7 +795,6 @@
                 const invDoc = await db.collection("invoices").doc(lastInvoiceId).get();
                 if (invDoc.exists && !invDoc.data().isDeleted) {
                     const docData = invDoc.data();
-                    // استرجاع رصيد الحساب السابق المحسوب مسبقاً لهذه الفاتورة (إن وُجد) حتى تظهر السلسلة كاملة على الصورة
                     const cachedBalance = window.invoiceBalanceCache[invDoc.id] || {};
                     const invData = {
                         id: invDoc.id,
@@ -773,6 +832,152 @@
         } catch (e) {
             console.error("خطأ في جلب صورة الفاتورة السابقة:", e);
             window.showCustomUi({ title: "خطأ", message: "تعذر فتح صورة الفاتورة: " + e.message, icon: "danger" });
+        }
+    };
+
+    window.currentStatementRows = [];
+    window.currentStatementCustomerName = '';
+
+    window.closeCustomerStatement = () => {
+        document.getElementById('customerStatementModal').style.display = 'none';
+    };
+
+    window.openCustomerStatement = async (customerId, customerName) => {
+        const isCashCustomer = !customerId && (!customerName || customerName.trim() === '' || customerName.trim() === 'عميل نقدى');
+        if (isCashCustomer) {
+            window.showCustomUi({ title: "تنبيه", message: "هذه فاتورة عميل نقدي عابر، ولا يوجد له كشف حساب متراكم.", icon: "info" });
+            return;
+        }
+
+        const modal = document.getElementById('customerStatementModal');
+        const body = document.getElementById('customerStatementBody');
+        const titleEl = document.getElementById('customerStatementTitle');
+        titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-1"></i> كشف حساب: ${customerName || 'عميل'}`;
+        body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري تجهيز كشف الحساب...</p></div>`;
+        modal.style.display = 'flex';
+
+        try {
+            const [invSnap, transSnap] = await Promise.all([
+                db.collection("invoices").get(),
+                db.collection("transactions").get()
+            ]);
+
+            const targetKey = customerId || ("NAME_" + normalizeName(customerName));
+            let events = [];
+
+            invSnap.forEach(d => {
+                const data = d.data();
+                if (data.isDeleted) return;
+                let key = data.customerId;
+                if (!key && data.customerName) key = customersNameMap[normalizeName(data.customerName)];
+                if (!key && data.customerName) key = "NAME_" + normalizeName(data.customerName);
+                if (!key || key !== targetKey) return;
+
+                const calculatedCash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+                const calculatedWallet = Number(data.walletAmount ?? data.walletPaid) || 0;
+                const total = Number(data.total) || 0;
+                const paid = calculatedCash + calculatedWallet;
+                const remaining = total - paid;
+                const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseArabicDateToMs(data.time || data.date);
+
+                events.push({
+                    timeMs,
+                    date: parseInvoiceDate(data),
+                    desc: `فاتورة مبيعات${data.paymentMethod ? ' - ' + data.paymentMethod : ''} (${total.toFixed(2)})`,
+                    debit: remaining > 0 ? remaining : 0,
+                    credit: 0
+                });
+            });
+
+            transSnap.forEach(d => {
+                const tr = d.data();
+                if (tr.isDeleted) return;
+                const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
+                if (isInvoicePayment) return;
+
+                let key = tr.partyId || tr.customerId;
+                let partyName = tr.customerName || tr.partyName;
+                if (!key && partyName) key = customersNameMap[normalizeName(partyName)];
+                if (!key && partyName) key = "NAME_" + normalizeName(partyName);
+                if (!key || key !== targetKey) return;
+
+                const amt = Math.abs(Number(tr.amount || tr.total || 0));
+                const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
+
+                events.push({
+                    timeMs,
+                    date: parseVoucherDate(tr),
+                    desc: tr.type === 'صرف' ? `سند صرف${tr.method ? ' (' + tr.method + ')' : ''}${tr.note ? ' - ' + tr.note : ''}` : `سند قبض${tr.method ? ' (' + tr.method + ')' : ''}${tr.note ? ' - ' + tr.note : ''}`,
+                    debit: tr.type === 'صرف' ? amt : 0,
+                    credit: tr.type === 'قبض' ? amt : 0
+                });
+            });
+
+            events.sort((a, b) => a.timeMs - b.timeMs);
+
+            let baseBalance = 0;
+            if (customerId && customersData[customerId]) baseBalance = Number(customersData[customerId].initialBalance || 0);
+
+            let running = baseBalance;
+            window.currentStatementRows = [];
+            window.currentStatementCustomerName = customerName || 'عميل';
+
+            let rowsHtml = '';
+            if (baseBalance !== 0) {
+                rowsHtml += `<tr style="background:#f1f5f9; font-weight:800;"><td>-</td><td>رصيد افتتاحي</td><td>-</td><td>-</td><td class="num">${baseBalance.toFixed(2)}</td></tr>`;
+                window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', debit: '', credit: '', balance: baseBalance });
+            }
+
+            events.forEach(ev => {
+                running += ev.debit - ev.credit;
+                rowsHtml += `
+                    <tr>
+                        <td>${ev.date || '-'}</td>
+                        <td>${ev.desc}</td>
+                        <td class="num" style="color:${ev.debit > 0 ? 'var(--germany-red)' : '#94a3b8'}">${ev.debit > 0 ? ev.debit.toFixed(2) : '-'}</td>
+                        <td class="num" style="color:${ev.credit > 0 ? '#16a34a' : '#94a3b8'}">${ev.credit > 0 ? ev.credit.toFixed(2) : '-'}</td>
+                        <td class="num fw-bold">${running.toFixed(2)}</td>
+                    </tr>`;
+                window.currentStatementRows.push({ date: ev.date, desc: ev.desc, debit: ev.debit || '', credit: ev.credit || '', balance: running });
+            });
+
+            if (events.length === 0 && baseBalance === 0) {
+                body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-folder-open fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات لهذا العميل.</p></div>`;
+                return;
+            }
+
+            body.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mb-2" style="font-size:0.8rem; font-weight:800;">
+                    <span>عدد الحركات: ${events.length}</span>
+                    <span>الرصيد الحالي: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:0.95rem;">${running.toFixed(2)}</span></span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="statement-table">
+                        <thead><tr><th>التاريخ</th><th>البيان</th><th>مستحق</th><th>مسدد</th><th>الرصيد</th></tr></thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>`;
+        } catch (err) {
+            console.error("خطأ في تجهيز كشف الحساب:", err);
+            body.innerHTML = `<div class="alert alert-danger text-center p-3 my-2" style="border-radius:14px; font-weight:700;">تعذر تحميل كشف الحساب: ${err.message}</div>`;
+        }
+    };
+
+    window.exportCustomerStatementExcel = () => {
+        if (!window.currentStatementRows || window.currentStatementRows.length === 0) {
+            window.showCustomUi({ title: "تنبيه", message: "لا توجد بيانات لتصديرها بعد.", icon: "info" });
+            return;
+        }
+        try {
+            const wsData = [["التاريخ", "البيان", "مستحق", "مسدد", "الرصيد"]];
+            window.currentStatementRows.forEach(r => wsData.push([r.date, r.desc, r.debit, r.credit, r.balance]));
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "كشف حساب");
+            XLSX.writeFile(wb, `كشف_حساب_${window.currentStatementCustomerName}.xlsx`);
+        } catch (err) {
+            console.error("خطأ في تصدير كشف الحساب:", err);
+            window.showCustomUi({ title: "خطأ", message: "تعذر تصدير الملف: " + err.message, icon: "danger" });
         }
     };
 
@@ -970,6 +1175,9 @@
                     </div>`;
             }
 
+            const safeCustomerName = (inv.customerName || 'عميل نقدى').replace(/'/g, "\\'");
+            const safeCustomerId = inv.customerId || '';
+
             return `
                 <div class="invoice-item ${!originalDate ? 'no-date' : ''}" style="border-right-color: ${inv.paymentMethod === 'آجل' ? 'var(--germany-red)' : 'var(--germany-black)'}">
                     <div class="d-flex justify-content-between align-items-start">
@@ -997,6 +1205,9 @@
                         </div>
                     </div>
                     <div class="invoice-actions-group">
+                        <button class="btn btn-outline-dark" onclick="openCustomerStatement('${safeCustomerId}', '${safeCustomerName}')" title="كشف حساب العميل">
+                            <i class="fas fa-file-invoice-dollar"></i> كشف حساب
+                        </button>
                         <button class="btn btn-outline-dark" onclick="toggleDetails('${inv.id}')" title="عرض الأصناف"><i class="fas fa-eye"></i></button>
                         ${viewModificationsBtn}
                         <button class="btn btn-outline-dark" onclick="window.printThermalInvoice('${inv.id}')" title="طباعة حرارية 80"><i class="fas fa-print"></i></button>
@@ -1015,7 +1226,9 @@
                 </div>`;
         }).join('');
 
-        const vouchersHtml = vouchers.map(v => `
+        const vouchersHtml = vouchers.map(v => {
+            const safeVoucherName = (v.customerName || 'عميل').replace(/'/g, "\\'");
+            return `
             <div class="invoice-item voucher-item">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
@@ -1026,12 +1239,16 @@
                         </div>
                         ${v.note ? `<div class="text-muted mt-2" style="font-size:0.78rem;"><i class="fas fa-sticky-note me-1"></i> ${v.note}</div>` : ''}
                     </div>
+                    <button class="btn btn-sm btn-outline-dark fw-bold" onclick="openCustomerStatement('', '${safeVoucherName}')" title="كشف حساب العميل">
+                        <i class="fas fa-file-invoice-dollar"></i> كشف حساب
+                    </button>
                 </div>
                 <div class="financial-grid">
                     ${v.cashAmount > 0 ? `<div class="fin-box text-dark">نقدى مستلم <span class="num">${v.cashAmount.toFixed(2)}</span></div>` : ''}
                     ${v.walletAmount > 0 ? `<div class="fin-box text-primary">محفظه مستلمة <span class="num">${v.walletAmount.toFixed(2)}</span></div>` : ''}
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
         let dividerHtml = (vouchers.length > 0 && invoices.length > 0) ? `<div class="vouchers-divider"><i class="fas fa-hand-holding-usd"></i> سندات القبض (${vouchers.length})</div>` : '';
         container.innerHTML = invoicesHtml + dividerHtml + vouchersHtml;
@@ -1229,14 +1446,11 @@
         let totalPaid = cashAmount + walletAmount;
         let invoiceTotal = Number(inv.total || 0);
         
-        // المتبقي من الفاتورة الحالية فقط
         let remainingAmt = Number(inv.remaining ?? (invoiceTotal - totalPaid)) || 0;
         if (remainingAmt < 0) remainingAmt = 0;
 
-        // الحساب السابق التراكمي
         let prevBalAmt = Number(inv.previousBalance || 0);
 
-        // صافي الحساب النهائي المتبقي على العميل كلياً
         let netAccountTotal = prevBalAmt + remainingAmt;
 
         let payMethodText = inv.paymentMethod || "آجل";
@@ -1411,12 +1625,10 @@
                 return;
             }
         } catch (err) {
-            // المستخدم ألغى نافذة المشاركة بنفسه - هذا ليس خطأ ولا داعي لإظهار أي رسالة
             if (err.name === 'AbortError') return;
             console.warn("تعذرت المشاركة عبر نظام التشغيل، سيتم تحميل الصورة مباشرة كبديل:", err);
         }
 
-        // بديل: تحميل الصورة مباشرة لو المشاركة غير مدعومة أو فشلت لسبب غير الإلغاء
         try {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
