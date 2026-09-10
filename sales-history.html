@@ -692,7 +692,7 @@
     };
 
     /**
-     * حساب الرصيد المتراكم الفعلي الحقيقي وتحديد تواريخ الفواتير السابقة
+     * حساب الرصيد المتراكم الفعلي الحقيقي بتدميج الفواتير والسندات في خط زمني موحد
      */
     async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
@@ -732,6 +732,7 @@
 
         const customerGroupMap = {};
 
+        // 1. تجميع الفواتير حسب العميل
         fullInvoicesList.forEach(inv => {
             let groupKey = inv.customerId;
             if (!groupKey && inv.customerName) groupKey = customersNameMap[normalizeName(inv.customerName)];
@@ -740,12 +741,29 @@
 
             if (!customerGroupMap[groupKey]) customerGroupMap[groupKey] = [];
             let timeMs = inv.timestamp?.seconds ? (inv.timestamp.seconds * 1000) : parseArabicDateToMs(inv.time || inv.date);
-            customerGroupMap[groupKey].push({ inv, timeMs });
+            customerGroupMap[groupKey].push({ type: 'invoice', data: inv, timeMs });
         });
 
+        // 2. تجميع السندات حسب العميل وإضافتها لخط الزمن
+        fullTransactionsList.forEach(tr => {
+            const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
+            if (isInvoicePayment) return;
+
+            let groupKey = tr.partyId || tr.customerId;
+            let partyName = tr.customerName || tr.partyName;
+            if (!groupKey && partyName) groupKey = customersNameMap[normalizeName(partyName)];
+            if (!groupKey && partyName) groupKey = "NAME_" + normalizeName(partyName);
+            if (!groupKey) return;
+
+            if (!customerGroupMap[groupKey]) customerGroupMap[groupKey] = [];
+            let timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
+            customerGroupMap[groupKey].push({ type: 'transaction', data: tr, timeMs });
+        });
+
+        // 3. ترتيب أحداث كل عميل زمنياً وحساب الرصيد التراكمي
         Object.keys(customerGroupMap).forEach(groupKey => {
-            const list = customerGroupMap[groupKey];
-            list.sort((a, b) => a.timeMs - b.timeMs);
+            const events = customerGroupMap[groupKey];
+            events.sort((a, b) => a.timeMs - b.timeMs);
 
             let realCustId = groupKey.startsWith("NAME_") ? null : groupKey;
             let baseBalance = 0;
@@ -753,39 +771,34 @@
                 baseBalance = Number(customersData[realCustId].initialBalance || 0);
             }
 
-            const custTrans = fullTransactionsList.filter(t => {
-                if (realCustId && (t.partyId === realCustId || t.customerId === realCustId)) return true;
-                if (t.customerName && normalizeName(t.customerName) === normalizeName(list[0].inv.customerName)) return true;
-                if (t.partyName && normalizeName(t.partyName) === normalizeName(list[0].inv.customerName)) return true;
-                return false;
-            });
-
             let runningBalance = baseBalance;
             let lastInvoiceDate = null;
 
-            list.forEach(item => {
-                const targetInvoice = allInvoices.find(i => i.id === item.inv.id);
-                
-                if (targetInvoice) {
-                    targetInvoice.previousBalance = runningBalance;
-                    targetInvoice.lastPendingInvoiceDate = lastInvoiceDate;
-                }
+            events.forEach(event => {
+                if (event.type === 'invoice') {
+                    const inv = event.data;
+                    const targetInvoice = allInvoices.find(i => i.id === inv.id);
 
-                const total = Number(item.inv.total) || 0;
-                const paid = Number(item.inv.calculatedCash + item.inv.calculatedWallet) || Number(item.inv.paid) || 0;
-                const remaining = total - paid;
-                
-                lastInvoiceDate = parseInvoiceDate(item.inv);
-                runningBalance += remaining;
-
-                custTrans.forEach(tr => {
-                    const trTimeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
-                    if (trTimeMs === item.timeMs) {
-                        const amt = Number(tr.amount || tr.total || 0);
-                        if (tr.type === 'قبض') runningBalance -= Math.abs(amt);
-                        else if (tr.type === 'صرف') runningBalance += Math.abs(amt);
+                    if (targetInvoice) {
+                        targetInvoice.previousBalance = runningBalance;
+                        targetInvoice.lastPendingInvoiceDate = lastInvoiceDate;
                     }
-                });
+
+                    const total = Number(inv.total) || 0;
+                    const paid = Number(inv.calculatedCash + inv.calculatedWallet) || Number(inv.paid) || 0;
+                    const remaining = total - paid;
+
+                    lastInvoiceDate = parseInvoiceDate(inv);
+                    runningBalance += remaining;
+                } else if (event.type === 'transaction') {
+                    const tr = event.data;
+                    const amt = Number(tr.amount || tr.total || 0);
+                    if (tr.type === 'قبض') {
+                        runningBalance -= Math.abs(amt);
+                    } else if (tr.type === 'صرف') {
+                        runningBalance += Math.abs(amt);
+                    }
+                }
             });
         });
     }
