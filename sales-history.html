@@ -341,48 +341,22 @@
             margin-bottom: 14px;
         }
 
-        .statement-modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.6);
-            z-index: 10500;
+        /* تنسيقات قسم كشف الحساب المدمج داخل الصفحة */
+        .statement-section-card {
+            background: var(--white);
+            border: 2px solid var(--germany-black);
+            border-radius: var(--card-radius);
+            padding: 18px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
             display: none;
-            align-items: flex-end;
-            justify-content: center;
-            backdrop-filter: blur(4px);
         }
-        .statement-modal-box {
-            background: white;
-            width: 100%;
-            max-width: 480px;
-            max-height: 88vh;
-            border-radius: 22px 22px 0 0;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
-            font-family: 'Cairo';
-        }
-        .statement-modal-header {
-            padding: 16px 18px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .statement-modal-body {
-            padding: 14px 18px;
-            overflow-y: auto;
-        }
-        .statement-modal-footer {
-            padding: 12px 18px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            gap: 8px;
-        }
-        .statement-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
-        .statement-table th { background: #f1f5f9; padding: 8px 6px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; white-space: nowrap; }
-        .statement-table td { padding: 8px 6px; border: 1px solid var(--border); text-align: center; font-weight: 700; }
-        .statement-table td:nth-child(2) { text-align: right; }
+        .statement-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+        .statement-table th { background: #1e293b; color: white; padding: 10px 8px; border: 1px solid var(--border); font-weight: 800; text-align: center; white-space: nowrap; }
+        .statement-table td { padding: 10px 8px; border: 1px solid var(--border); text-align: center; font-weight: 700; vertical-align: middle; }
+        .statement-table td.desc-cell { text-align: right; }
+        .statement-items-list { list-style: none; padding: 0; margin: 4px 0 0 0; font-size: 0.73rem; color: #334155; }
+        .statement-items-list li { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 2px 6px; margin-top: 3px; display: flex; justify-content: space-between; }
 
         .custom-popup-overlay {
             position: fixed;
@@ -563,6 +537,18 @@
             </div>
         </div>
 
+        <!-- قسم كشف الحساب التفصيلي المدمج داخل الصفحة -->
+        <div id="customerStatementInlineCard" class="statement-section-card">
+            <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
+                <h5 class="fw-bold mb-0 text-dark" id="customerStatementTitle"><i class="fas fa-file-invoice-dollar me-2" style="color:var(--germany-red);"></i> كشف حساب تفصيلي</h5>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-dark fw-bold" onclick="exportCustomerStatementExcel()"><i class="fas fa-file-excel me-1"></i> تصدير Excel</button>
+                    <button class="btn btn-sm btn-danger fw-bold" onclick="closeCustomerStatement()"><i class="fas fa-times me-1"></i> إغلاق</button>
+                </div>
+            </div>
+            <div id="customerStatementBody"></div>
+        </div>
+
         <div id="invoicesList">
             <div class="empty-state">
                 <i class="fas fa-spinner fa-spin fa-2x"></i>
@@ -573,19 +559,6 @@
 </div>
 
 <div id="thermalPrintSection"></div>
-
-<div id="customerStatementModal" class="statement-modal-overlay">
-    <div class="statement-modal-box">
-        <div class="statement-modal-header">
-            <h6 class="fw-bold mb-0" id="customerStatementTitle" style="font-size: 1rem;"><i class="fas fa-file-invoice-dollar me-1"></i> كشف حساب</h6>
-            <button class="btn btn-sm btn-light" onclick="closeCustomerStatement()" style="border-radius: 10px;"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="statement-modal-body" id="customerStatementBody"></div>
-        <div class="statement-modal-footer">
-            <button class="btn btn-outline-dark w-100 fw-bold" onclick="exportCustomerStatementExcel()" style="border-radius: 12px; font-family: 'Cairo'; font-size: 0.85rem;"><i class="fas fa-file-excel me-1"></i> تصدير Excel</button>
-        </div>
-    </div>
-</div>
 
 <div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">
     <div class="custom-popup-box">
@@ -839,7 +812,8 @@
     window.currentStatementCustomerName = '';
 
     window.closeCustomerStatement = () => {
-        document.getElementById('customerStatementModal').style.display = 'none';
+        const card = document.getElementById('customerStatementInlineCard');
+        if (card) card.style.display = 'none';
     };
 
     window.openCustomerStatement = async (customerId, customerName) => {
@@ -849,12 +823,15 @@
             return;
         }
 
-        const modal = document.getElementById('customerStatementModal');
+        const card = document.getElementById('customerStatementInlineCard');
         const body = document.getElementById('customerStatementBody');
         const titleEl = document.getElementById('customerStatementTitle');
-        titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-1"></i> كشف حساب: ${customerName || 'عميل'}`;
-        body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري تجهيز كشف الحساب...</p></div>`;
-        modal.style.display = 'flex';
+
+        titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-2" style="color:var(--germany-red);"></i> كشف حساب تفصيلي: ${customerName || 'عميل'}`;
+        body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري تجهيز كشف الحساب التفصيلي بالأصناف والسداد...</p></div>`;
+        
+        card.style.display = 'block';
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         try {
             const [invSnap, transSnap] = await Promise.all([
@@ -881,9 +858,14 @@
                 const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseArabicDateToMs(data.time || data.date);
 
                 events.push({
+                    type: 'invoice',
                     timeMs,
                     date: parseInvoiceDate(data),
-                    desc: `فاتورة مبيعات${data.paymentMethod ? ' - ' + data.paymentMethod : ''} (${total.toFixed(2)})`,
+                    paymentMethod: data.paymentMethod || 'غير محدد',
+                    cashPaid: calculatedCash,
+                    walletPaid: calculatedWallet,
+                    items: data.items || [],
+                    total: total,
                     debit: remaining > 0 ? remaining : 0,
                     credit: 0
                 });
@@ -905,9 +887,13 @@
                 const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
 
                 events.push({
+                    type: 'voucher',
                     timeMs,
                     date: parseVoucherDate(tr),
-                    desc: tr.type === 'صرف' ? `سند صرف${tr.method ? ' (' + tr.method + ')' : ''}${tr.note ? ' - ' + tr.note : ''}` : `سند قبض${tr.method ? ' (' + tr.method + ')' : ''}${tr.note ? ' - ' + tr.note : ''}`,
+                    voucherType: tr.type,
+                    method: tr.method || 'نقدى',
+                    note: tr.note || '',
+                    amt: amt,
                     debit: tr.type === 'صرف' ? amt : 0,
                     credit: tr.type === 'قبض' ? amt : 0
                 });
@@ -924,21 +910,59 @@
 
             let rowsHtml = '';
             if (baseBalance !== 0) {
-                rowsHtml += `<tr style="background:#f1f5f9; font-weight:800;"><td>-</td><td>رصيد افتتاحي</td><td>-</td><td>-</td><td class="num">${baseBalance.toFixed(2)}</td></tr>`;
-                window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', debit: '', credit: '', balance: baseBalance });
+                rowsHtml += `<tr style="background:#f1f5f9; font-weight:800;"><td>-</td><td class="desc-cell">رصيد افتتاحي سابق</td><td>-</td><td>-</td><td>-</td><td class="num">${baseBalance.toFixed(2)}</td></tr>`;
+                window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', items: '-', payDetails: '-', debit: '', credit: '', balance: baseBalance });
             }
 
             events.forEach(ev => {
                 running += ev.debit - ev.credit;
+                
+                let descText = '';
+                let itemsText = '-';
+                let payDetailsText = '-';
+
+                if (ev.type === 'invoice') {
+                    descText = `فاتورة مبيعات (${ev.total.toFixed(2)})`;
+                    
+                    if (ev.items && ev.items.length > 0) {
+                        itemsText = `<ul class="statement-items-list">` + 
+                            ev.items.map(i => `<li><span>${i.name}</span><span class="fw-bold">${i.qty} × ${(Number(i.price)||0).toFixed(1)} = ${((Number(i.qty)||0)*(Number(i.price)||0)).toFixed(1)}</span></li>`).join('') +
+                            `</ul>`;
+                    } else {
+                        itemsText = '<span class="text-muted">بلا أصناف</span>';
+                    }
+
+                    let payParts = [];
+                    if (ev.cashPaid > 0) payParts.push(`كاش: ${ev.cashPaid.toFixed(2)}`);
+                    if (ev.walletPaid > 0) payParts.push(`محفظة: ${ev.walletPaid.toFixed(2)}`);
+                    payDetailsText = `<span class="badge bg-dark">${ev.paymentMethod}</span>` + (payParts.length > 0 ? `<br><small class="text-muted fw-bold">${payParts.join(' | ')}</small>` : '');
+
+                } else {
+                    descText = ev.voucherType === 'صرف' ? `سند صرف` : `سند قبض`;
+                    if (ev.note) descText += ` (${ev.note})`;
+                    payDetailsText = `<span class="badge bg-purple" style="background:var(--purple);">${ev.method}</span>`;
+                }
+
                 rowsHtml += `
                     <tr>
                         <td>${ev.date || '-'}</td>
-                        <td>${ev.desc}</td>
+                        <td class="desc-cell fw-bold">${descText}</td>
+                        <td class="desc-cell">${itemsText}</td>
+                        <td>${payDetailsText}</td>
                         <td class="num" style="color:${ev.debit > 0 ? 'var(--germany-red)' : '#94a3b8'}">${ev.debit > 0 ? ev.debit.toFixed(2) : '-'}</td>
                         <td class="num" style="color:${ev.credit > 0 ? '#16a34a' : '#94a3b8'}">${ev.credit > 0 ? ev.credit.toFixed(2) : '-'}</td>
                         <td class="num fw-bold">${running.toFixed(2)}</td>
                     </tr>`;
-                window.currentStatementRows.push({ date: ev.date, desc: ev.desc, debit: ev.debit || '', credit: ev.credit || '', balance: running });
+
+                window.currentStatementRows.push({ 
+                    date: ev.date, 
+                    desc: descText, 
+                    items: ev.type === 'invoice' ? (ev.items || []).map(i => `${i.name} (${i.qty}×${i.price})`).join(' ، ') : '-',
+                    payDetails: ev.type === 'invoice' ? `${ev.paymentMethod} (كاش: ${ev.cashPaid} | محفظة: ${ev.walletPaid})` : ev.method,
+                    debit: ev.debit || '', 
+                    credit: ev.credit || '', 
+                    balance: running 
+                });
             });
 
             if (events.length === 0 && baseBalance === 0) {
@@ -947,13 +971,23 @@
             }
 
             body.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center mb-2" style="font-size:0.8rem; font-weight:800;">
-                    <span>عدد الحركات: ${events.length}</span>
-                    <span>الرصيد الحالي: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:0.95rem;">${running.toFixed(2)}</span></span>
+                <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background:#f1f5f9; font-size:0.85rem; font-weight:800;">
+                    <span>إجمالي عدد العمليات: ${events.length}</span>
+                    <span>الرصيد المتبقي النهائي: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1.1rem;">${running.toFixed(2)}</span></span>
                 </div>
                 <div style="overflow-x:auto;">
                     <table class="statement-table">
-                        <thead><tr><th>التاريخ</th><th>البيان</th><th>مستحق</th><th>مسدد</th><th>الرصيد</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>نوع الحركة</th>
+                                <th>تفاصيل الأصناف والكميات</th>
+                                <th>تفاصيل السداد</th>
+                                <th>مستحق (آجل)</th>
+                                <th>مسدد (واصل)</th>
+                                <th>الرصيد</th>
+                            </tr>
+                        </thead>
                         <tbody>${rowsHtml}</tbody>
                     </table>
                 </div>`;
@@ -969,12 +1003,12 @@
             return;
         }
         try {
-            const wsData = [["التاريخ", "البيان", "مستحق", "مسدد", "الرصيد"]];
-            window.currentStatementRows.forEach(r => wsData.push([r.date, r.desc, r.debit, r.credit, r.balance]));
+            const wsData = [["التاريخ", "الحركة", "الأصناف", "طريقة السداد", "مستحق", "مسدد", "الرصيد"]];
+            window.currentStatementRows.forEach(r => wsData.push([r.date, r.desc, r.items, r.payDetails, r.debit, r.credit, r.balance]));
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "كشف حساب");
-            XLSX.writeFile(wb, `كشف_حساب_${window.currentStatementCustomerName}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "كشف حساب تفصيلي");
+            XLSX.writeFile(wb, `كشف_حساب_تفصيلي_${window.currentStatementCustomerName}.xlsx`);
         } catch (err) {
             console.error("خطأ في تصدير كشف الحساب:", err);
             window.showCustomUi({ title: "خطأ", message: "تعذر تصدير الملف: " + err.message, icon: "danger" });
