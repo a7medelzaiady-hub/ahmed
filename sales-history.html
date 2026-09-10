@@ -272,6 +272,16 @@
         .fin-box { font-size: 0.76rem; font-weight: 800; color: var(--text-secondary); }
         .fin-box span { display: block; font-size: 1rem; margin-top: 4px; font-weight: 800; color: var(--text-primary); }
 
+        .prev-balance-link {
+            color: #475569;
+            text-decoration: underline;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .prev-balance-link:hover {
+            color: #000000;
+        }
+
         .search-box, input[type="date"], .recon-input {
             border: 1px solid var(--border);
             border-radius: var(--input-radius);
@@ -692,6 +702,39 @@
     };
 
     /**
+     * فتح صورة الفاتورة من الأرشيف بناء على معرف الفاتورة السابقة أو اسمها
+     */
+    window.openPreviousInvoiceImage = async (lastInvoiceId, customerId) => {
+        if (!lastInvoiceId && !customerId) {
+            window.showCustomUi({ title: "تنبيه", message: "لا تتوفر تفاصيل كافية عن الفاتورة السابقة.", icon: "info" });
+            return;
+        }
+
+        try {
+            let query = db.collection("customers_image_archive");
+            if (lastInvoiceId) {
+                query = query.where("invoiceId", "==", lastInvoiceId);
+            } else if (customerId) {
+                query = query.where("customerId", "==", customerId).orderBy("timestamp", "desc").limit(1);
+            }
+
+            const snap = await query.get();
+            if (!snap.empty) {
+                const imgData = snap.docs[0].data();
+                if (imgData.imageUrl) {
+                    window.open(imgData.imageUrl, "_blank");
+                    return;
+                }
+            }
+
+            window.showCustomUi({ title: "تنبيه", message: "لم يتم العثور على صورة أرشيفية لهذه الفاتورة السابقة.", icon: "info" });
+        } catch (e) {
+            console.error("خطأ في جلب صورة الفاتورة السابقة:", e);
+            window.showCustomUi({ title: "خطأ", message: "تعذر فتح صورة الفاتورة: " + e.message, icon: "danger" });
+        }
+    };
+
+    /**
      * حساب الرصيد المتراكم الفعلي الحقيقي بتدميج الفواتير والسندات في خط زمني موحد
      */
     async function calculateCumulativeBalances() {
@@ -773,6 +816,7 @@
 
             let runningBalance = baseBalance;
             let lastInvoiceDate = null;
+            let lastInvoiceId = null;
 
             events.forEach(event => {
                 if (event.type === 'invoice') {
@@ -782,6 +826,7 @@
                     if (targetInvoice) {
                         targetInvoice.previousBalance = runningBalance;
                         targetInvoice.lastPendingInvoiceDate = lastInvoiceDate;
+                        targetInvoice.lastPendingInvoiceId = lastInvoiceId;
                     }
 
                     const total = Number(inv.total) || 0;
@@ -789,6 +834,7 @@
                     const remaining = total - paid;
 
                     lastInvoiceDate = parseInvoiceDate(inv);
+                    lastInvoiceId = inv.id;
                     runningBalance += remaining;
                 } else if (event.type === 'transaction') {
                     const tr = event.data;
@@ -854,7 +900,7 @@
                 prevBalanceLabel = `حساب سابق (فاتورة ${lastShortDate})`;
             }
 
-            // إعداد أسطر أنماط السداد (عرض القيم فقط الإيجابية فوق بعضها)
+            // أسطر أنماط السداد (عرض القيم الإيجابية فقط فوق بعضها)
             let paymentBoxesHtml = '';
             if (inv.calculatedCash > 0) {
                 paymentBoxesHtml += `<div class="fin-box text-dark">سداد نقدي <span class="num">${inv.calculatedCash.toFixed(2)}</span></div>`;
@@ -863,10 +909,28 @@
                 paymentBoxesHtml += `<div class="fin-box text-primary">سداد محفظة <span class="num">${inv.calculatedWallet.toFixed(2)}</span></div>`;
             }
 
-            // إعداد سطر الحساب السابق (إذا كان أكبر من صفر فقط)
+            // إجمالي السداد (يظهر إذا كان أكبر من صفر فقط)
+            let totalPaidHtml = '';
+            if (totalPaid > 0) {
+                totalPaidHtml = `<div class="fin-box text-dark fw-bold">إجمالي السداد <span class="num">${totalPaid.toFixed(2)}</span></div>`;
+            }
+
+            // الأجل (يظهر إذا كان أكبر من صفر فقط)
+            let remainingHtml = '';
+            if (remainingAmt > 0) {
+                remainingHtml = `<div class="fin-box text-danger">الأجل (المتبقي) <span class="num">${remainingAmt.toFixed(2)}</span></div>`;
+            }
+
+            // الحساب السابق (يظهر إذا كان أكبر من صفر فقط ورابط لفتح الصورة)
             let prevBalanceHtml = '';
             if (prevBalAmt > 0) {
-                prevBalanceHtml = `<div class="fin-box text-secondary" style="grid-column: span 2;">${prevBalanceLabel} <span class="num">${prevBalAmt.toFixed(2)}</span></div>`;
+                prevBalanceHtml = `
+                    <div class="fin-box text-secondary" style="grid-column: span 2;">
+                        <span class="prev-balance-link" onclick="openPreviousInvoiceImage('${inv.lastPendingInvoiceId || ''}', '${inv.customerId || ''}')" title="اضغط لفتح صورة الفاتورة السابقة">
+                            <i class="fas fa-image me-1"></i>${prevBalanceLabel}
+                        </span>
+                        <span class="num">${prevBalAmt.toFixed(2)}</span>
+                    </div>`;
             }
 
             return `
@@ -887,10 +951,8 @@
                         ${discountAmount > 0 ? `<div class="fin-box" style="color: var(--germany-red);">الخصم <span class="num">${discountAmount.toFixed(2)}</span></div>` : ''}
                         
                         ${paymentBoxesHtml}
-
-                        <div class="fin-box text-dark fw-bold">المسدد الشامل <span class="num">${totalPaid.toFixed(2)}</span></div>
-                        <div class="fin-box text-danger">الأجل (المتبقي) <span class="num">${remainingAmt.toFixed(2)}</span></div>
-                        
+                        ${totalPaidHtml}
+                        ${remainingHtml}
                         ${prevBalanceHtml}
                         
                         <div class="fin-box text-dark fw-bold" style="grid-column: span 2; background: #e2e8f0; padding: 6px; border-radius: 8px; text-align: center;">
@@ -1129,6 +1191,7 @@
         let walletAmount = Number(inv.calculatedWallet || 0);
         let prevBalAmt = Number(inv.previousBalance || 0);
         let remainingAmt = Number(inv.remaining || 0);
+        let totalPaid = cashAmount + walletAmount;
 
         let payMethodText = inv.paymentMethod || "آجل";
         if (cashAmount > 0 && walletAmount > 0) payMethodText = "سداد كاش ومحفظة";
@@ -1170,7 +1233,7 @@
                     <div style="display:flex; justify-content:space-between;"><span>إجمالي الفاتورة:</span><b>${(Number(inv.total) || 0).toFixed(2)}</b></div>
                     
                     ${thermalPaymentRows}
-                    <div style="display:flex; justify-content:space-between; font-weight:bold;"><span>- المسدد الشامل:</span><b>${(cashAmount + walletAmount).toFixed(2)}</b></div>
+                    ${totalPaid > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold;"><span>- إجمالي السداد:</span><b>${totalPaid.toFixed(2)}</b></div>` : ''}
 
                     ${prevBalAmt > 0 ? `<div style="display:flex; justify-content:space-between; color:#4a5568; margin-top:2px;"><span>${prevBalanceLabel}:</span><b>${prevBalAmt.toFixed(2)}</b></div>` : ''}
                     
