@@ -533,7 +533,7 @@
         return Number(sup.openingBalance) || 0;
     }
 
-    // === دالة احتساب الرصيد السابق للمورد تاريخياً وضبط السدادات المباشرة ===
+    // === دالة احتساب الرصيد السابق للمورد تاريخياً بشكل دقيق بدون تكرار السداد ===
     async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null) {
         try {
             const [snapInvoices, snapTrans] = await Promise.all([
@@ -541,44 +541,40 @@
                 getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId)))
             ]);
 
-            let invoiceDebt = 0;
+            let invoiceTotalEffect = 0;
             const targetSec = targetTimestamp?.seconds || Infinity;
 
+            // 1. حساب إجمالي الفواتير (بدون خصم المدفوعات المباشرة لمنع التكرار)
             snapInvoices.forEach(docSnap => {
-                // استبعاد الفاتورة المفتوحة للتعديل حالياً
                 if (editId && docSnap.id === editId) return;
                 
                 const data = docSnap.data();
                 const invSec = data.timestamp?.seconds || 0;
 
-                // التجميع التاريخي حتى لحظة الفاتورة المحددة فقط
                 if (invSec < targetSec || (invSec === targetSec && docSnap.id < editId)) {
                     const amt = Number(data.grossTotal) || Number(data.total) || 0;
-                    const paid = Number(data.totalPaid || (Number(data.cashPaid || 0) + Number(data.walletPaid || 0)));
-                    
                     if (data.type === "مرتجع شراء") {
-                        invoiceDebt -= amt;
+                        invoiceTotalEffect -= amt;
                     } else {
-                        // دين الفاتورة الصافي = إجمالي الفاتورة - السداد المباشر داخل الفاتورة
-                        invoiceDebt += (amt - paid);
+                        invoiceTotalEffect += amt;
                     }
                 }
             });
 
+            // 2. حساب كافة المدفوعات والحركات المالية المقيدة في السندات
             let transEffect = 0;
             snapTrans.forEach(docSnap => {
                 const tr = docSnap.data();
                 const trSec = tr.timestamp?.seconds || 0;
 
-                // مراعاة حركة السندات والتحويلات الخارجية المسجلة سابقاً
-                if (trSec < targetSec && !tr.invoiceId) {
+                if (trSec < targetSec) {
                     const amt = Number(tr.amount) || 0;
                     if (tr.type === 'قبض') transEffect -= amt;
-                    else if (tr.type === 'صرف') transEffect += amt;
+                    else if (tr.type === 'صرف') transEffect -= amt;
                 }
             });
 
-            return Number(baseBalance) + invoiceDebt + transEffect;
+            return Number(baseBalance) + invoiceTotalEffect + transEffect;
         } catch (e) { 
             return Number(baseBalance); 
         }
