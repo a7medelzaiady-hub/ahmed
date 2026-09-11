@@ -107,17 +107,17 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .field-inline.priority-field label { color: var(--brand); font-size: 11px; font-weight: 800; }
 .field-inline.priority-field input { border: 1.5px solid var(--brand); background: var(--brand-lt); font-weight: 800; }
 
-/* BUTTONS CONTAINER FIX */
+/* ACTION BUTTONS GRID */
 .action-buttons-group {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
   align-items: center;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .btn{
-  padding: 8px 12px;
+  padding: 9px 12px;
   border: none;
   border-radius: 10px;
   font-size: 12px;
@@ -131,11 +131,12 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
   align-items: center;
   justify-content: center;
   gap: 4px;
-  flex: 1 1 auto;
+  width: 100%;
 }
 .btn-primary{background:var(--brand);color:#fff; box-shadow: 0 2px 4px rgba(11,94,61,0.2);}
 .btn-success{background:var(--green);color:#fff; box-shadow: 0 2px 4px rgba(45,106,79,0.2);}
 .btn-danger{background:var(--red);color:#fff; box-shadow: 0 2px 4px rgba(217,4,41,0.2);}
+.btn-warning{background:var(--amber);color:#fff; box-shadow: 0 2px 4px rgba(230,149,0,0.2);}
 .btn-sm{padding:8px 10px;font-size:12px;}
 .btn:active { transform: scale(0.96); }
 
@@ -302,7 +303,7 @@ table select:focus { border-color: var(--brand); }
         <p>سجّل ما كان بداخل العربية + الحمولة الجديدة لربطها بالمبيعات</p>
       </div>
       
-      <!-- ترتيب منظم للأزرار بدون تداخل -->
+      <!-- ترتيب منظم للشبكة وإضافة زر تصفير التحميل -->
       <div class="action-buttons-group">
         <a href="index1.html" class="btn btn-primary btn-sm" style="background:var(--brand-d);">
           🏠 الرئيسية
@@ -315,6 +316,9 @@ table select:focus { border-color: var(--brand); }
         </button>
         <button class="btn btn-danger btn-sm" onclick="window.exportLoadPDF()">
           📄 إذن PDF
+        </button>
+        <button class="btn btn-warning btn-sm" onclick="window.resetLoad()">
+          🔄 تصفير التحميل
         </button>
       </div>
     </div>
@@ -370,7 +374,6 @@ table select:focus { border-color: var(--brand); }
       </button>
     </div>
 
-    <!-- ترتيب منظم لأزرار التصدير والإغلاق -->
     <div class="action-buttons-group" style="margin-bottom:14px;">
       <button class="btn btn-sm" onclick="window.refreshSummaryData(true)" style="background: var(--blue-lt); color: var(--blue); border: 1px solid #bde0fe; font-weight: 700;">
         🔄 تحديث المبيعات
@@ -959,7 +962,7 @@ function renderLoadFlow() {
             <div class="dsummary">✅ الإجمالي بالعربية: ${doneText}</div>
             ${detailPrev ? `<div style="font-size:11px; color:var(--gray); margin-top:4px;">${detailPrev}</div>` : ''}
           </div>
-          <button class="btn btn-sm" style="background:var(--amber-lt);color:var(--amber);font-weight:700" onclick="window.editStep('${it.id}')">✏️ تعديل الكمية</button>
+          <button class="btn btn-sm" style="background:var(--amber-lt);color:var(--amber);font-weight:700; width:auto;" onclick="window.editStep('${it.id}')">✏️ تعديل الكمية</button>
         </div>`;
     } else {
       let inputFieldsHtml = '';
@@ -1035,7 +1038,6 @@ window.focusNextInput = function(e, primaryTargetId, secondaryTargetId) {
   }
 };
 
-/* إصلاح مشكلة الكيبورد والانتقال التلقائي */
 window.confirmStep = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   
@@ -1062,7 +1064,6 @@ window.confirmStep = function(itemId) {
   
   renderLoadFlow();
   
-  /* فتح الكيبورد في خانة الصنف القادم مباشرة بدون إغلاق */
   setTimeout(() => {
     const nextStep = document.querySelector('.lstep.pending-step');
     if (nextStep) {
@@ -1104,7 +1105,12 @@ window.editStep = function(itemId) {
 
 window.resetLoad = function() {
   if(!confirm('هل أنت متأكد من تصفير جميع الكميات وبدء تحميل جديد؟')) return;
-  loadedInSession = {}; cartItems = {}; forceShowLoadList = false; document.getElementById('searchLoad').value = ''; document.getElementById('searchSuggestList').classList.remove('open'); saveSessionCloud(); renderLoadFlow();
+  loadedInSession = {}; cartItems = {}; forceShowLoadList = false; 
+  document.getElementById('searchLoad').value = ''; 
+  document.getElementById('searchSuggestList').classList.remove('open'); 
+  saveSessionCloud(); 
+  renderLoadFlow();
+  window.toast('🔄 تم تصفير كافة الكميات بنجاح');
 };
 
 window.editAllLoad = function() {
