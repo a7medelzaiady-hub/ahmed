@@ -337,6 +337,7 @@ padding: 6px 4px;
 border-bottom: 1px dashed #e2e8f0;
 color: var(--text-primary);
 text-align: right;
+vertical-align: middle;
 }
 
 .fab {
@@ -862,12 +863,13 @@ ${!isDone ? `<button class="action-btn btn-edit" onclick="event.stopPropagation(
 <thead>
 <tr>
 <th>الصنف</th>
-<th style="text-align:center; width:50px;">الكمية</th>
-<th style="text-align:left; width:90px;">الإجمالي</th>
+<th style="text-align:center; width:45px;">الكمية</th>
+<th style="text-align:left; width:75px;">الإجمالي</th>
+<th style="text-align:center; width:40px;">مشاركة</th>
 </tr>
 </thead>
 <tbody>
-${order.items?.map(i => {
+${order.items?.map((i, idx) => {
     const qty = num(i.quantity || i.qty);
     const price = num(i.price);
     const itemTotal = qty * price;
@@ -875,6 +877,11 @@ ${order.items?.map(i => {
         <td>${i.name || '—'}</td>
         <td style="text-align:center;">${qty}</td>
         <td style="text-align:left;">${itemTotal.toFixed(2)} ج.م</td>
+        <td style="text-align:center;">
+            <button class="action-btn btn-share" style="width:24px; height:24px; font-size:0.65rem;" onclick="shareSingleItem('${order.id}', ${idx})" title="مشاركة الصنف">
+                <i class="fas fa-share-alt"></i>
+            </button>
+        </td>
     </tr>`;
 }).join('') || ''}
 </tbody>
@@ -902,6 +909,37 @@ icon.className = 'fas fa-chevron-down';
 el.style.display = 'block';
 icon.className = 'fas fa-chevron-up';
 }
+};
+
+window.shareSingleItem = (orderId, itemIndex) => {
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order || !order.items || !order.items[itemIndex]) return;
+
+    const item = order.items[itemIndex];
+    const qty = num(item.quantity || item.qty);
+    const price = num(item.price);
+    const total = qty * price;
+    const clientName = order.supplierName || order.customerName || 'عميل';
+
+    const shareText = `شركة الزيادي لزيوت وفلاتر السيارات\n` +
+                      `تفاصيل صنف من طلبية (${clientName}):\n` +
+                      `📦 الصنف: ${item.name || '—'}\n` +
+                      `🔢 الكمية: ${qty}\n` +
+                      `💰 السعر: ${price.toFixed(2)} ج.م\n` +
+                      `💵 الإجمالي: ${total.toFixed(2)} ج.م`;
+
+    if (navigator.share) {
+        navigator.share({
+            title: `تفاصيل صنف - ${item.name}`,
+            text: shareText
+        }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(shareText).then(() => {
+            alert('تم نسخ تفاصيل الصنف إلى الحافظة!');
+        }).catch(() => {
+            alert(shareText);
+        });
+    }
 };
 
 window.onOrderClick = (orderId) => {
