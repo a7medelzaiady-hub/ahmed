@@ -176,10 +176,29 @@
             font-size: 0.95rem;
             display: flex;
             justify-content: center;
+            align-items: center;
+            gap: 8px;
             border-top: 1px solid var(--border-color);
             color: var(--primary-green);
             box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
             z-index: 999;
+        }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #d1d5db;
+            transition: background 0.3s ease;
+        }
+        .sync-dot.syncing {
+            background: #f59e0b;
+            animation: pulse 1s infinite ease-in-out;
+        }
+        .sync-dot.fresh { background: #10b981; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.35; }
         }
 
         .fab {
@@ -239,6 +258,7 @@
 
 <div class="bottom-summary">
     <i class="fas fa-boxes me-2"></i> إجمالي الأصناف: <span id="totalCount" class="ms-2">0</span>
+    <span class="sync-dot" id="syncDot" title="حالة التحديث"></span>
 </div>
 
 <a href="add-product.html" class="fab" aria-label="إضافة منتج">
@@ -262,6 +282,45 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     let allData = [];
+
+    // ---- ذاكرة تخزين محلية لعرض فوري (stale-while-revalidate) ----
+    // بدل ما المستخدم يستنى تحميل كل الفواتير وسندات الموردين من الصفر
+    // في كل مرة يفتح فيها الصفحة، بنعرض آخر نسخة محفوظة عنده فورًا،
+    // وفي نفس الوقت بنجيب البيانات الحقيقية في الخلفية ونحدث القائمة
+    // لما تجهز. ده بيخلي الصفحة تحس إنها سريعة من أول لحظة.
+    const CACHE_KEY = 'inventoryPageCache_v1';
+
+    function setSyncState(state) {
+        const dot = document.getElementById('syncDot');
+        if (!dot) return;
+        dot.classList.remove('syncing', 'fresh');
+        if (state) dot.classList.add(state);
+    }
+
+    function loadCachedRender() {
+        try {
+            const cachedRaw = localStorage.getItem(CACHE_KEY);
+            if (!cachedRaw) return false;
+            const cached = JSON.parse(cachedRaw);
+            if (Array.isArray(cached.data) && cached.data.length) {
+                allData = cached.data;
+                renderItems();
+                setSyncState('syncing');
+                return true;
+            }
+        } catch (e) {
+            console.warn('تعذرت قراءة الكاش المحلي', e);
+        }
+        return false;
+    }
+
+    function saveCache(data) {
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() }));
+        } catch (e) {
+            console.warn('تعذر حفظ الكاش المحلي (ربما البيانات كبيرة جدًا)', e);
+        }
+    }
 
     // التحقق الفعلي مما إذا كانت الوحدة مباعة/مشتراة ككرتونة
     function isCartonUnit(unitValue, isCartonFlag) {
@@ -343,7 +402,7 @@
 
             // الاستماع المباشر للتغيرات في المخزون
             onSnapshot(collection(db, "inventory"), (snap) => {
-                allData = [];
+                const freshData = [];
                 snap.forEach(doc => {
                     const data = doc.data();
                     if (!data.isDeleted) {
@@ -362,7 +421,7 @@
                         const purchasesPcs = purchasesMap.get(doc.id) || 0;
                         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
-                        allData.push({ 
+                        freshData.push({ 
                             id: doc.id, 
                             ...data,
                             totalPcs: calculatedRealPcs,
@@ -370,11 +429,15 @@
                         });
                     }
                 });
+                allData = freshData;
                 renderItems();
+                saveCache(freshData);
+                setSyncState('fresh');
             });
 
         } catch (e) {
             console.error("خطأ في تجميع البيانات:", e);
+            setSyncState(null);
         }
     }
 
@@ -464,6 +527,9 @@
         window.location.href = `product-details.html?id=${id}`;
     };
 
+    // اعرض النسخة المحفوظة فورًا (لو موجودة) قبل ما نبدأ نجيب البيانات الحقيقية
+    const hadCache = loadCachedRender();
+    if (!hadCache) setSyncState('syncing');
     loadLiveInventory();
 </script>
 <script>
