@@ -580,13 +580,13 @@ appId: "1:300306825071:web:0426ddde56280fa090329a"
 
 const app = initializeApp(firebaseConfig);
 let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+try {
+    db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
+} catch (e) {
+    db = getFirestore(app);
+}
 
 let allOrders = [];
 let supplierBalancesMap = {}; 
@@ -619,7 +619,6 @@ async function loadBalances() {
         supplierBalancesMap = {};
         const supplierMovements = {};
 
-        // 1. تجميع كافة معاملات المشتريات والسداد من supplier_transactions
         suppTransSnap.forEach(d => {
             const data = d.data();
             if (isDocDeleted(data)) return;
@@ -645,7 +644,6 @@ async function loadBalances() {
             if (sName) supplierMovements[sName] = (supplierMovements[sName] || 0) + netEffect;
         });
 
-        // 2. تجميع السندات اليدوية غير المربوطة بالمشتريات من مجموعة transactions
         transSnap.forEach(d => {
             const data = d.data();
             if (isDocDeleted(data)) return;
@@ -662,7 +660,6 @@ async function loadBalances() {
             if (sName) supplierMovements[sName] = (supplierMovements[sName] || 0) + netEffect;
         });
 
-        // 3. احتساب الرصيد النهائي لكل مورد بدمج الرصيد الافتتاحي مع الحركة الحسابية
         suppSnap.docs.forEach(docSnap => {
             const data = docSnap.data();
             if (isDocDeleted(data)) return;
@@ -678,7 +675,6 @@ async function loadBalances() {
             if (name) supplierBalancesMap[name] = finalBalance;
         });
 
-        // 4. تجميع أرصدة العملاء الاحتياطية
         const invoiceBalances = {};
         invSnap.forEach(d => {
             const data = d.data();
@@ -724,191 +720,185 @@ async function loadBalances() {
 }
 
 async function init() {
-try {
-await loadBalances();
-const ordersSnap = await getDocs(collection(db, 'orders'));
-allOrders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+        await loadBalances();
+        const ordersSnap = await getDocs(collection(db, 'orders'));
+        allOrders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-updateChips();
-triggerOrderNotification();
-renderOrders();
-} catch (e) {
-console.error(e);
-}
+        updateChips();
+        triggerOrderNotification();
+        renderOrders();
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 function updateChips() {
-const pending = allOrders.filter(o => o.status === 'pending').length;
-const done = allOrders.filter(o => o.status === 'done').length;
-document.getElementById('chipAll').innerText = allOrders.length;
-document.getElementById('chipPending').innerText = pending;
-document.getElementById('chipDone').innerText = done;
-document.getElementById('totalCountBadge').innerText = allOrders.length;
+    const pending = allOrders.filter(o => o.status === 'pending').length;
+    const done = allOrders.filter(o => o.status === 'done').length;
+    document.getElementById('chipAll').innerText = allOrders.length;
+    document.getElementById('chipPending').innerText = pending;
+    document.getElementById('chipDone').innerText = done;
+    document.getElementById('totalCountBadge').innerText = allOrders.length;
 }
 
 function triggerOrderNotification() {
-const pendingCount = allOrders.filter(o => o.status === 'pending').length;
-if (pendingCount > 0) {
-document.getElementById('toastMessageText').innerHTML = `لديك <span class="fw-bold text-warning">${pendingCount} طلبات معلقة</span> قيد التنفيذ.`;
-const toast = document.getElementById('orderToastNotification');
-toast.classList.add('show');
-setTimeout(() => { dismissToast(); }, 4000);
-}
+    const pendingCount = allOrders.filter(o => o.status === 'pending').length;
+    if (pendingCount > 0) {
+        document.getElementById('toastMessageText').innerHTML = `لديك <span class="fw-bold text-warning">${pendingCount} طلبات معلقة</span> قيد التنفيذ.`;
+        const toast = document.getElementById('orderToastNotification');
+        toast.classList.add('show');
+        setTimeout(() => { dismissToast(); }, 4000);
+    }
 }
 
+function calculateRemainingDays(dateStr) {
+    if (!dateStr) return 9999;
+    try {
+        const cleanDateStr = dateStr.split(' ')[0].trim();
+        const today = moment().startOf('day');
+
+        let target = moment(cleanDateStr, 'DD-MM-YYYY', true).startOf('day');
+        if (!target.isValid()) target = moment(cleanDateStr, 'YYYY-MM-DD', true).startOf('day');
+        if (!target.isValid()) target = moment(cleanDateStr).startOf('day');
+        if (!target.isValid()) return 9999;
+
+        return target.diff(today, 'days');
+    } catch (e) { 
+        return 9999; 
+    }
+}
+
+function renderOrders() {
+    const term = document.getElementById('searchInput').value.trim().toLowerCase();
+    let filtered = [...allOrders];
+
+    if (currentFilter !== 'all') { filtered = filtered.filter(o => o.status === currentFilter); }
+    if (term) {
+        filtered = filtered.filter(o => o.customerName?.toLowerCase().includes(term) || o.supplierName?.toLowerCase().includes(term) || o.items?.some(i => i.name?.toLowerCase().includes(term)));
+    }
+
+    const container = document.getElementById('ordersList');
+    if (!filtered.length) {
+        container.innerHTML = `<div class="empty-state"><h6>لا توجد طلبات</h6></div>`;
+        return;
+    }
+
+    filtered.sort((a, b) => {
+        if (a.status === 'done' && b.status !== 'done') return 1;
+        if (a.status !== 'done' && b.status === 'done') return -1;
+        return calculateRemainingDays(a.date) - calculateRemainingDays(b.date);
+    });
+
+    let html = '';
+    filtered.forEach(order => {
+        const isDone = order.status === 'done';
+        const displayName = order.supplierName || order.customerName || '—';
+        const initials = displayName.charAt(0);
+        const total = num(order.total).toFixed(2);
+        const daysRemaining = calculateRemainingDays(order.date);
+
+        let badgeHTML = '';
+        if (isDone) {
+            badgeHTML = `<span class="days-counter-badge success-light"><i class="fas fa-check-double"></i> تم التسليم</span>`;
+        } else if (daysRemaining === 9999) {
+            badgeHTML = `<span class="days-counter-badge warning-light">لم يحدد موعد</span>`;
+        } else if (daysRemaining === 0) {
+            badgeHTML = `<span class="days-counter-badge urgent" style="border:1px solid #c62828; background: #ffebee; color: #c62828;"><i class="fas fa-exclamation-circle"></i> موعد التسليم اليوم!</span>`;
+        } else if (daysRemaining === 1) {
+            badgeHTML = `<span class="days-counter-badge warning-light" style="background: #fff3e0; color: #e65100; border:1px solid #ffe0b2;"><i class="fas fa-clock"></i> التسليم غداً</span>`;
+        } else if (daysRemaining < 0) {
+            badgeHTML = `<span class="days-counter-badge urgent"><i class="fas fa-history"></i> متأخرة منذ ${Math.abs(daysRemaining)} يوم</span>`;
+        } else {
+            badgeHTML = `<span class="days-counter-badge primary-light">متبقي ${daysRemaining} يوم</span>`;
+        }
+
+        const tapHint = !isDone 
+        ? `<div class="tap-hint"><i class="fas fa-arrow-left"></i> اضغط لتحويلها لفاتورة مبيعات</div>`
+        : `<div class="tap-hint" style="background:#f0fdf4; border-color:#bbf7d0; color:#16a34a;"><i class="fas fa-check"></i> تم الفوترة</div>`;
+
+        html += `
+        <div class="order-card ${isDone ? 'status-done':''}" onclick="onOrderClick('${order.id}')">
+        <div class="card-header-row">
+        <div class="customer-name">
+        <div class="customer-avatar">${initials}</div>
+        <span>${displayName}</span>
+        </div>
+        <div class="header-actions-wrap">
+        <span class="status-badge ${isDone?'status-done':'status-pending'}">${isDone?'تم الفوترة':'قيد التنفيذ'}</span>
+        <div class="buttons-group">
+        <button class="action-btn btn-view-items" onclick="event.stopPropagation(); toggleItemsDropdown('${order.id}', this)"><i class="fas fa-chevron-down"></i></button>
+        <button class="action-btn btn-share" onclick="event.stopPropagation(); shareAsThermalInvoice('${order.id}')"><i class="fas fa-share-alt"></i></button>
+        ${!isDone ? `<button class="action-btn btn-edit" onclick="event.stopPropagation(); editOrder('${order.id}')"><i class="fas fa-edit"></i></button>` : ''}
+        <button class="action-btn btn-delete" onclick="event.stopPropagation(); confirmDelete('${order.id}', '${displayName}')"><i class="fas fa-trash"></i></button>
+        </div>
+        </div>
+        </div>
+        <div class="card-body-row">
+        <div>${badgeHTML}</div>
+        <div class="items-dropdown-table" id="dropdown-${order.id}" onclick="event.stopPropagation();">
+        <table>
+        <thead>
+        <tr>
+        <th>الصنف</th>
+        <th style="text-align:center; width:45px;">الكمية</th>
+        <th style="text-align:left; width:75px;">الإجمالي</th>
+        <th style="text-align:center; width:40px;">مشاركة</th>
+        </tr>
+        </thead>
+        <tbody>
+        ${order.items?.map((i, idx) => {
+            const qty = num(i.quantity || i.qty);
+            const price = num(i.price);
+            const itemTotal = qty * price;
+            return `<tr>
+                <td>${i.name || '—'}</td>
+                <td style="text-align:center;">${qty}</td>
+                <td style="text-align:left;">${itemTotal.toFixed(2)} ج.م</td>
+                <td style="text-align:center;">
+                    <button class="action-btn btn-share" style="width:24px; height:24px; font-size:0.65rem;" onclick="event.stopPropagation(); shareSingleItem('${order.id}', ${idx})" title="مشاركة الصنف">
+                        <i class="fas fa-share-alt"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('') || ''}
+        </tbody>
+        </table>
+        </div>
+        <div class="card-footer-row mt-2">
+        <div class="order-meta"><i class="fas fa-clock"></i> التسليم: ${order.date || '—'}</div>
+        <div class="order-total">${total} ج.م</div>
+        </div>
+        ${tapHint}
+        </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// تصحيح نطاق الدوال لربطها بـ window مباشرة
 window.dismissToast = () => document.getElementById('orderToastNotification').classList.remove('show');
 
 window.setFilter = (filter, el) => {
-currentFilter = filter;
-document.querySelectorAll('.stat-chip').forEach(c => c.classList.remove('active'));
-el.classList.add('active');
-renderOrders();
+    currentFilter = filter;
+    document.querySelectorAll('.stat-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    renderOrders();
 };
 
 window.filterOrders = () => renderOrders();
 
-function calculateRemainingDays(dateStr) {
-if (!dateStr) return 9999;
-try {
-const cleanDateStr = dateStr.split(' ')[0].trim();
-const today = moment().startOf('day');
-
-let target = moment(cleanDateStr, 'DD-MM-YYYY', true).startOf('day');
-
-if (!target.isValid()) {
-    target = moment(cleanDateStr, 'YYYY-MM-DD', true).startOf('day');
-}
-
-if (!target.isValid()) {
-    target = moment(cleanDateStr).startOf('day');
-}
-
-if (!target.isValid()) return 9999;
-
-return target.diff(today, 'days');
-} catch (e) { 
-return 9999; 
-}
-}
-
-function renderOrders() {
-const term = document.getElementById('searchInput').value.trim().toLowerCase();
-let filtered = [...allOrders];
-
-if (currentFilter !== 'all') { filtered = filtered.filter(o => o.status === currentFilter); }
-if (term) {
-filtered = filtered.filter(o => o.customerName?.toLowerCase().includes(term) || o.supplierName?.toLowerCase().includes(term) || o.items?.some(i => i.name?.toLowerCase().includes(term)));
-}
-
-const container = document.getElementById('ordersList');
-if (!filtered.length) {
-container.innerHTML = `<div class="empty-state"><h6>لا توجد طلبات</h6></div>`;
-return;
-}
-
-filtered.sort((a, b) => {
-if (a.status === 'done' && b.status !== 'done') return 1;
-if (a.status !== 'done' && b.status === 'done') return -1;
-return calculateRemainingDays(a.date) - calculateRemainingDays(b.date);
-});
-
-let html = '';
-filtered.forEach(order => {
-const isDone = order.status === 'done';
-const displayName = order.supplierName || order.customerName || '—';
-const initials = displayName.charAt(0);
-const total = num(order.total).toFixed(2);
-const daysRemaining = calculateRemainingDays(order.date);
-
-let badgeHTML = '';
-if (isDone) {
-badgeHTML = `<span class="days-counter-badge success-light"><i class="fas fa-check-double"></i> تم التسليم</span>`;
-} else if (daysRemaining === 9999) {
-badgeHTML = `<span class="days-counter-badge warning-light">لم يحدد موعد</span>`;
-} else if (daysRemaining === 0) {
-badgeHTML = `<span class="days-counter-badge urgent" style="border:1px solid #c62828; background: #ffebee; color: #c62828;"><i class="fas fa-exclamation-circle"></i> موعد التسليم اليوم!</span>`;
-} else if (daysRemaining === 1) {
-badgeHTML = `<span class="days-counter-badge warning-light" style="background: #fff3e0; color: #e65100; border:1px solid #ffe0b2;"><i class="fas fa-clock"></i> التسليم غداً</span>`;
-} else if (daysRemaining < 0) {
-badgeHTML = `<span class="days-counter-badge urgent"><i class="fas fa-history"></i> متأخرة منذ ${Math.abs(daysRemaining)} يوم</span>`;
-} else {
-badgeHTML = `<span class="days-counter-badge primary-light">متبقي ${daysRemaining} يوم</span>`;
-}
-
-const tapHint = !isDone 
-? `<div class="tap-hint"><i class="fas fa-arrow-left"></i> اضغط لتحويلها لفاتورة مبيعات</div>`
-: `<div class="tap-hint" style="background:#f0fdf4; border-color:#bbf7d0; color:#16a34a;"><i class="fas fa-check"></i> تم الفوترة</div>`;
-
-html += `
-<div class="order-card ${isDone ? 'status-done':''}" onclick="onOrderClick('${order.id}')">
-<div class="card-header-row">
-<div class="customer-name">
-<div class="customer-avatar">${initials}</div>
-<span>${displayName}</span>
-</div>
-<div class="header-actions-wrap">
-<span class="status-badge ${isDone?'status-done':'status-pending'}">${isDone?'تم الفوترة':'قيد التنفيذ'}</span>
-<div class="buttons-group">
-<button class="action-btn btn-view-items" onclick="event.stopPropagation(); toggleItemsDropdown('${order.id}', this)"><i class="fas fa-chevron-down"></i></button>
-<button class="action-btn btn-share" onclick="event.stopPropagation(); shareAsThermalInvoice('${order.id}')"><i class="fas fa-share-alt"></i></button>
-${!isDone ? `<button class="action-btn btn-edit" onclick="event.stopPropagation(); editOrder('${order.id}')"><i class="fas fa-edit"></i></button>` : ''}
-<button class="action-btn btn-delete" onclick="event.stopPropagation(); confirmDelete('${order.id}', '${displayName}')"><i class="fas fa-trash"></i></button>
-</div>
-</div>
-</div>
-<div class="card-body-row">
-<div>${badgeHTML}</div>
-<div class="items-dropdown-table" id="dropdown-${order.id}" onclick="event.stopPropagation();">
-<table>
-<thead>
-<tr>
-<th>الصنف</th>
-<th style="text-align:center; width:45px;">الكمية</th>
-<th style="text-align:left; width:75px;">الإجمالي</th>
-<th style="text-align:center; width:40px;">مشاركة</th>
-</tr>
-</thead>
-<tbody>
-${order.items?.map((i, idx) => {
-    const qty = num(i.quantity || i.qty);
-    const price = num(i.price);
-    const itemTotal = qty * price;
-    return `<tr>
-        <td>${i.name || '—'}</td>
-        <td style="text-align:center;">${qty}</td>
-        <td style="text-align:left;">${itemTotal.toFixed(2)} ج.م</td>
-        <td style="text-align:center;">
-            <button class="action-btn btn-share" style="width:24px; height:24px; font-size:0.65rem;" onclick="shareSingleItem('${order.id}', ${idx})" title="مشاركة الصنف">
-                <i class="fas fa-share-alt"></i>
-            </button>
-        </td>
-    </tr>`;
-}).join('') || ''}
-</tbody>
-</table>
-</div>
-<div class="card-footer-row mt-2">
-<div class="order-meta"><i class="fas fa-clock"></i> التسليم: ${order.date || '—'}</div>
-<div class="order-total">${total} ج.م</div>
-</div>
-${tapHint}
-</div>
-</div>`;
-});
-
-container.innerHTML = html;
-}
-
 window.toggleItemsDropdown = (id, btn) => {
-const el = document.getElementById(`dropdown-${id}`);
-const icon = btn.querySelector('i');
-if (el.style.display === 'block') {
-el.style.display = 'none';
-icon.className = 'fas fa-chevron-down';
-} else {
-el.style.display = 'block';
-icon.className = 'fas fa-chevron-up';
-}
+    const el = document.getElementById(`dropdown-${id}`);
+    const icon = btn.querySelector('i');
+    if (el.style.display === 'block') {
+        el.style.display = 'none';
+        icon.className = 'fas fa-chevron-down';
+    } else {
+        el.style.display = 'block';
+        icon.className = 'fas fa-chevron-up';
+    }
 };
 
 window.shareSingleItem = (orderId, itemIndex) => {
@@ -943,94 +933,94 @@ window.shareSingleItem = (orderId, itemIndex) => {
 };
 
 window.onOrderClick = (orderId) => {
-const order = allOrders.find(o => o.id === orderId);
-if (!order || order.status === 'done') return;
-pendingOrderForConvert = order;
-const name = order.supplierName || order.customerName || 'المورد';
-document.getElementById('convertModalText').innerHTML = `هل تريد تحويل طلبية <b>${name}</b> إلى فاتورة مبيعات؟`;
-document.getElementById('confirmConvertBtn').onclick = () => {
-const params = new URLSearchParams({ fromOrder: order.id, customerName: name, total: order.total, items: JSON.stringify(order.items || []), deleteOrderAfterSave: "true" });
-window.location.href = `sales-invoice.html?${params.toString()}`;
-};
-document.getElementById('convertModal').style.display = 'flex';
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order || order.status === 'done') return;
+    pendingOrderForConvert = order;
+    const name = order.supplierName || order.customerName || 'المورد';
+    document.getElementById('convertModalText').innerHTML = `هل تريد تحويل طلبية <b>${name}</b> إلى فاتورة مبيعات؟`;
+    document.getElementById('confirmConvertBtn').onclick = () => {
+        const params = new URLSearchParams({ fromOrder: order.id, customerName: name, total: order.total, items: JSON.stringify(order.items || []), deleteOrderAfterSave: "true" });
+        window.location.href = `sales-invoice.html?${params.toString()}`;
+    };
+    document.getElementById('convertModal').style.display = 'flex';
 };
 
 window.closeModal = () => document.getElementById('convertModal').style.display = 'none';
 window.editOrder = (id) => window.location.href = `customer-orders.html?editOrderId=${id}`;
 window.confirmDelete = async (id, name) => {
-if (confirm(`حذف طلبية ${name}؟`)) {
-await deleteDoc(doc(db, 'orders', id));
-allOrders = allOrders.filter(o => o.id !== id);
-updateChips(); renderOrders();
-}
+    if (confirm(`حذف طلبية ${name}؟`)) {
+        await deleteDoc(doc(db, 'orders', id));
+        allOrders = allOrders.filter(o => o.id !== id);
+        updateChips(); renderOrders();
+    }
 };
 
 window.shareAsThermalInvoice = (orderId) => {
-const order = allOrders.find(o => o.id === orderId);
-if (!order) return;
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order) return;
 
-const sId = order.supplierId || order.customerId;
-const sName = (order.supplierName || order.customerName || '').trim();
+    const sId = order.supplierId || order.customerId;
+    const sName = (order.supplierName || order.customerName || '').trim();
 
-let prevBalance = 0;
+    let prevBalance = 0;
 
-if (sId && supplierBalancesMap[sId] !== undefined) {
-    prevBalance = supplierBalancesMap[sId];
-} else if (sName && supplierBalancesMap[sName] !== undefined) {
-    prevBalance = supplierBalancesMap[sName];
-} else if (sId && customerBalancesMap[sId] !== undefined) {
-    prevBalance = customerBalancesMap[sId];
-} else if (sName && customerBalancesMap[sName] !== undefined) {
-    prevBalance = customerBalancesMap[sName];
-}
+    if (sId && supplierBalancesMap[sId] !== undefined) {
+        prevBalance = supplierBalancesMap[sId];
+    } else if (sName && supplierBalancesMap[sName] !== undefined) {
+        prevBalance = supplierBalancesMap[sName];
+    } else if (sId && customerBalancesMap[sId] !== undefined) {
+        prevBalance = customerBalancesMap[sId];
+    } else if (sName && customerBalancesMap[sName] !== undefined) {
+        prevBalance = customerBalancesMap[sName];
+    }
 
-const currentTotal = num(order.total);
-const grandTotal = prevBalance + currentTotal;
+    const currentTotal = num(order.total);
+    const grandTotal = prevBalance + currentTotal;
 
-document.getElementById('shareLoadingModal').style.display = 'flex';
-document.getElementById('thOrderDate').innerText = order.date ? order.date.split(' ')[0] : '—';
-document.getElementById('thCustomerName').innerText = sName || 'مورد/عميل';
+    document.getElementById('shareLoadingModal').style.display = 'flex';
+    document.getElementById('thOrderDate').innerText = order.date ? order.date.split(' ')[0] : '—';
+    document.getElementById('thCustomerName').innerText = sName || 'مورد/عميل';
 
-const daysRemaining = calculateRemainingDays(order.date);
-let remainingText = '';
-if (daysRemaining === 9999) remainingText = 'غير محدد';
-else if (daysRemaining === 0) remainingText = 'اليوم';
-else if (daysRemaining === 1) remainingText = 'غداً';
-else if (daysRemaining === 2) remainingText = 'بعد غد';
-else if (daysRemaining > 2) remainingText = `بعد ${daysRemaining} أيام`;
-else if (daysRemaining < 0) remainingText = `متأخر منذ ${Math.abs(daysRemaining)} يوم`;
+    const daysRemaining = calculateRemainingDays(order.date);
+    let remainingText = '';
+    if (daysRemaining === 9999) remainingText = 'غير محدد';
+    else if (daysRemaining === 0) remainingText = 'اليوم';
+    else if (daysRemaining === 1) remainingText = 'غداً';
+    else if (daysRemaining === 2) remainingText = 'بعد غد';
+    else if (daysRemaining > 2) remainingText = `بعد ${daysRemaining} أيام`;
+    else if (daysRemaining < 0) remainingText = `متأخر منذ ${Math.abs(daysRemaining)} يوم`;
 
-document.getElementById('thRemainingDays').innerText = remainingText;
+    document.getElementById('thRemainingDays').innerText = remainingText;
 
-document.getElementById('thFinalTotal').innerText = `${currentTotal.toFixed(2)} ج.م`;
-document.getElementById('thPreviousBalance').innerText = `${prevBalance.toFixed(2)} ج.م`; 
-document.getElementById('thGrandTotal').innerText = `${grandTotal.toFixed(2)} ج.م`;
+    document.getElementById('thFinalTotal').innerText = `${currentTotal.toFixed(2)} ج.م`;
+    document.getElementById('thPreviousBalance').innerText = `${prevBalance.toFixed(2)} ج.م`; 
+    document.getElementById('thGrandTotal').innerText = `${grandTotal.toFixed(2)} ج.م`;
 
-document.getElementById('thReceiptItems').innerHTML = order.items?.map(i => {
-    const qty = num(i.quantity || i.qty);
-    const price = num(i.price);
-    const itemTotal = qty * price;
-    return `<tr>
-        <td style="text-align:right;">${i.name || '—'}</td>
-        <td style="text-align:center;">${qty}</td>
-        <td style="text-align:center;">${price.toFixed(2)}</td>
-        <td style="text-align:left;">${itemTotal.toFixed(2)}</td>
-    </tr>`;
-}).join('') || '';
+    document.getElementById('thReceiptItems').innerHTML = order.items?.map(i => {
+        const qty = num(i.quantity || i.qty);
+        const price = num(i.price);
+        const itemTotal = qty * price;
+        return `<tr>
+            <td style="text-align:right;">${i.name || '—'}</td>
+            <td style="text-align:center;">${qty}</td>
+            <td style="text-align:center;">${price.toFixed(2)}</td>
+            <td style="text-align:left;">${itemTotal.toFixed(2)}</td>
+        </tr>`;
+    }).join('') || '';
 
-setTimeout(() => {
-html2canvas(document.getElementById('thermalReceiptArea'), { scale: 2 }).then(canvas => {
-canvas.toBlob(blob => {
-document.getElementById('shareLoadingModal').style.display = 'none';
-const file = new File([blob], `invoice.png`, { type: 'image/png' });
-if (navigator.canShare && navigator.canShare({ files: [file] })) {
-navigator.share({ files: [file], title: 'الفاتورة' });
-} else {
-const link = document.createElement('a'); link.download = 'invoice.png'; link.href = canvas.toDataURL(); link.click();
-}
-});
-});
-}, 400);
+    setTimeout(() => {
+        html2canvas(document.getElementById('thermalReceiptArea'), { scale: 2 }).then(canvas => {
+            canvas.toBlob(blob => {
+                document.getElementById('shareLoadingModal').style.display = 'none';
+                const file = new File([blob], `invoice.png`, { type: 'image/png' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    navigator.share({ files: [file], title: 'الفاتورة' });
+                } else {
+                    const link = document.createElement('a'); link.download = 'invoice.png'; link.href = canvas.toDataURL(); link.click();
+                }
+            });
+        });
+    }, 400);
 };
 
 init();
