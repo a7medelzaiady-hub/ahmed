@@ -1141,23 +1141,68 @@ window.updateManualSummaryField = function(itemId, field, val) {
   saveSessionCloud();
 };
 
-window.toggleItemInventoryComplete = function(itemId, isComplete) {
+/* الإغلاق التلقائي وترحيل الأرشيف عند إتمام آخر صنف بالجرد والمشاركة على الواتساب */
+window.toggleItemInventoryComplete = async function(itemId, isComplete) {
   if (!cartItems[itemId]) cartItems[itemId] = {}; 
   cartItems[itemId].isInventoryDone = isComplete; 
   saveSessionCloud();
   
   const r = cachedCalculatedRows.find(item => item.id === itemId); 
   if (r) r.isInventoryDone = isComplete;
+  
   const cardEl = document.getElementById('card-item-' + itemId);
   if (cardEl) {
     cardEl.style.opacity = '0'; cardEl.style.transform = 'translateY(-10px)';
-    setTimeout(() => {
+    setTimeout(async () => {
       cardEl.remove(); updateTabCounters();
-      const cardsContainer = document.getElementById('summaryCards');
-      if (cardsContainer.children.length === 0) { const emptyMsg = currentSummaryTab === 'completed' ? 'لا توجد أصناف مكتملة الجرد حالياً' : 'ممتاز! تم جرد كافة أصناف هذه الحركة'; cardsContainer.innerHTML = `<div class="empty"><span class="em">🎉</span>${emptyMsg}</div>`; }
+      
+      const activeRemaining = cachedCalculatedRows.filter(row => !row.isInventoryDone).length;
+      
+      if (activeRemaining === 0 && isComplete) {
+        window.toast('🎉 اكتمل جرد جميع الأصناف! جاري الأرشفة والشار بالواتساب...');
+        await window.autoArchiveAndShareWhatsApp();
+      } else {
+        const cardsContainer = document.getElementById('summaryCards');
+        if (cardsContainer.children.length === 0) { 
+          const emptyMsg = currentSummaryTab === 'completed' ? 'لا توجد أصناف مكتملة الجرد حالياً' : 'ممتاز! تم جرد كافة أصناف هذه الحركة'; 
+          cardsContainer.innerHTML = `<div class="empty"><span class="em">🎉</span>${emptyMsg}</div>`; 
+        }
+      }
     }, 250);
   }
   window.toast(isComplete ? '✅ تم نقل الصنف لبطاقة الأصناف المكتملة' : '↩️ تم إرجاع الصنف لقائمة الجرد النشطة');
+};
+
+/* دالة الأرشفة والتصدير للواتساب */
+window.autoArchiveAndShareWhatsApp = async function() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  
+  const exportData = cachedCalculatedRows.map(r => ({
+    id: r.id, name: r.it.name, loaded: r.loadedText, sold: r.soldText, inTruck: r.inTruckText, returnedManual: r.manualText, status: r.calculatedStatus || 'مضبوط'
+  }));
+
+  try {
+    const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
+    await setDoc(doc(db, 'archived_inventory', d), {
+      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
+    });
+    
+    // إنشاء وحفظ الـ PDF بالخلفية
+    await window.exportPDF('all', false);
+
+    // تجهيز رابط الواتساب المباشر للرقم المحدد
+    const phone = "201000197222";
+    const msg = `📋 *الزيادي لزيوت السيارات*\nتم إتمام وجرد كافة أصناف العربة لليوم بتاريخ: *${d}*\n\n✅ تم إغلاق وترحيل اليوم للأرشيف بنجاح.\nيرجى مراجعة ملف الـ PDF المرفق للجرد الشامل.`;
+    const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`;
+    
+    setTimeout(() => {
+      window.open(waUrl, '_blank');
+    }, 1000);
+
+  } catch(e) { 
+    console.error(e); 
+    window.toast('❌ حدث خطأ أثناء إغلاق اليوم والترحيل تلقائياً'); 
+  }
 };
 
 function updateTabCounters() {
@@ -1654,7 +1699,6 @@ window.exportArchivePDF = async function(d) {
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       data.forEach((r, i) => {
-        const isDiff = r.status === 'عجز' || r.status === 'زيادة';
         cardsListHtml += `
           <div style="background:#f8faf9; border:1px solid #dbe3e0; border-radius:10px; padding:12px; margin-bottom:10px; page-break-inside:avoid; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
             <div style="font-size:15px; font-weight:800; color:#0a4a31; margin-bottom:8px; border-bottom:1px dashed #dbe3e0; padding-bottom:4px; display:flex; justify-content:space-between;">
@@ -1706,8 +1750,7 @@ window.exportArchivePDF = async function(d) {
   }
 };
 
-/* تحسين تصدير PDF للموبايل بالكامل */
-window.exportPDF = async function(mode = 'all') {
+window.exportPDF = async function(mode = 'all', openInNewTab = true) {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات لتصديرها'); return; }
   const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
   if (!exportRows.length) { window.toast('⚠️ لا توجد أصناف مكتملة لتصديرها'); return; }
@@ -1774,10 +1817,11 @@ window.exportPDF = async function(mode = 'all') {
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
   
-  html2pdf().set(opt).from(container.querySelector('#summary-print-area')).output('bloburl').then((pdfUrl) => { 
+  return html2pdf().set(opt).from(container.querySelector('#summary-print-area')).output('bloburl').then((pdfUrl) => { 
     document.body.removeChild(container); 
-    window.open(pdfUrl, '_blank');
-    window.toast('✅ تم فتح التقرير بوضع الموبايل المريح'); 
+    if (openInNewTab) window.open(pdfUrl, '_blank');
+    window.toast('✅ تم توليد ملف الجرد بنجاح'); 
+    return pdfUrl;
   });
 };
 
