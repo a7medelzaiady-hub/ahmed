@@ -134,7 +134,7 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .archive-status-badge.pending { background: var(--amber-lt); color: #8a5b00; }
 .archive-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
 
-/* كارد الجرد المعدل (بدون متبقي حسابي) */
+/* كارد الجرد */
 .inv-item-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-3d); transition: opacity 0.3s ease, transform 0.3s ease; }
 .inv-item-card:active { transform: translateY(2px); }
 .inv-item-card.completed-card { background: #f8faf9; border-color: #c3e6cb; }
@@ -145,7 +145,6 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 
 .edit-timestamp-badge { font-size: 11px; font-weight: 700; color: #8a5b00; background: #fff8e6; border: 1px solid #ffe599; border-radius: 8px; padding: 4px 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
 
-/* تغيير التوزيع إلى 3 أعمدة بدلاً من 4 بعد حذف المتبقي الحسابي */
 .inv-stats-row { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 8px; margin-bottom: 10px; }
 .inv-stats-row .inv-stat { background: var(--surface); border-radius: 8px; padding: 8px 4px; text-align: center; }
 .inv-stats-row .inv-stat .lbl { font-size: 10px; color: var(--gray); font-weight: 700; display: block; margin-bottom: 3px; white-space: nowrap; }
@@ -521,7 +520,6 @@ function listenToDailyLoadChanges() {
     }
   });
 
-  // استدعاء المتبقي السابق من اليوم الماضي
   const prevDate = getPreviousDateStr(d);
   getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
     previousTruckStock = {};
@@ -1013,6 +1011,7 @@ window.focusNextInput = function(e, primaryTargetId, secondaryTargetId) {
   }
 };
 
+// حل مشكلة اختفاء الكيبورد بعد الضغط على "تم"
 window.confirmStep = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   
@@ -1039,17 +1038,21 @@ window.confirmStep = function(itemId) {
   
   renderLoadFlow();
   
+  // حل اختفاء الكيبورد: انتظر انتهاء الـ Scroll بالكامل ثم افتح الكيبورد على الخانة التالية
   const nextStep = document.querySelector('.lstep.pending-step');
   if (nextStep) {
     const nextId = nextStep.dataset.itemid;
     const inp = document.getElementById(`plc-${nextId}`) || document.getElementById(`pll-${nextId}`) || document.getElementById(`lc-${nextId}`) || document.getElementById(`ll-${nextId}`);
+    
     if (inp) { 
+      nextStep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      nextStep.classList.add('active'); 
+      
+      // تأخير 250ms لمنع التمرير من إغلاق الكيبورد
       setTimeout(() => { 
-        nextStep.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
-        nextStep.classList.add('active'); 
         inp.focus(); 
         if (typeof inp.select === 'function') inp.select(); 
-      }, 50); 
+      }, 250); 
     }
   }
 };
@@ -1071,7 +1074,7 @@ window.editStep = function(itemId) {
       const inp = document.getElementById(`plc-${itemId}`) || document.getElementById(`pll-${itemId}`) || document.getElementById(`lc-${itemId}`) || document.getElementById(`ll-${itemId}`); 
       if (inp) { inp.focus(); inp.select(); } 
     } 
-  }, 100);
+  }, 250);
 };
 
 window.resetLoad = function() {
