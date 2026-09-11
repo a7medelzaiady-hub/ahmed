@@ -303,7 +303,6 @@ table select:focus { border-color: var(--brand); }
         <p>سجّل ما كان بداخل العربية + الحمولة الجديدة لربطها بالمبيعات</p>
       </div>
       
-      <!-- ترتيب منظم للشبكة وإضافة زر تصفير التحميل -->
       <div class="action-buttons-group">
         <a href="index1.html" class="btn btn-primary btn-sm" style="background:var(--brand-d);">
           🏠 الرئيسية
@@ -1643,59 +1642,43 @@ window.deleteArchiveDate = async function(d) {
 };
 
 window.exportArchivePDF = async function(d) {
-  window.toast('⏳ جاري فتح تقرير الـ PDF للعرض...');
+  window.toast('⏳ جاري فتح تقرير الـ PDF المخصص للموبايل...');
   try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
-    let tbody = '';
-    let titleText = `تقرير جرد وتتبع حركة حمولة السيارة الفعلي`;
+    let cardsListHtml = '';
+    let titleText = `تقرير جرد حركة حمولة السيارة الفعلي`;
     const printDateStr = new Date().toLocaleDateString('ar-EG');
 
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
-      data.forEach(r => {
-        tbody += `
-          <tr style="page-break-inside: avoid;">
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:13px; color:#1b2e26;">${r.name}</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px; color:#1b2e26;">${r.loaded}</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:13px;">${r.sold}</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:13px;">${r.inTruck || '—'}</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">${r.returnedManual}</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:13px;">${r.status}</td>
-          </tr>`;
-      });
-    } else if (loadDoc.exists()) {
-      const loadData = loadDoc.data().cartItems || {};
-      Object.values(loadData).forEach(r => {
-        tbody += `
-          <tr style="page-break-inside: avoid;">
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:13px;">${r.name}</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">${(r.prevCartons||0) + (r.loadedCartons||0)} كرتونة</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:13px;">${(r.prevLoose||0) + (r.loadedLoose||0)} قطعة</td>
-            <td style="padding:8px 6px; border:1px solid #0b5e3d; text-align:center; font-size:12px;" colspan="3">${r.lastEditedAt || '—'}</td>
-          </tr>`;
+      data.forEach((r, i) => {
+        const isDiff = r.status === 'عجز' || r.status === 'زيادة';
+        cardsListHtml += `
+          <div style="background:#f8faf9; border:1px solid #dbe3e0; border-radius:10px; padding:12px; margin-bottom:10px; page-break-inside:avoid; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <div style="font-size:15px; font-weight:800; color:#0a4a31; margin-bottom:8px; border-bottom:1px dashed #dbe3e0; padding-bottom:4px; display:flex; justify-content:space-between;">
+              <span>${i+1}. ${r.name}</span>
+              <span style="font-size:12px; padding:2px 8px; border-radius:6px; color:#fff; background:${r.status==='عجز'?'#d90429':r.status==='زيادة'?'#2d6a4f':'#0b5e3d'};">${r.status || 'مضبوط'}</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px;">
+              <div style="background:#fff; padding:6px; border-radius:6px;"><b>المحمل:</b> ${r.loaded}</div>
+              <div style="background:#fff; padding:6px; border-radius:6px;"><b>المباع:</b> <span style="color:#d90429; font-weight:bold;">${r.sold}</span></div>
+              <div style="background:#e0f2fe; padding:6px; border-radius:6px; color:#0284c7;"><b>المتبقي:</b> <b>${r.inTruck || '—'}</b></div>
+              <div style="background:#fff; padding:6px; border-radius:6px;"><b>الراجع:</b> ${r.returnedManual || '0'}</div>
+            </div>
+          </div>`;
       });
     }
 
     const html = `
-      <div id="arch-pdf-area" style="padding:20px; direction:rtl; font-family:'Cairo', Tahoma, sans-serif; background:#fff; width:900px; box-sizing:border-box;">
-        <h2 style="text-align:center; color:#0b5e3d; margin-bottom:2px; font-size:24px; font-weight:800;">الزيادي لزيوت السيارات</h2>
-        <h3 style="text-align:center; color:#475569; margin-bottom:6px; font-size:16px; font-weight:700;">${titleText}</h3>
-        <p style="text-align:center; margin:0 0 12px 0; font-size:13px; font-weight:bold; color:#475569; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 8px;">تاريخ الحركة: ${d} | تاريخ الطباعة: ${printDateStr}</p>
-        <table style="width:100%; border-collapse:collapse; border:1.5px solid #0b5e3d;">
-          <thead>
-            <tr style="background:#0b5e3d; color:#fff;">
-              <th style="padding:10px 6px; text-align:right; font-size:14px; font-weight:800;">اسم الصنف</th>
-              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">المحمل الكلي</th>
-              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">المباع</th>
-              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800; background:#08462d;">المتبقي بالعربية</th>
-              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">الراجع</th>
-              <th style="padding:10px 4px; text-align:center; font-size:14px; font-weight:800;">الحالة</th>
-            </tr>
-          </thead>
-          <tbody>${tbody}</tbody>
-        </table>
+      <div id="arch-pdf-area" style="padding:15px; direction:rtl; font-family:'Cairo', Tahoma, sans-serif; background:#fff; width:450px; box-sizing:border-box; margin:auto;">
+        <div style="text-align:center; border-bottom:2px solid #0b5e3d; padding-bottom:8px; margin-bottom:12px;">
+          <h2 style="color:#0b5e3d; margin:0; font-size:20px; font-weight:800;">الزيادي لزيوت السيارات</h2>
+          <h3 style="color:#475569; margin:4px 0; font-size:14px; font-weight:700;">${titleText}</h3>
+          <p style="margin:0; font-size:11px; font-weight:bold; color:#6b7a73;">تاريخ الحركة: ${d} | طباعة: ${printDateStr}</p>
+        </div>
+        <div>${cardsListHtml}</div>
       </div>`;
 
     const container = document.createElement('div');
@@ -1704,18 +1687,18 @@ window.exportArchivePDF = async function(d) {
     document.body.appendChild(container);
 
     const opt = { 
-      margin: 0.15, 
-      filename: `تقرير_أرشيف_${d}.pdf`, 
+      margin: 0.1, 
+      filename: `تقرير_جرد_موبايل_${d}.pdf`, 
       image: { type:'jpeg', quality:0.98 }, 
       html2canvas: { scale:2, useCORS:true }, 
-      jsPDF: { unit:'in', format:'a4', orientation:'landscape' },
+      jsPDF: { unit:'in', format:'a4', orientation:'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
     
     html2pdf().set(opt).from(container.querySelector('#arch-pdf-area')).output('bloburl').then((pdfUrl) => {
       document.body.removeChild(container);
       window.open(pdfUrl, '_blank');
-      window.toast('✅ تم فتح الملف بنجاح');
+      window.toast('✅ تم فتح التقرير المخصص للموبايل');
     });
   } catch (e) {
     console.error(e);
@@ -1723,15 +1706,16 @@ window.exportArchivePDF = async function(d) {
   }
 };
 
+/* تحسين تصدير PDF للموبايل بالكامل */
 window.exportPDF = async function(mode = 'all') {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات لتصديرها'); return; }
   const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
   if (!exportRows.length) { window.toast('⚠️ لا توجد أصناف مكتملة لتصديرها'); return; }
-  window.toast('⏳ جاري تجهيز تقرير الجرد للعرض...');
+  window.toast('⏳ جاري تجهيز التقرير للعرض على الموبايل...');
   
   const reportDate = document.getElementById('summaryDate').value || defaultDateStr; 
   const nowStr = new Date().toLocaleDateString('ar-EG');
-  let tbody = '';
+  let cardsListHtml = '';
   
   const uniqueRows = [];
   const seenIds = new Set();
@@ -1742,40 +1726,36 @@ window.exportPDF = async function(mode = 'all') {
     }
   });
 
-  uniqueRows.forEach(r => {
-    let statusColor = r.calculatedStatus === 'عجز' ? '#d90429' : (r.calculatedStatus === 'زيادة' ? '#2d6a4f' : '#1b2e26');
-    tbody += `
-      <tr style="page-break-inside: avoid;">
-        <td style="padding: 8px 6px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #0a4a31; font-size:13px;">${r.it.name}${r.lastEditedAt ? `<br><span style="font-size:9px; color:#8a5b00;">(تعديل التحميل: ${r.lastEditedAt})</span>` : ''}</td>
-        <td style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: center; color: #0b5e3d; font-weight: bold; font-size:13px;">${r.loadedText}</td>
-        <td style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: center; color: #d90429; font-weight: bold; font-size:13px;">${r.soldText}</td>
-        <td style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: center; color: #0284c7; font-weight: bold; background: #e0f2fe; font-size:13px;">${r.inTruckText}</td>
-        <td style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; font-size:13px;">${r.manualText}</td>
-        <td style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; color: ${statusColor}; font-size:13px;">${r.calculatedStatus || '—'}</td>
-      </tr>`;
+  uniqueRows.forEach((r, idx) => {
+    let statusBg = r.calculatedStatus === 'عجز' ? '#fee2e2' : (r.calculatedStatus === 'زيادة' ? '#dcfce7' : '#eefaf1');
+    let statusColor = r.calculatedStatus === 'عجز' ? '#d90429' : (r.calculatedStatus === 'زيادة' ? '#2d6a4f' : '#0b5e3d');
+    
+    cardsListHtml += `
+      <div style="background:#ffffff; border:1.5px solid #dbe3e0; border-radius:12px; padding:10px 12px; margin-bottom:10px; page-break-inside:avoid; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
+        <div style="font-size:14px; font-weight:800; color:#0a4a31; margin-bottom:6px; border-bottom:1px dashed #dbe3e0; padding-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+          <span>${idx + 1}. ${r.it.name}</span>
+          <span style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:bold; background:${statusBg}; color:${statusColor};">
+            ${r.calculatedStatus || 'مضبوط'}
+          </span>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:12px;">
+          <div style="background:#f8faf9; padding:5px 8px; border-radius:6px;"><b>المحمل:</b> ${r.loadedText}</div>
+          <div style="background:#f8faf9; padding:5px 8px; border-radius:6px;"><b>المباع:</b> <span style="color:#d90429; font-weight:bold;">${r.soldText}</span></div>
+          <div style="background:#e0f2fe; padding:5px 8px; border-radius:6px; color:#0284c7; grid-column: span 2; font-size:13px;"><b>المتبقي بالعربية:</b> <b>${r.inTruckText}</b></div>
+          <div style="background:#f8faf9; padding:5px 8px; border-radius:6px; grid-column: span 2;"><b>الراجع الفعلي:</b> ${r.manualText}</div>
+        </div>
+      </div>`;
   });
   
   const titleText = mode === 'completed' ? 'تقرير الأصناف المكتملة الجرد' : 'تقرير جرد وتتبع حركة حمولة السيارة الفعلي';
   const html = `
-    <div id="summary-print-area" style="padding: 20px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 900px; box-sizing: border-box;">
-       <div style="text-align: center; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 8px; margin-bottom: 12px;">
-         <h1 style="margin:0 0 2px 0; font-size: 24px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
-         <h2 style="margin:0 0 6px 0; font-size: 16px; color: #475569; font-weight:700;">${titleText}</h2>
-         <p style="margin:0; font-size: 13px; font-weight: bold; color:#475569;">تاريخ الحركة: ${reportDate} | تاريخ الطباعة: ${nowStr}</p>
+    <div id="summary-print-area" style="padding:15px; direction:rtl; font-family:'Cairo', Tahoma, sans-serif; background:#f4f6f5; color:#000; width:450px; box-sizing:border-box; margin:auto;">
+       <div style="text-align: center; background:#fff; padding:12px; border-radius:12px; border:1.5px solid #0b5e3d; margin-bottom:12px;">
+         <h1 style="margin:0 0 2px 0; font-size: 20px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
+         <h2 style="margin:0 0 4px 0; font-size: 13px; color: #475569; font-weight:700;">${titleText}</h2>
+         <p style="margin:0; font-size: 11px; font-weight: bold; color:#475569;">تاريخ الحركة: ${reportDate} | تاريخ الطباعة: ${nowStr}</p>
        </div>
-       <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1.5px solid #0b5e3d;">
-           <thead>
-             <tr style="background-color: #0b5e3d; color: #ffffff !important;">
-               <th style="padding: 10px 6px; border: 1px solid #0b5e3d; text-align: right; color: #ffffff; font-size:14px; font-weight:800;">اسم الصنف</th>
-               <th style="padding: 10px 4px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:14px; font-weight:800;">المحمل الكلي</th>
-               <th style="padding: 10px 4px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:14px; font-weight:800;">المباع</th>
-               <th style="padding: 10px 4px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:14px; font-weight:800; background:#08462d;">المتبقي بالعربية</th>
-               <th style="padding: 10px 4px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:14px; font-weight:800;">الراجع</th>
-               <th style="padding: 10px 4px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:14px; font-weight:800;">الحالة</th>
-             </tr>
-           </thead>
-           <tbody>${tbody}</tbody>
-       </table>
+       <div>${cardsListHtml}</div>
     </div>`;
     
   const container = document.createElement('div'); 
@@ -1786,48 +1766,66 @@ window.exportPDF = async function(mode = 'all') {
   document.body.appendChild(container);
   
   const opt = { 
-    margin: 0.15, 
-    filename: `تقرير_جرد_العربة_${mode}_${reportDate}.pdf`, 
+    margin: 0.1, 
+    filename: `تقرير_جرد_موبايل_${reportDate}.pdf`, 
     image: { type: 'jpeg', quality: 0.98 }, 
     html2canvas: { scale: 2, useCORS: true }, 
-    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
   
   html2pdf().set(opt).from(container.querySelector('#summary-print-area')).output('bloburl').then((pdfUrl) => { 
     document.body.removeChild(container); 
     window.open(pdfUrl, '_blank');
-    window.toast('✅ تم فتح ملف PDF'); 
+    window.toast('✅ تم فتح التقرير بوضع الموبايل المريح'); 
   });
 };
 
 window.exportLoadPDF = async function() {
   const loadedKeys = Object.keys(loadedInSession);
   if (loadedKeys.length === 0) { window.toast('⚠️ لم يتم تسجيل تحميل أي أصناف بعد لتصديرها'); return; }
-  window.toast('⏳ جاري تجهيز إذن التحميل...');
-  const reportDate = document.getElementById('summaryDate').value || defaultDateStr; let tbody = ''; let index = 1;
+  window.toast('⏳ جاري تجهيز إذن التحميل للموبايل...');
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr; 
+  let cardsHtml = ''; 
+  let index = 1;
+  
   firebaseItems.forEach(fbItem => {
     if (loadedInSession[fbItem.id]) {
-      const sess = loadedInSession[fbItem.id]; const cap = fbItem.capacity || 1; const unit = getUnitName(fbItem.name);
+      const sess = loadedInSession[fbItem.id]; 
+      const cap = fbItem.capacity || 1; 
+      const unit = getUnitName(fbItem.name);
       
       const prevPcs = (parseFloat(sess.prevCartons || 0) * cap) + parseInt(sess.prevLoose || 0);
       const newPcs  = (parseFloat(sess.cartons || 0) * cap) + parseInt(sess.loose || 0);
       const totalLoadedPcs = prevPcs + newPcs;
       
       const loadedText = formatQuantityDetailed(totalLoadedPcs, cap, unit).replace(/&nbsp;/g, ' ');
-      tbody += `<tr style="page-break-inside: avoid;"><td style="padding: 12px; border: 1px solid #0b5e3d; text-align: center; font-size: 18px; font-weight: bold; width: 10%;">${index++}</td><td style="padding: 12px 15px 12px 5px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #1b2e26; font-size: 18px; width: 60%;">${fbItem.name}</td><td style="padding: 12px 5px 12px 15px; border: 1px solid #0b5e3d; text-align: left; font-weight: bold; color: #0b5e3d; font-size: 18px; width: 30%; direction: ltr;">${loadedText}</td></tr>`;
+      cardsHtml += `
+        <div style="background:#fff; border:1px solid #dbe3e0; border-radius:10px; padding:10px 12px; margin-bottom:8px; page-break-inside:avoid; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:13px; font-weight:800; color:#1b2e26;">${index++}. ${fbItem.name}</div>
+          <div style="font-size:13px; font-weight:800; color:#0b5e3d; background:#eefaf1; padding:4px 8px; border-radius:6px;">${loadedText}</div>
+        </div>`;
     }
   });
+
   const invoiceHTML = `
-    <div id="invoice-print-area" style="padding: 30px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 800px; box-sizing: border-box;">
-       <div style="text-align: center; border-bottom: 2px dashed #0b5e3d; padding-bottom: 12px; margin-bottom: 20px;"><h1 style="margin:0 0 4px 0; font-size: 30px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1><h2 style="margin:0 0 8px 0; font-size: 22px; color: #475569; font-weight:700;">إذن تحميل بضاعة</h2><p style="margin:0; font-size: 17px; font-weight: bold; color: #1b2e26;">التاريخ: ${reportDate}</p></div>
-       <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; border: 2px solid #0b5e3d;"><thead><tr style="background-color: #0b5e3d; color: #ffffff !important;"><th style="padding: 14px; border: 1px solid #0b5e3d; text-align: center; font-size: 20px; color: #ffffff;">م</th><th style="padding: 14px 15px; border: 1px solid #0b5e3d; text-align: right; font-size: 20px; color: #ffffff;">اسم الصنف</th><th style="padding: 14px 15px; border: 1px solid #0b5e3d; text-align: left; font-size: 20px; color: #ffffff;">إجمالي الحمولة (سابق + جديد)</th></tr></thead><tbody>${tbody}</tbody></table>
-       <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; color: #1b2e26; margin-top: 35px; padding: 0 10px;"><div>توقيع أمين المخزن: .......................</div><div>توقيع السائق: .......................</div></div>
+    <div id="invoice-print-area" style="padding: 15px; direction: rtl; font-family: 'Cairo', Tahoma, sans-serif; background: #f4f6f5; color: #000; width: 450px; box-sizing: border-box; margin:auto;">
+       <div style="text-align: center; background:#fff; border:1.5px solid #0b5e3d; padding:12px; border-radius:12px; margin-bottom: 12px;">
+         <h1 style="margin:0 0 2px 0; font-size: 20px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
+         <h2 style="margin:0 0 4px 0; font-size: 15px; color: #475569; font-weight:700;">إذن تحميل بضاعة</h2>
+         <p style="margin:0; font-size: 12px; font-weight: bold; color: #1b2e26;">التاريخ: ${reportDate}</p>
+       </div>
+       <div>${cardsHtml}</div>
+       <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; color: #1b2e26; margin-top: 20px; padding: 10px; background:#fff; border-radius:8px;">
+         <div>أمين المخزن: .........</div>
+         <div>السائق: .........</div>
+       </div>
     </div>`;
+
   const container = document.createElement('div'); container.innerHTML = invoiceHTML; container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '-9999px'; document.body.appendChild(container);
   const opt = { 
-    margin: 0.15, 
-    filename: `إذن_تحميل_${reportDate}.pdf`, 
+    margin: 0.1, 
+    filename: `إذن_تحميل_موبايل_${reportDate}.pdf`, 
     image: { type: 'jpeg', quality: 0.98 }, 
     html2canvas: { scale: 2, useCORS: true }, 
     jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
@@ -1837,7 +1835,7 @@ window.exportLoadPDF = async function() {
   html2pdf().set(opt).from(container.querySelector('#invoice-print-area')).output('bloburl').then((pdfUrl) => { 
     document.body.removeChild(container); 
     window.open(pdfUrl, '_blank');
-    window.toast('✅ تم فتح الإذن للقراءة'); 
+    window.toast('✅ تم فتح إذن التحميل بتنسيق الموبايل'); 
   }).catch(err => { console.error(err); window.toast('❌ حدث خطأ أثناء المعاينة'); document.body.removeChild(container); });
 };
 
