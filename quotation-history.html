@@ -155,7 +155,7 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .archive-status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
 .archive-status-badge.closed { background: var(--green-lt); color: var(--green); }
 .archive-status-badge.pending { background: var(--amber-lt); color: #8a5b00; }
-.archive-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.archive-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); flex-wrap: wrap; }
 
 /* كارد الجرد */
 .inv-item-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-3d); transition: opacity 0.3s ease, transform 0.3s ease; }
@@ -1166,7 +1166,17 @@ window.autoArchiveAndShareWhatsApp = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   
   const exportData = cachedCalculatedRows.map(r => ({
-    id: r.id, name: r.it.name, loaded: r.loadedText, sold: r.soldText, inTruck: r.inTruckText, returnedManual: r.manualText, status: r.calculatedStatus || 'مضبوط'
+    id: r.id, 
+    name: r.it.name, 
+    loaded: r.loadedText, 
+    sold: r.soldText, 
+    inTruck: r.inTruckText, 
+    returnedManual: r.manualText, 
+    status: r.calculatedStatus || 'مضبوط',
+    totalLoadedPcs: r.totalLoadedPcs,
+    totalSoldPcs: r.totalSoldPcs,
+    cap: r.cap,
+    unit: r.unit
   }));
 
   try {
@@ -1175,10 +1185,8 @@ window.autoArchiveAndShareWhatsApp = async function() {
       date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
     });
     
-    // إنشاء وحفظ الـ PDF بالخلفية
     await window.exportPDF('all', false);
 
-    // تجهيز رابط الواتساب المباشر للرقم المحدد
     const phone = "201000197222";
     const msg = `📋 *الزيادي لزيوت السيارات*\nتم إتمام وجرد كافة أصناف العربة لليوم بتاريخ: *${d}*\n\n✅ تم إغلاق وترحيل اليوم للأرشيف بنجاح.\nيرجى مراجعة ملف الـ PDF المرفق للجرد الشامل.`;
     const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`;
@@ -1268,8 +1276,8 @@ function buildCalculatedRows() {
 
     const liveSales = memorySalesCache || {};
     const unit = getUnitName(cartData.name); 
-    const cap  = cartData.capacity || 1; 
-    const totalSoldPcs = liveSales[fbItem.id] || 0;
+    const cap  = Number(cartData.capacity) || 1; 
+    const totalSoldPcs = Number(liveSales[fbItem.id]) || 0;
     
     const totalPrevPcs   = ((parseFloat(cartData.prevCartons || 0)) * cap) + parseInt(cartData.prevLoose || 0);
     const totalNewPcs    = ((parseFloat(cartData.loadedCartons || 0)) * cap) + parseInt(cartData.loadedLoose || 0);
@@ -1282,7 +1290,9 @@ function buildCalculatedRows() {
     const isInventoryDone      = !!cartData.isInventoryDone;
     
     let calculatedStatus = cartData.diffStatus || "";
-    if (!cartData.diffStatus && (currentManualCartons !== '' || currentManualLoose !== '')) {
+    if (totalSoldPcs > totalLoadedPcs) {
+      calculatedStatus = "زيادة";
+    } else if (!cartData.diffStatus && (currentManualCartons !== '' || currentManualLoose !== '')) {
       const totalManualPcs = ((parseFloat(currentManualCartons)||0) * cap) + (parseInt(currentManualLoose)||0);
       calculatedStatus = (totalManualPcs < totalRemPcs) ? "عجز" : (totalManualPcs > totalRemPcs) ? "زيادة" : "";
     }
@@ -1326,9 +1336,13 @@ window.filterSummaryUI = function() {
   tb.innerHTML = '';
 
   filtered.forEach(({ id, it, unit, cap, totalLoadedPcs, totalSoldPcs, loadedText, soldText, inTruckText, calculatedStatus, currentManualCartons, currentManualLoose, lastEditedAt, isInventoryDone }) => {
-    const isIncrease = totalSoldPcs > totalLoadedPcs || calculatedStatus === 'زيادة';
-    const diffPcs = Math.abs(totalSoldPcs - totalLoadedPcs);
+    const loadedPcs = Number(totalLoadedPcs) || 0;
+    const soldPcs = Number(totalSoldPcs) || 0;
+    const isIncrease = soldPcs > loadedPcs || calculatedStatus === 'زيادة';
+    
+    const diffPcs = Math.abs(soldPcs - loadedPcs);
     const diffText = isIncrease ? formatQuantityDetailed(diffPcs, cap, unit) : '—';
+    const statusText = isIncrease ? 'زيادة' : (calculatedStatus || 'مضبوط');
     
     let returnFieldsHtml = '';
     if (cap > 1) {
@@ -1356,9 +1370,9 @@ window.filterSummaryUI = function() {
       <td style="color:#b91c1c; font-weight:bold;">${diffText.replace(/&nbsp;/g, ' ')}</td>
       <td>
         <select onchange="window.updateManualSummaryField('${id}','diffStatus',this.value)">
-          <option value="" ${calculatedStatus===''?'selected':''}>— —</option>
-          <option value="عجز" ${calculatedStatus==='عجز'?'selected':''}>❌ عجز</option>
-          <option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option>
+          <option value="" ${statusText===''||statusText==='مضبوط'?'selected':''}>— —</option>
+          <option value="عجز" ${statusText==='عجز'?'selected':''}>❌ عجز</option>
+          <option value="زيادة" ${statusText==='زيادة'?'selected':''}>➕ زيادة</option>
         </select>
       </td>`;
     tb.appendChild(tr);
@@ -1489,7 +1503,17 @@ window.archiveInventory = async function() {
   if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
   const exportData = cachedCalculatedRows.map(r => ({
-    id: r.id, name: r.it.name, loaded: r.loadedText, sold: r.soldText, inTruck: r.inTruckText, returnedManual: r.manualText, status: r.calculatedStatus || 'مضبوط'
+    id: r.id, 
+    name: r.it.name, 
+    loaded: r.loadedText, 
+    sold: r.soldText, 
+    inTruck: r.inTruckText, 
+    returnedManual: r.manualText, 
+    status: r.calculatedStatus || 'مضبوط',
+    totalLoadedPcs: r.totalLoadedPcs,
+    totalSoldPcs: r.totalSoldPcs,
+    cap: r.cap,
+    unit: r.unit
   }));
 
   try {
@@ -1508,7 +1532,7 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
-/* تسريع استجابة صفحة الأرشيف بجلب البيانات دُفعة واحدة */
+/* تسريع استجابة صفحة الأرشيف وإضافة زر مشاركة وإخفاء زر المسح عن غير المدير */
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
@@ -1569,7 +1593,10 @@ window.fetchArchive = async function() {
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
               👁️ قراءة PDF
             </button>
-            <button class="btn btn-danger btn-sm" onclick="window.deleteArchiveDate('${d}')">
+            <button class="btn btn-primary btn-sm" style="background:#25D366; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
+              📲 شير واتساب
+            </button>
+            <button class="btn btn-danger btn-sm admin-only" onclick="window.deleteArchiveDate('${d}')">
               🗑️ مسح
             </button>
           </div>
@@ -1583,6 +1610,30 @@ window.fetchArchive = async function() {
   } catch (e) {
     console.error(e);
     container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
+  }
+};
+
+/* دالة المشاركة عبر الواتساب للأرشيف */
+window.shareArchiveWhatsApp = async function(d) {
+  window.toast('⏳ جاري تجهيز تقرير المشاركة...');
+  try {
+    const invDoc = await getDoc(doc(db, 'archived_inventory', d));
+    let summaryTxt = `📋 *الزيادي لزيوت السيارات*\n📅 *تقرير جرد يوم:* ${d}\n\n`;
+
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData || [];
+      data.forEach((r, idx) => {
+        summaryTxt += `${idx + 1}. *${r.name}*\n   ▪️ المحمل: ${r.loaded} | المباع: ${r.sold}\n   ▪️ المتبقي: ${r.inTruck || '0'} | الراجع: ${r.returnedManual || '0'}\n   ▪️ الحالة: ${r.status}\n\n`;
+      });
+    } else {
+      summaryTxt += `⚠️ هذا اليوم غير مغلق نهائياً بعد.`;
+    }
+
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(summaryTxt)}`;
+    window.open(waUrl, '_blank');
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء تجهيز المشاركة');
   }
 };
 
@@ -1687,8 +1738,14 @@ window.exportArchivePDF = async function(d) {
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       data.forEach((r, i) => {
-        const isIncrease = r.status === 'زيادة';
+        const loadedPcs = Number(r.totalLoadedPcs) || 0;
+        const soldPcs = Number(r.totalSoldPcs) || 0;
+        const isIncrease = soldPcs > loadedPcs || r.status === 'زيادة';
+        
+        const diffPcs = Math.abs(soldPcs - loadedPcs);
+        const diffText = isIncrease ? (r.cap ? formatQuantityDetailed(diffPcs, r.cap, r.unit) : `${diffPcs}`) : '—';
         const rowStyle = isIncrease ? 'background-color: #fee2e2 !important; color: #991b1b !important; font-weight: bold;' : (i % 2 === 0 ? 'background-color: #f9fafb;' : 'background-color: #ffffff;');
+        
         tableRowsHtml += `
           <tr style="${rowStyle}">
             <td style="text-align: right; padding: 10px 8px; border: 1px solid #000; font-size: 13px;">${i+1}. ${r.name}</td>
@@ -1696,8 +1753,8 @@ window.exportArchivePDF = async function(d) {
             <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center; color: ${isIncrease ? '#b91c1c' : '#000'};">${r.sold}</td>
             <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${r.inTruck || '—'}</td>
             <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${r.returnedManual || '0'}</td>
-            <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center; color: #b91c1c; font-weight: bold;">${isIncrease ? r.status : '—'}</td>
-            <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${r.status || 'مضبوط'}</td>
+            <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center; color: #b91c1c; font-weight: bold;">${diffText}</td>
+            <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${isIncrease ? 'زيادة' : (r.status || 'مضبوط')}</td>
           </tr>`;
       });
     }
@@ -1752,7 +1809,7 @@ window.exportArchivePDF = async function(d) {
   }
 };
 
-/* تصدير PDF بنظام الجدول القياسي والواضح لشاشات الموبايل */
+/* تصدير PDF بنظام الجدول القياسي والواضح لشاشات الموبايل مع إصلاح احتساب الزيادة بالقطع */
 window.exportPDF = async function(mode = 'all', openInNewTab = true) {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات لتصديرها'); return; }
   const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
@@ -1773,9 +1830,13 @@ window.exportPDF = async function(mode = 'all', openInNewTab = true) {
 
   let tableRowsHtml = '';
   uniqueRows.forEach((r, idx) => {
-    const isIncrease = r.totalSoldPcs > r.totalLoadedPcs || r.calculatedStatus === 'زيادة';
-    const diffPcs = Math.abs(r.totalSoldPcs - r.totalLoadedPcs);
+    const loadedPcs = Number(r.totalLoadedPcs) || 0;
+    const soldPcs = Number(r.totalSoldPcs) || 0;
+    const isIncrease = soldPcs > loadedPcs || r.calculatedStatus === 'زيادة';
+    
+    const diffPcs = Math.abs(soldPcs - loadedPcs);
     const diffText = isIncrease ? formatQuantityDetailed(diffPcs, r.cap, r.unit) : '—';
+    const statusText = isIncrease ? 'زيادة' : (r.calculatedStatus || 'مضبوط');
 
     const rowStyle = isIncrease 
       ? 'background-color: #fee2e2 !important; color: #991b1b !important; font-weight: bold;' 
@@ -1789,7 +1850,7 @@ window.exportPDF = async function(mode = 'all', openInNewTab = true) {
         <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${r.inTruckText}</td>
         <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${r.manualText}</td>
         <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center; color: #b91c1c; font-weight: bold;">${diffText}</td>
-        <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${r.calculatedStatus || 'مضبوط'}</td>
+        <td style="padding: 10px 4px; border: 1px solid #000; font-size: 13px; text-align: center;">${statusText}</td>
       </tr>`;
   });
   
