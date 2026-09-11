@@ -240,13 +240,12 @@
   
   .btn-log{ background:#ffffff; color:var(--germany-black); border-color:var(--germany-black); }
   .btn-info{ background:var(--germany-black); color:#ffffff; border-color:var(--germany-black); }
-  .btn-pay{ background:var(--credit); color:#ffffff; border-color:var(--credit); }
+  .btn-share-direct{ background:linear-gradient(135deg, #25d366, #128c7e); color:#ffffff; border-color:#128c7e; }
   .btn-del{ background:var(--owed-bg); color:var(--owed); border-color:rgba(255, 0, 0, 0.15); }
 
   .empty-state{ text-align:center; padding:60px 20px; color:var(--mute); }
   .empty-state i{ font-size:2.5rem; opacity:.4; margin-bottom:12px; display:block; color: var(--germany-gold); }
 
-  /* النافذة المنبثقة التفصيلية لكشف الحساب المصممة للموبايل */
   .statement-modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -328,7 +327,6 @@
       width: 100%;
       box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
   }
-  .btn-share-full:active { transform: scale(0.96); }
 
   .modal-overlay {
     display: none;
@@ -665,7 +663,7 @@
           <div class="action-container">
             <button class="action-btn btn-log" onclick="openCustomerStatement('${cust.id}', '${safeName}')"><i class="fas fa-history"></i> كشف السجل</button>
             <a href="customer-details.html?id=${cust.id}" class="action-btn btn-info"><i class="fas fa-user-tag"></i> كشف الحساب</a>
-            <a href="customer-payment.html?id=${cust.id}" class="action-btn btn-pay"><i class="fas fa-hand-holding-dollar"></i> دفعة</a>
+            <button class="action-btn btn-share-direct" onclick="triggerDirectStatementShare('${cust.id}', '${safeName}')"><i class="fas fa-share-nodes"></i> مشاركة</button>
             <button class="action-btn btn-del" onclick="deleteCustomer('${cust.id}', '${safeName}')"><i class="fas fa-trash-alt"></i> حذف</button>
           </div>
         </div>
@@ -678,6 +676,13 @@
 
   window.closeCustomerStatement = () => {
       document.getElementById('customerStatementModal').style.display = 'none';
+  };
+
+  window.triggerDirectStatementShare = async (customerId, customerName) => {
+      await openCustomerStatement(customerId, customerName);
+      setTimeout(() => {
+          shareEntireStatement();
+      }, 500);
   };
 
   window.openCustomerStatement = async (customerId, customerName) => {
@@ -888,7 +893,7 @@
       }
   };
 
-  /* دالة تصوير كشف الحساب بالكامل دفعة واحدة */
+  /* دالة تصوير كشف الحساب بالكامل دفعة واحدة الموثوقة */
   window.shareEntireStatement = function() {
       const statementBody = document.getElementById('customerStatementBody');
       if (!statementBody || !statementBody.children.length) {
@@ -904,7 +909,7 @@
               backgroundColor: "#ffffff",
               useCORS: true,
               scrollX: 0,
-              scrollY: -window.scrollY
+              scrollY: 0
           }).then(canvas => {
               canvas.toBlob(blob => {
                   document.getElementById('shareLoadingModal').style.display = 'none';
