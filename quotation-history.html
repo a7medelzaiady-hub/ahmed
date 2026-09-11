@@ -600,20 +600,25 @@ function cleanItemName(str) {
   return str.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
 }
 
+function cleanTextForPdf(str) {
+  if (!str) return "0";
+  return str.replace(/&nbsp;/g, ' ').replace(/nbsp;/g, ' ').replace(/&/g, '');
+}
+
 function formatQuantityDetailed(totalPcs, capacity, unit) {
   totalPcs = parseInt(totalPcs) || 0;
   capacity = parseInt(capacity) || 1;
-  if (totalPcs === 0) return `0&nbsp;${unit}`;
+  if (totalPcs === 0) return `0 ${unit}`;
   const isNegative = totalPcs < 0;
   const absPcs = Math.abs(totalPcs);
   let result = '';
-  if (capacity <= 1) { result = `${absPcs}&nbsp;${unit}`; } 
+  if (capacity <= 1) { result = `${absPcs} ${unit}`; } 
   else {
     const cartons = Math.floor(absPcs / capacity);
     const loose = absPcs % capacity;
-    if (cartons > 0 && loose > 0) { result = `${cartons}&nbsp;كرتونة و&nbsp;${loose}&nbsp;${unit}`; } 
-    else if (cartons > 0) { result = `${cartons}&nbsp;كرتونة`; } 
-    else { result = `${loose}&nbsp;${unit}`; }
+    if (cartons > 0 && loose > 0) { result = `${cartons} كرتونة و ${loose} ${unit}`; } 
+    else if (cartons > 0) { result = `${cartons} كرتونة`; } 
+    else { result = `${loose} ${unit}`; }
   }
   return isNegative ? `-${result}` : result;
 }
@@ -882,7 +887,7 @@ function renderItemsPage() {
             return `
             <tr>
               <td>${i+1}</td><td style="text-align: right; padding-right:8px; font-weight:700;">${it.name}</td><td ${styleLabel}>${it.totalPcs} ${unit}</td>
-              <td style="color:${isNegative ? 'var(--red)' : 'var(--brand)'}; font-weight:700;">${formatQuantityDetailed(it.totalPcs, it.capacity, unit).replace(/&nbsp;/g, ' ')}</td>
+              <td style="color:${isNegative ? 'var(--red)' : 'var(--brand)'}; font-weight:700;">${formatQuantityDetailed(it.totalPcs, it.capacity, unit)}</td>
             </tr>`}).join('')}
         </tbody>
       </table>
@@ -919,7 +924,7 @@ function renderLoadFlow() {
     const isCurrent = !isDone && (searchVal ? true : sortedItems.slice(0, idx).every(prev => loadedInSession[prev.id] !== undefined));
     const unit = getUnitName(it.name);
     const isNegative = it.totalPcs < 0;
-    const stockText = formatQuantityDetailed(it.totalPcs, it.capacity, unit).replace(/&nbsp;/g, ' ');
+    const stockText = formatQuantityDetailed(it.totalPcs, it.capacity, unit);
     const stockBadge = `<span class="item-stock-badge ${isNegative ? 'negative' : ''}">🏭 المخزون: ${stockText}</span>`;
 
     const div = document.createElement('div');
@@ -948,8 +953,8 @@ function renderLoadFlow() {
       const loadPcs = (parseFloat(sess.cartons || 0) * it.capacity) + parseInt(sess.loose || 0);
       const totalLoadedPcs = prevPcs + loadPcs;
 
-      const doneText = formatQuantityDetailed(totalLoadedPcs, it.capacity, unit).replace(/&nbsp;/g, ' ');
-      const detailPrev = `(قبل التحميل: ${formatQuantityDetailed(prevPcs, it.capacity, unit).replace(/&nbsp;/g, ' ')} | تم تحميله: ${formatQuantityDetailed(loadPcs, it.capacity, unit).replace(/&nbsp;/g, ' ')})`;
+      const doneText = formatQuantityDetailed(totalLoadedPcs, it.capacity, unit);
+      const detailPrev = `(قبل التحميل: ${formatQuantityDetailed(prevPcs, it.capacity, unit)} | تم تحميله: ${formatQuantityDetailed(loadPcs, it.capacity, unit)})`;
 
       div.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
@@ -1257,7 +1262,7 @@ function buildCalculatedRows() {
     const loadedText     = formatQuantityDetailed(totalLoadedPcs, cap, unit);
     
     let soldText = formatQuantityDetailed(Math.abs(totalSoldPcs), cap, unit);
-    if (totalSoldPcs === 0) soldText = '0'; else if (totalSoldPcs < 0) soldText = '↺&nbsp;' + soldText;
+    if (totalSoldPcs === 0) soldText = '0'; else if (totalSoldPcs < 0) soldText = '↺ ' + soldText;
     
     let manualText = '—';
     if (currentManualCartons !== '' || currentManualLoose !== '') { manualText = formatQuantityDetailed(totalReturnedPcs, cap, unit); }
@@ -1303,13 +1308,13 @@ window.filterSummaryUI = function() {
     card.className = `inv-item-card ${isInventoryDone ? 'completed-card' : ''}`;
     card.id = 'card-item-' + id;
     card.innerHTML = `
-      <div class="inv-item-name"><span>${it.name}</span><div style="display:flex; align-items:center; gap:3px;">${actionBtnHtml}<button class="btn btn-sm" style="background:var(--amber-lt); color:var(--amber); font-size:9px; padding:2px 4px; font-weight:700;" onclick="window.openEditLoadModal('${id}')">✏️</button><span class="stock-badge ${isNegativeStock ? 'negative' : ''}" title="المخزون الفعلي بالمخزن الرئيسي">🏭 ${stockText.replace(/&nbsp;/g, ' ')}</span></div></div>
+      <div class="inv-item-name"><span>${it.name}</span><div style="display:flex; align-items:center; gap:3px;">${actionBtnHtml}<button class="btn btn-sm" style="background:var(--amber-lt); color:var(--amber); font-size:9px; padding:2px 4px; font-weight:700;" onclick="window.openEditLoadModal('${id}')">✏️</button><span class="stock-badge ${isNegativeStock ? 'negative' : ''}" title="المخزون الفعلي بالمخزن الرئيسي">🏭 ${stockText}</span></div></div>
       ${editBadgeHtml}
       <div class="inv-stats-row">
-        <div class="inv-stat"><span class="lbl">قبل التحميل</span><span class="val" style="color:var(--gray);">${prevLoadedText.replace(/&nbsp;/g, ' ')}</span></div>
-        <div class="inv-stat loaded"><span class="lbl">تم تحميله</span><span class="val" style="color:var(--brand);">${newLoadedText.replace(/&nbsp;/g, ' ')}</span></div>
-        <div class="inv-stat sold"><span class="lbl">المباع</span><span class="val" style="${totalSoldPcs < 0 ? 'color:var(--amber)' : ''}">${soldText.replace(/&nbsp;/g, ' ')}</span></div>
-        <div class="inv-stat in-truck"><span class="lbl">المتبقي بالعربية</span><span class="val">${inTruckText.replace(/&nbsp;/g, ' ')}</span></div>
+        <div class="inv-stat"><span class="lbl">قبل التحميل</span><span class="val" style="color:var(--gray);">${prevLoadedText}</span></div>
+        <div class="inv-stat loaded"><span class="lbl">تم تحميله</span><span class="val" style="color:var(--brand);">${newLoadedText}</span></div>
+        <div class="inv-stat sold"><span class="lbl">المباع</span><span class="val" style="${totalSoldPcs < 0 ? 'color:var(--amber)' : ''}">${soldText}</span></div>
+        <div class="inv-stat in-truck"><span class="lbl">المتبقي بالعربية</span><span class="val">${inTruckText}</span></div>
       </div>
       <div class="inv-bottom-row">
         <div class="inv-return-group"><label>الراجع:</label>${returnFieldsHtml}</div>
@@ -1324,10 +1329,10 @@ window.filterSummaryUI = function() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="text-align:right; padding-right:4px; font-weight:700; color:var(--brand-d);">${it.name}${lastEditedAt ? `<br><small style="font-size:8px; color:var(--amber); font-weight:bold;">🕒 ${lastEditedAt}</small>` : ''}</td>
-      <td style="color:var(--gray);">${prevLoadedText.replace(/&nbsp;/g, ' ')}</td>
-      <td style="color:var(--brand); font-weight:bold;">${newLoadedText.replace(/&nbsp;/g, ' ')}</td>
-      <td>${soldText.replace(/&nbsp;/g, ' ')}</td>
-      <td style="color:var(--blue); background:#f0f9ff; font-weight:bold;">${inTruckText.replace(/&nbsp;/g, ' ')}</td>
+      <td style="color:var(--gray);">${prevLoadedText}</td>
+      <td style="color:var(--brand); font-weight:bold;">${newLoadedText}</td>
+      <td>${soldText}</td>
+      <td style="color:var(--blue); background:#f0f9ff; font-weight:bold;">${inTruckText}</td>
       <td>${tblReturnFieldsHtml}</td>
       <td><select onchange="window.updateManualSummaryField('${id}','diffStatus',this.value)"><option value="" ${calculatedStatus===''?'selected':''}>— —</option><option value="عجز" ${calculatedStatus==='عجز'?'selected':''}>❌ عجز</option><option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option></select></td>`;
     tb.appendChild(tr);
@@ -1458,7 +1463,7 @@ window.archiveInventory = async function() {
   if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
   const exportData = cachedCalculatedRows.map(r => ({
-    id: r.id, name: r.it.name, prevLoaded: r.prevLoadedText, newLoaded: r.newLoadedText, loaded: r.loadedText, sold: r.soldText, inTruck: r.inTruckText, returnedManual: r.manualText, status: r.calculatedStatus || 'مضبوط'
+    id: r.id, name: r.it.name, prevLoaded: cleanTextForPdf(r.prevLoadedText), newLoaded: cleanTextForPdf(r.newLoadedText), loaded: cleanTextForPdf(r.loadedText), sold: cleanTextForPdf(r.soldText), inTruck: cleanTextForPdf(r.inTruckText), returnedManual: cleanTextForPdf(r.manualText), status: r.calculatedStatus || 'مضبوط'
   }));
 
   try {
@@ -1538,8 +1543,8 @@ window.fetchArchive = async function() {
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
               👁️ قراءة PDF
             </button>
-            <button class="btn btn-primary btn-sm" style="background:#25D366; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
-              📲 شير PDF
+            <button class="btn btn-primary btn-sm" style="background:#0284c7; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
+              📤 مشاركة ملف PDF
             </button>
             <button class="btn btn-danger btn-sm admin-only" onclick="window.deleteArchiveDate('${d}')">
               🗑️ مسح
@@ -1558,9 +1563,9 @@ window.fetchArchive = async function() {
   }
 };
 
-/* دالة مشاركة التقرير كملف PDF حقيقي عبر الواتساب والموبايل */
+/* دالة مشاركة التقرير كملف PDF حقيقي عبر نافذة نظام الموبايل العامة */
 window.shareArchiveWhatsApp = async function(d) {
-  window.toast('⏳ جاري تجهيز ملف الـ PDF للمشاركة...');
+  window.toast('⏳ جاري تجهيز ملف الـ PDF للمشاركة العامة...');
   try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
@@ -1574,11 +1579,11 @@ window.shareArchiveWhatsApp = async function(d) {
         tbody += `
           <tr style="page-break-inside: avoid;">
             <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:10px; color:#1b2e26;">${r.name}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#6b7a73;">${r.prevLoaded || '—'}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#0b5e3d; font-weight:bold;">${r.newLoaded || r.loaded}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:10px;">${r.sold}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:10px;">${r.inTruck || '—'}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px;">${r.returnedManual}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#6b7a73;">${cleanTextForPdf(r.prevLoaded) || '—'}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#0b5e3d; font-weight:bold;">${cleanTextForPdf(r.newLoaded || r.loaded)}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:10px;">${cleanTextForPdf(r.sold)}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:10px;">${cleanTextForPdf(r.inTruck) || '—'}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px;">${cleanTextForPdf(r.returnedManual)}</td>
             <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:10px;">${r.status}</td>
           </tr>`;
       });
@@ -1634,17 +1639,17 @@ window.shareArchiveWhatsApp = async function(d) {
 
     const file = new File([pdfBlob], `تقرير_جرد_${d}.pdf`, { type: 'application/pdf' });
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         files: [file],
         title: `تقرير جرد يوم ${d}`,
-        text: `📋 مرفق تقرير جرد وتتبع حركة حمولة السيارة ليوم ${d} - الزيادي لزيوت السيارات`
+        text: `📋 ملف PDF - تقرير جرد وتتبع حركة حمولة السيارة ليوم ${d}`
       });
-      window.toast('✅ تم المشاركة بنجاح');
+      window.toast('✅ تم فتح قائمة المشاركة بنجاح');
     } else {
       const pdfUrl = URL.createObjectURL(pdfBlob);
       window.open(pdfUrl, '_blank');
-      window.toast('💡 المتصفح لا يدعم مشاركة الملفات المباشرة، تم فتح الملف للقراءة');
+      window.toast('💡 تم فتح الملف للقراءة وحفظه');
     }
   } catch (e) {
     console.error(e);
@@ -1689,11 +1694,11 @@ window.toggleArchiveDetails = async function(d) {
               ${data.map(r => `
                 <tr>
                   <td style="text-align:right; font-weight:bold; color:var(--brand-d);">${r.name}</td>
-                  <td style="color:var(--gray);">${r.prevLoaded || '—'}</td>
-                  <td style="color:var(--brand); font-weight:bold;">${r.newLoaded || r.loaded}</td>
-                  <td style="color:var(--red); font-weight:bold;">${r.sold}</td>
-                  <td style="color:var(--blue); font-weight:bold;">${r.inTruck || '—'}</td>
-                  <td style="font-weight:bold;">${r.returnedManual}</td>
+                  <td style="color:var(--gray);">${cleanTextForPdf(r.prevLoaded) || '—'}</td>
+                  <td style="color:var(--brand); font-weight:bold;">${cleanTextForPdf(r.newLoaded || r.loaded)}</td>
+                  <td style="color:var(--red); font-weight:bold;">${cleanTextForPdf(r.sold)}</td>
+                  <td style="color:var(--blue); font-weight:bold;">${cleanTextForPdf(r.inTruck) || '—'}</td>
+                  <td style="font-weight:bold;">${cleanTextForPdf(r.returnedManual)}</td>
                   <td style="color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--text)'}; font-weight:bold;">${r.status}</td>
                 </tr>
               `).join('')}
@@ -1761,11 +1766,11 @@ window.exportArchivePDF = async function(d) {
         tbody += `
           <tr style="page-break-inside: avoid;">
             <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:10px; color:#1b2e26;">${r.name}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#6b7a73;">${r.prevLoaded || '—'}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#0b5e3d; font-weight:bold;">${r.newLoaded || r.loaded}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:10px;">${r.sold}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:10px;">${r.inTruck || '—'}</td>
-            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px;">${r.returnedManual}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#6b7a73;">${cleanTextForPdf(r.prevLoaded) || '—'}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px; color:#0b5e3d; font-weight:bold;">${cleanTextForPdf(r.newLoaded || r.loaded)}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#d90429; font-weight:bold; font-size:10px;">${cleanTextForPdf(r.sold)}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; color:#0284c7; font-weight:bold; background:#e0f2fe; font-size:10px;">${cleanTextForPdf(r.inTruck) || '—'}</td>
+            <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-size:10px;">${cleanTextForPdf(r.returnedManual)}</td>
             <td style="padding:4px 3px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:10px;">${r.status}</td>
           </tr>`;
       });
@@ -1852,11 +1857,11 @@ window.exportPDF = async function(mode = 'all') {
     tbody += `
       <tr style="page-break-inside: avoid;">
         <td style="padding: 4px 3px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #0a4a31; font-size:10px;">${r.it.name}${r.lastEditedAt ? `<br><span style="font-size:7px; color:#8a5b00;">(تعديل: ${r.lastEditedAt})</span>` : ''}</td>
-        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #6b7a73; font-size:10px;">${r.prevLoadedText}</td>
-        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #0b5e3d; font-weight: bold; font-size:10px;">${r.newLoadedText}</td>
-        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #d90429; font-weight: bold; font-size:10px;">${r.soldText}</td>
-        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #0284c7; font-weight: bold; background: #e0f2fe; font-size:10px;">${r.inTruckText}</td>
-        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; font-size:10px;">${r.manualText}</td>
+        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #6b7a73; font-size:10px;">${cleanTextForPdf(r.prevLoadedText)}</td>
+        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #0b5e3d; font-weight: bold; font-size:10px;">${cleanTextForPdf(r.newLoadedText)}</td>
+        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #d90429; font-weight: bold; font-size:10px;">${cleanTextForPdf(r.soldText)}</td>
+        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; color: #0284c7; font-weight: bold; background: #e0f2fe; font-size:10px;">${cleanTextForPdf(r.inTruckText)}</td>
+        <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; font-size:10px;">${cleanTextForPdf(r.manualText)}</td>
         <td style="padding: 4px 2px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; color: ${statusColor}; font-size:10px;">${r.calculatedStatus || '—'}</td>
       </tr>`;
   });
@@ -1921,7 +1926,7 @@ window.exportLoadPDF = async function() {
       const newPcs  = (parseFloat(sess.cartons || 0) * cap) + parseInt(sess.loose || 0);
       const totalLoadedPcs = prevPcs + newPcs;
       
-      const loadedText = formatQuantityDetailed(totalLoadedPcs, cap, unit).replace(/&nbsp;/g, ' ');
+      const loadedText = formatQuantityDetailed(totalLoadedPcs, cap, unit);
       tbody += `<tr style="page-break-inside: avoid;"><td style="padding: 8px; border: 1px solid #0b5e3d; text-align: center; font-size: 13px; font-weight: bold; width: 10%;">${index++}</td><td style="padding: 8px 10px 8px 4px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #1b2e26; font-size: 13px; width: 60%;">${fbItem.name}</td><td style="padding: 8px 4px 8px 10px; border: 1px solid #0b5e3d; text-align: left; font-weight: bold; color: #0b5e3d; font-size: 13px; width: 30%; direction: ltr;">${loadedText}</td></tr>`;
     }
   });
