@@ -327,6 +327,10 @@
       width: 100%;
       box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
   }
+  .btn-share-full:disabled{
+      opacity: 0.6;
+      cursor: not-allowed;
+  }
 
   .modal-overlay {
     display: none;
@@ -416,7 +420,7 @@
         </div>
         <div class="statement-modal-body" id="customerStatementBody"></div>
         <div class="statement-modal-footer" style="flex-direction: column;">
-            <button class="btn-share-full" onclick="shareEntireStatement()"><i class="fas fa-share-nodes"></i> مشاركة كشف الحساب كاملاً</button>
+            <button class="btn-share-full" id="shareStatementBtn" onclick="shareEntireStatement()"><i class="fas fa-share-nodes"></i> مشاركة كشف الحساب كاملاً</button>
             <button class="action-btn btn-info" onclick="exportCustomerStatementExcel()" style="width:100%;"><i class="fas fa-file-excel me-1"></i> تصدير إكسيل Excel</button>
         </div>
     </div>
@@ -893,7 +897,7 @@
       }
   };
 
-  /* دالة تصوير كشف الحساب بالكامل دفعة واحدة الموثوقة */
+  /* دالة تصوير كشف الحساب بالكامل دفعة واحدة الموثوقة، مع معالجة كل حالات الفشل */
   window.shareEntireStatement = function() {
       const statementBody = document.getElementById('customerStatementBody');
       if (!statementBody || !statementBody.children.length) {
@@ -901,39 +905,69 @@
           return;
       }
 
-      document.getElementById('shareLoadingModal').style.display = 'flex';
+      const loadingModal = document.getElementById('shareLoadingModal');
+      const shareBtn = document.getElementById('shareStatementBtn');
+      if (shareBtn) shareBtn.disabled = true;
+      loadingModal.style.display = 'flex';
 
-      setTimeout(() => {
-          html2canvas(statementBody, {
-              scale: 2,
-              backgroundColor: "#ffffff",
-              useCORS: true,
-              scrollX: 0,
-              scrollY: 0
-          }).then(canvas => {
-              canvas.toBlob(blob => {
-                  document.getElementById('shareLoadingModal').style.display = 'none';
-                  const fileName = `كشف_حساب_${window.currentStatementCustomerName || 'عميل'}.png`;
-                  const file = new File([blob], fileName, { type: 'image/png' });
+      const finish = () => {
+          loadingModal.style.display = 'none';
+          if (shareBtn) shareBtn.disabled = false;
+      };
 
-                  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                      navigator.share({
-                          files: [file],
-                          title: `كشف حساب - ${window.currentStatementCustomerName || 'عميل'}`,
-                          text: `كشف الحساب الخاص بـ ${window.currentStatementCustomerName || 'العميل'} - شركة الزيادي`
-                      }).catch(err => console.log('إلغاء المشاركة:', err));
-                  } else {
-                      const link = document.createElement('a');
-                      link.download = fileName;
-                      link.href = canvas.toDataURL('image/png');
-                      link.click();
-                  }
-              }, 'image/png');
-          }).catch(err => {
-              document.getElementById('shareLoadingModal').style.display = 'none';
-              alert("حدث خطأ أثناء إنشاء الصورة: " + err.message);
-          });
-      }, 300);
+      html2canvas(statementBody, {
+          scale: 2,
+          backgroundColor: "#ffffff",
+          useCORS: true,
+          allowTaint: false,
+          scrollX: 0,
+          scrollY: 0
+      }).then(canvas => {
+          canvas.toBlob((blob) => {
+              if (!blob) {
+                  finish();
+                  alert("تعذر إنشاء الصورة (فشل تحويل الكشف إلى صورة). حاول مرة أخرى.");
+                  return;
+              }
+
+              const fileName = `كشف_حساب_${window.currentStatementCustomerName || 'عميل'}.png`;
+              const file = new File([blob], fileName, { type: 'image/png' });
+
+              const downloadBlob = () => {
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.download = fileName;
+                  link.href = url;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  setTimeout(() => URL.revokeObjectURL(url), 2000);
+              };
+
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                  navigator.share({
+                      files: [file],
+                      title: `كشف حساب - ${window.currentStatementCustomerName || 'عميل'}`,
+                      text: `كشف الحساب الخاص بـ ${window.currentStatementCustomerName || 'العميل'} - شركة الزيادي`
+                  }).then(() => {
+                      finish();
+                  }).catch(err => {
+                      finish();
+                      // المستخدم لغى المشاركة بنفسه، لا داعي لتنزيل الملف أو إظهار خطأ
+                      if (err && err.name === 'AbortError') return;
+                      console.log('تعذرت المشاركة، سيتم تنزيل الصورة مباشرة:', err);
+                      downloadBlob();
+                  });
+              } else {
+                  finish();
+                  downloadBlob();
+              }
+          }, 'image/png');
+      }).catch(err => {
+          finish();
+          console.error(err);
+          alert("حدث خطأ أثناء إنشاء الصورة: " + err.message);
+      });
   };
 
   window.exportCustomerStatementExcel = () => {
