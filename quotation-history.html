@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -154,7 +155,7 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .archive-status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
 .archive-status-badge.closed { background: var(--green-lt); color: var(--green); }
 .archive-status-badge.pending { background: var(--amber-lt); color: #8a5b00; }
-.archive-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.archive-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); flex-wrap: wrap; }
 
 /* كارد الجرد */
 .inv-item-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-3d); transition: opacity 0.3s ease, transform 0.3s ease; }
@@ -302,7 +303,6 @@ table select:focus { border-color: var(--brand); }
         <p>سجّل ما كان بداخل العربية + الحمولة الجديدة لربطها بالمبيعات</p>
       </div>
       
-      <!-- ترتيب منظم للأزرار بدون تداخل -->
       <div class="action-buttons-group">
         <a href="index1.html" class="btn btn-primary btn-sm" style="background:var(--brand-d);">
           🏠 الرئيسية
@@ -370,7 +370,6 @@ table select:focus { border-color: var(--brand); }
       </button>
     </div>
 
-    <!-- ترتيب منظم لأزرار التصدير والإغلاق -->
     <div class="action-buttons-group" style="margin-bottom:14px;">
       <button class="btn btn-sm" onclick="window.refreshSummaryData(true)" style="background: var(--blue-lt); color: var(--blue); border: 1px solid #bde0fe; font-weight: 700;">
         🔄 تحديث المبيعات
@@ -1035,7 +1034,6 @@ window.focusNextInput = function(e, primaryTargetId, secondaryTargetId) {
   }
 };
 
-/* إصلاح مشكلة الكيبورد والانتقال التلقائي */
 window.confirmStep = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   
@@ -1062,7 +1060,6 @@ window.confirmStep = function(itemId) {
   
   renderLoadFlow();
   
-  /* فتح الكيبورد في خانة الصنف القادم مباشرة بدون إغلاق */
   setTimeout(() => {
     const nextStep = document.querySelector('.lstep.pending-step');
     if (nextStep) {
@@ -1475,38 +1472,46 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
+/* تسريع جلب بيانات الأرشيف باستخدام Promise.all وجلب جماعي سريع */
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
   container.innerHTML = '<div class="spin"></div>';
 
   try {
-    let datesToFetch = [];
+    let archivedLoadsMap = {};
+    let archivedInventoryMap = {};
+
     if (selectedDate) {
-      datesToFetch.push(selectedDate);
+      const [loadSnap, invSnap] = await Promise.all([
+        getDoc(doc(db, 'archived_loads', selectedDate)),
+        getDoc(doc(db, 'archived_inventory', selectedDate))
+      ]);
+      if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
+      if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
     } else {
-      const loadSnap = await getDocs(collection(db, 'archived_loads'));
-      const invSnap  = await getDocs(collection(db, 'archived_inventory'));
-      const set = new Set();
-      loadSnap.forEach(d => set.add(d.id));
-      invSnap.forEach(d => set.add(d.id));
-      datesToFetch = Array.from(set).sort().reverse();
+      const [loadSnap, invSnap] = await Promise.all([
+        getDocs(collection(db, 'archived_loads')),
+        getDocs(collection(db, 'archived_inventory'))
+      ]);
+      loadSnap.forEach(d => archivedLoadsMap[d.id] = d.data());
+      invSnap.forEach(d => archivedInventoryMap[d.id] = d.data());
     }
 
-    if (!datesToFetch.length) {
+    const allDates = Array.from(new Set([...Object.keys(archivedLoadsMap), ...Object.keys(archivedInventoryMap)])).sort().reverse();
+
+    if (!allDates.length) {
       container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
       return;
     }
 
     let cardsHtml = '';
-    for (const d of datesToFetch) {
-      const loadDoc = await getDoc(doc(db, 'archived_loads', d));
-      const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    allDates.forEach(d => {
+      const invData  = archivedInventoryMap[d];
+      const loadData = archivedLoadsMap[d];
 
-      if (!loadDoc.exists() && !invDoc.exists()) continue;
-
-      const isClosed = invDoc.exists();
-      const user = (invDoc.exists() ? invDoc.data().user : loadDoc.data()?.user) || 'أحمد محمود الزيادي';
+      const isClosed = !!invData;
+      const user = (invData?.user || loadData?.user) || 'أحمد محمود الزيادي';
 
       cardsHtml += `
         <div class="archive-card" id="arch-card-${d}">
@@ -1528,7 +1533,10 @@ window.fetchArchive = async function() {
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
               👁️ قراءة PDF
             </button>
-            <button class="btn btn-danger btn-sm" onclick="window.deleteArchiveDate('${d}')">
+            <button class="btn btn-primary btn-sm" style="background:#25D366; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
+              📲 شير واتساب
+            </button>
+            <button class="btn btn-danger btn-sm admin-only" onclick="window.deleteArchiveDate('${d}')">
               🗑️ مسح
             </button>
           </div>
@@ -1536,12 +1544,36 @@ window.fetchArchive = async function() {
           <div id="arch-details-${d}" style="display:none; margin-top:14px; padding-top:12px; border-top:1.5px dashed var(--border);"></div>
         </div>
       `;
-    }
+    });
 
-    container.innerHTML = cardsHtml || '<div class="empty"><span class="em">📭</span>لا توجد سجلات مطابقة</div>';
+    container.innerHTML = cardsHtml;
   } catch (e) {
     console.error(e);
     container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
+  }
+};
+
+/* دالة مشاركة التقرير عبر الواتساب للأرشيف */
+window.shareArchiveWhatsApp = async function(d) {
+  window.toast('⏳ جاري تجهيز تقرير المشاركة...');
+  try {
+    const invDoc = await getDoc(doc(db, 'archived_inventory', d));
+    let summaryTxt = `📋 *الزيادي لزيوت السيارات*\n📅 *تقرير جرد يوم:* ${d}\n\n`;
+
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData || [];
+      data.forEach((r, idx) => {
+        summaryTxt += `${idx + 1}. *${r.name}*\n   ▪️ المحمل: ${r.loaded} | المباع: ${r.sold}\n   ▪️ المتبقي: ${r.inTruck || '0'} | الراجع: ${r.returnedManual || '0'}\n   ▪️ الحالة: ${r.status}\n\n`;
+      });
+    } else {
+      summaryTxt += `⚠️ هذا اليوم غير مغلق نهائياً بعد.`;
+    }
+
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(summaryTxt)}`;
+    window.open(waUrl, '_blank');
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء تجهيز المشاركة');
   }
 };
 
