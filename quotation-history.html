@@ -1508,46 +1508,38 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
-/* تسريع استجابة صفحة الأرشيف بجلب البيانات دُفعة واحدة */
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
   container.innerHTML = '<div class="spin"></div>';
 
   try {
-    let archivedLoadsMap = {};
-    let archivedInventoryMap = {};
-
+    let datesToFetch = [];
     if (selectedDate) {
-      const [loadSnap, invSnap] = await Promise.all([
-        getDoc(doc(db, 'archived_loads', selectedDate)),
-        getDoc(doc(db, 'archived_inventory', selectedDate))
-      ]);
-      if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
-      if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
+      datesToFetch.push(selectedDate);
     } else {
-      const [loadSnap, invSnap] = await Promise.all([
-        getDocs(collection(db, 'archived_loads')),
-        getDocs(collection(db, 'archived_inventory'))
-      ]);
-      loadSnap.forEach(d => archivedLoadsMap[d.id] = d.data());
-      invSnap.forEach(d => archivedInventoryMap[d.id] = d.data());
+      const loadSnap = await getDocs(collection(db, 'archived_loads'));
+      const invSnap  = await getDocs(collection(db, 'archived_inventory'));
+      const set = new Set();
+      loadSnap.forEach(d => set.add(d.id));
+      invSnap.forEach(d => set.add(d.id));
+      datesToFetch = Array.from(set).sort().reverse();
     }
 
-    const allDates = Array.from(new Set([...Object.keys(archivedLoadsMap), ...Object.keys(archivedInventoryMap)])).sort().reverse();
-
-    if (!allDates.length) {
+    if (!datesToFetch.length) {
       container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
       return;
     }
 
     let cardsHtml = '';
-    allDates.forEach(d => {
-      const invData  = archivedInventoryMap[d];
-      const loadData = archivedLoadsMap[d];
-      
-      const isClosed = !!invData;
-      const user = (invData?.user || loadData?.user) || 'أحمد محمود الزيادي';
+    for (const d of datesToFetch) {
+      const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+      const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+
+      if (!loadDoc.exists() && !invDoc.exists()) continue;
+
+      const isClosed = invDoc.exists();
+      const user = (invDoc.exists() ? invDoc.data().user : loadDoc.data()?.user) || 'أحمد محمود الزيادي';
 
       cardsHtml += `
         <div class="archive-card" id="arch-card-${d}">
@@ -1577,9 +1569,9 @@ window.fetchArchive = async function() {
           <div id="arch-details-${d}" style="display:none; margin-top:14px; padding-top:12px; border-top:1.5px dashed var(--border);"></div>
         </div>
       `;
-    });
+    }
 
-    container.innerHTML = cardsHtml;
+    container.innerHTML = cardsHtml || '<div class="empty"><span class="em">📭</span>لا توجد سجلات مطابقة</div>';
   } catch (e) {
     console.error(e);
     container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
