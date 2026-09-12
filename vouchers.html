@@ -169,6 +169,10 @@
         .badge-method { padding: 2px 7px; border-radius: 6px; font-weight: 700; font-size: 0.62rem; display: inline-block; margin-top: 3px; }
         .badge-cash { background-color: #fff6e6; color: #b6892f; }
         .badge-wallet { background-color: #e7f0ff; color: #2456c7; }
+        
+        .badge-custody { padding: 2px 7px; border-radius: 6px; font-weight: 700; font-size: 0.62rem; display: inline-block; }
+        .badge-car { background-color: #e2f0d9; color: #385723; }
+        .badge-ahmed { background-color: #fce4d6; color: #c65911; }
 
         .btn-submit { background: var(--accent); color: white; font-weight: 700; border-radius: 8px; padding: 8px 15px; border: none; font-size: 0.85rem; }
         .btn-submit:hover { background: #08472e; color: white; }
@@ -304,6 +308,14 @@
                     <input type="date" class="form-control form-control-sm" id="vDate" required>
                 </div>
                 
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">جهة الاستلام / العهدة</label>
+                    <select class="form-select form-select-sm" id="vCustody" required>
+                        <option value="عهدة العربية">عهدة العربية (تجمع بالعهد)</option>
+                        <option value="يد أحمد">يد أحمد (لا تجمع بالعهد)</option>
+                    </select>
+                </div>
+
                 <div class="col-md-2">
                     <label class="form-label small fw-bold">المبلغ (ج.م)</label>
                     <input type="number" step="0.01" class="form-control form-control-sm num fw-bold" id="vAmount" value="0.00" onfocus="if(parseFloat(this.value)===0) this.value='';" onblur="if(this.value.trim()==='') this.value='0.00';" required>
@@ -316,7 +328,7 @@
                         <option value="محفظة">محفظة</option>
                     </select>
                 </div>
-                <div class="col-md-9">
+                <div class="col-md-7">
                     <label class="form-label small fw-bold">البيان / التفاصيل</label>
                     <input type="text" class="form-control form-control-sm" id="vNote" placeholder="اكتب التفاصيل هنا...">
                 </div>
@@ -329,11 +341,11 @@
 
         <div class="method-stats">
             <div class="method-stat-card cash">
-                <div class="lbl">إجمالي النقدى</div>
+                <div class="lbl">إجمالي النقدى (عهدة العربية)</div>
                 <div class="val" id="totalCash">0.00 ج.م</div>
             </div>
             <div class="method-stat-card wallet">
-                <div class="lbl">إجمالي المحفظة</div>
+                <div class="lbl">إجمالي المحفظة (عهدة العربية)</div>
                 <div class="val" id="totalWallet">0.00 ج.م</div>
             </div>
         </div>
@@ -345,25 +357,32 @@
                 </div>
                 <div class="col-12 col-md-auto flex-grow-1">
                     <div class="row g-1">
-                        <div class="col-4 col-md-auto">
+                        <div class="col-3 col-md-auto">
                             <select class="form-select form-select-sm w-100" id="filterType" onchange="filterData()">
                                 <option value="الكل">العمليات</option>
                                 <option value="قبض">القبض</option>
                                 <option value="صرف">الصرف</option>
                             </select>
                         </div>
-                        <div class="col-4 col-md-auto">
+                        <div class="col-3 col-md-auto">
                             <select class="form-select form-select-sm w-100" id="filterParty" onchange="filterData()">
                                 <option value="الكل">الأطراف</option>
                                 <option value="عميل">العملاء</option>
                                 <option value="مورد">الموردين</option>
                             </select>
                         </div>
-                        <div class="col-4 col-md-auto">
+                        <div class="col-3 col-md-auto">
                             <select class="form-select form-select-sm w-100" id="filterMethod" onchange="filterData()">
                                 <option value="الكل">الطرق</option>
                                 <option value="نقدى">نقدى</option>
                                 <option value="محفظة">محفظة</option>
+                            </select>
+                        </div>
+                        <div class="col-3 col-md-auto">
+                            <select class="form-select form-select-sm w-100" id="filterCustody" onchange="filterData()">
+                                <option value="الكل">كل الجهات</option>
+                                <option value="عهدة العربية">عهدة العربية</option>
+                                <option value="يد أحمد">يد أحمد</option>
                             </select>
                         </div>
                     </div>
@@ -379,19 +398,20 @@
             <table class="statement-table" id="vouchersTable">
                 <thead>
                     <tr>
-                        <th style="width: 12%;">التاريخ</th>
-                        <th style="width: 9%;">النوع</th>
-                        <th style="width: 20%;">الاسم</th>
-                        <th style="width: 22%;">البيان والتفاصيل</th>
+                        <th style="width: 10%;">التاريخ</th>
+                        <th style="width: 8%;">النوع</th>
+                        <th style="width: 18%;">الاسم</th>
+                        <th style="width: 12%;">الجهة</th>
+                        <th style="width: 20%;">البيان والتفاصيل</th>
                         <th style="width: 11%;">المبلغ</th>
-                        <th style="width: 8%;">طريقة السداد</th>
-                        <th style="width: 6%;">تعديل</th>
-                        <th style="width: 6%;">مشاركة</th>
-                        <th style="width: 6%;">حذف</th>
+                        <th style="width: 9%;">طريقة السداد</th>
+                        <th style="width: 4%;">تعديل</th>
+                        <th style="width: 4%;">مشاركة</th>
+                        <th style="width: 4%;">حذف</th>
                     </tr>
                 </thead>
                 <tbody id="vouchersBody">
-                    <tr><td colspan="9" class="text-center py-4">
+                    <tr><td colspan="10" class="text-center py-4">
                         <div class="spinner-border spinner-border-sm text-success"></div> جاري مراجعة البيانات...
                     </td></tr>
                 </tbody>
@@ -558,7 +578,6 @@
         }
     }
 
-    // === 1. احتساب رصيد المورد الموحد والمطابق لقائمة الموردين بالضبط ===
     async function calculateSupplierBalance(supId, openingBal) {
         try {
             const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
@@ -567,8 +586,8 @@
                 getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
             ]);
 
-            let totalDebit = Number(openingBal || 0); // المدين (+)
-            let totalCredit = 0;                     // الدائن (-)
+            let totalDebit = Number(openingBal || 0);
+            let totalCredit = 0;
 
             const processedTransIds = new Set();
 
@@ -617,7 +636,6 @@
         }
     }
 
-    // === 2. احتساب رصيد العميل الموحد ===
     async function calculateCustomerBalance(custId) {
         try {
             const cDoc = await getDoc(doc(db, "customers", custId));
@@ -743,6 +761,7 @@
                         resolvedName: resolvedName,
                         amount: Number(d.amount || d.total || 0),
                         method: d.method || d.paymentMethod || 'نقدى',
+                        custody: d.custody || 'عهدة العربية',
                         note: d.note || d.notes || ''
                     });
                 }
@@ -756,7 +775,7 @@
         } catch (err) {
             console.error(err);
             if (allVouchers.length === 0) {
-                document.getElementById('vouchersBody').innerHTML = '<tr><td colspan="9" class="text-danger py-4">حدث خطأ أثناء تحميل البيانات</td></tr>';
+                document.getElementById('vouchersBody').innerHTML = '<tr><td colspan="10" class="text-danger py-4">حدث خطأ أثناء تحميل البيانات</td></tr>';
             }
         }
     }
@@ -772,7 +791,7 @@
         tbody.innerHTML = '';
         let total = 0;
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-muted">لا توجد حركات مطابقة لخيارات الفرز الحالية</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-3 text-muted">لا توجد حركات مطابقة لخيارات الفرز الحالية</td></tr>';
             document.getElementById('vouchersTotal').innerText = "0.00 ج.م";
             return;
         }
@@ -781,12 +800,14 @@
             
             const badgeClass = v.type === 'قبض' ? 'badge-receipt' : 'badge-payment';
             const methodClass = v.method === 'محفظة' ? 'badge-wallet' : 'badge-cash';
+            const custodyClass = v.custody === 'يد أحمد' ? 'badge-ahmed' : 'badge-car';
             
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td data-label="التاريخ"><span class="text-secondary fw-bold">${escapeHtml(v.date)}</span></td>
                 <td data-label="النوع"><span class="badge-type ${badgeClass}">${escapeHtml(v.type)}</span></td>
                 <td data-label="الاسم" class="cell-name text-dark">${escapeHtml(v.resolvedName)}</td>
+                <td data-label="الجهة"><span class="badge-custody ${custodyClass}">${escapeHtml(v.custody)}</span></td>
                 <td data-label="البيان" class="text-muted small">${escapeHtml(v.note)}</td>
                 <td data-label="المبلغ" class="fw-bold ${v.type === 'قبض' ? 'text-success' : 'text-danger'}">${v.amount.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</td>
                 <td data-label="طريقة السداد"><span class="badge-method ${methodClass}">${escapeHtml(v.method)}</span></td>
@@ -814,10 +835,14 @@
         if (btn.dataset.action === 'share') window.openReceiptModal(voucher.type, voucher.date, voucher.amount, voucher.partyId, voucher.resolvedName, voucher.timestamp, voucher.id);
     });
 
+    // === تحديث تجميع العهدة: فقط مبالغ "عهدة العربية" تُجمع في الإجمالي ===
     function updateMethodTotals(data) {
         let cash = 0, wallet = 0;
         data.forEach(v => {
             if (v.type !== 'قبض') return;
+            // تصفية: لا يتم التجميع إلا إذا كانت السندات تابعة لـ "عهدة العربية"
+            if (v.custody === 'يد أحمد') return;
+
             if (v.method === 'محفظة') wallet += v.amount;
             else cash += v.amount;
         });
@@ -835,6 +860,7 @@
         document.getElementById('partyId').value = voucher.partyId;
         document.getElementById('partySearch').value = voucher.resolvedName;
         document.getElementById('vDate').value = voucher.date;
+        document.getElementById('vCustody').value = voucher.custody || 'عهدة العربية';
         document.getElementById('vAmount').value = voucher.amount;
         document.getElementById('vMethod').value = voucher.method || 'نقدى';
         document.getElementById('vNote').value = voucher.note;
@@ -851,6 +877,7 @@
         document.getElementById('editVoucherId').value = '';
         document.getElementById('voucherForm').reset();
         document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('vCustody').value = 'عهدة العربية';
         document.getElementById('vAmount').value = '0.00';
         document.getElementById('vMethod').value = 'نقدى';
         document.getElementById('partyId').value = '';
@@ -866,17 +893,19 @@
         const fType = document.getElementById('filterType').value;
         const fParty = document.getElementById('filterParty').value;
         const fMethod = document.getElementById('filterMethod').value;
+        const fCustody = document.getElementById('filterCustody').value;
+
         const filtered = allVouchers.filter(v => {
             const matchType = (fType === 'الكل' || v.type === fType);
             const matchParty = (fParty === 'الكل' || v.partyType === fParty);
             const matchMethod = (fMethod === 'الكل' || v.method === fMethod);
-            return matchType && matchParty && matchMethod;
+            const matchCustody = (fCustody === 'الكل' || v.custody === fCustody);
+            return matchType && matchParty && matchMethod && matchCustody;
         });
         renderTable(filtered);
         updateMethodTotals(filtered);
     };
 
-    // === 3. فتح مودال الإيصال وتجهيز الرصيد السابق والمتبقي بدقة متناهية ===
     window.openReceiptModal = async (type, date, amount, partyId, resolvedName, voucherTimestamp = null, voucherId = null) => {
         const pType = partiesMap[partyId] ? partiesMap[partyId].type : 'عميل';
         let pName = resolvedName;
@@ -899,11 +928,9 @@
         let newBalance = 0;
 
         if (type === 'صرف') {
-            // سند الصرف يقلل المديونية: الرصيد الحالي هو المتبقي بعد السداد، وكان الحساب السابق أكثر بمقدار المبلغ
             prevBalance = currentBalance + Number(amount);
             newBalance = currentBalance;
-        } else { // قبض
-            // سند القبض يقلل المديونية: الرصيد الحالي هو المتبقي بعد القبض، وكان الحساب السابق أكثر بمقدار المبلغ
+        } else { 
             prevBalance = currentBalance + Number(amount);
             newBalance = currentBalance;
         }
@@ -955,6 +982,7 @@
         const partyId = document.getElementById('partyId').value;
         const customerName = document.getElementById('partySearch').value;
         const date = document.getElementById('vDate').value;
+        const custody = document.getElementById('vCustody').value;
         const amount = Number(document.getElementById('vAmount').value);
         const method = document.getElementById('vMethod').value;
         const note = document.getElementById('vNote').value;
@@ -984,6 +1012,7 @@
             customerId: partyType === 'عميل' ? partyId : null,
             partyType, 
             customerName: customerName,
+            custody: custody,
             amount, 
             method, 
             note,
@@ -1040,12 +1069,14 @@
         const fType = document.getElementById('filterType').value;
         const fParty = document.getElementById('filterParty').value;
         const fMethod = document.getElementById('filterMethod').value;
+        const fCustody = document.getElementById('filterCustody').value;
 
         const displayedVouchers = allVouchers.filter(v => {
             const matchType = (fType === 'الكل' || v.type === fType);
             const matchParty = (fParty === 'الكل' || v.partyType === fParty);
             const matchMethod = (fMethod === 'الكل' || v.method === fMethod);
-            return matchType && matchParty && matchMethod;
+            const matchCustody = (fCustody === 'الكل' || v.custody === fCustody);
+            return matchType && matchParty && matchMethod && matchCustody;
         });
 
         if (displayedVouchers.length === 0) {
@@ -1065,6 +1096,7 @@
                 'التاريخ': v.date,
                 'الحركة': movementLabel,
                 'اسم العميل': v.resolvedName,
+                'جهة الاستلام': v.custody,
                 'نوع السداد': 'سداد نقدى',
                 'عدد جركن': 0,
                 'عدد كرتونة': 1,
@@ -1084,12 +1116,14 @@
         const fType = document.getElementById('filterType').value;
         const fParty = document.getElementById('filterParty').value;
         const fMethod = document.getElementById('filterMethod').value;
+        const fCustody = document.getElementById('filterCustody').value;
 
         const displayedVouchers = allVouchers.filter(v => {
             const matchType = (fType === 'الكل' || v.type === fType);
             const matchParty = (fParty === 'الكل' || v.partyType === fParty);
             const matchMethod = (fMethod === 'الكل' || v.method === fMethod);
-            return matchType && matchParty && matchMethod;
+            const matchCustody = (fCustody === 'الكل' || v.custody === fCustody);
+            return matchType && matchParty && matchMethod && matchCustody;
         });
 
         if (displayedVouchers.length === 0) {
