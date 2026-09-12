@@ -947,7 +947,6 @@
                 });
             });
 
-            // الترتيب من الأقدم للأحدث أولاً لاحتساب الرصيد بشكل متراكم ومظبوط
             events.sort((a, b) => a.timeMs - b.timeMs);
 
             let baseBalance = 0;
@@ -976,7 +975,6 @@
             events.forEach(ev => {
                 running += ev.debit - ev.credit;
 
-                // التسمية الديناميكية للأجل المضاف والصافي بحسب حالة الحساب (عليه/له)
                 const remainingLabel = ev.debit >= 0 ? "المتبقي عليه من فاتورة اليوم" : "المتبقي له من فاتورة اليوم";
                 const balanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
 
@@ -1058,7 +1056,6 @@
                 return;
             }
 
-            // إعادة الفرز للعرض من الأحدث للأقدم (تنازلياً حسب الوقت)
             renderedCards.sort((a, b) => b.timeMs - a.timeMs);
             let cardsHtml = renderedCards.map(c => c.html).join('');
 
@@ -1386,6 +1383,8 @@
                 if (Number(inv.remaining) > 0) todayRemaining += Number(inv.remaining);
             }
         });
+
+        // احتساب السندات - مع استبعاد يد أحمد تلقائياً لأنها لم تُضف للقائمة أصلًا
         allReceiptVouchers.forEach(v => {
             if (parseVoucherDate(v) === targetDateStr) { voucherCash += Number(v.cashAmount) || 0; voucherWallet += Number(v.walletAmount) || 0; }
         });
@@ -1514,6 +1513,14 @@
             if (transSnap) {
                 transSnap.forEach(d => {
                     const tr = d.data(); if (tr.isDeleted) return;
+                    
+                    // ==========================================
+                    // فلترة حاسمة: استبعاد السندات المسجلة بـ "يد أحمد"
+                    // ==========================================
+                    if (tr.custody === "يد أحمد") {
+                        return; // تجاوز هذه المعاملة وعدم تجميعها بالسجلات
+                    }
+
                     rawTransactionsList.push({ id: d.id, ...tr });
                     const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
                     if (tr.type === 'قبض' && !isInvoicePayment) {
@@ -1801,7 +1808,7 @@
 
                     const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
                     for (const tr of relatedTrans) {
-                        await db.collection("transactions").doc(tr.id),update({
+                        await db.collection("transactions").doc(tr.id).update({
                             isDeleted: true,
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
