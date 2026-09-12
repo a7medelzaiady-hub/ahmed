@@ -12,7 +12,7 @@
     <meta name="mobile-web-app-capable" content="yes">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght=400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -76,6 +76,10 @@
         .badge-receipt { background-color: #e8f5e9; color: var(--success); }
         .badge-payment { background-color: #ffebee; color: var(--danger); }
 
+        .badge-custody { padding: 3px 8px; border-radius: 6px; font-weight: 800; font-size: 0.72rem; display: inline-block; }
+        .badge-car { background-color: #e2f0d9; color: #385723; }
+        .badge-ahmed { background-color: #fce4d6; color: #c65911; }
+
         .btn-action { 
             width: 35px; height: 35px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); 
             background: rgba(255,255,255,0.1); color: #fff; transition: 0.3s; font-size: 0.9rem;
@@ -134,34 +138,29 @@
 
             .card-custom { padding: 12px; margin: 8px 0; border-radius: 10px; }
 
-            /* نموذج الإدخال يصبح عمود واحد بالكامل مع مسافة مريحة للمس */
+            /* نموذج الإدخال يصبح عمود واحد بالكامل */
             #voucherForm .col-md-2,
             #voucherForm .col-md-3,
             #voucherForm .col-md-4,
+            #voucherForm .col-md-5,
             #voucherForm .col-md-6 { width: 100%; margin-bottom: 4px; }
 
             .form-label { font-size: 0.75rem !important; }
             .form-control-sm, .form-select-sm { padding: 10px 12px; font-size: 0.9rem !important; }
 
-            /* أزرار الحفظ والإلغاء بجانب بعض بعرض كامل وارتفاع مريح للمس */
             #voucherForm .col-md-3.d-flex { flex-wrap: nowrap; }
             .btn-submit { width: 100%; padding: 12px 10px; font-size: 0.85rem; }
             #btnCancelEdit { padding: 12px 14px; }
 
-            /* شريط الفلترة يلتف بشكل مرتب */
             .card-custom.py-2.d-flex { flex-direction: column; align-items: stretch !important; gap: 8px; }
             .card-custom.py-2.d-flex .text-end { text-align: center !important; }
-            #filterType { width: 100% !important; }
 
-            /* الجدول: تمرير أفقي لأنه لا يمكن ضغط 10 أعمدة على شاشة صغيرة */
             .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .statement-table { min-width: 720px; }
+            .statement-table { min-width: 820px; }
             .statement-table th, .statement-table td { font-size: 0.78rem; padding: 8px 6px; }
 
-            /* أزرار الإجراءات داخل الجدول أسهل للمس */
             .btn-delete-row, .btn-edit-row, .btn-share-row { padding: 6px 8px; font-size: 0.9rem; }
 
-            /* مودال الإيصال الحراري يتمدد لعرض الشاشة بدل عرض ثابت 80mm */
             .modal-dialog { margin: 8px; }
             .receipt-preview-box { width: 100%; max-width: 320px; padding: 18px 14px; }
             .receipt-header-title { font-size: 20px; }
@@ -173,10 +172,9 @@
 
         @media (max-width: 400px) {
             .title-area h5 { font-size: 0.75rem !important; }
-            .statement-table { min-width: 640px; }
+            .statement-table { min-width: 760px; }
             .receipt-preview-box { max-width: 280px; }
         }
-        /* ================================================================ */
     </style>
 </head>
 <body>
@@ -225,6 +223,14 @@
                 </div>
 
                 <div class="col-md-3">
+                    <label class="form-label">جهة الاستلام / العهدة</label>
+                    <select class="form-select form-select-sm" id="vCustody" required>
+                        <option value="عهدة العربية">عهدة العربية</option>
+                        <option value="يد أحمد">يد أحمد</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
                     <label class="form-label text-success">المبلغ النقدي (كاش)</label>
                     <input type="number" step="0.01" class="form-control form-control-sm border-success fw-bold text-success" id="vCashAmount" value="0.00" required>
                 </div>
@@ -234,7 +240,7 @@
                     <input type="number" step="0.01" class="form-control form-control-sm fw-bold" style="border-color: var(--wallet-color); color: var(--wallet-color);" id="vWalletAmount" value="0.00" required>
                 </div>
 
-                <div class="col-md-6">
+                <div class="col-md-3">
                     <label class="form-label text-dark">البيان / التفاصيل</label>
                     <input type="text" class="form-control form-control-sm" id="vNote" placeholder="اكتب تفاصيل المعاملة هنا...">
                 </div>
@@ -248,12 +254,17 @@
 
         <!-- أدوات الفلترة والعرض -->
         <div class="card-custom py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div class="d-flex gap-2 align-items-center">
-                <span class="small fw-bold text-muted" style="font-size: 0.8rem; font-weight: 800;"><i class="fas fa-filter"></i> تصفية النوع:</span>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <span class="small fw-bold text-muted" style="font-size: 0.8rem; font-weight: 800;"><i class="fas fa-filter"></i> تصفية:</span>
                 <select class="form-select form-select-sm w-auto" id="filterType" onchange="filterData()">
                     <option value="الكل">كل العمليات</option>
                     <option value="قبض">القبض فقط</option>
                     <option value="صرف">الصرف فقط</option>
+                </select>
+                <select class="form-select form-select-sm w-auto" id="filterCustody" onchange="filterData()">
+                    <option value="الكل">كل الجهات</option>
+                    <option value="عهدة العربية">عهدة العربية</option>
+                    <option value="يد أحمد">يد أحمد</option>
                 </select>
             </div>
             <div class="text-end">
@@ -267,12 +278,13 @@
             <table class="statement-table" id="vouchersTable">
                 <thead>
                     <tr>
-                        <th style="width: 12%;">التاريخ</th>
+                        <th style="width: 10%;">التاريخ</th>
                         <th style="width: 8%;">النوع</th>
+                        <th style="width: 10%;">الجهة</th>
                         <th style="width: 10%;">النقدي</th>
                         <th style="width: 10%;">المحفظة</th>
-                        <th style="width: 20%;">اسم العميل</th>
-                        <th style="width: 24%;">البيان والتفاصيل</th>
+                        <th style="width: 18%;">اسم العميل</th>
+                        <th style="width: 20%;">البيان والتفاصيل</th>
                         <th style="width: 10%;">الإجمالي</th>
                         <th style="width: 2%;">شير</th>
                         <th style="width: 2%;">تعديل</th>
@@ -280,7 +292,7 @@
                     </tr>
                 </thead>
                 <tbody id="vouchersBody">
-                    <tr><td colspan="10" class="text-center py-4">
+                    <tr><td colspan="11" class="text-center py-4">
                         <div class="spinner-border spinner-border-sm text-success"></div> جاري مراجعة حسابات العملاء...
                     </td></tr>
                 </tbody>
@@ -318,6 +330,10 @@
                         <tr id="recClientRow">
                             <td>العميل:</td>
                             <td id="recClientName" style="font-weight: bold;"></td>
+                        </tr>
+                        <tr id="recCustodyRow">
+                            <td>جهة الاستلام:</td>
+                            <td id="recCustody" style="font-weight: bold;"></td>
                         </tr>
                         <tr id="recCashRow">
                             <td>نقدي (كاش):</td>
@@ -497,6 +513,7 @@
                         id: doc.id,
                         date: d.date,
                         type: d.type,
+                        custody: d.custody || 'عهدة العربية',
                         cashPaid: cashAmt,
                         walletPaid: walletAmt,
                         partyId: d.partyId,
@@ -514,7 +531,7 @@
 
         } catch (err) {
             if(allVouchers.length === 0) {
-                document.getElementById('vouchersBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">حدث خطأ أثناء تحميل مستندات الحسابات</td></tr>';
+                document.getElementById('vouchersBody').innerHTML = '<tr><td colspan="11" class="text-center py-4 text-danger">حدث خطأ أثناء تحميل مستندات الحسابات</td></tr>';
             }
         }
     }
@@ -525,7 +542,7 @@
         let totalSum = 0;
 
         if(data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-3 text-muted">لا توجد حركات عملاء مسجلة حالياً</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-3 text-muted">لا توجد حركات عملاء مسجلة حالياً</td></tr>';
             document.getElementById('vouchersTotal').innerText = "0.00 ج.م";
             return;
         }
@@ -534,17 +551,19 @@
             totalSum += v.amount;
             const pName = clientsMap[v.partyId] ? clientsMap[v.partyId].name : 'عميل غير مسجل';
             const badgeClass = v.type === 'قبض' ? 'badge-receipt' : 'badge-payment';
+            const custodyClass = v.custody === 'يد أحمد' ? 'badge-ahmed' : 'badge-car';
 
             tbody.innerHTML += `<tr>
                     <td><span class="text-secondary fw-bold">${v.date}</span></td>
                     <td><span class="badge-type ${badgeClass}">${v.type}</span></td>
+                    <td><span class="badge-custody ${custodyClass}">${v.custody}</span></td>
                     <td class="text-success fw-bold">${v.cashPaid > 0 ? v.cashPaid.toLocaleString('en-US', {minimumFractionDigits: 2}) : '-'}</td>
                     <td style="color: var(--wallet-color); font-weight:700;">${v.walletPaid > 0 ? v.walletPaid.toLocaleString('en-US', {minimumFractionDigits: 2}) : '-'}</td>
                     <td class="text-end fw-bold text-dark">${pName}</td>
                     <td class="text-end text-muted small">${v.note}</td>
                     <td class="fw-bold ${v.type === 'قبض' ? 'text-success' : 'text-danger'}">${v.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                     <td>
-                        <button class="btn-share-row" onclick="openReceiptModalDirect('${v.type}', '${v.date}', '${v.partyId}', ${v.cashPaid}, ${v.walletPaid}, ${v.amount}, ${v.prevBalance}, ${v.newBalance})" title="مشاركة المعاينة"><i class="fas fa-share-alt"></i></button>
+                        <button class="btn-share-row" onclick="openReceiptModalDirect('${v.type}', '${v.date}', '${v.partyId}', '${v.custody}', ${v.cashPaid}, ${v.walletPaid}, ${v.amount}, ${v.prevBalance}, ${v.newBalance})" title="مشاركة المعاينة"><i class="fas fa-share-alt"></i></button>
                     </td>
                     <td>
                         <button class="btn-edit-row" onclick="editVoucher('${v.id}')" title="تعديل السند"><i class="fas fa-edit"></i></button>
@@ -560,16 +579,23 @@
 
     window.filterData = () => {
         const fType = document.getElementById('filterType').value;
-        const filtered = allVouchers.filter(v => (fType === 'الكل' || v.type === fType));
+        const fCustody = document.getElementById('filterCustody').value;
+
+        const filtered = allVouchers.filter(v => {
+            const matchType = (fType === 'الكل' || v.type === fType);
+            const matchCustody = (fCustody === 'الكل' || v.custody === fCustody);
+            return matchType && matchCustody;
+        });
         renderTable(filtered);
     };
 
-    window.openReceiptModalDirect = (type, date, partyId, cashPaid, walletPaid, amount, prevBalance, newBalance) => {
+    window.openReceiptModalDirect = (type, date, partyId, custody, cashPaid, walletPaid, amount, prevBalance, newBalance) => {
         const pName = clientsMap[partyId] ? clientsMap[partyId].name : 'عميل غير مسجل';
         
         document.getElementById('recType').innerText = type === 'قبض' ? 'سند قبض عميل' : 'سند صرف عميل';
         document.getElementById('recDate').innerText = date;
         document.getElementById('recClientName').innerText = pName;
+        document.getElementById('recCustody').innerText = custody || 'عهدة العربية';
         
         document.getElementById('recCash').innerText = `${cashPaid.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
         document.getElementById('recWallet').innerText = `${walletPaid.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
@@ -602,6 +628,7 @@
         document.getElementById('editVoucherId').value = v.id;
         document.getElementById('vType').value = v.type;
         document.getElementById('vDate').value = v.date;
+        document.getElementById('vCustody').value = v.custody || 'عهدة العربية';
         document.getElementById('vCashAmount').value = v.cashPaid;
         document.getElementById('vWalletAmount').value = v.walletPaid;
         document.getElementById('vNote').value = v.note;
@@ -622,6 +649,7 @@
         document.getElementById('editVoucherId').value = '';
         document.getElementById('partyId').value = '';
         document.getElementById('partySearch').value = '';
+        document.getElementById('vCustody').value = 'عهدة العربية';
         document.getElementById('vCashAmount').value = '0.00';
         document.getElementById('vWalletAmount').value = '0.00';
         document.getElementById('vNote').value = '';
@@ -633,7 +661,6 @@
         document.getElementById('btnCancelEdit').classList.add('d-none');
     };
 
-    // التعديل هنا: تم إزالة أي كود يقوم بحذف أو إخفاء الاسم، والاسم سيظهر دائماً في الصورة والـ الشير
     document.getElementById('btnDoShare').addEventListener('click', () => {
         const target = document.getElementById('thermalReceipt');
         
@@ -687,6 +714,7 @@
         const editId = document.getElementById('editVoucherId').value;
         const vDateVal = document.getElementById('vDate').value;
         const vTypeVal = document.getElementById('vType').value;
+        const custodyVal = document.getElementById('vCustody').value;
         const noteVal = document.getElementById('vNote').value;
 
         try {
@@ -725,6 +753,7 @@
             const voucherPayload = {
                 date: vDateVal,
                 type: vTypeVal,
+                custody: custodyVal,
                 cashPaid: cashAmt,
                 walletPaid: walletAmt,
                 amount: totalAmount,
@@ -748,7 +777,7 @@
             await fetchClientsData();
             await loadVouchers();
             
-            openReceiptModalDirect(vTypeVal, vDateVal, partyId, cashAmt, walletAmt, totalAmount, previousBalance, finalNewBalance);
+            openReceiptModalDirect(vTypeVal, vDateVal, partyId, custodyVal, cashAmt, walletAmt, totalAmount, previousBalance, finalNewBalance);
 
             setTimeout(() => {
                 document.getElementById('btnDoShare').click();
@@ -799,14 +828,20 @@
         }
 
         const fType = document.getElementById('filterType').value;
-        const filteredData = allVouchers.filter(v => (fType === 'الكل' || v.type === fType));
+        const fCustody = document.getElementById('filterCustody').value;
+
+        const filteredData = allVouchers.filter(v => {
+            const matchType = (fType === 'الكل' || v.type === fType);
+            const matchCustody = (fCustody === 'الكل' || v.custody === fCustody);
+            return matchType && matchCustody;
+        });
 
         const excelRows = [];
-        excelRows.push(["التاريخ", "الحركة", "اسم العميل", "البيان والطلب", "سداد نقدي", "سداد محفظة", "الحساب السابق", "صافي الحساب"]);
+        excelRows.push(["التاريخ", "الحركة", "اسم العميل", "جهة الاستلام", "البيان والطلب", "سداد نقدي", "سداد محفظة", "الحساب السابق", "صافي الحساب"]);
 
         filteredData.forEach(v => {
             const pName = clientsMap[v.partyId] ? clientsMap[v.partyId].name : 'عميل غير مسجل';
-            excelRows.push([v.date, v.type, pName, v.note, v.cashPaid, v.walletPaid, v.prevBalance, v.newBalance]);
+            excelRows.push([v.date, v.type, pName, v.custody, v.note, v.cashPaid, v.walletPaid, v.prevBalance, v.newBalance]);
         });
 
         const ws = XLSX.utils.aoa_to_sheet(excelRows);
