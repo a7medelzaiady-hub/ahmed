@@ -142,13 +142,6 @@
             gap: 5px;
         }
 
-        .grid-2col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
         .data-box {
             background: #f8fafc;
             border: 1px solid var(--border);
@@ -156,22 +149,8 @@
             padding: 10px;
             text-align: center;
         }
-        .data-box.van-total { border-right: 3px solid var(--germany-gold); background: #fffdf5; }
         .data-box.cash { border-right: 3px solid #16a34a; background: #f0fdf4; }
         .data-box.credit { border-right: 3px solid var(--germany-red); background: #fff1f1; }
-
-        .avg-bar {
-            border-radius: 10px;
-            padding: 8px 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.78rem;
-            font-weight: 800;
-            margin-bottom: 10px;
-        }
-        .avg-bar.cash { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
-        .avg-bar.credit { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
 
         .box-lbl { font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); text-align: center; }
         .box-val { font-size: 1.05rem; font-weight: 900; margin-top: 2px; }
@@ -215,7 +194,7 @@
         </div>
     </div>
 
-    <!-- كروت الإحصائيات العامة للفترة المحددة (مبيعات العربية فقط) -->
+    <!-- كروت الإحصائيات العامة للفترة المحددة -->
     <div class="row g-1 mb-3">
         <div class="col-3">
             <div class="kpi-card">
@@ -243,7 +222,7 @@
         </div>
     </div>
 
-    <!-- قائمة يوميات مبيعات العربية -->
+    <!-- قائمة اليوميات -->
     <div id="dailySummaryList">
         <div class="empty-state">
             <i class="fas fa-spinner fa-spin fa-2x"></i>
@@ -315,7 +294,6 @@
             rawInvoices = [];
             invSnap.forEach(doc => {
                 const data = doc.data();
-                // الفلترة الخاصة بالفواتير: احتفاظ بفواتير العربية فقط
                 if (!data.isDeleted && data.source === 'van_sales') {
                     rawInvoices.push({ id: doc.id, ...data });
                 }
@@ -324,9 +302,8 @@
             rawTransactions = [];
             transSnap.forEach(doc => {
                 const tr = doc.data();
-                // الفلترة الخاصة بالسندات: التمييز واحتفاظ بسندات العربية فقط (استبعاد يد أحمد أو أي جهة أخرى)
-                const isVanTransaction = (tr.custody === "العربية" || tr.source === "van_sales" || (tr.note && tr.note.includes("العربية")));
-                if (!tr.isDeleted && isVanTransaction && tr.custody !== "يد أحمد") {
+                // جلب كل السندات كالسابق، مع استبعاد المحذوف أو المسجل بـ يد أحمد فقط إن وُجد حقلها صراحة
+                if (!tr.isDeleted && tr.custody !== "يد أحمد") {
                     rawTransactions.push({ id: doc.id, ...tr });
                 }
             });
@@ -381,7 +358,7 @@
             if (remaining > 0) dayGroups[d].invCreditVan += remaining;
         });
 
-        // 2. تجميع سندات القبض الخاصة بالعربية ودمجها في الحساب النقدي للعربية
+        // 2. تجميع كل سندات القبض (الكاش والمحفظة) ودمجها مباشرة مع النقدية
         rawTransactions.forEach(tr => {
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (tr.type === 'قبض' && !isInvoicePayment) {
@@ -416,7 +393,7 @@
         const listContainer = document.getElementById('dailySummaryList');
 
         if (processedDaysList.length === 0) {
-            listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-truck-pickup fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات للسيارة في هذه الفترة.</p></div>`;
+            listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-truck-pickup fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات في هذه الفترة.</p></div>`;
             document.getElementById('periodTotalSales').innerText = "0.0";
             document.getElementById('periodCashAvg').innerText = "0.0";
             document.getElementById('periodCreditAvg').innerText = "0.0";
@@ -431,7 +408,7 @@
         const html = processedDaysList.map(day => {
             gVanSales += day.vanSales;
 
-            // حساب النقدي الشامل للعربية (مبيعات + سندات القبض الخاصة بالعربية)
+            // حساب النقدية الشاملة (مبيعات كاش + محفظة + سندات قبض كاش ومحفظة)
             const totalCashVan = day.invCashVan + day.invWalletVan + day.voucherCash + day.voucherWallet;
             const totalCreditVan = day.invCreditVan;
 
@@ -449,14 +426,14 @@
                     </div>
                 </div>
 
-                <!-- 1. المبيعات النقدية للعربية مضافاً إليها السندات -->
+                <!-- النقدية المستلمة للسيارة (شاملة كل السندات) -->
                 <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> النقدية المستلمة للسيارة:</div>
                 <div class="data-box cash mb-2">
                     <div class="box-lbl">نقدي العربية (مبيعات + سندات القبض)</div>
                     <div class="box-val num text-success" style="font-size: 1.15rem;">${totalCashVan.toFixed(2)}</div>
                 </div>
 
-                <!-- 2. المبيعات الآجلة للعربية (المتبقي) -->
+                <!-- الآجل المتبقي على عملاء العربية -->
                 <div class="section-title-sm"><i class="fas fa-file-invoice-dollar text-danger"></i> الآجل المتبقي على عملاء العربية:</div>
                 <div class="data-box credit">
                     <div class="box-lbl">آجل مبيعات العربية</div>
@@ -467,7 +444,7 @@
 
         listContainer.innerHTML = html;
 
-        // حساب المتوسطات العامة العلوية للسيارة
+        // حساب المتوسطات العامة العلوية
         const totalDays = processedDaysList.length;
         document.getElementById('periodTotalSales').innerText = gVanSales.toFixed(1);
         document.getElementById('periodCashAvg').innerText = totalDays > 0 ? (gCashTotal / totalDays).toFixed(1) : "0.0";
