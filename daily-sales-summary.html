@@ -133,7 +133,7 @@
         }
 
         .section-title-sm {
-            font-size: 0.75rem;
+            font-size: 0.78rem;
             font-weight: 800;
             color: #475569;
             margin-bottom: 6px;
@@ -146,24 +146,34 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .data-box {
             background: #f8fafc;
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 8px 10px;
+            padding: 10px;
             text-align: center;
         }
-        .data-box.main { border-right: 3px solid var(--germany-black); }
-        .data-box.van { border-right: 3px solid var(--germany-gold); }
         .data-box.cash { border-right: 3px solid #16a34a; background: #f0fdf4; }
-        .data-box.wallet { border-right: 3px solid var(--purple); background: #f5f3ff; }
         .data-box.credit { border-right: 3px solid var(--germany-red); background: #fff1f1; }
 
-        .box-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
-        .box-val { font-size: 0.98rem; font-weight: 900; margin-top: 2px; }
+        .avg-bar {
+            border-radius: 10px;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.78rem;
+            font-weight: 800;
+            margin-bottom: 14px;
+        }
+        .avg-bar.cash { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+        .avg-bar.credit { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+        .box-lbl { font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); text-align: center; }
+        .box-val { font-size: 1.05rem; font-weight: 900; margin-top: 2px; }
 
         .filter-card {
             background: var(--white);
@@ -214,14 +224,14 @@
         </div>
         <div class="col-3">
             <div class="kpi-card">
-                <div class="kpi-title">متوسط المخزن</div>
-                <div class="kpi-value num text-primary" id="periodMainAvg">0.0</div>
+                <div class="kpi-title">متوسط النقدية</div>
+                <div class="kpi-value num text-success" id="periodCashAvg">0.0</div>
             </div>
         </div>
         <div class="col-3">
             <div class="kpi-card">
-                <div class="kpi-title">متوسط العربية</div>
-                <div class="kpi-value num text-warning" id="periodVanAvg">0.0</div>
+                <div class="kpi-title">متوسط الآجل</div>
+                <div class="kpi-value num text-danger" id="periodCreditAvg">0.0</div>
             </div>
         </div>
         <div class="col-3">
@@ -232,7 +242,7 @@
         </div>
     </div>
 
-    <!-- قائمة اليوميات التفصيلية -->
+    <!-- قائمة اليوميات التفصيلية النظيفة -->
     <div id="dailySummaryList">
         <div class="empty-state">
             <i class="fas fa-spinner fa-spin fa-2x"></i>
@@ -380,7 +390,7 @@
             }
         });
 
-        // 2. تجميع سندات القبض
+        // 2. تجميع سندات القبض ودمجها في الحسابات النقدية
         rawTransactions.forEach(tr => {
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (tr.type === 'قبض' && !isInvoicePayment) {
@@ -418,86 +428,64 @@
         if (processedDaysList.length === 0) {
             listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-calendar-times fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات بالفترة المحددة.</p></div>`;
             document.getElementById('periodTotalSales').innerText = "0.0";
-            document.getElementById('periodMainAvg').innerText = "0.0";
-            document.getElementById('periodVanAvg').innerText = "0.0";
+            document.getElementById('periodCashAvg').innerText = "0.0";
+            document.getElementById('periodCreditAvg').innerText = "0.0";
             document.getElementById('periodCashTotal').innerText = "0.0";
             return;
         }
 
-        let gTotalSales = 0, gStoreSales = 0, gVanSales = 0;
+        let gTotalSales = 0;
         let gCashTotal = 0;
-        let storeDaysCount = 0, vanDaysCount = 0;
+        let gCreditTotal = 0;
 
         const html = processedDaysList.map(day => {
             gTotalSales += day.totalSales;
-            gStoreSales += day.storeSales;
-            gVanSales += day.vanSales;
 
-            if (day.storeSales > 0) storeDaysCount++;
-            if (day.vanSales > 0) vanDaysCount++;
-
-            // حساب النقدية الإجمالية اليومية (مبيعات + سندات)
-            const totalCashDay = day.invCashStore + day.invCashVan + day.voucherCash;
-            const totalWalletDay = day.invWalletStore + day.invWalletVan + day.voucherWallet;
-            const totalNetCash = totalCashDay + totalWalletDay;
+            // دمـج السنـدات النقدية والمحفظة داخل مبيعات المخزن والعربية النقدية
+            const cashStoreTotal = day.invCashStore + day.invWalletStore + day.voucherCash;
+            const cashVanTotal = day.invCashVan + day.invWalletVan + day.voucherWallet;
+            
+            const totalCashDay = cashStoreTotal + cashVanTotal;
             const totalCreditDay = day.invCreditStore + day.invCreditVan;
 
-            gCashTotal += totalNetCash;
+            gCashTotal += totalCashDay;
+            gCreditTotal += totalCreditDay;
 
-            // حساب متوسطات النقدية والمبيعات
-            const activeSources = (day.storeSales > 0 ? 1 : 0) + (day.vanSales > 0 ? 1 : 0) || 1;
-            const avgStoreTotal = day.storeSales;
-            const avgVanTotal = day.vanSales;
-
-            const cashStoreTotal = day.invCashStore + day.invWalletStore;
-            const cashVanTotal = day.invCashVan + day.invWalletVan;
+            // حساب متوسط النقدية ومتوسط الآجل لليوم (تقسيم بالتساوي على المنافذ المشتغلة 2)
+            const activeSourcesCount = 2;
+            const avgCashDay = totalCashDay / activeSourcesCount;
+            const avgCreditDay = totalCreditDay / activeSourcesCount;
 
             return `
             <div class="day-summary-card">
                 <div class="day-header">
-                    <div class="badge bg-dark px-3 py-2 fw-bold num" style="font-size: 0.92rem;">
-                        المبيعات الإجمالية: ${day.totalSales.toFixed(2)}
-                    </div>
                     <div class="day-date">
                         <i class="far fa-calendar-alt text-danger"></i> ${day.date}
                     </div>
-                </div>
-
-                <!-- 1. إجمالي المبيعات والمتوسطات الإجمالية -->
-                <div class="section-title-sm"><i class="fas fa-shopping-cart text-dark"></i> المبيعات الإجمالية ومتوسطاتها:</div>
-                <div class="grid-2col">
-                    <div class="data-box main">
-                        <div class="box-lbl">إجمالي مبيعات المخزن</div>
-                        <div class="box-val num">${day.storeSales.toFixed(2)}</div>
-                    </div>
-                    <div class="data-box van">
-                        <div class="box-lbl">إجمالي مبيعات العربية</div>
-                        <div class="box-val num text-dark">${day.vanSales.toFixed(2)}</div>
+                    <div class="badge bg-dark px-3 py-2 fw-bold num" style="font-size: 0.92rem;">
+                        المبيعات الإجمالية: ${day.totalSales.toFixed(2)}
                     </div>
                 </div>
 
-                <!-- 2. المبيعات النقدية والسندات ومتوسطاتها -->
-                <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> المبيعات النقدية (كاش + محفظة + سندات):</div>
+                <!-- 1. المبيعات النقدية (شاملة السندات ومتوسطها) -->
+                <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> المبيعات النقدية (مضاف إليها السندات):</div>
                 <div class="grid-2col">
                     <div class="data-box cash">
-                        <div class="box-lbl"><span>نقدي المخزن</span></div>
+                        <div class="box-lbl">نقدي المخزن النقدية</div>
                         <div class="box-val num text-success">${cashStoreTotal.toFixed(2)}</div>
                     </div>
                     <div class="data-box cash">
-                        <div class="box-lbl"><span>نقدي العربية</span></div>
+                        <div class="box-lbl">نقدي العربية النقدية</div>
                         <div class="box-val num text-success">${cashVanTotal.toFixed(2)}</div>
                     </div>
                 </div>
-                <div class="data-box wallet mb-2" style="background: #f0fdf4; border-color: #16a34a;">
-                    <div class="box-lbl">
-                        <span class="text-success fw-bold">إجمالي السداد النقدي الكلي (+ السندات)</span>
-                        <span class="text-muted" style="font-size:0.65rem;">(سندات كاش: ${day.voucherCash.toFixed(1)} | محفظة: ${day.voucherWallet.toFixed(1)})</span>
-                    </div>
-                    <div class="box-val num text-success" style="font-size: 1.1rem;">${totalNetCash.toFixed(2)}</div>
+                <div class="avg-bar cash">
+                    <span><i class="fas fa-calculator me-1"></i> متوسط إجمالي النقدية اليومي (+ السندات):</span>
+                    <span class="num text-success fs-6">${avgCashDay.toFixed(2)}</span>
                 </div>
 
-                <!-- 3. مبيعات الآجل -->
-                <div class="section-title-sm"><i class="fas fa-file-invoice-dollar text-danger"></i> مبيعات الآجل (المتبقي):</div>
+                <!-- 2. المبيعات الآجلة ومتوسطها -->
+                <div class="section-title-sm"><i class="fas fa-file-invoice-dollar text-danger"></i> المبيعات الآجلة (المتبقي):</div>
                 <div class="grid-2col">
                     <div class="data-box credit">
                         <div class="box-lbl">آجل المخزن</div>
@@ -508,50 +496,51 @@
                         <div class="box-val num text-danger">${day.invCreditVan.toFixed(2)}</div>
                     </div>
                 </div>
+                <div class="avg-bar credit">
+                    <span><i class="fas fa-calculator me-1"></i> متوسط إجمالي الآجل اليومي:</span>
+                    <span class="num text-danger fs-6">${avgCreditDay.toFixed(2)}</span>
+                </div>
             </div>`;
         }).join('');
 
         listContainer.innerHTML = html;
 
-        // حساب المتوسطات العامة العلوية
-        const avgMainStore = storeDaysCount > 0 ? (gStoreSales / storeDaysCount) : 0;
-        const avgVanStore = vanDaysCount > 0 ? (gVanSales / vanDaysCount) : 0;
-
+        // حساب الإحصائيات العامة العلوية للفترة
+        const totalDays = processedDaysList.length;
         document.getElementById('periodTotalSales').innerText = gTotalSales.toFixed(1);
-        document.getElementById('periodMainAvg').innerText = avgMainStore.toFixed(1);
-        document.getElementById('periodVanAvg').innerText = avgVanStore.toFixed(1);
+        document.getElementById('periodCashAvg').innerText = totalDays > 0 ? (gCashTotal / totalDays).toFixed(1) : "0.0";
+        document.getElementById('periodCreditAvg').innerText = totalDays > 0 ? (gCreditTotal / totalDays).toFixed(1) : "0.0";
         document.getElementById('periodCashTotal').innerText = gCashTotal.toFixed(1);
     }
 
     function exportSummaryExcel() {
         if (!processedDaysList || processedDaysList.length === 0) return;
         const excelRows = [
-            ["التاريخ", "إجمالي المبيعات", "مبيعات المخزن", "مبيعات العربية", "نقدي المخزن", "نقدي العربية", "سندات القبض", "إجمالي النقدية", "آجل المخزن", "آجل العربية"]
+            ["التاريخ", "إجمالي المبيعات", "نقدي المخزن والسندات", "نقدي العربية والسندات", "متوسط النقدية اليومي", "آجل المخزن", "آجل العربية", "متوسط الآجل اليومي"]
         ];
 
         processedDaysList.forEach(d => {
-            const cashStore = d.invCashStore + d.invWalletStore;
-            const cashVan = d.invCashVan + d.invWalletVan;
-            const totalCash = cashStore + cashVan + d.voucherCash + d.voucherWallet;
+            const cashStore = d.invCashStore + d.invWalletStore + d.voucherCash;
+            const cashVan = d.invCashVan + d.invWalletVan + d.voucherWallet;
+            const totalCash = cashStore + cashVan;
+            const totalCredit = d.invCreditStore + d.invCreditVan;
 
             excelRows.push([
                 d.date,
                 d.totalSales,
-                d.storeSales,
-                d.vanSales,
                 cashStore,
                 cashVan,
-                (d.voucherCash + d.voucherWallet),
-                totalCash,
+                Number((totalCash / 2).toFixed(2)),
                 d.invCreditStore,
-                d.invCreditVan
+                d.invCreditVan,
+                Number((totalCredit / 2).toFixed(2))
             ]);
         });
 
         const ws = XLSX.utils.aoa_to_sheet(excelRows);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "ملخص المبيعات الشامل");
-        XLSX.writeFile(wb, `ملخص_المبيعات_الشامل_${new Date().toLocaleDateString('en-CA')}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "ملخص المبيعات النظيف");
+        XLSX.writeFile(wb, `ملخص_المبيعات_النظيف_${new Date().toLocaleDateString('en-CA')}.xlsx`);
     }
 
     // تشغيل الجلب عند فتح الصفحة
