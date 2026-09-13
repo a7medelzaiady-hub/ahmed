@@ -103,10 +103,11 @@
         .grand-row span:first-child { font-size: 0.82rem; font-weight: 700; opacity: 0.85; }
         .grand-row span:last-child { font-size: 1.05rem; font-weight: 900; }
 
-        .daily-table { width: 100%; margin-top: 10px; font-size: 0.76rem; border-collapse: collapse; background: white; border-radius: 14px; overflow: hidden; }
-        .daily-table th { background: #f1f5f9; padding: 8px 6px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; }
+        .daily-table-wrap { max-height: 480px; overflow-y: auto; border-radius: 14px; border: 1px solid var(--border); }
+        .daily-table { width: 100%; margin-top: 0; font-size: 0.76rem; border-collapse: collapse; background: white; }
+        .daily-table th { background: #f1f5f9; padding: 8px 6px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; position: sticky; top: 0; z-index: 5; box-shadow: 0 1px 0 var(--border); }
         .daily-table td { padding: 8px 6px; border: 1px solid var(--border); text-align: center; font-weight: 700; }
-        .daily-table tfoot td { background: #f8fafc; font-weight: 900; }
+        .daily-table tfoot td { background: #f8fafc; font-weight: 900; position: sticky; bottom: 0; }
 
         .empty-state { text-align: center; padding: 40px 10px; color: var(--text-secondary); }
         .empty-state i { color: #cbd5e1; }
@@ -312,9 +313,9 @@
             dailyMap[k].totalAll += (Number(inv.total) || 0);
         });
 
-        const sortedDays = Object.keys(dailyMap).filter(k => k !== 'بلا تاريخ').sort();
+        const sortedDays = Object.keys(dailyMap).filter(k => k !== 'بلا تاريخ').sort().reverse();
 
-        const fmt = n => (n || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmt = n => (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         let dailyRowsHtml = sortedDays.map(day => {
             const d = dailyMap[day];
@@ -360,6 +361,14 @@
                         <div class="stat-value num" style="color: var(--purple);">${fmt(vanVoucherWallet)}</div>
                     </div>
                 </div>
+                <div class="col-12">
+                    <div class="stat-card" style="border: 2px solid var(--germany-black); background: #fffdf2;">
+                        <div class="stat-bar" style="background: var(--germany-red);"></div>
+                        <div class="stat-label">إجمالي المبيعات النقدي + السندات (العربية فقط)</div>
+                        <div class="stat-value num" style="color: var(--germany-red); font-size: 1.4rem;">${fmt(grandVanCashTotal)}</div>
+                        <div class="stat-sub">مبيعات نقدي العربية (${fmt(vanCashSales)}) + سندات نقدي عهدة العربية (${fmt(vanVoucherCash)})</div>
+                    </div>
+                </div>
             </div>
 
             <div class="section-title"><i class="fas fa-calculator"></i> متوسط إجمالي المبيعات ككل (كل المصادر)</div>
@@ -390,7 +399,7 @@
             </div>
 
             <div class="section-title"><i class="fas fa-table"></i> تفصيل يومي</div>
-            <div class="table-responsive">
+            <div class="daily-table-wrap">
                 <table class="daily-table">
                     <thead>
                         <tr>
@@ -413,6 +422,7 @@
                     </tfoot>
                 </table>
             </div>
+            <div class="stat-sub text-center mt-2">الترتيب من الأحدث للأقدم — رأس الجدول ثابت أثناء التمرير</div>
             <div class="text-center mt-3">
                 <button class="apply-btn mx-auto" id="exportExcelBtn"><i class="fas fa-file-excel"></i> تصدير التفصيل اليومي إكسيل</button>
             </div>
