@@ -3,571 +3,362 @@
 <head>
     <meta charset="UTF-8">
     <script src="auth-guard.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ملخص المبيعات الشامل - الزيادي لزيوت السيارات</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>التقارير — شركة الزيادي</title>
+    
+    <!-- PWA settings -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <!-- مكاتب فايربيز compat -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
     <style>
-        :root {
-            --accent: #000000;
-            --header-bg: linear-gradient(135deg, #000000, #252525 80%);
-            --bg-light: #f5f6f6;
-            --text-primary: #000000;
-            --text-secondary: #4a4a4a;
-            --border: #dcdcdc;
+        :root { 
+            --header-bg: linear-gradient(135deg, #07472e 0%, #0b5e3d 100%);
+            --bg-light: #eef3f0;
+            --text-primary: #0f172a;
             --white: #ffffff;
-            
-            --germany-black: #000000;
-            --germany-red: #FF0000;
-            --germany-gold: #FFCC00;
-            --purple: #5b21b6;
-            
-            --card-radius: 18px;
-            --shadow-sm: 0 2px 6px rgba(0,0,0,0.06);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
-        }
-        
-        * { box-sizing: border-box; }
-        
-        body {
-            background: var(--bg-light);
-            font-family: 'Cairo', sans-serif;
-            color: var(--text-primary);
-            padding-bottom: 80px;
-            font-size: 0.88rem;
-            -webkit-tap-highlight-color: transparent;
-            -webkit-font-smoothing: antialiased;
-        }
-        
-        .num { 
-            font-family: 'JetBrains Mono', monospace; 
-            font-weight: 700; 
-            letter-spacing: -0.5px; 
         }
 
-        .header-nav {
-            background: var(--header-bg);
-            padding: 16px 20px;
+        body { 
+            background: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-primary); 
+            min-height: 100vh;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: var(--shadow-md);
+            flex-direction: column;
+            -webkit-font-smoothing: antialiased;
+            padding-bottom: 25px;
+        }
+        
+        .header-section { 
+            padding: 0 16px; 
+            height: 65px;
+            background: var(--header-bg); 
             color: white;
+            box-shadow: 0 6px 18px rgba(7, 71, 46, 0.25);
             position: sticky;
             top: 0;
             z-index: 1000;
-            border-bottom-left-radius: 20px;
-            border-bottom-right-radius: 20px;
-            border-bottom: 4px solid var(--germany-red);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .header-nav h6 { 
-            font-weight: 900; 
-            font-size: 1.05rem;
-            margin: 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .add-btn {
-            background: rgba(255, 255, 255, 0.15);
-            width: 38px; 
-            height: 38px;
-            border-radius: 12px;
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            color: white; 
-            text-decoration: none; 
-            font-size: 0.95rem;
-            border: 1px solid rgba(255, 255, 255, 0.2); 
-            transition: all 0.2s ease;
-        }
-        .add-btn:active { transform: scale(0.92); }
+        .header-container { height: 100%; display: flex; justify-content: space-between; align-items: center; }
 
-        .kpi-card {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 10px 6px;
-            box-shadow: var(--shadow-sm);
+        .hub-container {
+            flex: 1;
+            padding: 20px 10px 40px;
+            max-width: 600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        /* تصميم الكروت ثلاثية الأبعاد (3D Modern Style) */
+        .hub-card {
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 16px 10px;
             text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            text-decoration: none !important;
+            color: var(--text-primary) !important;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
             height: 100%;
-        }
-        .kpi-title { font-size: 0.68rem; color: var(--text-secondary); font-weight: 800; white-space: nowrap; }
-        .kpi-value { font-size: 0.95rem; font-weight: 900; margin-top: 4px; }
-
-        .day-summary-card {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: var(--card-radius);
-            padding: 16px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-sm);
-            border-right: 5px solid var(--germany-gold);
-            transition: all 0.2s ease;
+            min-height: 185px;
+            
+            /* تأثير الظل والتجسيم 3D */
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05), 
+                        0 4px 6px rgba(0, 0, 0, 0.03),
+                        0 1px 0 rgba(255, 255, 255, 0.9) inset;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .day-header {
+        /* تفاعل اللمس للـ Mobile */
+        .hub-card:active {
+            transform: translateY(4px) scale(0.98);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        /* التمويج الخلفي الجمالي داخل الكارت */
+        .hub-card::after {
+            content: '';
+            position: absolute;
+            top: -40px;
+            right: -40px;
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            opacity: 0.12;
+            pointer-events: none;
+        }
+
+        /* تخصيص الألوان والثيم لكل كارت */
+        .card-all {
+            border-bottom: 4px solid #d97706;
+        }
+        .card-all::after { background: #f59e0b; }
+        .card-all .icon-wrapper {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #b45309;
+            box-shadow: 0 6px 12px rgba(245, 158, 11, 0.25);
+        }
+
+        .card-all2 {
+            border-bottom: 4px solid #7c3aed;
+        }
+        .card-all2::after { background: #8b5cf6; }
+        .card-all2 .icon-wrapper {
+            background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+            color: #6d28d9;
+            box-shadow: 0 6px 12px rgba(124, 58, 237, 0.25);
+        }
+
+        /* الثيم الخاص بكارت ملخص المبيعات اليومية */
+        .card-daily-summary {
+            border-bottom: 4px solid #eab308;
+        }
+        .card-daily-summary::after { background: #eab308; }
+        .card-daily-summary .icon-wrapper {
+            background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%);
+            color: #854d0e;
+            box-shadow: 0 6px 12px rgba(234, 179, 8, 0.3);
+        }
+
+        .card-stock {
+            border-bottom: 4px solid #ea580c;
+        }
+        .card-stock::after { background: #f97316; }
+        .card-stock .icon-wrapper {
+            background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
+            color: #c2410c;
+            box-shadow: 0 6px 12px rgba(249, 115, 22, 0.25);
+        }
+
+        .card-profit {
+            border-bottom: 4px solid #2563eb;
+        }
+        .card-profit::after { background: #3b82f6; }
+        .card-profit .icon-wrapper {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            color: #1d4ed8;
+            box-shadow: 0 6px 12px rgba(37, 99, 235, 0.25);
+        }
+
+        .card-item-profit {
+            border-bottom: 4px solid #0891b2;
+        }
+        .card-item-profit::after { background: #06b6d4; }
+        .card-item-profit .icon-wrapper {
+            background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+            color: #0e7490;
+            box-shadow: 0 6px 12px rgba(8, 145, 178, 0.25);
+        }
+
+        .card-cash {
+            border-bottom: 4px solid #059669;
+        }
+        .card-cash::after { background: #10b981; }
+        .card-cash .icon-wrapper {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #047857;
+            box-shadow: 0 6px 12px rgba(16, 185, 129, 0.25);
+        }
+
+        .card-cash-book {
+            border-bottom: 4px solid #16a34a;
+        }
+        .card-cash-book::after { background: #22c55e; }
+        .card-cash-book .icon-wrapper {
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            color: #15803d;
+            box-shadow: 0 6px 12px rgba(34, 197, 94, 0.25);
+        }
+
+        .card-dashboard {
+            border-bottom: 4px solid #0d9488;
+        }
+        .card-dashboard::after { background: #14b8a6; }
+        .card-dashboard .icon-wrapper {
+            background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
+            color: #0f766e;
+            box-shadow: 0 6px 12px rgba(20, 184, 166, 0.25);
+        }
+
+        /* تجسيم أيقونة الكارت (3D Icon Box) */
+        .icon-wrapper {
+            width: 52px;
+            height: 52px;
+            border-radius: 16px;
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            border-bottom: 1.5px dashed var(--border);
-            padding-bottom: 10px;
-            margin-bottom: 12px;
-        }
-        .day-date {
-            font-size: 1rem;
-            font-weight: 900;
-            color: var(--germany-black);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .section-title-sm {
-            font-size: 0.75rem;
-            font-weight: 800;
-            color: #475569;
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .grid-2col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
+            justify-content: center;
+            font-size: 1.4rem;
             margin-bottom: 10px;
+            transition: transform 0.25s ease;
+            border: 1px solid rgba(255, 255, 255, 0.6);
         }
 
-        .data-box {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 8px 10px;
-        }
-        .data-box.main { border-right: 3px solid var(--germany-black); }
-        .data-box.van { border-right: 3px solid var(--germany-gold); }
-        .data-box.avg-main { border-right: 3px solid #3b82f6; background: #eff6ff; }
-        .data-box.avg-van { border-right: 3px solid #f59e0b; background: #fffdf5; }
-        .data-box.cash { border-right: 3px solid #16a34a; background: #f0fdf4; }
-        .data-box.wallet { border-right: 3px solid var(--purple); background: #f5f3ff; }
-        .data-box.credit { border-right: 3px solid var(--germany-red); background: #fff1f1; }
-
-        .box-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); display: flex; justify-content: space-between; }
-        .box-val { font-size: 0.98rem; font-weight: 900; margin-top: 2px; }
-
-        .filter-card {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: var(--card-radius);
-            padding: 14px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-sm);
+        .hub-card h3 {
+            font-size: 0.92rem;
+            font-weight: 800;
+            margin-bottom: 5px;
+            color: #1e293b;
         }
 
-        .empty-state { text-align: center; padding: 50px 10px; color: var(--text-secondary); }
+        .hub-card p {
+            font-size: 0.72rem;
+            color: #64748b;
+            margin: 0;
+            line-height: 1.35;
+            font-weight: 600;
+        }
+
+        .btn-action { 
+            width: 40px; height: 40px; border-radius: 12px;
+            background: rgba(255, 255, 255, 0.15); 
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #fff; transition: all 0.2s; 
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .btn-action:active { scale: 0.92; background: rgba(255,255,255,0.3); }
     </style>
 </head>
 <body>
 
-<div class="header-nav">
-    <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
-    <h6 class="m-0"><i class="fas fa-calculator me-1"></i> ملخص المبيعات الشامل</h6>
-    <div class="d-flex gap-2">
-        <a href="sales-history.html" class="add-btn" title="سجل الفواتير"><i class="fas fa-history"></i></a>
-        <button class="add-btn" onclick="exportSummaryExcel()" title="تصدير إكسيل"><i class="fas fa-file-excel"></i></button>
+    <div class="header-section">
+        <div class="header-container container">
+            <div style="width: 40px;"></div>
+            <div class="title-area text-center flex-grow-1">
+                <h5 class="fw-bold m-0" style="font-size: 1.2rem; font-weight: 800; letter-spacing: 0.3px;">التقارير</h5>
+            </div>
+            <a href="javascript:history.back()" class="btn-action text-decoration-none" title="رجوع">
+                <i class="fas fa-arrow-right fs-5"></i>
+            </a>
+        </div>
     </div>
-</div>
 
-<div class="container px-2 mt-3">
-
-    <!-- الفلاتر واختيار النطاق الزمني -->
-    <div class="filter-card">
-        <div class="row g-2 align-items-center">
+    <div class="hub-container container">
+        <div class="row g-2 justify-content-center">
+            
+            <!-- ملخص المبيعات اليومية (الكارت الجديد) -->
             <div class="col-6">
-                <label class="fw-bold mb-1" style="font-size: 0.75rem;">من تاريخ:</label>
-                <input type="date" id="startDateInput" class="form-control form-control-sm fw-bold num" onchange="renderDailySummary()">
+                <a href="daily-sales-summary.html" class="hub-card card-daily-summary">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-chart-area"></i>
+                    </div>
+                    <h3>ملخص المبيعات اليومية</h3>
+                    <p>مبيعات كل يوم مقسمة بين المخزن والسيارة والمتوسط.</p>
+                </a>
             </div>
+
+            <!-- جميع الملفات والسجلات -->
             <div class="col-6">
-                <label class="fw-bold mb-1" style="font-size: 0.75rem;">إلى تاريخ:</label>
-                <input type="date" id="endDateInput" class="form-control form-control-sm fw-bold num" onchange="renderDailySummary()">
+                <a href="allfiles.html" class="hub-card card-all">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-folder-open"></i>
+                    </div>
+                    <h3>جميع الملفات والسجلات</h3>
+                    <p>عرض وتحميل كافة سجلات وملفات النظام.</p>
+                </a>
             </div>
+
+            <!-- ملفات وسجلات إضافية -->
+            <div class="col-6">
+                <a href="allfiles1.html" class="hub-card card-all2">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-folder-tree"></i>
+                    </div>
+                    <h3>ملفات وسجلات إضافية</h3>
+                    <p>مجموعة إضافية من الملفات والسجلات.</p>
+                </a>
+            </div>
+
+            <!-- دفتر النقدية (الكاش) -->
+            <div class="col-6">
+                <a href="cash.html" class="hub-card card-cash-book">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-book-journal-whills"></i>
+                    </div>
+                    <h3>دفتر النقدية (الكاش)</h3>
+                    <p>كشف حركات الخزينة والدرج وارد وصادر سطر بسطر.</p>
+                </a>
+            </div>
+
+            <!-- سجل النقدية المُرَحَّلة -->
+            <div class="col-6">
+                <a href="cash-register.html" class="hub-card card-cash">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-cash-register"></i>
+                    </div>
+                    <h3>النقدية المُرَحَّلة</h3>
+                    <p>أرشيف مطابقة الكاش والجرد الفعلي والفوارق.</p>
+                </a>
+            </div>
+
+            <!-- حركة الأصناف -->
+            <div class="col-6">
+                <a href="reports2.html" class="hub-card card-stock">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-boxes"></i>
+                    </div>
+                    <h3>حركة الأصناف</h3>
+                    <p>متابعة كميات جرد حركة الزيوت والبضاعة.</p>
+                </a>
+            </div>
+
+            <!-- تقرير الأرباح -->
+            <div class="col-6">
+                <a href="profit.html" class="hub-card card-profit">
+                    <div class="icon-wrapper">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <h3>تقرير الأرباح</h3>
+                    <p>الأرباح اليومية الإجمالية والصافية للمحل.</p>
+                </a>
+            </div>
+
+            <!-- أرباح الأصناف -->
+            <div class="col-6">
+                <a href="profits.html" class="hub-card card-item-profit">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-tags"></i>
+                    </div>
+                    <h3>أرباح الأصناف</h3>
+                    <p>ربح كل صنف وتفاصيل الكمية المباعة.</p>
+                </a>
+            </div>
+
+            <!-- صافي الدخل والربح -->
+            <div class="col-6">
+                <a href="dashboard.html" class="hub-card card-dashboard">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <h3>صافي الدخل والربح</h3>
+                    <p>لوحة التحكم المالية لمتابعة حجم أرباحك.</p>
+                </a>
+            </div>
+
         </div>
     </div>
 
-    <!-- كروت الإحصائيات العامة للفترة المحددة -->
-    <div class="row g-1 mb-3">
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">إجمالي المبيعات</div>
-                <div class="kpi-value num text-dark" id="periodTotalSales">0.0</div>
-            </div>
-        </div>
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">متوسط المخزن</div>
-                <div class="kpi-value num text-primary" id="periodMainAvg">0.0</div>
-            </div>
-        </div>
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">متوسط العربية</div>
-                <div class="kpi-value num text-warning" id="periodVanAvg">0.0</div>
-            </div>
-        </div>
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">إجمالي النقدية</div>
-                <div class="kpi-value num text-success" id="periodCashTotal">0.0</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- قائمة اليوميات التفصيلية -->
-    <div id="dailySummaryList">
-        <div class="empty-state">
-            <i class="fas fa-spinner fa-spin fa-2x"></i>
-            <p class="mt-3 fw-bold">جاري تجميع وحساب مبيعات اليوميات والسندات...</p>
-        </div>
-    </div>
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-        authDomain: "ahmedelzaiady.firebaseapp.com",
-        projectId: "ahmedelzaiady",
-        storageBucket: "ahmedelzaiady.firebasestorage.app",
-        messagingSenderId: "300306825071",
-        appId: "1:300306825071:web:0426ddde56280fa090329a"
-    };
-
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.firestore();
-
-    let rawInvoices = [];
-    let rawTransactions = [];
-    let processedDaysList = [];
-
-    function convertToEnglishNumbers(str) {
-        if (!str) return "";
-        const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
-        let res = str.toString();
-        for (let i = 0; i < 10; i++) { res = res.replace(arabicNumbers[i], i); }
-        return res;
-    }
-
-    function parseInvoiceDate(inv) {
-        let dateStr = "";
-        if (inv.date) { dateStr = convertToEnglishNumbers(inv.date); }
-        else if (inv.timestamp?.seconds) { return new Date(inv.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
-        if (!dateStr) return "";
-        let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-        if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-        m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-        if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-        return dateStr;
-    }
-
-    function parseTransactionDate(tr) {
-        if (!tr) return "";
-        if (tr.date) {
-            let dateStr = convertToEnglishNumbers(tr.date);
-            let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-            if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-            m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-            if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-            if (dateStr) return dateStr;
-        }
-        if (tr.timestamp?.seconds) { return new Date(tr.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
-        return "";
-    }
-
-    async function fetchData() {
-        try {
-            const [invSnap, transSnap] = await Promise.all([
-                db.collection("invoices").orderBy("timestamp", "desc").get(),
-                db.collection("transactions").get()
-            ]);
-
-            rawInvoices = [];
-            invSnap.forEach(doc => {
-                const data = doc.data();
-                if (!data.isDeleted) rawInvoices.push({ id: doc.id, ...data });
-            });
-
-            rawTransactions = [];
-            transSnap.forEach(doc => {
-                const tr = doc.data();
-                if (!tr.isDeleted && tr.custody !== "يد أحمد") {
-                    rawTransactions.push({ id: doc.id, ...tr });
-                }
-            });
-
-            const today = new Date();
-            const pastDate = new Date();
-            pastDate.setDate(today.getDate() - 30);
-
-            document.getElementById('endDateInput').value = today.toLocaleDateString('en-CA');
-            document.getElementById('startDateInput').value = pastDate.toLocaleDateString('en-CA');
-
-            renderDailySummary();
-        } catch (e) {
-            console.error("خطأ جلب البيانات:", e);
-            document.getElementById('dailySummaryList').innerHTML = `<div class="alert alert-danger text-center fw-bold">تعذر تحميل البيانات: ${e.message}</div>`;
-        }
-    }
-
-    function renderDailySummary() {
-        const startDate = document.getElementById('startDateInput').value;
-        const endDate = document.getElementById('endDateInput').value;
-
-        const dayGroups = {};
-
-        // 1. تجميع المبيعات من الفواتير
-        rawInvoices.forEach(inv => {
-            const d = parseInvoiceDate(inv);
-            if (!d) return;
-            if (startDate && d < startDate) return;
-            if (endDate && d > endDate) return;
-
-            if (!dayGroups[d]) {
-                dayGroups[d] = {
-                    date: d,
-                    totalSales: 0,
-                    storeSales: 0,
-                    vanSales: 0,
-                    storeCount: 0,
-                    vanCount: 0,
-                    
-                    invCashStore: 0, invCashVan: 0,
-                    invWalletStore: 0, invWalletVan: 0,
-                    invCreditStore: 0, invCreditVan: 0,
-
-                    voucherCash: 0,
-                    voucherWallet: 0
-                };
-            }
-
-            const total = Number(inv.total) || 0;
-            const cash = Number(inv.cashAmount ?? inv.cashPaid ?? inv.paid) || 0;
-            const wallet = Number(inv.walletAmount ?? inv.walletPaid) || 0;
-            const remaining = Number(inv.remaining) || (total - (cash + wallet));
-
-            const isVan = (inv.source === 'van_sales');
-
-            dayGroups[d].totalSales += total;
-
-            if (isVan) {
-                dayGroups[d].vanSales += total;
-                dayGroups[d].vanCount += 1;
-                dayGroups[d].invCashVan += cash;
-                dayGroups[d].invWalletVan += wallet;
-                if (remaining > 0) dayGroups[d].invCreditVan += remaining;
-            } else {
-                dayGroups[d].storeSales += total;
-                dayGroups[d].storeCount += 1;
-                dayGroups[d].invCashStore += cash;
-                dayGroups[d].invWalletStore += wallet;
-                if (remaining > 0) dayGroups[d].invCreditStore += remaining;
-            }
-        });
-
-        // 2. تجميع سندات القبض
-        rawTransactions.forEach(tr => {
-            const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
-            if (tr.type === 'قبض' && !isInvoicePayment) {
-                const d = parseTransactionDate(tr);
-                if (!d) return;
-                if (startDate && d < startDate) return;
-                if (endDate && d > endDate) return;
-
-                if (!dayGroups[d]) {
-                    dayGroups[d] = {
-                        date: d, totalSales: 0, storeSales: 0, vanSales: 0, storeCount: 0, vanCount: 0,
-                        invCashStore: 0, invCashVan: 0, invWalletStore: 0, invWalletVan: 0, invCreditStore: 0, invCreditVan: 0,
-                        voucherCash: 0, voucherWallet: 0
-                    };
-                }
-
-                let amt = Math.abs(Number(tr.amount || tr.total || 0));
-                let method = tr.method || tr.paymentMethod || 'نقدى';
-                
-                let cashAmt = (method === 'محفظة' || method === 'محفظه') ? 0 : amt;
-                let walletAmt = (method === 'محفظة' || method === 'محفظه') ? amt : 0;
-                
-                if (tr.cashPaid !== undefined) cashAmt = Number(tr.cashPaid);
-                if (tr.walletPaid !== undefined) walletAmt = Number(tr.walletPaid);
-
-                dayGroups[d].voucherCash += cashAmt;
-                dayGroups[d].voucherWallet += walletAmt;
-            }
-        });
-
-        processedDaysList = Object.values(dayGroups).sort((a, b) => b.date.localeCompare(a.date));
-
-        const listContainer = document.getElementById('dailySummaryList');
-
-        if (processedDaysList.length === 0) {
-            listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-calendar-times fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات بالفترة المحددة.</p></div>`;
-            document.getElementById('periodTotalSales').innerText = "0.0";
-            document.getElementById('periodMainAvg').innerText = "0.0";
-            document.getElementById('periodVanAvg').innerText = "0.0";
-            document.getElementById('periodCashTotal').innerText = "0.0";
-            return;
-        }
-
-        let gTotalSales = 0, gStoreSales = 0, gVanSales = 0;
-        let gCashTotal = 0;
-        let storeDaysCount = 0, vanDaysCount = 0;
-
-        const html = processedDaysList.map(day => {
-            gTotalSales += day.totalSales;
-            gStoreSales += day.storeSales;
-            gVanSales += day.vanSales;
-
-            if (day.storeSales > 0) storeDaysCount++;
-            if (day.vanSales > 0) vanDaysCount++;
-
-            // متوسط البيع لكل منفذ لليوم
-            const avgMainToday = day.storeCount > 0 ? (day.storeSales / day.storeCount) : 0;
-            const avgVanToday = day.vanCount > 0 ? (day.vanSales / day.vanCount) : 0;
-
-            // إجماليات التحصيل
-            const totalCashDay = day.invCashStore + day.invCashVan + day.voucherCash;
-            const totalWalletDay = day.invWalletStore + day.invWalletVan + day.voucherWallet;
-            const totalCreditDay = day.invCreditStore + day.invCreditVan;
-
-            gCashTotal += totalCashDay;
-
-            return `
-            <div class="day-summary-card">
-                <div class="day-header">
-                    <div class="day-date">
-                        <i class="far fa-calendar-alt text-danger"></i> ${day.date}
-                    </div>
-                    <div class="badge bg-dark px-3 py-2 fw-bold num" style="font-size: 0.92rem;">
-                        المبيعات الإجمالية: ${day.totalSales.toFixed(2)}
-                    </div>
-                </div>
-
-                <!-- 1. إجمالي المبيعات -->
-                <div class="section-title-sm"><i class="fas fa-shopping-cart text-dark"></i> المبيعات الإجمالية بالتفصيل:</div>
-                <div class="grid-2col">
-                    <div class="data-box main">
-                        <div class="box-lbl">مبيعات المخزن</div>
-                        <div class="box-val num">${day.storeSales.toFixed(2)}</div>
-                    </div>
-                    <div class="data-box van">
-                        <div class="box-lbl">مبيعات العربية</div>
-                        <div class="box-val num text-dark">${day.vanSales.toFixed(2)}</div>
-                    </div>
-                </div>
-
-                <!-- 2. متوسط مبيعات اليوم -->
-                <div class="section-title-sm"><i class="fas fa-chart-line text-primary"></i> متوسطات البيع اليومية:</div>
-                <div class="grid-2col">
-                    <div class="data-box avg-main">
-                        <div class="box-lbl"><span>متوسط بيع المخزن</span> <span class="text-muted">(${day.storeCount} فاتورة)</span></div>
-                        <div class="box-val num text-primary">${avgMainToday.toFixed(2)}</div>
-                    </div>
-                    <div class="data-box avg-van">
-                        <div class="box-lbl"><span>متوسط بيع العربية</span> <span class="text-muted">(${day.vanCount} فاتورة)</span></div>
-                        <div class="box-val num" style="color:#d97706;">${avgVanToday.toFixed(2)}</div>
-                    </div>
-                </div>
-
-                <!-- 3. النقدية الإجمالية (شاملة السندات) -->
-                <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> إجمالي النقدية (مبيعات + سندات قبض):</div>
-                <div class="grid-2col">
-                    <div class="data-box cash" style="grid-column: span 2;">
-                        <div class="box-lbl">
-                            <span>إجمالي النقدية (الكاش)</span>
-                            <span class="text-muted" style="font-size:0.65rem;">(مخزن: ${day.invCashStore.toFixed(1)} | عربية: ${day.invCashVan.toFixed(1)} | سندات: ${day.voucherCash.toFixed(1)})</span>
-                        </div>
-                        <div class="box-val num text-success" style="font-size: 1.1rem;">${totalCashDay.toFixed(2)}</div>
-                    </div>
-                </div>
-
-                <!-- 4. إجمالي المحفظة وإجمالي الآجل -->
-                <div class="section-title-sm"><i class="fas fa-wallet text-primary"></i> إجماليات المحفظة والآجل:</div>
-                <div class="grid-2col">
-                    <div class="data-box wallet">
-                        <div class="box-lbl">
-                            <span>إجمالي المحفظة</span>
-                        </div>
-                        <div class="box-val num" style="color:var(--purple);">${totalWalletDay.toFixed(2)}</div>
-                        <div class="text-muted fw-bold" style="font-size:0.62rem; margin-top:2px;">(مبيعات: ${(day.invWalletStore + day.invWalletVan).toFixed(1)} | سندات: ${day.voucherWallet.toFixed(1)})</div>
-                    </div>
-                    <div class="data-box credit">
-                        <div class="box-lbl">
-                            <span>إجمالي الآجل</span>
-                        </div>
-                        <div class="box-val num text-danger">${totalCreditDay.toFixed(2)}</div>
-                        <div class="text-muted fw-bold" style="font-size:0.62rem; margin-top:2px;">(مخزن: ${day.invCreditStore.toFixed(1)} | عربية: ${day.invCreditVan.toFixed(1)})</div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-
-        listContainer.innerHTML = html;
-
-        // حساب المتوسطات العامة العلوية
-        const avgMainStore = storeDaysCount > 0 ? (gStoreSales / storeDaysCount) : 0;
-        const avgVanStore = vanDaysCount > 0 ? (gVanSales / vanDaysCount) : 0;
-
-        document.getElementById('periodTotalSales').innerText = gTotalSales.toFixed(1);
-        document.getElementById('periodMainAvg').innerText = avgMainStore.toFixed(1);
-        document.getElementById('periodVanAvg').innerText = avgVanStore.toFixed(1);
-        document.getElementById('periodCashTotal').innerText = gCashTotal.toFixed(1);
-    }
-
-    function exportSummaryExcel() {
-        if (!processedDaysList || processedDaysList.length === 0) return;
-        const excelRows = [
-            ["التاريخ", "إجمالي المبيعات", "مبيعات المخزن", "مبيعات العربية", "متوسط المخزن", "متوسط العربية", "إجمالي النقدية (الكاش)", "إجمالي المحفظة", "إجمالي الآجل"]
-        ];
-
-        processedDaysList.forEach(d => {
-            const avgMain = d.storeCount > 0 ? (d.storeSales / d.storeCount) : 0;
-            const avgVan = d.vanCount > 0 ? (d.vanSales / d.vanCount) : 0;
-            const cashTotal = d.invCashStore + d.invCashVan + d.voucherCash;
-            const walletTotal = d.invWalletStore + d.invWalletVan + d.voucherWallet;
-            const creditTotal = d.invCreditStore + d.invCreditVan;
-
-            excelRows.push([
-                d.date,
-                d.totalSales,
-                d.storeSales,
-                d.vanSales,
-                Number(avgMain.toFixed(2)),
-                Number(avgVan.toFixed(2)),
-                cashTotal,
-                walletTotal,
-                creditTotal
-            ]);
-        });
-
-        const ws = XLSX.utils.aoa_to_sheet(excelRows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "ملخص المبيعات الشامل");
-        XLSX.writeFile(wb, `ملخص_المبيعات_الشامل_${new Date().toLocaleDateString('en-CA')}.xlsx`);
-    }
-
-    // تشغيل الجلب عند فتح الصفحة
-    fetchData();
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
 </script>
 </body>
 </html>
