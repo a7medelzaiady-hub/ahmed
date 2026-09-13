@@ -194,11 +194,11 @@
         </div>
     </div>
 
-    <!-- كروت الإحصائيات العامة للفترة المحددة -->
+    <!-- كروت الإحصائيات العامة للمدة (مبيعات العربية فقط) -->
     <div class="row g-1 mb-3">
         <div class="col-3">
             <div class="kpi-card">
-                <div class="kpi-title">إجمالي مبيعات العربية</div>
+                <div class="kpi-title">مبيعات العربية</div>
                 <div class="kpi-value num text-dark" id="periodTotalSales">0.0</div>
             </div>
         </div>
@@ -226,7 +226,7 @@
     <div id="dailySummaryList">
         <div class="empty-state">
             <i class="fas fa-spinner fa-spin fa-2x"></i>
-            <p class="mt-3 fw-bold">جاري تجميع وحساب مبيعات العربية والسندات...</p>
+            <p class="mt-3 fw-bold">جاري تجميع وحساب بيانات السيارة والسندات المخصصة...</p>
         </div>
     </div>
 </div>
@@ -294,6 +294,7 @@
             rawInvoices = [];
             invSnap.forEach(doc => {
                 const data = doc.data();
+                // جلب فواتير مبيعات السيارة فقط (van_sales)
                 if (!data.isDeleted && data.source === 'van_sales') {
                     rawInvoices.push({ id: doc.id, ...data });
                 }
@@ -302,8 +303,14 @@
             rawTransactions = [];
             transSnap.forEach(doc => {
                 const tr = doc.data();
-                // جلب كل السندات كالسابق، مع استبعاد المحذوف أو المسجل بـ يد أحمد فقط إن وُجد حقلها صراحة
-                if (!tr.isDeleted && tr.custody !== "يد أحمد") {
+                
+                // التمييز الدقيق بين السندات:
+                // 1. استبعاد السندات المسجلة صراحة بـ "يد أحمد" أو الخزينة العامة (main_store)
+                // 2. تصفية السندات الخاصة بـ السيارة فقط (van_sales)
+                const isHandAhmed = (tr.custody === "يد أحمد" || tr.source === "main_store");
+                const isVanTransaction = (tr.source === "van_sales" || tr.custody === "العربية" || (tr.note && tr.note.includes("سيارة")));
+
+                if (!tr.isDeleted && !isHandAhmed && isVanTransaction) {
                     rawTransactions.push({ id: doc.id, ...tr });
                 }
             });
@@ -358,7 +365,7 @@
             if (remaining > 0) dayGroups[d].invCreditVan += remaining;
         });
 
-        // 2. تجميع كل سندات القبض (الكاش والمحفظة) ودمجها مباشرة مع النقدية
+        // 2. تجميع سندات القبض الخاصة بالعربية فقط
         rawTransactions.forEach(tr => {
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (tr.type === 'قبض' && !isInvoicePayment) {
@@ -393,7 +400,7 @@
         const listContainer = document.getElementById('dailySummaryList');
 
         if (processedDaysList.length === 0) {
-            listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-truck-pickup fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات في هذه الفترة.</p></div>`;
+            listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-truck-pickup fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات خاصة بالسيارة في هذه الفترة.</p></div>`;
             document.getElementById('periodTotalSales').innerText = "0.0";
             document.getElementById('periodCashAvg').innerText = "0.0";
             document.getElementById('periodCreditAvg').innerText = "0.0";
@@ -408,7 +415,7 @@
         const html = processedDaysList.map(day => {
             gVanSales += day.vanSales;
 
-            // حساب النقدية الشاملة (مبيعات كاش + محفظة + سندات قبض كاش ومحفظة)
+            // تجميع النقدية المستلمة للسيارة (مبيعات العربية الكاش + المحفظة + سندات قبض العربية)
             const totalCashVan = day.invCashVan + day.invWalletVan + day.voucherCash + day.voucherWallet;
             const totalCreditVan = day.invCreditVan;
 
@@ -426,10 +433,10 @@
                     </div>
                 </div>
 
-                <!-- النقدية المستلمة للسيارة (شاملة كل السندات) -->
+                <!-- النقدية المستلمة للسيارة (مبيعات كاش/محفظة + سندات السيارة فقط) -->
                 <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> النقدية المستلمة للسيارة:</div>
                 <div class="data-box cash mb-2">
-                    <div class="box-lbl">نقدي العربية (مبيعات + سندات القبض)</div>
+                    <div class="box-lbl">نقدي العربية (مبيعات + سندات السيارة)</div>
                     <div class="box-val num text-success" style="font-size: 1.15rem;">${totalCashVan.toFixed(2)}</div>
                 </div>
 
