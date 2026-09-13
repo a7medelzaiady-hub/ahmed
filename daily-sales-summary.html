@@ -2,16 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <script src="auth-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ملخص مبيعات العربية - الزيادي لزيوت السيارات</title>
+    <title>تقرير نقدية العربية والسندات - الزيادي لزيوت السيارات</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <!-- مكاتب فايربيز compat -->
+    <!-- مكاتب فايربيز -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
@@ -24,231 +22,153 @@
             --text-secondary: #4a4a4a;
             --border: #dcdcdc;
             --white: #ffffff;
-            
             --germany-black: #000000;
             --germany-red: #FF0000;
             --germany-gold: #FFCC00;
             --purple: #5b21b6;
-            
-            --card-radius: 18px;
-            --shadow-sm: 0 2px 6px rgba(0,0,0,0.06);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
+            --card-radius: 20px;
+            --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
         }
-        
         * { box-sizing: border-box; }
-        
         body {
             background: var(--bg-light);
             font-family: 'Cairo', sans-serif;
             color: var(--text-primary);
-            padding-bottom: 80px;
+            padding-bottom: 60px;
             font-size: 0.88rem;
-            -webkit-tap-highlight-color: transparent;
             -webkit-font-smoothing: antialiased;
         }
-        
-        .num { 
-            font-family: 'JetBrains Mono', monospace; 
-            font-weight: 700; 
-            letter-spacing: -0.5px; 
-        }
+        .num { font-family: 'JetBrains Mono', monospace; font-weight: 800; letter-spacing: -0.5px; }
 
         .header-nav {
             background: var(--header-bg);
             padding: 16px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: var(--shadow-md);
-            color: white;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            border-bottom-left-radius: 20px;
-            border-bottom-right-radius: 20px;
-            border-bottom: 4px solid var(--germany-gold);
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: var(--shadow-md); color: white;
+            position: sticky; top: 0; z-index: 1000;
+            border-bottom-left-radius: 20px; border-bottom-right-radius: 20px;
+            border-bottom: 4px solid var(--germany-red);
         }
-        .header-nav h6 { 
-            font-weight: 900; 
-            font-size: 1.05rem;
-            margin: 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+        .header-nav h6 { font-weight: 900; font-size: 1.02rem; margin: 0; display: flex; align-items: center; gap: 8px; }
         .add-btn {
-            background: rgba(255, 255, 255, 0.15);
-            width: 38px; 
-            height: 38px;
-            border-radius: 12px;
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            color: white; 
-            text-decoration: none; 
-            font-size: 0.95rem;
-            border: 1px solid rgba(255, 255, 255, 0.2); 
+            background: rgba(255,255,255,0.15); width: 38px; height: 38px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; color: white;
+            text-decoration: none; font-size: 0.95rem; border: 1px solid rgba(255,255,255,0.2);
             transition: all 0.2s ease;
         }
         .add-btn:active { transform: scale(0.92); }
 
-        .kpi-card {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 10px 6px;
-            box-shadow: var(--shadow-sm);
-            text-align: center;
-            height: 100%;
-        }
-        .kpi-title { font-size: 0.68rem; color: var(--text-secondary); font-weight: 800; white-space: nowrap; }
-        .kpi-value { font-size: 0.95rem; font-weight: 900; margin-top: 4px; }
-
-        .day-summary-card {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: var(--card-radius);
-            padding: 16px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-sm);
-            border-right: 5px solid var(--germany-gold);
-            transition: all 0.2s ease;
-        }
-
-        .day-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1.5px dashed var(--border);
-            padding-bottom: 10px;
-            margin-bottom: 12px;
-        }
-        .day-date {
-            font-size: 1rem;
-            font-weight: 900;
-            color: var(--germany-black);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .section-title-sm {
-            font-size: 0.78rem;
-            font-weight: 800;
-            color: #475569;
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .data-box {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 10px;
-            text-align: center;
-        }
-        .data-box.cash { border-right: 3px solid #16a34a; background: #f0fdf4; }
-        .data-box.credit { border-right: 3px solid var(--germany-red); background: #fff1f1; }
-
-        .box-lbl { font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); text-align: center; }
-        .box-val { font-size: 1.05rem; font-weight: 900; margin-top: 2px; }
-
         .filter-card {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: var(--card-radius);
-            padding: 14px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-sm);
+            background: var(--white); border: 1px solid var(--border); border-radius: var(--card-radius);
+            padding: 14px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
+        }
+        .filter-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .filter-row > div { flex: 1; min-width: 130px; }
+        .filter-row label { font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); margin-bottom: 4px; display: block; }
+        .filter-row input {
+            border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
+            font-weight: 700; font-size: 0.82rem; width: 100%; font-family: 'Cairo';
+        }
+        .apply-btn {
+            background: var(--germany-black); color: white; border: none; border-radius: 12px;
+            padding: 10px 18px; font-weight: 800; font-family: 'Cairo'; font-size: 0.82rem;
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        }
+        .apply-btn:active { transform: scale(0.96); }
+        .reset-link { font-size: 0.74rem; color: var(--text-secondary); text-decoration: underline; cursor: pointer; }
+
+        .section-title {
+            font-size: 0.82rem; font-weight: 900; color: var(--accent);
+            margin: 18px 4px 10px; display: flex; align-items: center; gap: 6px;
         }
 
-        .empty-state { text-align: center; padding: 50px 10px; color: var(--text-secondary); }
+        .stat-card {
+            background: var(--white); border: 1px solid var(--border); border-radius: 16px;
+            padding: 14px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+            height: 100%; display: flex; flex-direction: column; justify-content: center;
+        }
+        .stat-bar { position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+        .stat-label { font-size: 0.72rem; color: var(--text-secondary); font-weight: 800; line-height: 1.4; }
+        .stat-value { font-size: 1.25rem; margin-top: 6px; font-weight: 900; }
+        .stat-sub { font-size: 0.68rem; color: #94a3b8; font-weight: 700; margin-top: 2px; }
+
+        .grand-card {
+            background: var(--header-bg); color: white; border-radius: var(--card-radius);
+            padding: 18px; margin-top: 18px; box-shadow: var(--shadow-md);
+            border-bottom: 4px solid var(--germany-gold);
+        }
+        .grand-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; border-bottom: 1px dashed rgba(255,255,255,0.2); }
+        .grand-row:last-child { border-bottom: none; }
+        .grand-row span:first-child { font-size: 0.82rem; font-weight: 700; opacity: 0.85; }
+        .grand-row span:last-child { font-size: 1.05rem; font-weight: 900; }
+
+        .daily-table { width: 100%; margin-top: 10px; font-size: 0.76rem; border-collapse: collapse; background: white; border-radius: 14px; overflow: hidden; }
+        .daily-table th { background: #f1f5f9; padding: 8px 6px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; }
+        .daily-table td { padding: 8px 6px; border: 1px solid var(--border); text-align: center; font-weight: 700; }
+        .daily-table tfoot td { background: #f8fafc; font-weight: 900; }
+
+        .empty-state { text-align: center; padding: 40px 10px; color: var(--text-secondary); }
+        .empty-state i { color: #cbd5e1; }
+        .loading-note { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-weight: 700; }
     </style>
 </head>
 <body>
 
 <div class="header-nav">
-    <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
-    <h6 class="m-0"><i class="fas fa-truck me-1"></i> ملخص مبيعات العربية</h6>
-    <div class="d-flex gap-2">
-        <a href="sales-history.html" class="add-btn" title="سجل الفواتير"><i class="fas fa-history"></i></a>
-        <button class="add-btn" onclick="exportSummaryExcel()" title="تصدير إكسيل"><i class="fas fa-file-excel"></i></button>
-    </div>
+    <a href="sales-history.html" class="add-btn" title="رجوع لسجل المبيعات"><i class="fas fa-arrow-right"></i></a>
+    <h6><i class="fas fa-truck-loading me-1"></i> تقرير نقدية العربية والسندات</h6>
+    <button class="add-btn" id="refreshBtn" title="تحديث"><i class="fas fa-sync-alt"></i></button>
 </div>
 
 <div class="container px-2 mt-3">
 
-    <!-- الفلاتر واختيار النطاق الزمني -->
     <div class="filter-card">
-        <div class="row g-2 align-items-center">
-            <div class="col-6">
-                <label class="fw-bold mb-1" style="font-size: 0.75rem;">من تاريخ:</label>
-                <input type="date" id="startDateInput" class="form-control form-control-sm fw-bold num" onchange="renderDailySummary()">
+        <div class="filter-row">
+            <div>
+                <label>من تاريخ</label>
+                <input type="date" id="fromDate">
             </div>
-            <div class="col-6">
-                <label class="fw-bold mb-1" style="font-size: 0.75rem;">إلى تاريخ:</label>
-                <input type="date" id="endDateInput" class="form-control form-control-sm fw-bold num" onchange="renderDailySummary()">
+            <div>
+                <label>إلى تاريخ</label>
+                <input type="date" id="toDate">
             </div>
+            <div style="flex: 0 0 auto; display:flex; align-items:flex-end;">
+                <button class="apply-btn" id="applyFilterBtn"><i class="fas fa-filter"></i> تطبيق الفلتر</button>
+            </div>
+        </div>
+        <div class="mt-2 d-flex justify-content-between align-items-center">
+            <span class="reset-link" id="resetFilterBtn"><i class="fas fa-undo me-1"></i> عرض كل الفترات</span>
+            <span class="stat-sub" id="rangeLabel">عرض: كل الفترات</span>
         </div>
     </div>
 
-    <!-- كروت الإحصائيات العامة للمدة (مبيعات العربية فقط) -->
-    <div class="row g-1 mb-3">
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">مبيعات العربية</div>
-                <div class="kpi-value num text-dark" id="periodTotalSales">0.0</div>
-            </div>
-        </div>
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">متوسط النقدية</div>
-                <div class="kpi-value num text-success" id="periodCashAvg">0.0</div>
-            </div>
-        </div>
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">متوسط الآجل</div>
-                <div class="kpi-value num text-danger" id="periodCreditAvg">0.0</div>
-            </div>
-        </div>
-        <div class="col-3">
-            <div class="kpi-card">
-                <div class="kpi-title">إجمالي النقدية</div>
-                <div class="kpi-value num text-success" id="periodCashTotal">0.0</div>
-            </div>
-        </div>
+    <div id="mainContent">
+        <div class="loading-note"><i class="fas fa-spinner fa-spin fa-2x d-block mb-2"></i>جاري تحميل بيانات الفواتير والسندات...</div>
     </div>
 
-    <!-- قائمة اليوميات -->
-    <div id="dailySummaryList">
-        <div class="empty-state">
-            <i class="fas fa-spinner fa-spin fa-2x"></i>
-            <p class="mt-3 fw-bold">جاري تجميع وحساب بيانات السيارة والسندات المخصصة...</p>
-        </div>
-    </div>
 </div>
 
 <script>
+    (function checkLoginGuard() {
+        const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
+        if (!loggedUser) { window.location.replace("login.html"); }
+    })();
+
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
         authDomain: "ahmedelzaiady.firebaseapp.com",
         projectId: "ahmedelzaiady",
         storageBucket: "ahmedelzaiady.firebasestorage.app",
         messagingSenderId: "300306825071",
-        appId: "1:300306825071:web:0426ddde56280fa090329a"
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
     };
-
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
+    firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    let rawInvoices = [];
-    let rawTransactions = [];
-    let processedDaysList = [];
+    let allInvoices = [];
+    let allVouchers = [];
 
     function convertToEnglishNumbers(str) {
         if (!str) return "";
@@ -258,11 +178,19 @@
         return res;
     }
 
+    function cleanDateString(dateStr) {
+        if (!dateStr) return "";
+        dateStr = convertToEnglishNumbers(dateStr);
+        const match = dateStr.match(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/) || dateStr.match(/\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/);
+        return match ? match[0] : dateStr;
+    }
+
     function parseInvoiceDate(inv) {
         let dateStr = "";
-        if (inv.date) { dateStr = convertToEnglishNumbers(inv.date); }
+        if (inv.date) { dateStr = cleanDateString(inv.date); }
         else if (inv.timestamp?.seconds) { return new Date(inv.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
         if (!dateStr) return "";
+        dateStr = convertToEnglishNumbers(dateStr);
         let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
         if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
         m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
@@ -270,7 +198,7 @@
         return dateStr;
     }
 
-    function parseTransactionDate(tr) {
+    function parseVoucherDate(tr) {
         if (!tr) return "";
         if (tr.date) {
             let dateStr = convertToEnglishNumbers(tr.date);
@@ -284,205 +212,241 @@
         return "";
     }
 
-    async function fetchData() {
-        try {
-            const [invSnap, transSnap] = await Promise.all([
-                db.collection("invoices").orderBy("timestamp", "desc").get(),
-                db.collection("transactions").get()
-            ]);
-
-            rawInvoices = [];
-            invSnap.forEach(doc => {
-                const data = doc.data();
-                // جلب فواتير مبيعات السيارة فقط (van_sales)
-                if (!data.isDeleted && data.source === 'van_sales') {
-                    rawInvoices.push({ id: doc.id, ...data });
-                }
-            });
-
-            rawTransactions = [];
-            transSnap.forEach(doc => {
-                const tr = doc.data();
-                
-                // التمييز الدقيق بين السندات:
-                // 1. استبعاد السندات المسجلة صراحة بـ "يد أحمد" أو الخزينة العامة (main_store)
-                // 2. تصفية السندات الخاصة بـ السيارة فقط (van_sales)
-                const isHandAhmed = (tr.custody === "يد أحمد" || tr.source === "main_store");
-                const isVanTransaction = (tr.source === "van_sales" || tr.custody === "العربية" || (tr.note && tr.note.includes("سيارة")));
-
-                if (!tr.isDeleted && !isHandAhmed && isVanTransaction) {
-                    rawTransactions.push({ id: doc.id, ...tr });
-                }
-            });
-
-            const today = new Date();
-            const pastDate = new Date();
-            pastDate.setDate(today.getDate() - 30);
-
-            document.getElementById('endDateInput').value = today.toLocaleDateString('en-CA');
-            document.getElementById('startDateInput').value = pastDate.toLocaleDateString('en-CA');
-
-            renderDailySummary();
-        } catch (e) {
-            console.error("خطأ جلب البيانات:", e);
-            document.getElementById('dailySummaryList').innerHTML = `<div class="alert alert-danger text-center fw-bold">تعذر تحميل البيانات: ${e.message}</div>`;
-        }
+    function inRange(dateStr, from, to) {
+        if (!dateStr) return false;
+        if (from && dateStr < from) return false;
+        if (to && dateStr > to) return false;
+        return true;
     }
 
-    function renderDailySummary() {
-        const startDate = document.getElementById('startDateInput').value;
-        const endDate = document.getElementById('endDateInput').value;
+    async function loadAllData() {
+        const [invSnap, transSnap] = await Promise.all([
+            db.collection("invoices").get(),
+            db.collection("transactions").get()
+        ]);
 
-        const dayGroups = {};
-
-        // 1. تجميع مبيعات العربية من الفواتير
-        rawInvoices.forEach(inv => {
-            const d = parseInvoiceDate(inv);
-            if (!d) return;
-            if (startDate && d < startDate) return;
-            if (endDate && d > endDate) return;
-
-            if (!dayGroups[d]) {
-                dayGroups[d] = {
-                    date: d,
-                    vanSales: 0,
-                    invCashVan: 0,
-                    invWalletVan: 0,
-                    invCreditVan: 0,
-                    voucherCash: 0,
-                    voucherWallet: 0
-                };
-            }
-
-            const total = Number(inv.total) || 0;
-            const cash = Number(inv.cashAmount ?? inv.cashPaid ?? inv.paid) || 0;
-            const wallet = Number(inv.walletAmount ?? inv.walletPaid) || 0;
-            const remaining = Number(inv.remaining) || (total - (cash + wallet));
-
-            dayGroups[d].vanSales += total;
-            dayGroups[d].invCashVan += cash;
-            dayGroups[d].invWalletVan += wallet;
-            if (remaining > 0) dayGroups[d].invCreditVan += remaining;
+        allInvoices = [];
+        invSnap.forEach(d => {
+            const data = d.data();
+            if (data.isDeleted) return;
+            allInvoices.push({
+                id: d.id,
+                ...data,
+                calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0,
+                calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0,
+                dateKey: parseInvoiceDate(data)
+            });
         });
 
-        // 2. تجميع سندات القبض الخاصة بالعربية فقط
-        rawTransactions.forEach(tr => {
+        allVouchers = [];
+        transSnap.forEach(d => {
+            const tr = d.data();
+            if (tr.isDeleted) return;
+            const isValidVoucherType = (tr.type === 'قبض' || tr.type === 'صرف');
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
-            if (tr.type === 'قبض' && !isInvoicePayment) {
-                const d = parseTransactionDate(tr);
-                if (!d) return;
-                if (startDate && d < startDate) return;
-                if (endDate && d > endDate) return;
-
-                if (!dayGroups[d]) {
-                    dayGroups[d] = {
-                        date: d, vanSales: 0, invCashVan: 0, invWalletVan: 0, invCreditVan: 0,
-                        voucherCash: 0, voucherWallet: 0
-                    };
-                }
-
-                let amt = Math.abs(Number(tr.amount || tr.total || 0));
-                let method = tr.method || tr.paymentMethod || 'نقدى';
-                
-                let cashAmt = (method === 'محفظة' || method === 'محفظه') ? 0 : amt;
-                let walletAmt = (method === 'محفظة' || method === 'محفظه') ? amt : 0;
-                
-                if (tr.cashPaid !== undefined) cashAmt = Number(tr.cashPaid);
-                if (tr.walletPaid !== undefined) walletAmt = Number(tr.walletPaid);
-
-                dayGroups[d].voucherCash += cashAmt;
-                dayGroups[d].voucherWallet += walletAmt;
-            }
+            if (!isValidVoucherType || isInvoicePayment) return;
+            allVouchers.push({
+                id: d.id,
+                ...tr,
+                amount: Number(tr.amount || tr.total || 0),
+                method: tr.method || tr.paymentMethod || 'نقدى',
+                custody: tr.custody || 'عهدة العربية',
+                dateKey: parseVoucherDate(tr)
+            });
         });
 
-        processedDaysList = Object.values(dayGroups).sort((a, b) => b.date.localeCompare(a.date));
+        render();
+    }
 
-        const listContainer = document.getElementById('dailySummaryList');
+    function render() {
+        const from = document.getElementById('fromDate').value || null;
+        const to = document.getElementById('toDate').value || null;
 
-        if (processedDaysList.length === 0) {
-            listContainer.innerHTML = `<div class="empty-state"><i class="fas fa-truck-pickup fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات مبيعات أو سندات خاصة بالسيارة في هذه الفترة.</p></div>`;
-            document.getElementById('periodTotalSales').innerText = "0.0";
-            document.getElementById('periodCashAvg').innerText = "0.0";
-            document.getElementById('periodCreditAvg').innerText = "0.0";
-            document.getElementById('periodCashTotal').innerText = "0.0";
-            return;
+        const rangeLabel = document.getElementById('rangeLabel');
+        if (from || to) {
+            rangeLabel.innerText = `عرض: ${from || '...'} إلى ${to || '...'}`;
+        } else {
+            rangeLabel.innerText = 'عرض: كل الفترات';
         }
 
-        let gVanSales = 0;
-        let gCashTotal = 0;
-        let gCreditTotal = 0;
+        // فواتير العربية فقط (مش المخزن) ضمن الفترة
+        const vanInvoices = allInvoices.filter(inv => (inv.source || 'main_store') === 'van_sales' && inRange(inv.dateKey, from, to));
+        // كل الفواتير (لأي مصدر) ضمن الفترة - لحساب متوسط إجمالي المبيعات ككل
+        const allInvoicesInRange = allInvoices.filter(inv => inRange(inv.dateKey, from, to));
+        // السندات: عهدة العربية فقط (مش يد أحمد) - نوع قبض فقط ضمن الفترة
+        const vanVouchers = allVouchers.filter(v => v.type === 'قبض' && v.custody !== 'يد أحمد' && inRange(v.dateKey, from, to));
 
-        const html = processedDaysList.map(day => {
-            gVanSales += day.vanSales;
+        // 1) إجمالي المبيعات النقدي (العربية فقط)
+        const vanCashSales = vanInvoices.reduce((sum, inv) => sum + inv.calculatedCash, 0);
 
-            // تجميع النقدية المستلمة للسيارة (مبيعات العربية الكاش + المحفظة + سندات قبض العربية)
-            const totalCashVan = day.invCashVan + day.invWalletVan + day.voucherCash + day.voucherWallet;
-            const totalCreditVan = day.invCreditVan;
+        // 2) السندات - عهدة العربية: نقدى ومحفظة
+        const vanVoucherCash = vanVouchers.filter(v => v.method !== 'محفظة' && v.method !== 'محفظه').reduce((sum, v) => sum + v.amount, 0);
+        const vanVoucherWallet = vanVouchers.filter(v => v.method === 'محفظة' || v.method === 'محفظه').reduce((sum, v) => sum + v.amount, 0);
 
-            gCashTotal += totalCashVan;
-            gCreditTotal += totalCreditVan;
+        // 3) الإجمالي الكلي النقدي للعربية (مبيعات نقدي + سندات نقدي عهدة العربية)
+        const grandVanCashTotal = vanCashSales + vanVoucherCash;
 
-            return `
-            <div class="day-summary-card">
-                <div class="day-header">
-                    <div class="day-date">
-                        <i class="far fa-calendar-alt text-danger"></i> ${day.date}
-                    </div>
-                    <div class="badge bg-dark px-3 py-2 fw-bold num" style="font-size: 0.92rem;">
-                        إجمالي مبيعات العربية: ${day.vanSales.toFixed(2)}
-                    </div>
-                </div>
+        // 4) متوسط إجمالي المبيعات ككل (كل الفواتير بكل المصادر) - المتوسط يومي
+        const totalSalesAll = allInvoicesInRange.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
+        const distinctDaysSet = new Set(allInvoicesInRange.map(inv => inv.dateKey).filter(Boolean));
+        const distinctDaysCount = distinctDaysSet.size || 0;
+        const avgDailySalesAll = distinctDaysCount > 0 ? (totalSalesAll / distinctDaysCount) : 0;
+        const avgPerInvoiceAll = allInvoicesInRange.length > 0 ? (totalSalesAll / allInvoicesInRange.length) : 0;
 
-                <!-- النقدية المستلمة للسيارة (مبيعات كاش/محفظة + سندات السيارة فقط) -->
-                <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> النقدية المستلمة للسيارة:</div>
-                <div class="data-box cash mb-2">
-                    <div class="box-lbl">نقدي العربية (مبيعات + سندات السيارة)</div>
-                    <div class="box-val num text-success" style="font-size: 1.15rem;">${totalCashVan.toFixed(2)}</div>
-                </div>
+        // تجميع يومي للتفصيل
+        const dailyMap = {};
+        vanInvoices.forEach(inv => {
+            const k = inv.dateKey || 'بلا تاريخ';
+            if (!dailyMap[k]) dailyMap[k] = { vanCash: 0, voucherCash: 0, voucherWallet: 0, totalAll: 0 };
+            dailyMap[k].vanCash += inv.calculatedCash;
+        });
+        vanVouchers.forEach(v => {
+            const k = v.dateKey || 'بلا تاريخ';
+            if (!dailyMap[k]) dailyMap[k] = { vanCash: 0, voucherCash: 0, voucherWallet: 0, totalAll: 0 };
+            if (v.method === 'محفظة' || v.method === 'محفظه') dailyMap[k].voucherWallet += v.amount;
+            else dailyMap[k].voucherCash += v.amount;
+        });
+        allInvoicesInRange.forEach(inv => {
+            const k = inv.dateKey || 'بلا تاريخ';
+            if (!dailyMap[k]) dailyMap[k] = { vanCash: 0, voucherCash: 0, voucherWallet: 0, totalAll: 0 };
+            dailyMap[k].totalAll += (Number(inv.total) || 0);
+        });
 
-                <!-- الآجل المتبقي على عملاء العربية -->
-                <div class="section-title-sm"><i class="fas fa-file-invoice-dollar text-danger"></i> الآجل المتبقي على عملاء العربية:</div>
-                <div class="data-box credit">
-                    <div class="box-lbl">آجل مبيعات العربية</div>
-                    <div class="box-val num text-danger" style="font-size: 1.15rem;">${totalCreditVan.toFixed(2)}</div>
-                </div>
-            </div>`;
+        const sortedDays = Object.keys(dailyMap).filter(k => k !== 'بلا تاريخ').sort();
+
+        const fmt = n => (n || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        let dailyRowsHtml = sortedDays.map(day => {
+            const d = dailyMap[day];
+            return `<tr>
+                <td>${day}</td>
+                <td class="num">${fmt(d.vanCash)}</td>
+                <td class="num">${fmt(d.voucherCash)}</td>
+                <td class="num">${fmt(d.voucherWallet)}</td>
+                <td class="num">${fmt(d.totalAll)}</td>
+            </tr>`;
         }).join('');
 
-        listContainer.innerHTML = html;
+        if (!dailyRowsHtml) {
+            dailyRowsHtml = `<tr><td colspan="5" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
+        }
 
-        // حساب المتوسطات العامة العلوية
-        const totalDays = processedDaysList.length;
-        document.getElementById('periodTotalSales').innerText = gVanSales.toFixed(1);
-        document.getElementById('periodCashAvg').innerText = totalDays > 0 ? (gCashTotal / totalDays).toFixed(1) : "0.0";
-        document.getElementById('periodCreditAvg').innerText = totalDays > 0 ? (gCreditTotal / totalDays).toFixed(1) : "0.0";
-        document.getElementById('periodCashTotal').innerText = gCashTotal.toFixed(1);
+        const html = `
+            <div class="section-title"><i class="fas fa-truck"></i> مبيعات العربية النقدي (بدون المخزن)</div>
+            <div class="row g-2">
+                <div class="col-12">
+                    <div class="stat-card">
+                        <div class="stat-bar" style="background: var(--germany-black);"></div>
+                        <div class="stat-label">إجمالي المبيعات النقدي (فواتير العربية فقط)</div>
+                        <div class="stat-value num" style="color: var(--germany-black);">${fmt(vanCashSales)}</div>
+                        <div class="stat-sub">عدد فواتير العربية ضمن الفترة: ${vanInvoices.length}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-title"><i class="fas fa-hand-holding-usd"></i> سندات القبض (عهدة العربية فقط - بدون يد أحمد)</div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-bar" style="background: var(--germany-gold);"></div>
+                        <div class="stat-label">إجمالي سندات القبض النقدي</div>
+                        <div class="stat-value num" style="color: #b6892f;">${fmt(vanVoucherCash)}</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-bar" style="background: var(--purple);"></div>
+                        <div class="stat-label">إجمالي سندات القبض المحفظة</div>
+                        <div class="stat-value num" style="color: var(--purple);">${fmt(vanVoucherWallet)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-title"><i class="fas fa-calculator"></i> متوسط إجمالي المبيعات ككل (كل المصادر)</div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-bar" style="background: #16a34a;"></div>
+                        <div class="stat-label">متوسط المبيعات اليومي (كل الفواتير)</div>
+                        <div class="stat-value num" style="color: #16a34a;">${fmt(avgDailySalesAll)}</div>
+                        <div class="stat-sub">عدد أيام بها فواتير: ${distinctDaysCount}</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-bar" style="background: #0ea5e9;"></div>
+                        <div class="stat-label">متوسط قيمة الفاتورة الواحدة</div>
+                        <div class="stat-value num" style="color: #0ea5e9;">${fmt(avgPerInvoiceAll)}</div>
+                        <div class="stat-sub">عدد الفواتير ضمن الفترة: ${allInvoicesInRange.length}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grand-card">
+                <div class="grand-row"><span><i class="fas fa-money-bill-wave me-1" style="color:var(--germany-gold);"></i> إجمالي نقدي العربية (مبيعات + سندات)</span><span class="num">${fmt(grandVanCashTotal)}</span></div>
+                <div class="grand-row"><span><i class="fas fa-wallet me-1" style="color:var(--germany-gold);"></i> إجمالي محفظة سندات العربية</span><span class="num">${fmt(vanVoucherWallet)}</span></div>
+                <div class="grand-row"><span><i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> إجمالي المبيعات ككل (كل المصادر)</span><span class="num">${fmt(totalSalesAll)}</span></div>
+                <div class="grand-row"><span><i class="fas fa-percentage me-1" style="color:var(--germany-gold);"></i> متوسط المبيعات اليومي ككل</span><span class="num">${fmt(avgDailySalesAll)}</span></div>
+            </div>
+
+            <div class="section-title"><i class="fas fa-table"></i> تفصيل يومي</div>
+            <div class="table-responsive">
+                <table class="daily-table">
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>نقدي العربية (مبيعات)</th>
+                            <th>سندات نقدي</th>
+                            <th>سندات محفظة</th>
+                            <th>إجمالي مبيعات اليوم (ككل)</th>
+                        </tr>
+                    </thead>
+                    <tbody>${dailyRowsHtml}</tbody>
+                    <tfoot>
+                        <tr>
+                            <td>الإجمالي</td>
+                            <td class="num">${fmt(vanCashSales)}</td>
+                            <td class="num">${fmt(vanVoucherCash)}</td>
+                            <td class="num">${fmt(vanVoucherWallet)}</td>
+                            <td class="num">${fmt(totalSalesAll)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="text-center mt-3">
+                <button class="apply-btn mx-auto" id="exportExcelBtn"><i class="fas fa-file-excel"></i> تصدير التفصيل اليومي إكسيل</button>
+            </div>
+        `;
+
+        document.getElementById('mainContent').innerHTML = html;
+
+        document.getElementById('exportExcelBtn').onclick = () => {
+            const wsData = [["التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي مبيعات اليوم (ككل)"]];
+            sortedDays.forEach(day => {
+                const d = dailyMap[day];
+                wsData.push([day, d.vanCash, d.voucherCash, d.voucherWallet, d.totalAll]);
+            });
+            wsData.push(["الإجمالي", vanCashSales, vanVoucherCash, vanVoucherWallet, totalSalesAll]);
+            wsData.push(["متوسط يومي", "", "", "", avgDailySalesAll]);
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "تقرير نقدية العربية");
+            XLSX.writeFile(wb, `تقرير_نقدية_العربية_${from || 'الكل'}_${to || 'الكل'}.xlsx`);
+        };
     }
 
-    function exportSummaryExcel() {
-        if (!processedDaysList || processedDaysList.length === 0) return;
-        const excelRows = [
-            ["التاريخ", "إجمالي مبيعات العربية", "نقدي العربية (شامل السندات)", "آجل العربية"]
-        ];
+    document.getElementById('applyFilterBtn').onclick = render;
+    document.getElementById('resetFilterBtn').onclick = () => {
+        document.getElementById('fromDate').value = '';
+        document.getElementById('toDate').value = '';
+        render();
+    };
+    document.getElementById('refreshBtn').onclick = () => {
+        document.getElementById('mainContent').innerHTML = `<div class="loading-note"><i class="fas fa-spinner fa-spin fa-2x d-block mb-2"></i>جاري التحديث...</div>`;
+        loadAllData();
+    };
 
-        processedDaysList.forEach(d => {
-            const totalCashVan = d.invCashVan + d.invWalletVan + d.voucherCash + d.voucherWallet;
-            excelRows.push([
-                d.date,
-                d.vanSales,
-                totalCashVan,
-                d.invCreditVan
-            ]);
-        });
-
-        const ws = XLSX.utils.aoa_to_sheet(excelRows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "ملخص مبيعات العربية");
-        XLSX.writeFile(wb, `ملخص_مبيعات_العربية_${new Date().toLocaleDateString('en-CA')}.xlsx`);
-    }
-
-    // تشغيل الجلب عند فتح الصفحة
-    fetchData();
+    loadAllData();
 </script>
 </body>
 </html>
