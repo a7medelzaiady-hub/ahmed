@@ -194,56 +194,8 @@
         .modal-header h4 { font-size: 15px; font-weight: 800; width: 100%; }
         .close-modal { background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .modal-body { padding: 12px 16px 20px; overflow-y: auto; flex: 1; background: #f8fafc; }
-        
-        .modal-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-        .mini-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 10px 8px; display: flex; align-items: center; gap: 8px; min-width: 0; }
-        .mini-card i { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
-        .mini-info { display: flex; flex-direction: column; text-align: right; min-width: 0; flex: 1; }
-        .mini-val { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mini-lbl { font-size: 10px; color: var(--sub); font-weight: 700; margin-top: 2px; white-space: nowrap; }
-        
-        .mc-init i { background: rgba(100, 116, 139, 0.08); color: var(--sub); }
-        .mc-buy i { background: rgba(2, 132, 199, 0.08); color: #0284c7; }
-        .mc-buy .mini-val { color: #0284c7; }
-        .mc-sell i { background: rgba(22, 163, 74, 0.08); color: var(--success); }
-        .mc-sell .mini-val { color: var(--success); }
-        .mc-ret i { background: rgba(217, 119, 6, 0.08); color: var(--gold); }
-        .mc-ret .mini-val { color: var(--gold); }
-
-        .mc-current {
-            grid-column: 1 / -1; background: linear-gradient(135deg, rgba(11,94,61,0.03) 0%, rgba(18,130,86,0.06) 100%);
-            border: 1px dashed var(--accent-light); justify-content: center; padding: 10px;
-        }
-        .mc-current .mini-val { color: var(--accent); font-size: 15px; font-weight: 900; }
-
-        .section-title { font-size: 12.5px; font-weight: 800; color: var(--text); margin: 8px 0; display: flex; align-items: center; gap: 6px; }
-        .history-list { display: flex; flex-direction: column; gap: 8px; }
-        .tx-item {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; gap: 12px;
-        }
-        .tx-type { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; color: #fff; text-align: center; min-width: 70px; }
-        .tx-type.sale { background: var(--success); }
-        .tx-type.purchase { background: #0284c7; }
-        .tx-type.return { background: var(--gold); }
-        .tx-type.loss { background: var(--danger); }
-        .tx-details { flex: 1; text-align: right; min-width: 0; }
-        .tx-title { font-size: 13px; font-weight: 800; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tx-date { font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
-        .tx-amount { font-size: 12px; font-weight: 900; text-align: left; direction: ltr; white-space: nowrap; }
-        .tx-amount.plus { color: #0284c7; }
-        .tx-amount.minus { color: var(--danger); }
 
         #pdfExportTemplate { display: none; padding: 20px; background: #fff; font-family: 'Cairo', sans-serif; color: #000; direction: rtl; }
-
-        @media (max-width: 400px) {
-            #listBody { grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
-            .row-name { font-size: 11.5px; height: 32px; }
-            .qty-main { font-size: 16px; }
-            .stats { padding: 12px; gap: 8px; }
-            .stat-num { font-size: 24px; }
-            .mini-val { font-size: 11px; }
-        }
     </style>
 </head>
 <body>
@@ -305,7 +257,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, getFirestore, collection, getDocs, onSnapshot, query, where, collectionGroup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, getFirestore, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -496,6 +448,7 @@
             .replace(/ة/g, 'ه');
     }
 
+    // إصلاح صيغة إخراج الكميات باللغة العربية مع مراعاة مسافات الفصل الحقيقية
     function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
         totalPcs = parseInt(totalPcs) || 0;
         capacity = parseInt(capacity) || 1;
@@ -511,7 +464,7 @@
         } else {
             const cartons = Math.floor(absPcs / capacity);
             const loose = absPcs % capacity;
-            if (cartons > 0 && loose > 0) result = `${cartons} ك و ${loose} ${unit}`; 
+            if (cartons > 0 && loose > 0) result = `${cartons} كرتونة و ${loose} ${unit}`; 
             else if (cartons > 0) result = `${cartons} كرتونة`; 
             else result = `${loose} ${unit}`; 
         }
@@ -611,46 +564,7 @@
         </div>`;
     }
 
-    async function showItemHistory(itemId, itemName) {
-        dom.modalItemName.innerHTML = `
-            <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
-                <div><span style="color:#ffce31; font-weight:800; display:block; font-size:11px;">تفاصيل الصنف:</span> ${itemName}</div>
-            </div>`;
-        
-        dom.modalBody.innerHTML = `<div class="loading"><div class="spinner"></div><p>جاري عرض التقرير...</p></div>`;
-        dom.historyModal.style.display = 'flex';
-
-        try {
-            const itemObj = allItems.find(i => i.id === itemId) || {};
-            const capacity = Math.max(1, Number(itemObj.unitFactor || itemObj.factor || itemObj.pcsPerCarton) || 1);
-            const rawUnit = (itemObj.unitName || itemObj.unit || '').trim();
-            const unit = (rawUnit && normalizeAr(rawUnit) !== normalizeAr('كرتونة')) ? rawUnit : 'جركن';
-
-            const initPcs = Number(itemObj.openingTotalPcsCalc || 0);
-            const buyPcs  = Number(itemObj.purchasesPcsCalc || 0);
-            const sellPcs = Number(itemObj.salesPcsCalc || 0);
-            const totalPcs = Number(itemObj.totalPcs || 0);
-
-            let html = `
-            <div class="modal-dashboard">
-                <div class="mini-card mc-init"><i class="fas fa-hourglass-start"></i><div class="mini-info"><span class="mini-val">${formatQuantityDetailed(initPcs, capacity, unit)}</span><span class="mini-lbl">رصيد أول المدة</span></div></div>
-                <div class="mini-card mc-buy"><i class="fas fa-circle-arrow-down"></i><div class="mini-info"><span class="mini-val">+${formatQuantityDetailed(buyPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المشتريات</span></div></div>
-                <div class="mini-card mc-sell"><i class="fas fa-circle-arrow-up"></i><div class="mini-info"><span class="mini-val">-${formatQuantityDetailed(sellPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المبيعات</span></div></div>
-                <div class="mini-card mc-ret"><i class="fas fa-rotate-left"></i><div class="mini-info"><span class="mini-val">0 كرتونة</span><span class="mini-lbl">المرتجعات والتالف</span></div></div>
-                <div class="mini-card mc-current"><div class="mini-info" style="text-align: center;"><span class="mini-val">${formatQuantityDetailed(totalPcs, capacity, unit)}</span><span class="mini-lbl">الرصيد الحالي بالمخزن</span></div></div>
-            </div>`;
-
-            dom.modalBody.innerHTML = html;
-
-        } catch (err) {
-            dom.modalBody.innerHTML = `<div class="err-box"><i class="fas fa-exclamation-triangle"></i>فشل في العرض<br><small>${err.message}</small></div>`;
-        }
-    }
-
-    function closeHistoryModal() {
-        dom.historyModal.style.display = 'none';
-    }
-
+    // تصدير PDF مع تصحيح مسافات الكلمات والخطوط لمنع تداخل الأحرف العربية
     function exportInventoryPDF() {
         if (!allItems.length) return alert('لا توجد أصناف لتصديرها!');
         
@@ -671,7 +585,7 @@
                     <td style="padding: 8px; border-left: 1px solid #e2e8f0;">${index + 1}</td>
                     <td style="padding: 8px; text-align: right; font-weight: bold; border-left: 1px solid #e2e8f0;">${item.name || 'بدون اسم'}</td>
                     <td style="padding: 8px; border-left: 1px solid #e2e8f0;">${item.category || 'عام'}</td>
-                    <td style="padding: 8px; font-weight: bold; color: #0b5e3d; border-left: 1px solid #e2e8f0;">${price}</td>
+                    <td style="padding: 8px; font-weight: bold; color: #0b5e3d; border-left: 1px solid #e2e8f0; letter-spacing: 0.5px;">${price}</td>
                     <td style="padding: 8px; font-weight: bold; ${totalPcs <= 0 ? 'color:#e11d48;' : 'color:#16a34a;'}">${formatQuantityDetailed(totalPcs, factor, unitName)}</td>
                 </tr>`;
         });
@@ -679,20 +593,20 @@
         const template = document.getElementById('pdfExportTemplate');
         template.style.display = 'block';
         template.innerHTML = `
-            <div style="font-family: 'Cairo', sans-serif; padding: 10px; direction: rtl;">
-                <div style="text-align: center; margin-bottom: 15px; border-bottom: 2px solid #0b5e3d; padding-bottom: 8px;">
-                    <h2 style="color: #0b5e3d; margin: 0; font-size: 18px;">شركة الزيادى لزيوت السيارات</h2>
-                    <h4 style="color: #475569; margin: 4px 0; font-size: 13px;">تقرير جرد الأصناف والمخزون</h4>
-                    <div style="font-size: 10px; color: #64748b;">تاريخ التقرير: ${dateStr} | إجمالي الأصناف: ${allItems.length}</div>
+            <div style="font-family: 'Cairo', sans-serif; padding: 15px; direction: rtl; line-height: 1.6;">
+                <div style="text-align: center; margin-bottom: 15px; border-bottom: 2px solid #0b5e3d; padding-bottom: 10px;">
+                    <h2 style="color: #0b5e3d; margin: 0; font-size: 20px; letter-spacing: 0.5px;">شركة الزيادى لزيوت السيارات</h2>
+                    <h4 style="color: #475569; margin: 6px 0; font-size: 14px;">تقرير جرد الأصناف والمخزون</h4>
+                    <div style="font-size: 11px; color: #64748b;">تاريخ التقرير: ${dateStr} | إجمالي الأصناف: ${allItems.length}</div>
                 </div>
                 <table style="width: 100%; border-collapse: collapse; border: 1px solid #0b5e3d;">
                     <thead>
                         <tr style="background: #0b5e3d; color: #ffffff; font-size: 12px;">
-                            <th style="padding: 8px; width: 5%;">#</th>
-                            <th style="padding: 8px; text-align: right; width: 40%;">اسم الصنف</th>
-                            <th style="padding: 8px; width: 18%;">التصنيف</th>
-                            <th style="padding: 8px; width: 17%;">سعر البيع</th>
-                            <th style="padding: 8px; width: 20%;">الرصيد المتاح</th>
+                            <th style="padding: 10px; width: 6%;">#</th>
+                            <th style="padding: 10px; text-align: right; width: 40%;">اسم الصنف</th>
+                            <th style="padding: 10px; width: 18%;">التصنيف</th>
+                            <th style="padding: 10px; width: 16%;">سعر البيع</th>
+                            <th style="padding: 10px; width: 20%;">الرصيد المتاح</th>
                         </tr>
                     </thead>
                     <tbody>${tableRows}</tbody>
@@ -703,7 +617,16 @@
             margin: [8, 8, 8, 8],
             filename: `جرد_الأصناف_${new Date().toISOString().slice(0,10)}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+            html2canvas: { 
+                scale: 2, 
+                useCORS: true, 
+                letterRendering: false,
+                onclone: function(clonedDoc) {
+                    // إجبار المتصفح على محاذاة المساحات والنصوص بشكل صحيح لمنع الالتصاق
+                    const el = clonedDoc.getElementById('pdfExportTemplate');
+                    if (el) el.style.letterSpacing = 'normal';
+                }
+            },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(template).save().then(() => { 
             template.style.display = 'none'; 
@@ -723,10 +646,10 @@
         }
     });
 
-    dom.btnCloseModal.addEventListener('click', closeHistoryModal);
+    dom.btnCloseModal.addEventListener('click', () => { dom.historyModal.style.display = 'none'; });
 
     dom.historyModal.addEventListener('click', (e) => {
-        if (e.target === dom.historyModal) closeHistoryModal();
+        if (e.target === dom.historyModal) dom.historyModal.style.display = 'none';
     });
 
     dom.btnExportPDF.addEventListener('click', exportInventoryPDF);
