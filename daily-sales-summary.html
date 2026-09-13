@@ -315,6 +315,14 @@
 
         const sortedDays = Object.keys(dailyMap).filter(k => k !== 'بلا تاريخ').sort().reverse();
 
+        const vanCombinedGrandTotal = grandVanCashTotal + vanVoucherWallet;
+        const vanActiveDaysSet = new Set([
+            ...vanInvoices.map(inv => inv.dateKey).filter(Boolean),
+            ...vanVouchers.map(v => v.dateKey).filter(Boolean)
+        ]);
+        const vanActiveDaysCount = vanActiveDaysSet.size;
+        const avgDailyVanCombined = vanActiveDaysCount > 0 ? (vanCombinedGrandTotal / vanActiveDaysCount) : 0;
+
         const fmt = n => (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         let dailyRowsHtml = sortedDays.map(day => {
@@ -373,9 +381,17 @@
                 </div>
             </div>
 
-            <div class="section-title"><i class="fas fa-calculator"></i> متوسط إجمالي المبيعات ككل (كل المصادر)</div>
+            <div class="section-title"><i class="fas fa-calculator"></i> المتوسطات</div>
             <div class="row g-2">
-                <div class="col-12">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-bar" style="background: var(--germany-red);"></div>
+                        <div class="stat-label">متوسط إجمالي المبيعات النقدي والسندات (العربية)</div>
+                        <div class="stat-value num" style="color: var(--germany-red);">${fmt(avgDailyVanCombined)}</div>
+                        <div class="stat-sub">عدد أيام النشاط: ${vanActiveDaysCount}</div>
+                    </div>
+                </div>
+                <div class="col-6">
                     <div class="stat-card">
                         <div class="stat-bar" style="background: #16a34a;"></div>
                         <div class="stat-label">متوسط المبيعات اليومي (كل الفواتير)</div>
@@ -433,7 +449,8 @@
                 wsData.push([day, d.vanCash, d.voucherCash, d.voucherWallet, d.vanCash + d.voucherCash + d.voucherWallet, d.totalAll]);
             });
             wsData.push(["الإجمالي", vanCashSales, vanVoucherCash, vanVoucherWallet, grandVanCashTotal + vanVoucherWallet, totalSalesAll]);
-            wsData.push(["متوسط يومي", "", "", "", "", avgDailySalesAll]);
+            wsData.push(["متوسط يومي (العربية: نقدي+سندات)", "", "", "", avgDailyVanCombined, ""]);
+            wsData.push(["متوسط يومي (كل المبيعات)", "", "", "", "", avgDailySalesAll]);
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "تقرير نقدية العربية");
