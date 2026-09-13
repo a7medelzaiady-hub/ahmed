@@ -154,16 +154,15 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 8px 10px;
+            text-align: center;
         }
         .data-box.main { border-right: 3px solid var(--germany-black); }
         .data-box.van { border-right: 3px solid var(--germany-gold); }
-        .data-box.avg-main { border-right: 3px solid #3b82f6; background: #eff6ff; }
-        .data-box.avg-van { border-right: 3px solid #f59e0b; background: #fffdf5; }
         .data-box.cash { border-right: 3px solid #16a34a; background: #f0fdf4; }
         .data-box.wallet { border-right: 3px solid var(--purple); background: #f5f3ff; }
         .data-box.credit { border-right: 3px solid var(--germany-red); background: #fff1f1; }
 
-        .box-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); display: flex; justify-content: space-between; }
+        .box-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
         .box-val { font-size: 0.98rem; font-weight: 900; margin-top: 2px; }
 
         .filter-card {
@@ -349,8 +348,6 @@
                     totalSales: 0,
                     storeSales: 0,
                     vanSales: 0,
-                    storeCount: 0,
-                    vanCount: 0,
                     
                     invCashStore: 0, invCashVan: 0,
                     invWalletStore: 0, invWalletVan: 0,
@@ -372,13 +369,11 @@
 
             if (isVan) {
                 dayGroups[d].vanSales += total;
-                dayGroups[d].vanCount += 1;
                 dayGroups[d].invCashVan += cash;
                 dayGroups[d].invWalletVan += wallet;
                 if (remaining > 0) dayGroups[d].invCreditVan += remaining;
             } else {
                 dayGroups[d].storeSales += total;
-                dayGroups[d].storeCount += 1;
                 dayGroups[d].invCashStore += cash;
                 dayGroups[d].invWalletStore += wallet;
                 if (remaining > 0) dayGroups[d].invCreditStore += remaining;
@@ -396,7 +391,7 @@
 
                 if (!dayGroups[d]) {
                     dayGroups[d] = {
-                        date: d, totalSales: 0, storeSales: 0, vanSales: 0, storeCount: 0, vanCount: 0,
+                        date: d, totalSales: 0, storeSales: 0, vanSales: 0,
                         invCashStore: 0, invCashVan: 0, invWalletStore: 0, invWalletVan: 0, invCreditStore: 0, invCreditVan: 0,
                         voucherCash: 0, voucherWallet: 0
                     };
@@ -441,82 +436,76 @@
             if (day.storeSales > 0) storeDaysCount++;
             if (day.vanSales > 0) vanDaysCount++;
 
-            // متوسط البيع لكل منفذ لليوم
-            const avgMainToday = day.storeCount > 0 ? (day.storeSales / day.storeCount) : 0;
-            const avgVanToday = day.vanCount > 0 ? (day.vanSales / day.vanCount) : 0;
-
-            // إجماليات التحصيل
+            // حساب النقدية الإجمالية اليومية (مبيعات + سندات)
             const totalCashDay = day.invCashStore + day.invCashVan + day.voucherCash;
             const totalWalletDay = day.invWalletStore + day.invWalletVan + day.voucherWallet;
+            const totalNetCash = totalCashDay + totalWalletDay;
             const totalCreditDay = day.invCreditStore + day.invCreditVan;
 
-            gCashTotal += totalCashDay;
+            gCashTotal += totalNetCash;
+
+            // حساب متوسطات النقدية والمبيعات
+            const activeSources = (day.storeSales > 0 ? 1 : 0) + (day.vanSales > 0 ? 1 : 0) || 1;
+            const avgStoreTotal = day.storeSales;
+            const avgVanTotal = day.vanSales;
+
+            const cashStoreTotal = day.invCashStore + day.invWalletStore;
+            const cashVanTotal = day.invCashVan + day.invWalletVan;
 
             return `
             <div class="day-summary-card">
                 <div class="day-header">
-                    <div class="day-date">
-                        <i class="far fa-calendar-alt text-danger"></i> ${day.date}
-                    </div>
                     <div class="badge bg-dark px-3 py-2 fw-bold num" style="font-size: 0.92rem;">
                         المبيعات الإجمالية: ${day.totalSales.toFixed(2)}
                     </div>
+                    <div class="day-date">
+                        <i class="far fa-calendar-alt text-danger"></i> ${day.date}
+                    </div>
                 </div>
 
-                <!-- 1. إجمالي المبيعات -->
-                <div class="section-title-sm"><i class="fas fa-shopping-cart text-dark"></i> المبيعات الإجمالية بالتفصيل:</div>
+                <!-- 1. إجمالي المبيعات والمتوسطات الإجمالية -->
+                <div class="section-title-sm"><i class="fas fa-shopping-cart text-dark"></i> المبيعات الإجمالية ومتوسطاتها:</div>
                 <div class="grid-2col">
                     <div class="data-box main">
-                        <div class="box-lbl">مبيعات المخزن</div>
+                        <div class="box-lbl">إجمالي مبيعات المخزن</div>
                         <div class="box-val num">${day.storeSales.toFixed(2)}</div>
                     </div>
                     <div class="data-box van">
-                        <div class="box-lbl">مبيعات العربية</div>
+                        <div class="box-lbl">إجمالي مبيعات العربية</div>
                         <div class="box-val num text-dark">${day.vanSales.toFixed(2)}</div>
                     </div>
                 </div>
 
-                <!-- 2. متوسط مبيعات اليوم -->
-                <div class="section-title-sm"><i class="fas fa-chart-line text-primary"></i> متوسطات البيع اليومية:</div>
+                <!-- 2. المبيعات النقدية والسندات ومتوسطاتها -->
+                <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> المبيعات النقدية (كاش + محفظة + سندات):</div>
                 <div class="grid-2col">
-                    <div class="data-box avg-main">
-                        <div class="box-lbl"><span>متوسط بيع المخزن</span> <span class="text-muted">(${day.storeCount} فاتورة)</span></div>
-                        <div class="box-val num text-primary">${avgMainToday.toFixed(2)}</div>
+                    <div class="data-box cash">
+                        <div class="box-lbl"><span>نقدي المخزن</span></div>
+                        <div class="box-val num text-success">${cashStoreTotal.toFixed(2)}</div>
                     </div>
-                    <div class="data-box avg-van">
-                        <div class="box-lbl"><span>متوسط بيع العربية</span> <span class="text-muted">(${day.vanCount} فاتورة)</span></div>
-                        <div class="box-val num" style="color:#d97706;">${avgVanToday.toFixed(2)}</div>
-                    </div>
-                </div>
-
-                <!-- 3. النقدية الإجمالية (شاملة السندات) -->
-                <div class="section-title-sm"><i class="fas fa-money-bill-wave text-success"></i> إجمالي النقدية (مبيعات + سندات قبض):</div>
-                <div class="grid-2col">
-                    <div class="data-box cash" style="grid-column: span 2;">
-                        <div class="box-lbl">
-                            <span>إجمالي النقدية (الكاش)</span>
-                            <span class="text-muted" style="font-size:0.65rem;">(مخزن: ${day.invCashStore.toFixed(1)} | عربية: ${day.invCashVan.toFixed(1)} | سندات: ${day.voucherCash.toFixed(1)})</span>
-                        </div>
-                        <div class="box-val num text-success" style="font-size: 1.1rem;">${totalCashDay.toFixed(2)}</div>
+                    <div class="data-box cash">
+                        <div class="box-lbl"><span>نقدي العربية</span></div>
+                        <div class="box-val num text-success">${cashVanTotal.toFixed(2)}</div>
                     </div>
                 </div>
+                <div class="data-box wallet mb-2" style="background: #f0fdf4; border-color: #16a34a;">
+                    <div class="box-lbl">
+                        <span class="text-success fw-bold">إجمالي السداد النقدي الكلي (+ السندات)</span>
+                        <span class="text-muted" style="font-size:0.65rem;">(سندات كاش: ${day.voucherCash.toFixed(1)} | محفظة: ${day.voucherWallet.toFixed(1)})</span>
+                    </div>
+                    <div class="box-val num text-success" style="font-size: 1.1rem;">${totalNetCash.toFixed(2)}</div>
+                </div>
 
-                <!-- 4. إجمالي المحفظة وإجمالي الآجل -->
-                <div class="section-title-sm"><i class="fas fa-wallet text-primary"></i> إجماليات المحفظة والآجل:</div>
+                <!-- 3. مبيعات الآجل -->
+                <div class="section-title-sm"><i class="fas fa-file-invoice-dollar text-danger"></i> مبيعات الآجل (المتبقي):</div>
                 <div class="grid-2col">
-                    <div class="data-box wallet">
-                        <div class="box-lbl">
-                            <span>إجمالي المحفظة</span>
-                        </div>
-                        <div class="box-val num" style="color:var(--purple);">${totalWalletDay.toFixed(2)}</div>
-                        <div class="text-muted fw-bold" style="font-size:0.62rem; margin-top:2px;">(مبيعات: ${(day.invWalletStore + day.invWalletVan).toFixed(1)} | سندات: ${day.voucherWallet.toFixed(1)})</div>
+                    <div class="data-box credit">
+                        <div class="box-lbl">آجل المخزن</div>
+                        <div class="box-val num text-danger">${day.invCreditStore.toFixed(2)}</div>
                     </div>
                     <div class="data-box credit">
-                        <div class="box-lbl">
-                            <span>إجمالي الآجل</span>
-                        </div>
-                        <div class="box-val num text-danger">${totalCreditDay.toFixed(2)}</div>
-                        <div class="text-muted fw-bold" style="font-size:0.62rem; margin-top:2px;">(مخزن: ${day.invCreditStore.toFixed(1)} | عربية: ${day.invCreditVan.toFixed(1)})</div>
+                        <div class="box-lbl">آجل العربية</div>
+                        <div class="box-val num text-danger">${day.invCreditVan.toFixed(2)}</div>
                     </div>
                 </div>
             </div>`;
@@ -537,26 +526,25 @@
     function exportSummaryExcel() {
         if (!processedDaysList || processedDaysList.length === 0) return;
         const excelRows = [
-            ["التاريخ", "إجمالي المبيعات", "مبيعات المخزن", "مبيعات العربية", "متوسط المخزن", "متوسط العربية", "إجمالي النقدية (الكاش)", "إجمالي المحفظة", "إجمالي الآجل"]
+            ["التاريخ", "إجمالي المبيعات", "مبيعات المخزن", "مبيعات العربية", "نقدي المخزن", "نقدي العربية", "سندات القبض", "إجمالي النقدية", "آجل المخزن", "آجل العربية"]
         ];
 
         processedDaysList.forEach(d => {
-            const avgMain = d.storeCount > 0 ? (d.storeSales / d.storeCount) : 0;
-            const avgVan = d.vanCount > 0 ? (d.vanSales / d.vanCount) : 0;
-            const cashTotal = d.invCashStore + d.invCashVan + d.voucherCash;
-            const walletTotal = d.invWalletStore + d.invWalletVan + d.voucherWallet;
-            const creditTotal = d.invCreditStore + d.invCreditVan;
+            const cashStore = d.invCashStore + d.invWalletStore;
+            const cashVan = d.invCashVan + d.invWalletVan;
+            const totalCash = cashStore + cashVan + d.voucherCash + d.voucherWallet;
 
             excelRows.push([
                 d.date,
                 d.totalSales,
                 d.storeSales,
                 d.vanSales,
-                Number(avgMain.toFixed(2)),
-                Number(avgVan.toFixed(2)),
-                cashTotal,
-                walletTotal,
-                creditTotal
+                cashStore,
+                cashVan,
+                (d.voucherCash + d.voucherWallet),
+                totalCash,
+                d.invCreditStore,
+                d.invCreditVan
             ]);
         });
 
