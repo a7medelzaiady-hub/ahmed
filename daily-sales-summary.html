@@ -142,6 +142,7 @@
             <span class="reset-link" id="resetFilterBtn"><i class="fas fa-undo me-1"></i> عرض كل الفترات</span>
             <span class="stat-sub" id="rangeLabel">عرض: كل الفترات</span>
         </div>
+        <div class="stat-sub mt-1" id="cacheNote" style="display:none; color:#0ea5e9;"><i class="fas fa-bolt me-1"></i> عرض سريع من آخر نسخة محفوظة، جاري التحديث في الخلفية...</div>
     </div>
 
     <div id="mainContent">
@@ -167,9 +168,12 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
     let allInvoices = [];
     let allVouchers = [];
+    let isLoading = false;
+    let lastLoadedRangeKey = null;
 
     function convertToEnglishNumbers(str) {
         if (!str) return "";
@@ -220,17 +224,12 @@
         return true;
     }
 
-    async function loadAllData() {
-        const [invSnap, transSnap] = await Promise.all([
-            db.collection("invoices").get(),
-            db.collection("transactions").get()
-        ]);
-
-        allInvoices = [];
-        invSnap.forEach(d => {
+    function processInvoiceDocs(snap) {
+        const list = [];
+        snap.forEach(d => {
             const data = d.data();
             if (data.isDeleted) return;
-            allInvoices.push({
+            list.push({
                 id: d.id,
                 ...data,
                 calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0,
@@ -238,15 +237,18 @@
                 dateKey: parseInvoiceDate(data)
             });
         });
+        return list;
+    }
 
-        allVouchers = [];
-        transSnap.forEach(d => {
+    function processVoucherDocs(snap) {
+        const list = [];
+        snap.forEach(d => {
             const tr = d.data();
             if (tr.isDeleted) return;
             const isValidVoucherType = (tr.type === 'قبض' || tr.type === 'صرف');
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (!isValidVoucherType || isInvoicePayment) return;
-            allVouchers.push({
+            list.push({
                 id: d.id,
                 ...tr,
                 amount: Number(tr.amount || tr.total || 0),
@@ -255,8 +257,84 @@
                 dateKey: parseVoucherDate(tr)
             });
         });
+        return list;
+    }
 
-        render();
+    function cacheKey(from, to) { return `cache_van_report_${from || 'ALL'}_${to || 'ALL'}`; }
+
+    function readCache(from, to) {
+        try {
+            const raw = localStorage.getItem(cacheKey(from, to));
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) { return null; }
+    }
+
+    function writeCache(from, to, invoices, vouchers) {
+        try {
+            localStorage.setItem(cacheKey(from, to), JSON.stringify({ invoices, vouchers, savedAt: Date.now() }));
+        } catch (e) { /* تجاهل امتلاء التخزين المحلي */ }
+    }
+
+    // جلب مُقيّد بمدى تاريخ مباشرة من فايربيز (بدل تنزيل الأرشيف بالكامل) لتقليل الاستهلاك والسرعة
+    async function fetchRange(from, to) {
+        if (from && to) {
+            const dayStart = new Date(`${from}T00:00:00`);
+            const dayEndExclusive = new Date(`${to}T00:00:00`);
+            dayEndExclusive.setDate(dayEndExclusive.getDate() + 1);
+
+            const invQuery = db.collection("invoices")
+                .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(dayStart))
+                .where("timestamp", "<", firebase.firestore.Timestamp.fromDate(dayEndExclusive));
+            const transQuery = db.collection("transactions")
+                .where("date", ">=", from)
+                .where("date", "<=", to);
+
+            const [invSnap, transSnap] = await Promise.all([invQuery.get(), transQuery.get()]);
+            return { invoices: processInvoiceDocs(invSnap), vouchers: processVoucherDocs(transSnap) };
+        }
+
+        // بدون مدى (كل الفترات) - جلب كامل الأرشيف فقط عند طلبه صراحةً
+        const [invSnap, transSnap] = await Promise.all([
+            db.collection("invoices").get(),
+            db.collection("transactions").get()
+        ]);
+        return { invoices: processInvoiceDocs(invSnap), vouchers: processVoucherDocs(transSnap) };
+    }
+
+    async function loadData(from, to, { showSpinner = true } = {}) {
+        if (isLoading) return;
+        isLoading = true;
+        const rangeKey = cacheKey(from, to);
+
+        // 1) عرض فوري من الكاش المحلي (بدون أي استهلاك بيانات) إن وُجد
+        const cached = readCache(from, to);
+        if (cached) {
+            allInvoices = cached.invoices;
+            allVouchers = cached.vouchers;
+            render();
+            document.getElementById('cacheNote').style.display = 'block';
+        } else if (showSpinner) {
+            document.getElementById('mainContent').innerHTML = `<div class="loading-note"><i class="fas fa-spinner fa-spin fa-2x d-block mb-2"></i>جاري تحميل البيانات...</div>`;
+        }
+
+        // 2) جلب حديث من فايربيز (مُقيّد بالمدى) وتحديث الكاش والعرض
+        try {
+            const fresh = await fetchRange(from, to);
+            allInvoices = fresh.invoices;
+            allVouchers = fresh.vouchers;
+            writeCache(from, to, fresh.invoices, fresh.vouchers);
+            lastLoadedRangeKey = rangeKey;
+            document.getElementById('cacheNote').style.display = 'none';
+            render();
+        } catch (e) {
+            console.error(e);
+            if (!cached) {
+                document.getElementById('mainContent').innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x mb-2"></i><p class="fw-bold mb-0">تعذر تحميل البيانات، تحقق من الاتصال.</p></div>`;
+            }
+        } finally {
+            isLoading = false;
+        }
     }
 
     function render() {
@@ -355,32 +433,6 @@
                 </div>
             </div>
 
-            <div class="section-title"><i class="fas fa-hand-holding-usd"></i> سندات القبض (عهدة العربية فقط - بدون يد أحمد)</div>
-            <div class="row g-2">
-                <div class="col-6">
-                    <div class="stat-card">
-                        <div class="stat-bar" style="background: var(--germany-gold);"></div>
-                        <div class="stat-label">إجمالي سندات القبض النقدي</div>
-                        <div class="stat-value num" style="color: #b6892f;">${fmt(vanVoucherCash)}</div>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="stat-card">
-                        <div class="stat-bar" style="background: var(--purple);"></div>
-                        <div class="stat-label">إجمالي سندات القبض المحفظة</div>
-                        <div class="stat-value num" style="color: var(--purple);">${fmt(vanVoucherWallet)}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="stat-card" style="border: 2px solid var(--germany-black); background: #fffdf2;">
-                        <div class="stat-bar" style="background: var(--germany-red);"></div>
-                        <div class="stat-label">إجمالي المبيعات النقدي + السندات (العربية فقط)</div>
-                        <div class="stat-value num" style="color: var(--germany-red); font-size: 1.4rem;">${fmt(grandVanCashTotal)}</div>
-                        <div class="stat-sub">مبيعات نقدي العربية (${fmt(vanCashSales)}) + سندات نقدي عهدة العربية (${fmt(vanVoucherCash)})</div>
-                    </div>
-                </div>
-            </div>
-
             <div class="section-title"><i class="fas fa-calculator"></i> المتوسطات</div>
             <div class="row g-2">
                 <div class="col-6">
@@ -458,18 +510,31 @@
         };
     }
 
-    document.getElementById('applyFilterBtn').onclick = render;
+    document.getElementById('applyFilterBtn').onclick = () => {
+        const from = document.getElementById('fromDate').value || null;
+        const to = document.getElementById('toDate').value || null;
+        loadData(from, to);
+    };
     document.getElementById('resetFilterBtn').onclick = () => {
         document.getElementById('fromDate').value = '';
         document.getElementById('toDate').value = '';
-        render();
+        loadData(null, null);
     };
     document.getElementById('refreshBtn').onclick = () => {
-        document.getElementById('mainContent').innerHTML = `<div class="loading-note"><i class="fas fa-spinner fa-spin fa-2x d-block mb-2"></i>جاري التحديث...</div>`;
-        loadAllData();
+        const from = document.getElementById('fromDate').value || null;
+        const to = document.getElementById('toDate').value || null;
+        loadData(from, to, { showSpinner: true });
     };
 
-    loadAllData();
+    // افتراضياً: تحميل الشهر الحالي فقط (أسرع وأقل استهلاكاً)، ويمكن تغييره أو عرض كل الفترات يدوياً
+    (function initDefaultRange() {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-CA');
+        const today = now.toLocaleDateString('en-CA');
+        document.getElementById('fromDate').value = firstDay;
+        document.getElementById('toDate').value = today;
+        loadData(firstDay, today);
+    })();
 </script>
 </body>
 </html>
