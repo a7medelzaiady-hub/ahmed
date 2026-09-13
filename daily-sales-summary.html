@@ -105,8 +105,8 @@
 
         .daily-table-wrap { max-height: 480px; overflow-y: auto; border-radius: 14px; border: 1px solid var(--border); }
         .daily-table { width: 100%; margin-top: 0; font-size: 0.76rem; border-collapse: collapse; background: white; }
-        .daily-table th { background: #f1f5f9; padding: 8px 6px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; position: sticky; top: 0; z-index: 5; box-shadow: 0 1px 0 var(--border); }
-        .daily-table td { padding: 8px 6px; border: 1px solid var(--border); text-align: center; font-weight: 700; }
+        .daily-table th { background: #f1f5f9; padding: 6px 4px; border: 1px solid var(--border); font-weight: 800; text-align: center; color: #475569; position: sticky; top: 0; z-index: 5; box-shadow: 0 1px 0 var(--border); font-size: 0.7rem; }
+        .daily-table td { padding: 6px 4px; border: 1px solid var(--border); text-align: center; font-weight: 700; font-size: 0.72rem; }
         .daily-table tfoot td { background: #f8fafc; font-weight: 900; position: sticky; bottom: 0; }
 
         .empty-state { text-align: center; padding: 40px 10px; color: var(--text-secondary); }
@@ -319,17 +319,19 @@
 
         let dailyRowsHtml = sortedDays.map(day => {
             const d = dailyMap[day];
+            const vanCombinedTotal = d.vanCash + d.voucherCash + d.voucherWallet;
             return `<tr>
                 <td>${day}</td>
                 <td class="num">${fmt(d.vanCash)}</td>
                 <td class="num">${fmt(d.voucherCash)}</td>
                 <td class="num">${fmt(d.voucherWallet)}</td>
+                <td class="num" style="font-weight:900;">${fmt(vanCombinedTotal)}</td>
                 <td class="num">${fmt(d.totalAll)}</td>
             </tr>`;
         }).join('');
 
         if (!dailyRowsHtml) {
-            dailyRowsHtml = `<tr><td colspan="5" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
+            dailyRowsHtml = `<tr><td colspan="6" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
         }
 
         const html = `
@@ -373,20 +375,12 @@
 
             <div class="section-title"><i class="fas fa-calculator"></i> متوسط إجمالي المبيعات ككل (كل المصادر)</div>
             <div class="row g-2">
-                <div class="col-6">
+                <div class="col-12">
                     <div class="stat-card">
                         <div class="stat-bar" style="background: #16a34a;"></div>
                         <div class="stat-label">متوسط المبيعات اليومي (كل الفواتير)</div>
                         <div class="stat-value num" style="color: #16a34a;">${fmt(avgDailySalesAll)}</div>
-                        <div class="stat-sub">عدد أيام بها فواتير: ${distinctDaysCount}</div>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="stat-card">
-                        <div class="stat-bar" style="background: #0ea5e9;"></div>
-                        <div class="stat-label">متوسط قيمة الفاتورة الواحدة</div>
-                        <div class="stat-value num" style="color: #0ea5e9;">${fmt(avgPerInvoiceAll)}</div>
-                        <div class="stat-sub">عدد الفواتير ضمن الفترة: ${allInvoicesInRange.length}</div>
+                        <div class="stat-sub">عدد أيام بها فواتير: ${distinctDaysCount} | عدد الفواتير ضمن الفترة: ${allInvoicesInRange.length}</div>
                     </div>
                 </div>
             </div>
@@ -407,6 +401,7 @@
                             <th>نقدي العربية (مبيعات)</th>
                             <th>سندات نقدي</th>
                             <th>سندات محفظة</th>
+                            <th>إجمالي نقدي العربية والسند (نقدي+محفظة)</th>
                             <th>إجمالي مبيعات اليوم (ككل)</th>
                         </tr>
                     </thead>
@@ -417,6 +412,7 @@
                             <td class="num">${fmt(vanCashSales)}</td>
                             <td class="num">${fmt(vanVoucherCash)}</td>
                             <td class="num">${fmt(vanVoucherWallet)}</td>
+                            <td class="num">${fmt(grandVanCashTotal + vanVoucherWallet)}</td>
                             <td class="num">${fmt(totalSalesAll)}</td>
                         </tr>
                     </tfoot>
@@ -431,13 +427,13 @@
         document.getElementById('mainContent').innerHTML = html;
 
         document.getElementById('exportExcelBtn').onclick = () => {
-            const wsData = [["التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي مبيعات اليوم (ككل)"]];
+            const wsData = [["التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)"]];
             sortedDays.forEach(day => {
                 const d = dailyMap[day];
-                wsData.push([day, d.vanCash, d.voucherCash, d.voucherWallet, d.totalAll]);
+                wsData.push([day, d.vanCash, d.voucherCash, d.voucherWallet, d.vanCash + d.voucherCash + d.voucherWallet, d.totalAll]);
             });
-            wsData.push(["الإجمالي", vanCashSales, vanVoucherCash, vanVoucherWallet, totalSalesAll]);
-            wsData.push(["متوسط يومي", "", "", "", avgDailySalesAll]);
+            wsData.push(["الإجمالي", vanCashSales, vanVoucherCash, vanVoucherWallet, grandVanCashTotal + vanVoucherWallet, totalSalesAll]);
+            wsData.push(["متوسط يومي", "", "", "", "", avgDailySalesAll]);
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "تقرير نقدية العربية");
