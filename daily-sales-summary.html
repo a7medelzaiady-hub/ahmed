@@ -276,7 +276,6 @@
         } catch (e) { /* تجاهل امتلاء التخزين المحلي */ }
     }
 
-    // جلب مُقيّد بمدى تاريخ مباشرة من فايربيز (بدل تنزيل الأرشيف بالكامل) لتقليل الاستهلاك والسرعة
     async function fetchRange(from, to) {
         if (from && to) {
             const dayStart = new Date(`${from}T00:00:00`);
@@ -294,7 +293,6 @@
             return { invoices: processInvoiceDocs(invSnap), vouchers: processVoucherDocs(transSnap) };
         }
 
-        // بدون مدى (كل الفترات) - جلب كامل الأرشيف فقط عند طلبه صراحةً
         const [invSnap, transSnap] = await Promise.all([
             db.collection("invoices").get(),
             db.collection("transactions").get()
@@ -307,7 +305,6 @@
         isLoading = true;
         const rangeKey = cacheKey(from, to);
 
-        // 1) عرض فوري من الكاش المحلي (بدون أي استهلاك بيانات) إن وُجد
         const cached = readCache(from, to);
         if (cached) {
             allInvoices = cached.invoices;
@@ -318,7 +315,6 @@
             document.getElementById('mainContent').innerHTML = `<div class="loading-note"><i class="fas fa-spinner fa-spin fa-2x d-block mb-2"></i>جاري تحميل البيانات...</div>`;
         }
 
-        // 2) جلب حديث من فايربيز (مُقيّد بالمدى) وتحديث الكاش والعرض
         try {
             const fresh = await fetchRange(from, to);
             allInvoices = fresh.invoices;
@@ -348,29 +344,19 @@
             rangeLabel.innerText = 'عرض: كل الفترات';
         }
 
-        // فواتير العربية فقط (مش المخزن) ضمن الفترة
         const vanInvoices = allInvoices.filter(inv => (inv.source || 'main_store') === 'van_sales' && inRange(inv.dateKey, from, to));
-        // كل الفواتير (لأي مصدر) ضمن الفترة - لحساب متوسط إجمالي المبيعات ككل
         const allInvoicesInRange = allInvoices.filter(inv => inRange(inv.dateKey, from, to));
-        // السندات: عهدة العربية فقط (مش يد أحمد) - نوع قبض فقط ضمن الفترة
         const vanVouchers = allVouchers.filter(v => v.type === 'قبض' && v.custody !== 'يد أحمد' && inRange(v.dateKey, from, to));
 
-        // 1) إجمالي المبيعات النقدي (العربية فقط)
         const vanCashSales = vanInvoices.reduce((sum, inv) => sum + inv.calculatedCash, 0);
-
-        // 2) السندات - عهدة العربية: نقدى ومحفظة
         const vanVoucherCash = vanVouchers.filter(v => v.method !== 'محفظة' && v.method !== 'محفظه').reduce((sum, v) => sum + v.amount, 0);
         const vanVoucherWallet = vanVouchers.filter(v => v.method === 'محفظة' || v.method === 'محفظه').reduce((sum, v) => sum + v.amount, 0);
-
-        // 3) الإجمالي الكلي النقدي للعربية (مبيعات نقدي + سندات نقدي عهدة العربية)
         const grandVanCashTotal = vanCashSales + vanVoucherCash;
 
-        // 4) متوسط إجمالي المبيعات ككل (كل الفواتير بكل المصادر) - المتوسط يومي
         const totalSalesAll = allInvoicesInRange.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
         const distinctDaysSet = new Set(allInvoicesInRange.map(inv => inv.dateKey).filter(Boolean));
         const distinctDaysCount = distinctDaysSet.size || 0;
         const avgDailySalesAll = distinctDaysCount > 0 ? (totalSalesAll / distinctDaysCount) : 0;
-        const avgPerInvoiceAll = allInvoicesInRange.length > 0 ? (totalSalesAll / allInvoicesInRange.length) : 0;
 
         // تجميع يومي للتفصيل
         const dailyMap = {};
@@ -392,6 +378,32 @@
         });
 
         const sortedDays = Object.keys(dailyMap).filter(k => k !== 'بلا تاريخ').sort().reverse();
+
+        // تجميع حسب أيام الأسبوع (ترتيب مخصص: السبت، الأحد، الإثنين، الثلاثاء، الأربعاء، الخميس، الجمعة)
+        const weekDayOrder = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+        const dayNamesMap = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        
+        const groupByDayOfWeek = {};
+        weekDayOrder.forEach(d => {
+            groupByDayOfWeek[d] = { count: 0, vanCash: 0, voucherCash: 0, voucherWallet: 0, totalAll: 0, dates: new Set() };
+        });
+
+        sortedDays.forEach(dayStr => {
+            const dObj = new Date(dayStr);
+            if (isNaN(dObj)) return;
+            const jsDayIndex = dObj.getDay(); // 0: Sun, 1: Mon ... 6: Sat
+            const arabicDayName = dayNamesMap[jsDayIndex];
+            
+            if (groupByDayOfWeek[arabicDayName]) {
+                const item = dailyMap[dayStr];
+                groupByDayOfWeek[arabicDayName].count += 1;
+                groupByDayOfWeek[arabicDayName].vanCash += item.vanCash;
+                groupByDayOfWeek[arabicDayName].voucherCash += item.voucherCash;
+                groupByDayOfWeek[arabicDayName].voucherWallet += item.voucherWallet;
+                groupByDayOfWeek[arabicDayName].totalAll += item.totalAll;
+                groupByDayOfWeek[arabicDayName].dates.add(dayStr);
+            }
+        });
 
         const vanCombinedGrandTotal = grandVanCashTotal + vanVoucherWallet;
         const vanActiveDaysSet = new Set([
@@ -418,6 +430,36 @@
 
         if (!dailyRowsHtml) {
             dailyRowsHtml = `<tr><td colspan="6" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
+        }
+
+        // بناء صفوف قسم تجميع أيام الأسبوع
+        let weekGroupRowsHtml = '';
+        let totalWeekVanCash = 0, totalWeekVoucherCash = 0, totalWeekVoucherWallet = 0, totalWeekAllSales = 0, totalWeekDaysCount = 0;
+
+        weekDayOrder.forEach(dayName => {
+            const group = groupByDayOfWeek[dayName];
+            if (group.count > 0) {
+                totalWeekVanCash += group.vanCash;
+                totalWeekVoucherCash += group.voucherCash;
+                totalWeekVoucherWallet += group.voucherWallet;
+                totalWeekAllSales += group.totalAll;
+                totalWeekDaysCount += group.count;
+
+                const combinedGroupTotal = group.vanCash + group.voucherCash + group.voucherWallet;
+                weekGroupRowsHtml += `<tr>
+                    <td style="font-weight:900; background:#fafafa;"><i class="fas fa-calendar-day text-secondary me-1"></i> ${dayName}</td>
+                    <td class="num">${group.count}</td>
+                    <td class="num">${fmt(group.vanCash)}</td>
+                    <td class="num">${fmt(group.voucherCash)}</td>
+                    <td class="num">${fmt(group.voucherWallet)}</td>
+                    <td class="num" style="font-weight:900;">${fmt(combinedGroupTotal)}</td>
+                    <td class="num">${fmt(group.totalAll)}</td>
+                </tr>`;
+            }
+        });
+
+        if (!weekGroupRowsHtml) {
+            weekGroupRowsHtml = `<tr><td colspan="7" class="text-center text-muted">لا توجد بيانات أسبوعية كافية</td></tr>`;
         }
 
         const html = `
@@ -448,6 +490,36 @@
                 <div class="grand-row"><span><i class="fas fa-percentage me-1" style="color:var(--germany-gold);"></i> متوسط المبيعات اليومي ككل</span><span class="num">${fmt(avgDailySalesAll)}</span></div>
             </div>
 
+            <!-- قسم تجميع أيام الأسبوع الجديد -->
+            <div class="section-title"><i class="fas fa-calendar-week"></i> تحليل أيام الأسبوع (تجميع مجمّع لكل يوم أسبوعي)</div>
+            <div class="daily-table-wrap mb-3">
+                <table class="daily-table">
+                    <thead>
+                        <tr>
+                            <th>اليوم أسبوعياً</th>
+                            <th>عدد التكرارات</th>
+                            <th>نقدي العربية (مبيعات)</th>
+                            <th>سندات نقدي</th>
+                            <th>سندات محفظة</th>
+                            <th>إجمالي نقدي العربية والسند</th>
+                            <th>إجمالي مبيعات اليوم (ككل)</th>
+                        </tr>
+                    </thead>
+                    <tbody>${weekGroupRowsHtml}</tbody>
+                    <tfoot>
+                        <tr>
+                            <td>الإجمالي الكلي</td>
+                            <td class="num">${totalWeekDaysCount}</td>
+                            <td class="num">${fmt(totalWeekVanCash)}</td>
+                            <td class="num">${fmt(totalWeekVoucherCash)}</td>
+                            <td class="num">${fmt(totalWeekVoucherWallet)}</td>
+                            <td class="num">${fmt(totalWeekVanCash + totalWeekVoucherCash + totalWeekVoucherWallet)}</td>
+                            <td class="num">${fmt(totalWeekAllSales)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
             <div class="section-title"><i class="fas fa-table"></i> تفصيل يومي</div>
             <div class="daily-table-wrap">
                 <table class="daily-table">
@@ -475,13 +547,32 @@
                 </table>
             </div>
             <div class="stat-sub text-center mt-2">الترتيب من الأحدث للأقدم — رأس الجدول ثابت أثناء التمرير</div>
-            <div class="text-center mt-3">
-                <button class="apply-btn mx-auto" id="exportExcelBtn"><i class="fas fa-file-excel"></i> تصدير التفصيل اليومي إكسيل</button>
+            <div class="text-center mt-3 d-flex justify-content-center gap-2 flex-wrap">
+                <button class="apply-btn" id="exportWeekExcelBtn"><i class="fas fa-file-excel"></i> تصدير تحليل الأسبوع إكسيل</button>
+                <button class="apply-btn" id="exportExcelBtn"><i class="fas fa-file-excel"></i> تصدير التفصيل اليومي إكسيل</button>
             </div>
         `;
 
         document.getElementById('mainContent').innerHTML = html;
 
+        // زر تصدير تجميع أيام الأسبوع
+        document.getElementById('exportWeekExcelBtn').onclick = () => {
+            const wsData = [["اليوم أسبوعياً", "عدد التكرارات", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)"]];
+            weekDayOrder.forEach(dayName => {
+                const group = groupByDayOfWeek[dayName];
+                if (group.count > 0) {
+                    wsData.push([dayName, group.count, group.vanCash, group.voucherCash, group.voucherWallet, group.vanCash + group.voucherCash + group.voucherWallet, group.totalAll]);
+                }
+            });
+            wsData.push(["الإجمالي الكلي", totalWeekDaysCount, totalWeekVanCash, totalWeekVoucherCash, totalWeekVoucherWallet, totalWeekVanCash + totalWeekVoucherCash + totalWeekVoucherWallet, totalWeekAllSales]);
+            
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "تحليل أيام الأسبوع");
+            XLSX.writeFile(wb, `تحليل_ايام_الاسبوع_${from || 'الكل'}_${to || 'الكل'}.xlsx`);
+        };
+
+        // زر تصدير التفصيل اليومي
         document.getElementById('exportExcelBtn').onclick = () => {
             const wsData = [["التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)"]];
             sortedDays.forEach(day => {
@@ -489,8 +580,6 @@
                 wsData.push([day, d.vanCash, d.voucherCash, d.voucherWallet, d.vanCash + d.voucherCash + d.voucherWallet, d.totalAll]);
             });
             wsData.push(["الإجمالي", vanCashSales, vanVoucherCash, vanVoucherWallet, grandVanCashTotal + vanVoucherWallet, totalSalesAll]);
-            wsData.push(["متوسط يومي (العربية: نقدي+سندات)", "", "", "", avgDailyVanCombined, ""]);
-            wsData.push(["متوسط يومي (كل المبيعات)", "", "", "", "", avgDailySalesAll]);
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "تقرير نقدية العربية");
@@ -514,7 +603,6 @@
         loadData(from, to, { showSpinner: true });
     };
 
-    // افتراضياً: عرض كل البيانات (كل الفترات)، ويمكن تضييق العرض باختيار مدى تاريخ محدد يدوياً
     loadData(null, null);
 </script>
 </body>
