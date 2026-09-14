@@ -216,24 +216,6 @@
         }
         .mc-current .mini-val { color: var(--accent); font-size: 15px; font-weight: 900; }
 
-        .section-title { font-size: 12.5px; font-weight: 800; color: var(--text); margin: 8px 0; display: flex; align-items: center; gap: 6px; }
-        .history-list { display: flex; flex-direction: column; gap: 8px; }
-        .tx-item {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; gap: 12px;
-        }
-        .tx-type { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; color: #fff; text-align: center; min-width: 70px; }
-        .tx-type.sale { background: var(--success); }
-        .tx-type.purchase { background: #0284c7; }
-        .tx-type.return { background: var(--gold); }
-        .tx-type.loss { background: var(--danger); }
-        .tx-details { flex: 1; text-align: right; min-width: 0; }
-        .tx-title { font-size: 13px; font-weight: 800; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tx-date { font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
-        .tx-amount { font-size: 12px; font-weight: 900; text-align: left; direction: ltr; white-space: nowrap; }
-        .tx-amount.plus { color: #0284c7; }
-        .tx-amount.minus { color: var(--danger); }
-
         #pdfExportTemplate { display: none; padding: 20px; background: #fff; font-family: 'Cairo', sans-serif; color: #000; direction: rtl; }
 
         @media (max-width: 400px) {
@@ -305,7 +287,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, getFirestore, collection, getDocs, onSnapshot, query, where, collectionGroup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, getFirestore, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -341,6 +323,14 @@
         btnExportPDF: document.getElementById('btnExportPDF')
     };
 
+    function normalizeAr(s) {
+        return String(s || '').trim()
+            .replace(/[\u064B-\u0652]/g, '')
+            .replace(/[إأآا]/g, 'ا')
+            .replace(/ى/g, 'ي')
+            .replace(/ة/g, 'ه');
+    }
+
     function isCartonUnit(unitValue, isCartonFlag) {
         if (isCartonFlag === true) return true;
         if (!unitValue) return false;
@@ -350,71 +340,80 @@
 
     async function loadLiveInventory() {
         try {
-            const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
-                getDocs(collection(db, "invoices")),
-                getDocs(collection(db, "supplier_transactions")),
-                getDocs(collection(db, "inventory")),
-                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
-            ]);
+            // جلب المخزن أولاً لضمان سرعة الاستجابة وعرض الصفحة فوراً
+            onSnapshot(collection(db, "inventory"), async (snap) => {
+                const factorsMap = new Map();
+                const namesMap = new Map();
 
-            const factorsMap = new Map();
-            const namesMap = new Map();
+                snap.forEach(d => {
+                    const data = d.data();
+                    const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                    factorsMap.set(d.id, f);
+                    if (data.name) namesMap.set(normalizeAr(data.name), d.id);
+                });
 
-            inventorySnap.forEach(d => {
-                const data = d.data();
-                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-                factorsMap.set(d.id, f);
-                if (data.name) namesMap.set(data.name.trim(), d.id);
-            });
+                // جلب باقي الحركات بصورة آمنة بدون توقف الصفحة
+                try {
+                    const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
+                        getDocs(collection(db, "invoices")).catch(() => ({ forEach: () => {} })),
+                        getDocs(collection(db, "supplier_transactions")).catch(() => ({ forEach: () => {} })),
+                        getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance"))).catch(() => ({ forEach: () => {} }))
+                    ]);
 
-            salesMapGlobal.clear();
-            purchasesMapGlobal.clear();
-            openingMapGlobal.clear();
+                    salesMapGlobal.clear();
+                    purchasesMapGlobal.clear();
+                    openingMapGlobal.clear();
 
-            transSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.productId) {
-                    const current = openingMapGlobal.get(data.productId) || 0;
-                    openingMapGlobal.set(data.productId, current + (Number(data.quantityPcs) || 0));
-                }
-            });
-
-            invoicesSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const rawQty = Number(item.qty) || 0;
-                        const isCarton = isCartonUnit(item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-                        
-                        const current = salesMapGlobal.get(id) || 0;
-                        salesMapGlobal.set(id, item.isReturn ? current - pcs : current + pcs);
+                    if (transSnap.forEach) {
+                        transSnap.forEach(docSnap => {
+                            const data = docSnap.data();
+                            if (data.productId) {
+                                const current = openingMapGlobal.get(data.productId) || 0;
+                                openingMapGlobal.set(data.productId, current + (Number(data.quantityPcs) || 0));
+                            }
+                        });
                     }
-                }
-            });
 
-            supplierSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-
-                        const current = purchasesMapGlobal.get(id) || 0;
-                        purchasesMapGlobal.set(id, isReturn ? current - pcs : current + pcs);
+                    if (invoicesSnap.forEach) {
+                        invoicesSnap.forEach(docSnap => {
+                            const items = docSnap.data()?.items || [];
+                            items.forEach(item => {
+                                const normName = item.name ? normalizeAr(item.name) : '';
+                                const id = item.stockId || namesMap.get(normName);
+                                if (id) {
+                                    const factor = factorsMap.get(id) || 1;
+                                    const rawQty = Number(item.qty) || 0;
+                                    const isCarton = isCartonUnit(item.unit, item.isCarton);
+                                    const pcs = isCarton ? (rawQty * factor) : rawQty;
+                                    const current = salesMapGlobal.get(id) || 0;
+                                    salesMapGlobal.set(id, item.isReturn ? current - pcs : current + pcs);
+                                }
+                            });
+                        });
                     }
-                }
-            });
 
-            onSnapshot(collection(db, "inventory"), (snap) => {
+                    if (supplierSnap.forEach) {
+                        supplierSnap.forEach(docSnap => {
+                            const items = docSnap.data()?.items || [];
+                            items.forEach(item => {
+                                const normName = item.name ? normalizeAr(item.name) : '';
+                                const id = item.stockId || namesMap.get(normName);
+                                if (id) {
+                                    const factor = factorsMap.get(id) || 1;
+                                    const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                                    const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                                    const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                                    const pcs = isCarton ? (rawQty * factor) : rawQty;
+                                    const current = purchasesMapGlobal.get(id) || 0;
+                                    purchasesMapGlobal.set(id, isReturn ? current - pcs : current + pcs);
+                                }
+                            });
+                        });
+                    }
+                } catch (err) {
+                    console.warn("خطأ غير يعيق الحركة:", err);
+                }
+
                 allItems = [];
                 snap.forEach(doc => {
                     const data = doc.data();
@@ -487,14 +486,6 @@
     }
 
     loadLiveInventory();
-
-    function normalizeAr(s) {
-        return String(s || '').trim()
-            .replace(/[\u064B-\u0652]/g, '')
-            .replace(/[إأآا]/g, 'ا')
-            .replace(/ى/g, 'ي')
-            .replace(/ة/g, 'ه');
-    }
 
     function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
         totalPcs = parseInt(totalPcs) || 0;
