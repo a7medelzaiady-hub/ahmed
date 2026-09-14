@@ -246,14 +246,50 @@
         .summary-card {
             background: white;
             flex: 1 1 calc(50% - 5px);
-            padding: 12px;
+            padding: 10px 12px;
             border-radius: var(--radius-md);
             border: 1px solid rgba(0,0,0,0.03);
             box-shadow: var(--card-shadow);
             border-right: 4px solid var(--primary);
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+            user-select: none;
+        }
+        .summary-card:active {
+            transform: scale(0.97);
+        }
+        .summary-card.active-filter {
+            border-right-color: var(--warning);
+            background: var(--primary-light);
+            box-shadow: 0 0 0 2px var(--primary);
         }
         .summary-title { font-size: 0.75rem; color: var(--text-muted); font-weight: 800; margin-bottom: 2px;}
-        .summary-value { font-size: 1rem; color: var(--text-dark); font-weight: 900;}
+        .summary-value { font-size: 0.95rem; color: var(--text-dark); font-weight: 900;}
+        .summary-avg { font-size: 0.68rem; color: var(--primary); font-weight: 800; margin-top: 4px; border-top: 1px dashed var(--border-color); padding-top: 4px; }
+
+        /* شريط التصفية الحالي */
+        .filter-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            color: #92400e;
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            margin: 0 16px 12px;
+            font-size: 0.8rem;
+            font-weight: 800;
+        }
+        .filter-banner button {
+            background: #f59e0b;
+            color: white;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 800;
+        }
 
         .expense-item { 
             display: flex; 
@@ -373,9 +409,15 @@
                 </button>
             </div>
 
-            <!-- حاوية ملخص المصروفات -->
+            <!-- حاوية ملخص البنود -->
             <div id="summaryContainer" class="summary-container"></div>
             
+            <!-- شريط التنبيه بوجود فلتر فعال -->
+            <div id="filterBanner" class="filter-banner" style="display: none;">
+                <span><i class="fas fa-filter me-1"></i> تصفية بحسب: <b id="activeFilterName"></b></span>
+                <button onclick="clearCategoryFilter()">عرض الكل <i class="fas fa-times ms-1"></i></button>
+            </div>
+
             <div id="expensesList">
                 <div class="text-center text-muted py-5">
                     <div class="spinner-border text-success" role="status" style="width: 1.5rem; height: 1.5rem;"></div>
@@ -388,7 +430,6 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    // إضافة updateDoc للمستوردات
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -413,13 +454,13 @@
 
     document.getElementById('expDate').valueAsDate = new Date();
     let allExpenses = [];
-    let currentEditId = null; // متغير لحفظ الـ ID عند التعديل
+    let currentEditId = null; 
+    let selectedCategoryFilter = null; // متغير يحفظ الفلتر الحالي
 
     window.toggleOtherField = (val) => {
         document.getElementById('otherTypeDiv').style.display = (val === 'أخرى') ? 'block' : 'none';
     };
 
-    // دالة تفريغ الحقول وإلغاء وضع التعديل
     window.cancelEdit = () => {
         currentEditId = null;
         document.getElementById('btnSave').textContent = "تأكيد وحفظ الحركة";
@@ -452,12 +493,10 @@
 
         try {
             if (currentEditId) {
-                // ---------- تحديث مصروف موجود ----------
                 await updateDoc(doc(db, "expenses", currentEditId), {
                     type, paymentMethod, amount: amt, note, date
                 });
 
-                // تحديث سجل النقدىة المرتبط (cash_logs)
                 const logsSnap = await getDocs(query(collection(db, "cash_logs")));
                 for (const logDoc of logsSnap.docs) {
                     if (logDoc.data().expenseId === currentEditId) {
@@ -470,10 +509,9 @@
                 }
                 alert("تم تحديث المصروف بنجاح ✅");
                 cancelEdit();
-                location.reload(); // إعادة التحميل لتحديث القوائم
+                location.reload();
 
             } else {
-                // ---------- إضافة مصروف جديد ----------
                 const expenseRef = await addDoc(collection(db, "expenses"), { 
                     type, paymentMethod, amount: amt, note, date, timestamp: serverTimestamp() 
                 });
@@ -496,18 +534,15 @@
         }
     };
 
-    // نقل بيانات المصروف لنموذج الإضافة لتعديله
     window.editExpense = (id) => {
         const exp = allExpenses.find(e => e.id === id);
         if(!exp) return;
 
-        // تعبئة البيانات في الحقول
         document.getElementById('paymentMethod').value = exp.paymentMethod;
         document.getElementById('expAmount').value = exp.amount;
         document.getElementById('expDate').value = exp.date;
         document.getElementById('expNote').value = exp.note;
 
-        // التحقق من نوع المصروف (إذا كان في القائمة أو "أخرى")
         const typeSelect = document.getElementById('expType');
         const options = Array.from(typeSelect.options).map(o => o.value);
         if (options.includes(exp.type)) {
@@ -519,90 +554,146 @@
             document.getElementById('otherTypeInput').value = exp.type;
         }
 
-        // تغيير حالة الزر إلى "تحديث"
         currentEditId = id;
         document.getElementById('btnSave').textContent = "تحديث البيانات";
         document.getElementById('btnSave').className = "btn-update";
         document.getElementById('btnCancelEdit').style.display = "block";
 
-        // الانتقال لتبويب الإضافة
         const addTab = new bootstrap.Tab(document.querySelector('button[data-bs-target="#addContent"]'));
         addTab.show();
     };
 
+    // دالة تصفية القائمة بالضغط على الكارت
+    window.filterByCategory = (categoryType) => {
+        if (selectedCategoryFilter === categoryType) {
+            window.clearCategoryFilter();
+            return;
+        }
+        selectedCategoryFilter = categoryType;
+        document.getElementById('activeFilterName').textContent = categoryType;
+        document.getElementById('filterBanner').style.display = 'flex';
+        renderExpensesUI();
+    };
+
+    // إلغاء الفلترة
+    window.clearCategoryFilter = () => {
+        selectedCategoryFilter = null;
+        document.getElementById('filterBanner').style.display = 'none';
+        renderExpensesUI();
+    };
+
     async function loadExpenses() {
-        const expensesContainer = document.getElementById('expensesList');
-        const summaryContainer = document.getElementById('summaryContainer');
-        
         try {
             const q = query(collection(db, "expenses"), orderBy("date", "desc"));
             const querySnapshot = await getDocs(q);
             
             allExpenses = [];
-            let categoryTotals = {}; // مصفوفة لحساب إجمالي كل بند
-
-            expensesContainer.innerHTML = '';
-            summaryContainer.innerHTML = '';
-
-            if (querySnapshot.empty) {
-                expensesContainer.innerHTML = `<div class="text-center text-muted py-5 fw-bold" style="font-size:0.85rem;">لا توجد مصروفات مسجلة حتى الآن</div>`;
-                return;
-            }
-
             querySnapshot.forEach((docSnap) => {
                 const data = docSnap.data();
-                const expItem = {
+                allExpenses.push({
                     id: docSnap.id,
                     type: data.type,
                     amount: Number(data.amount) || 0,
                     date: data.date,
                     note: data.note || '',
                     paymentMethod: data.paymentMethod || 'نقدى'
-                };
-                allExpenses.push(expItem);
-
-                // تجميع مجاميع البنود
-                categoryTotals[expItem.type] = (categoryTotals[expItem.type] || 0) + expItem.amount;
-
-                const itemHtml = `
-                    <div class="expense-item" id="item-${expItem.id}">
-                        <div class="expense-info">
-                            <span class="expense-type">${expItem.type}</span>
-                            <span class="expense-meta">
-                                <i class="far fa-calendar-alt me-1"></i> <span class="num">${expItem.date}</span> 
-                                | <i class="fas fa-wallet ms-1 me-1"></i> ${expItem.paymentMethod}
-                                ${expItem.note ? ` | <i class="far fa-sticky-note ms-1 me-1"></i> ${expItem.note}` : ''}
-                            </span>
-                        </div>
-                        <div class="expense-actions-wrapper">
-                            <span class="expense-amount num">${expItem.amount.toLocaleString('en-US')}</span>
-                            <button class="action-btn btn-edit-item" onclick="editExpense('${expItem.id}')" title="تعديل">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="action-btn btn-delete" onclick="deleteExpense('${expItem.id}')" title="حذف">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </div>
-                    </div>`;
-                expensesContainer.insertAdjacentHTML('beforeend', itemHtml);
+                });
             });
 
-            // عرض البطاقات الخاصة بإجمالي كل بند (إخفاء البنود الصفرية)
-            for (const [type, total] of Object.entries(categoryTotals)) {
-                if (total > 0) {
-                    summaryContainer.insertAdjacentHTML('beforeend', `
-                        <div class="summary-card">
-                            <div class="summary-title">إجمالي ${type}</div>
-                            <div class="summary-value num">${total.toLocaleString('en-US')} ج.م</div>
-                        </div>
-                    `);
-                }
-            }
+            renderExpensesUI();
 
         } catch (e) {
             console.error(e);
-            expensesContainer.innerHTML = `<div class="alert alert-danger text-center m-3">حدث خطأ أثناء تحميل البيانات!</div>`;
+            document.getElementById('expensesList').innerHTML = `<div class="alert alert-danger text-center m-3">حدث خطأ أثناء تحميل البيانات!</div>`;
         }
+    }
+
+    function renderExpensesUI() {
+        const expensesContainer = document.getElementById('expensesList');
+        const summaryContainer = document.getElementById('summaryContainer');
+
+        expensesContainer.innerHTML = '';
+        summaryContainer.innerHTML = '';
+
+        if (allExpenses.length === 0) {
+            expensesContainer.innerHTML = `<div class="text-center text-muted py-5 fw-bold" style="font-size:0.85rem;">لا توجد مصروفات مسجلة حتى الآن</div>`;
+            return;
+        }
+
+        // 1. حساب مجاميع البنود ومتوسطات الأيام
+        let categoryStats = {}; 
+
+        allExpenses.forEach(exp => {
+            if (!categoryStats[exp.type]) {
+                categoryStats[exp.type] = {
+                    total: 0,
+                    minDate: exp.date,
+                    maxDate: exp.date
+                };
+            }
+            categoryStats[exp.type].total += exp.amount;
+            if (exp.date < categoryStats[exp.type].minDate) categoryStats[exp.type].minDate = exp.date;
+            if (exp.date > categoryStats[exp.type].maxDate) categoryStats[exp.type].maxDate = exp.date;
+        });
+
+        // 2. بناء كروت الملخص مع متوسط الصرف اليومي
+        for (const [type, stats] of Object.entries(categoryStats)) {
+            if (stats.total > 0) {
+                // حساب عدد الأيام
+                const d1 = new Date(stats.minDate);
+                const d2 = new Date(stats.maxDate);
+                const diffTime = Math.abs(d2 - d1);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // الأيام شاملة اليوم الأول والأخير
+                
+                const avgDaily = Math.round(stats.total / (diffDays || 1));
+                const isActive = (selectedCategoryFilter === type);
+
+                summaryContainer.insertAdjacentHTML('beforeend', `
+                    <div class="summary-card ${isActive ? 'active-filter' : ''}" onclick="filterByCategory('${type}')">
+                        <div class="summary-title">إجمالي ${type}</div>
+                        <div class="summary-value num">${stats.total.toLocaleString('en-US')} ج.م</div>
+                        <div class="summary-avg">
+                            <i class="fas fa-chart-line me-1"></i> بمتوسط <span class="num">${avgDaily.toLocaleString('en-US')}</span> ج.م / يوم
+                        </div>
+                    </div>
+                `);
+            }
+        }
+
+        // 3. فلترة المصروفات المعروضة بالقائمة
+        const listToRender = selectedCategoryFilter 
+            ? allExpenses.filter(e => e.type === selectedCategoryFilter)
+            : allExpenses;
+
+        if (listToRender.length === 0) {
+            expensesContainer.innerHTML = `<div class="text-center text-muted py-4 fw-bold" style="font-size:0.85rem;">لا توجد عناصر لهذا البند</div>`;
+            return;
+        }
+
+        // 4. عرض عناصر المصروفات
+        listToRender.forEach(expItem => {
+            const itemHtml = `
+                <div class="expense-item" id="item-${expItem.id}">
+                    <div class="expense-info">
+                        <span class="expense-type">${expItem.type}</span>
+                        <span class="expense-meta">
+                            <i class="far fa-calendar-alt me-1"></i> <span class="num">${expItem.date}</span> 
+                            | <i class="fas fa-wallet ms-1 me-1"></i> ${expItem.paymentMethod}
+                            ${expItem.note ? ` | <i class="far fa-sticky-note ms-1 me-1"></i> ${expItem.note}` : ''}
+                        </span>
+                    </div>
+                    <div class="expense-actions-wrapper">
+                        <span class="expense-amount num">${expItem.amount.toLocaleString('en-US')}</span>
+                        <button class="action-btn btn-edit-item" onclick="editExpense('${expItem.id}')" title="تعديل">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="action-btn btn-delete" onclick="deleteExpense('${expItem.id}')" title="حذف">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>`;
+            expensesContainer.insertAdjacentHTML('beforeend', itemHtml);
+        });
     }
 
     window.deleteExpense = async (id) => {
@@ -619,7 +710,7 @@
                 }
             }
             alert("تم الحذف بنجاح ✅");
-            location.reload(); // إعادة تحميل الصفحة لتحديث المجاميع
+            location.reload(); 
         } catch (e) {
             console.error(e);
             alert("فشل حذف المستند!");
@@ -659,7 +750,6 @@
             return alert("لا توجد بيانات مصروفات لتصديرها حالياً!");
         }
 
-        // الترتيب الجديد: التاريخ - نوع المصروف - نوع الكاش - البيان - المبلغ
         const formattedData = allExpenses.map((exp) => ({
             "التاريخ": exp.date,
             "نوع المصروف": exp.type,
