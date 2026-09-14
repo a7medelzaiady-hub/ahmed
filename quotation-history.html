@@ -568,7 +568,6 @@ function listenToDailyLoadChanges() {
     
     saveLocalFallback();
 
-    // التحديث المباشر للواجهات عند وصول بيانات من جهاز آخر
     if (document.getElementById('pg-load').classList.contains('active')) {
       renderLoadFlow();
     }
@@ -622,35 +621,9 @@ function saveLocalFallback() {
   localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
 }
 
+// تم إلغاء التسجيل التلقائي من الكتابة - التسجيل فقط بالضغط على زر "تم"
 window.handleLiveInputChange = function(itemId) {
-  const it = firebaseItems.find(i => i.id === itemId);
-  if (!it) return;
-
-  const prevCartons = parseFloat(document.getElementById(`plc-${itemId}`)?.value) || 0;
-  const prevLoose   = parseInt(document.getElementById(`pll-${itemId}`)?.value) || 0;
-  const cartons     = parseFloat(document.getElementById(`lc-${itemId}`)?.value) || 0;
-  const loose       = parseInt(document.getElementById(`ll-${itemId}`)?.value) || 0;
-
-  const hasEnteredAny = (document.getElementById(`plc-${itemId}`)?.value !== '') ||
-                        (document.getElementById(`pll-${itemId}`)?.value !== '') ||
-                        (document.getElementById(`lc-${itemId}`)?.value !== '')  ||
-                        (document.getElementById(`ll-${itemId}`)?.value !== '');
-
-  if (hasEnteredAny) {
-    const now = new Date();
-    const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-
-    loadedInSession[itemId] = { prevCartons, prevLoose, cartons, loose };
-    if (!cartItems[itemId]) cartItems[itemId] = { name: it.name, capacity: it.capacity };
-
-    cartItems[itemId].prevCartons   = prevCartons;
-    cartItems[itemId].prevLoose     = prevLoose;
-    cartItems[itemId].loadedCartons = cartons;
-    cartItems[itemId].loadedLoose   = loose;
-    cartItems[itemId].lastEditedAt  = editTimeStr;
-
-    saveSessionCloud();
-  }
+  // دالة مفرغة لمنع التسجيل التلقائي فور الكتابة
 };
 
 function getUnitName(name) {
@@ -1019,10 +992,6 @@ function renderLoadFlow() {
       }
     }
 
-    if (!isDone && isPiecesItem(it) && loadedLooseDefault === '') { 
-      loadedLooseDefault = it.totalPcs > 0 ? it.totalPcs : ''; 
-    }
-
     if (isDone) {
       const sess = loadedInSession[it.id];
       const prevPcs = (parseFloat(sess.prevCartons || 0) * it.capacity) + parseInt(sess.prevLoose || 0);
@@ -1051,11 +1020,11 @@ function renderLoadFlow() {
               <div class="load-inputs-flex">
                 <div class="field-inline">
                   <label>📦 كرتونة</label>
-                  <input type="number" inputmode="decimal" id="plc-${it.id}" placeholder="0" min="0" step="any" value="${prevCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'pll-${it.id}', 'lc-${it.id}')">
+                  <input type="number" inputmode="decimal" id="plc-${it.id}" placeholder="0" min="0" step="any" value="${prevCartonsDefault}" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'pll-${it.id}', 'lc-${it.id}')">
                 </div>
                 <div class="field-inline">
                   <label>📦 ${unit}</label>
-                  <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'lc-${it.id}', 'll-${it.id}')">
+                  <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'lc-${it.id}', 'll-${it.id}')">
                 </div>
               </div>
             </div>
@@ -1065,11 +1034,11 @@ function renderLoadFlow() {
               <div class="load-inputs-flex">
                 <div class="field-inline priority-field">
                   <label>📦 كرتونة</label>
-                  <input type="number" inputmode="decimal" id="lc-${it.id}" placeholder="0" min="0" step="any" value="${loadedCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'll-${it.id}', 'btn-${it.id}')">
+                  <input type="number" inputmode="decimal" id="lc-${it.id}" placeholder="0" min="0" step="any" value="${loadedCartonsDefault}" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'll-${it.id}', 'btn-${it.id}')">
                 </div>
                 <div class="field-inline">
                   <label>📦 ${unit}</label>
-                  <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="0" min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.confirmStep('${it.id}')">
+                  <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="0" min="0" value="${loadedLooseDefault}" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.confirmStep('${it.id}')">
                 </div>
               </div>
             </div>
@@ -1084,7 +1053,7 @@ function renderLoadFlow() {
               <div class="load-section-title">🛑 قبل التحميل (سابق)</div>
               <div class="field-inline">
                 <label>الكمية السابقة (${unit})</label>
-                <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'll-${it.id}', 'btn-${it.id}')">
+                <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'll-${it.id}', 'btn-${it.id}')">
               </div>
             </div>
 
@@ -1092,7 +1061,7 @@ function renderLoadFlow() {
               <div class="load-section-title" style="color:var(--brand);">⬆️ التحميل الجديد</div>
               <div class="field-inline">
                 <label>الكمية المحملة (${unit})</label>
-                <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="أدخل عدد الـ ${unit}..." min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.confirmStep('${it.id}')">
+                <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="أدخل عدد الـ ${unit}..." min="0" value="${loadedLooseDefault}" onfocus="this.select()" onkeydown="if(event.key==='Enter') window.confirmStep('${it.id}')">
               </div>
             </div>
           </div>`;
@@ -1109,7 +1078,6 @@ function renderLoadFlow() {
             ${isNewBadge}
           </div>
         </div>
-        ${isPiecesItem(it) ? `<div style="font-size:11px;color:var(--blue);font-weight:800;margin-bottom:6px;padding:4px 8px;background:var(--blue-lt);border-radius:8px;display:inline-block;">💡 تم اقتراح كمية المخزون تلقائياً — يمكنك تعديلها</div>` : ''}
         <div class="frow-inline">
           ${inputFieldsHtml}
           <button id="btn-${it.id}" class="btn btn-success btn-confirm-load" onclick="window.confirmStep('${it.id}')">تـم ✔</button>
@@ -1131,6 +1099,7 @@ window.focusNextInput = function(e, primaryTargetId, secondaryTargetId) {
   }
 };
 
+// يتم اعتماد تسجيل التحميل رسمياً وحفظه عند ضغط زر "تم ✔" حصراً
 window.confirmStep = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   
@@ -1173,20 +1142,15 @@ window.confirmStep = function(itemId) {
   }, 50);
 };
 
+// إصلاح دالة التعديل بشكل نهائي
 window.editStep = function(itemId) {
   delete loadedInSession[itemId]; 
-  if (cartItems[itemId]) { 
-    cartItems[itemId].loadedCartons = 0; 
-    cartItems[itemId].loadedLoose = 0; 
-    cartItems[itemId].prevCartons = 0; 
-    cartItems[itemId].prevLoose = 0; 
-  } 
   saveSessionCloud(); 
   renderLoadFlow();
   setTimeout(() => { 
     const step = document.getElementById('step-' + itemId); 
     if (step) { 
-      const inp = document.getElementById(`plc-${itemId}`) || document.getElementById(`pll-${itemId}`) || document.getElementById(`lc-${itemId}`) || document.getElementById(`ll-${itemId}`); 
+      const inp = document.getElementById(`lc-${itemId}`) || document.getElementById(`ll-${itemId}`) || document.getElementById(`plc-${itemId}`) || document.getElementById(`pll-${itemId}`); 
       if (inp) { 
         inp.focus(); 
         inp.select(); 
@@ -1483,7 +1447,7 @@ window.openEditLoadModal = function(itemId) {
   document.getElementById('editLoadModal').classList.add('open'); 
 
   setTimeout(() => { 
-    const inp = document.getElementById('m-plc') || document.getElementById('m-pll') || document.getElementById('m-lc') || document.getElementById('m-ll'); 
+    const inp = document.getElementById('m-lc') || document.getElementById('m-ll') || document.getElementById('m-plc') || document.getElementById('m-pll'); 
     if (inp) { inp.focus(); inp.select(); } 
   }, 150);
 };
