@@ -567,6 +567,8 @@ function listenToDailyLoadChanges() {
     }
     
     saveLocalFallback();
+
+    // التحديث المباشر للواجهات عند وصول بيانات من جهاز آخر
     if (document.getElementById('pg-load').classList.contains('active')) {
       renderLoadFlow();
     }
@@ -586,6 +588,9 @@ function listenToDailyLoadChanges() {
           previousTruckStock[id] = prevCart[id].inTruckPcs;
         }
       });
+    }
+    if (document.getElementById('pg-load').classList.contains('active')) {
+      renderLoadFlow();
     }
   });
 }
@@ -617,7 +622,6 @@ function saveLocalFallback() {
   localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
 }
 
-/* التنسيق وحفظ القيم في الوقت الفعلي أثناء الكتابة من أي جهاز */
 window.handleLiveInputChange = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   if (!it) return;
@@ -971,6 +975,7 @@ function initLoadFlow() {
 function renderLoadFlow() {
   const flow    = document.getElementById('loadFlow');
   const doneMsg = document.getElementById('loadDoneMsg');
+  if (!flow) return;
   flow.innerHTML = '';
   const searchVal = cleanItemName(document.getElementById('searchLoad').value);
   const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
@@ -1569,7 +1574,6 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
-/* تسريع جلب بيانات الأرشيف باستخدام Promise.all وجلب جماعي سريع */
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
@@ -1650,7 +1654,6 @@ window.fetchArchive = async function() {
   }
 };
 
-/* دالة مشاركة التقرير كملف PDF حقيقي عبر نافذة نظام الموبايل العامة */
 window.shareArchiveWhatsApp = async function(d) {
   window.toast('⏳ جاري تجهيز ملف الـ PDF للمشاركة العامة...');
   try {
