@@ -109,6 +109,9 @@
         .daily-table td { padding: 6px 4px; border: 1px solid var(--border); text-align: center; font-weight: 700; font-size: 0.72rem; }
         .daily-table tfoot td { background: #f8fafc; font-weight: 900; position: sticky; bottom: 0; }
 
+        .day-group-box { background: white; border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+        .day-group-header { background: #1e293b; color: white; padding: 8px 12px; font-weight: 800; font-size: 0.82rem; display: flex; justify-content: space-between; align-items: center; }
+
         .empty-state { text-align: center; padding: 40px 10px; color: var(--text-secondary); }
         .empty-state i { color: #cbd5e1; }
         .loading-note { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-weight: 700; }
@@ -385,7 +388,7 @@
         
         const groupByDayOfWeek = {};
         weekDayOrder.forEach(d => {
-            groupByDayOfWeek[d] = { count: 0, vanCash: 0, voucherCash: 0, voucherWallet: 0, totalAll: 0, dates: new Set() };
+            groupByDayOfWeek[d] = { count: 0, vanCash: 0, voucherCash: 0, voucherWallet: 0, totalAll: 0, datesMap: {} };
         });
 
         sortedDays.forEach(dayStr => {
@@ -401,7 +404,7 @@
                 groupByDayOfWeek[arabicDayName].voucherCash += item.voucherCash;
                 groupByDayOfWeek[arabicDayName].voucherWallet += item.voucherWallet;
                 groupByDayOfWeek[arabicDayName].totalAll += item.totalAll;
-                groupByDayOfWeek[arabicDayName].dates.add(dayStr);
+                groupByDayOfWeek[arabicDayName].datesMap[dayStr] = item;
             }
         });
 
@@ -432,7 +435,7 @@
             dailyRowsHtml = `<tr><td colspan="6" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
         }
 
-        // بناء صفوف قسم تجميع أيام الأسبوع
+        // 1. بناء صفوف تجميع أيام الأسبوع (المجمل)
         let weekGroupRowsHtml = '';
         let totalWeekVanCash = 0, totalWeekVoucherCash = 0, totalWeekVoucherWallet = 0, totalWeekAllSales = 0, totalWeekDaysCount = 0;
 
@@ -462,6 +465,65 @@
             weekGroupRowsHtml = `<tr><td colspan="7" class="text-center text-muted">لا توجد بيانات أسبوعية كافية</td></tr>`;
         }
 
+        // 2. بناء تفاصيل كل يوم أسبوعياً بالتاريخ (لمقارنة الأسبوع بالأسبوع)
+        let weekDayDetailsHtml = '';
+        weekDayOrder.forEach(dayName => {
+            const group = groupByDayOfWeek[dayName];
+            const datesList = Object.keys(group.datesMap).sort().reverse();
+
+            if (datesList.length > 0) {
+                let rows = datesList.map(dateStr => {
+                    const item = group.datesMap[dateStr];
+                    const vanCombined = item.vanCash + item.voucherCash + item.voucherWallet;
+                    return `<tr>
+                        <td>${dateStr}</td>
+                        <td class="num">${fmt(item.vanCash)}</td>
+                        <td class="num">${fmt(item.voucherCash)}</td>
+                        <td class="num">${fmt(item.voucherWallet)}</td>
+                        <td class="num" style="font-weight:900;">${fmt(vanCombined)}</td>
+                        <td class="num">${fmt(item.totalAll)}</td>
+                    </tr>`;
+                }).join('');
+
+                const combinedGroupTotal = group.vanCash + group.voucherCash + group.voucherWallet;
+                const avgGroupCombined = group.count > 0 ? (combinedGroupTotal / group.count) : 0;
+
+                weekDayDetailsHtml += `
+                    <div class="day-group-box">
+                        <div class="day-group-header">
+                            <span><i class="fas fa-calendar-alt me-1"></i> يوم ${dayName} (${group.count} أسطر/تواريخ)</span>
+                            <span class="num" style="color:var(--germany-gold);">المتوسط لهذا اليوم: ${fmt(avgGroupCombined)}</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="daily-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>التاريخ Exact</th>
+                                        <th>نقدي العربية (مبيعات)</th>
+                                        <th>سندات نقدي</th>
+                                        <th>سندات محفظة</th>
+                                        <th>إجمالي نقدي العربية والسند</th>
+                                        <th>إجمالي مبيعات اليوم (ككل)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rows}</tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td>إجمالي أيام (${dayName})</td>
+                                        <td class="num">${fmt(group.vanCash)}</td>
+                                        <td class="num">${fmt(group.voucherCash)}</td>
+                                        <td class="num">${fmt(group.voucherWallet)}</td>
+                                        <td class="num">${fmt(combinedGroupTotal)}</td>
+                                        <td class="num">${fmt(group.totalAll)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
         const html = `
             <div class="section-title"><i class="fas fa-calculator"></i> المتوسطات</div>
             <div class="row g-2">
@@ -490,8 +552,8 @@
                 <div class="grand-row"><span><i class="fas fa-percentage me-1" style="color:var(--germany-gold);"></i> متوسط المبيعات اليومي ككل</span><span class="num">${fmt(avgDailySalesAll)}</span></div>
             </div>
 
-            <!-- قسم تجميع أيام الأسبوع الجديد -->
-            <div class="section-title"><i class="fas fa-calendar-week"></i> تحليل أيام الأسبوع (تجميع مجمّع لكل يوم أسبوعي)</div>
+            <!-- قسم تجميع أيام الأسبوع المجمل -->
+            <div class="section-title"><i class="fas fa-calendar-week"></i> 1. إجمالي أيام الأسبوع (مجمل لكل يوم أسبوعي)</div>
             <div class="daily-table-wrap mb-3">
                 <table class="daily-table">
                     <thead>
@@ -520,7 +582,13 @@
                 </table>
             </div>
 
-            <div class="section-title"><i class="fas fa-table"></i> تفصيل يومي</div>
+            <!-- قسم مقارنة الأسبوع بالأسبوع بالتفصيل لكل يوم -->
+            <div class="section-title"><i class="fas fa-tasks"></i> 2. تفاصيل كل يوم أسبوعياً بالتاريخ (لمقارنة الأسبوع بالأسبوع)</div>
+            <div class="mb-4">
+                ${weekDayDetailsHtml || '<div class="text-center text-muted p-3 background-white border-radius-14">لا توجد تواريخ مقسمة</div>'}
+            </div>
+
+            <div class="section-title"><i class="fas fa-table"></i> 3. تفصيل يومي شامل (مرتب بالتاريخ)</div>
             <div class="daily-table-wrap">
                 <table class="daily-table">
                     <thead>
