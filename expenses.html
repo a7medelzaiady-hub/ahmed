@@ -265,7 +265,7 @@
         }
         .summary-title { font-size: 0.75rem; color: var(--text-muted); font-weight: 800; margin-bottom: 2px;}
         .summary-value { font-size: 0.95rem; color: var(--text-dark); font-weight: 900;}
-        .summary-avg { font-size: 0.68rem; color: var(--primary); font-weight: 800; margin-top: 4px; border-top: 1px dashed var(--border-color); padding-top: 4px; }
+        .summary-days { font-size: 0.68rem; color: var(--primary); font-weight: 800; margin-top: 4px; border-top: 1px dashed var(--border-color); padding-top: 4px; }
 
         /* شريط التصفية الحالي */
         .filter-banner {
@@ -455,7 +455,7 @@
     document.getElementById('expDate').valueAsDate = new Date();
     let allExpenses = [];
     let currentEditId = null; 
-    let selectedCategoryFilter = null; // متغير يحفظ الفلتر الحالي
+    let selectedCategoryFilter = null;
 
     window.toggleOtherField = (val) => {
         document.getElementById('otherTypeDiv').style.display = (val === 'أخرى') ? 'block' : 'none';
@@ -563,7 +563,6 @@
         addTab.show();
     };
 
-    // دالة تصفية القائمة بالضغط على الكارت
     window.filterByCategory = (categoryType) => {
         if (selectedCategoryFilter === categoryType) {
             window.clearCategoryFilter();
@@ -575,7 +574,6 @@
         renderExpensesUI();
     };
 
-    // إلغاء الفلترة
     window.clearCategoryFilter = () => {
         selectedCategoryFilter = null;
         document.getElementById('filterBanner').style.display = 'none';
@@ -620,7 +618,7 @@
             return;
         }
 
-        // 1. حساب مجاميع البنود ومتوسطات الأيام
+        // 1. حساب مجاميع البنود وفارق الأيام لكل بند
         let categoryStats = {}; 
 
         allExpenses.forEach(exp => {
@@ -636,24 +634,23 @@
             if (exp.date > categoryStats[exp.type].maxDate) categoryStats[exp.type].maxDate = exp.date;
         });
 
-        // 2. بناء كروت الملخص مع متوسط الصرف اليومي
+        // 2. بناء كروت الملخص وتنسيق النص على أساس عدد الأيام
         for (const [type, stats] of Object.entries(categoryStats)) {
             if (stats.total > 0) {
-                // حساب عدد الأيام
                 const d1 = new Date(stats.minDate);
                 const d2 = new Date(stats.maxDate);
                 const diffTime = Math.abs(d2 - d1);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // الأيام شاملة اليوم الأول والأخير
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // إجمالي عدد الأيام
                 
-                const avgDaily = Math.round(stats.total / (diffDays || 1));
+                let daysText = (diffDays === 1) ? "خلال يوم واحد" : `خلال <span class="num">${diffDays}</span> يوم`;
                 const isActive = (selectedCategoryFilter === type);
 
                 summaryContainer.insertAdjacentHTML('beforeend', `
                     <div class="summary-card ${isActive ? 'active-filter' : ''}" onclick="filterByCategory('${type}')">
                         <div class="summary-title">إجمالي ${type}</div>
                         <div class="summary-value num">${stats.total.toLocaleString('en-US')} ج.م</div>
-                        <div class="summary-avg">
-                            <i class="fas fa-chart-line me-1"></i> بمتوسط <span class="num">${avgDaily.toLocaleString('en-US')}</span> ج.م / يوم
+                        <div class="summary-days">
+                            <i class="far fa-calendar-check me-1"></i> ${daysText}
                         </div>
                     </div>
                 `);
