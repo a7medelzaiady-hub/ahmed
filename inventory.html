@@ -55,17 +55,19 @@
         .h-title span { color: #ffce31; }
         .h-sub { font-size: 11px; color: rgba(255,255,255,0.75); font-weight: 600; margin-top: 3px; }
         
-        .back-btn, .pdf-btn {
+        .back-btn, .pdf-btn, .quick-btn {
             background: rgba(255,255,255,0.15);
             color: #fff; border: 1px solid rgba(255,255,255,0.25);
-            border-radius: 12px; padding: 8px 14px;
-            font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700;
+            border-radius: 12px; padding: 8px 12px;
+            font-family: 'Cairo', sans-serif; font-size: 12px; font-weight: 700;
             cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
             text-decoration: none; white-space: nowrap; transition: all 0.2s;
         }
         .pdf-btn { background: #d97706; border-color: #f59e0b; }
         .pdf-btn:hover { background: #b45309; }
-        .back-btn:active, .pdf-btn:active { transform: scale(0.95); }
+        .quick-btn { background: #0284c7; border-color: #38bdf8; }
+        .quick-btn:hover { background: #0369a1; }
+        .back-btn:active, .pdf-btn:active, .quick-btn:active { transform: scale(0.95); }
 
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; max-width: 700px; margin: 0 auto; }
         .stat {
@@ -190,7 +192,7 @@
             animation: modalFade 0.2s ease-out;
         }
         @keyframes modalFade { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .modal-header { background: var(--accent); color: #fff; padding: 16px; display: flex; align-items: center; justify-content: space-between; }
+        .modal-header { background: var(--accent); color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
         .modal-header h4 { font-size: 15px; font-weight: 800; width: 100%; }
         .close-modal { background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .modal-body { padding: 12px 16px 20px; overflow-y: auto; flex: 1; background: #f8fafc; }
@@ -216,6 +218,16 @@
         }
         .mc-current .mini-val { color: var(--accent); font-size: 15px; font-weight: 900; }
 
+        /* تنسيقات النظرة السريعة (قائمة رأسية فوق بعض) */
+        .quick-list { display: flex; flex-direction: column; gap: 8px; }
+        .quick-row-item {
+            background: #ffffff; border: 1px solid var(--border); border-radius: 12px;
+            padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .quick-item-name { font-size: 13px; font-weight: 800; color: #0f172a; }
+        .quick-item-qty { font-size: 13px; font-weight: 900; color: var(--accent); background: #f0fdf4; border: 1px solid #bbf7d0; padding: 3px 10px; border-radius: 8px; }
+        .quick-item-qty.zero { color: var(--danger); background: #fef2f2; border-color: #fecdd3; }
+
         #pdfExportTemplate { display: none; padding: 20px; background: #fff; font-family: 'Cairo', sans-serif; color: #000; direction: rtl; }
 
         @media (max-width: 400px) {
@@ -231,9 +243,12 @@
 <body>
 
 <header>
-    <div>
+    <div style="display: flex; gap: 6px;">
         <button class="pdf-btn" id="btnExportPDF">
-            <i class="fas fa-file-pdf"></i> تصدير PDF
+            <i class="fas fa-file-pdf"></i> PDF
+        </button>
+        <button class="quick-btn" id="btnQuickView">
+            <i class="fas fa-list-check"></i> نظرة سريعة
         </button>
     </div>
     <div class="header-center">
@@ -273,6 +288,7 @@
     </div>
 </div>
 
+<!-- مودال تفاصيل الحركات -->
 <div class="modal-overlay" id="historyModal">
     <div class="modal-card">
         <div class="modal-header">
@@ -280,6 +296,17 @@
             <button class="close-modal" id="btnCloseModal"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body" id="modalBody"></div>
+    </div>
+</div>
+
+<!-- مودال النظرة السريعة (قائمة رأسية فوق بعض) -->
+<div class="modal-overlay" id="quickViewModal">
+    <div class="modal-card">
+        <div class="modal-header" style="background: #0284c7;">
+            <h4><i class="fas fa-list-ul me-1"></i> نظرة سريعة على الأصناف</h4>
+            <button class="close-modal" id="btnCloseQuickModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" id="quickModalBody"></div>
     </div>
 </div>
 
@@ -320,7 +347,11 @@
         modalItemName: document.getElementById('modalItemName'),
         modalBody: document.getElementById('modalBody'),
         btnCloseModal: document.getElementById('btnCloseModal'),
-        btnExportPDF: document.getElementById('btnExportPDF')
+        btnExportPDF: document.getElementById('btnExportPDF'),
+        btnQuickView: document.getElementById('btnQuickView'),
+        quickViewModal: document.getElementById('quickViewModal'),
+        quickModalBody: document.getElementById('quickModalBody'),
+        btnCloseQuickModal: document.getElementById('btnCloseQuickModal')
     };
 
     function normalizeAr(s) {
@@ -340,7 +371,6 @@
 
     async function loadLiveInventory() {
         try {
-            // جلب المخزن أولاً لضمان سرعة الاستجابة وعرض الصفحة فوراً
             onSnapshot(collection(db, "inventory"), async (snap) => {
                 const factorsMap = new Map();
                 const namesMap = new Map();
@@ -352,7 +382,6 @@
                     if (data.name) namesMap.set(normalizeAr(data.name), d.id);
                 });
 
-                // جلب باقي الحركات بصورة آمنة بدون توقف الصفحة
                 try {
                     const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
                         getDocs(collection(db, "invoices")).catch(() => ({ forEach: () => {} })),
@@ -602,6 +631,32 @@
         </div>`;
     }
 
+    // دالة النظرة السريعة (تنسيق الأصناف فوق بعضها مع الكميات)
+    function showQuickView() {
+        if (!allItems.length) return alert('لا توجد أصناف حالياً!');
+
+        let listHtml = '<div class="quick-list">';
+        allItems.forEach(item => {
+            const totalPcs = Number(item.totalPcs) || 0;
+            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
+            const rawUnit = (item.unitName || item.unit || 'جركن').trim();
+            const unitName = (rawUnit && normalizeAr(rawUnit) !== normalizeAr('كرتونة')) ? rawUnit : 'جركن';
+            
+            const formattedQty = formatQuantityDetailed(totalPcs, factor, unitName);
+            const isZero = totalPcs <= 0;
+
+            listHtml += `
+            <div class="quick-row-item">
+                <span class="quick-item-name">${item.name || 'بدون اسم'}</span>
+                <span class="quick-item-qty${isZero ? ' zero' : ''}">${formattedQty}</span>
+            </div>`;
+        });
+        listHtml += '</div>';
+
+        dom.quickModalBody.innerHTML = listHtml;
+        dom.quickViewModal.style.display = 'flex';
+    }
+
     async function showItemHistory(itemId, itemName) {
         dom.modalItemName.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
@@ -640,6 +695,10 @@
 
     function closeHistoryModal() {
         dom.historyModal.style.display = 'none';
+    }
+
+    function closeQuickModal() {
+        dom.quickViewModal.style.display = 'none';
     }
 
     function exportInventoryPDF() {
@@ -714,8 +773,13 @@
         }
     });
 
-    dom.btnCloseModal.addEventListener('click', closeHistoryModal);
+    dom.btnQuickView.addEventListener('click', showQuickView);
+    dom.btnCloseQuickModal.addEventListener('click', closeQuickModal);
+    dom.quickViewModal.addEventListener('click', (e) => {
+        if (e.target === dom.quickViewModal) closeQuickModal();
+    });
 
+    dom.btnCloseModal.addEventListener('click', closeHistoryModal);
     dom.historyModal.addEventListener('click', (e) => {
         if (e.target === dom.historyModal) closeHistoryModal();
     });
