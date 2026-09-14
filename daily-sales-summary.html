@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- مكاتب فايربيز -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -52,10 +53,10 @@
         }
         .header-nav h6 { font-weight: 900; font-size: 1.02rem; margin: 0; display: flex; align-items: center; gap: 8px; }
         .add-btn {
-            background: rgba(255,255,255,0.15); width: 38px; height: 38px; border-radius: 12px;
+            background: rgba(255,255,255,0.15); height: 38px; border-radius: 12px;
             display: flex; align-items: center; justify-content: center; color: white;
             text-decoration: none; font-size: 0.95rem; border: 1px solid rgba(255,255,255,0.2);
-            transition: all 0.2s ease;
+            transition: all 0.2s ease; padding: 0 12px; gap: 6px;
         }
         .add-btn:active { transform: scale(0.92); }
 
@@ -75,7 +76,12 @@
             padding: 10px 18px; font-weight: 800; font-family: 'Cairo'; font-size: 0.82rem;
             display: flex; align-items: center; gap: 6px; white-space: nowrap;
         }
-        .apply-btn:active { transform: scale(0.96); }
+        .pdf-btn-danger {
+            background: #dc2626; color: white; border: none; border-radius: 12px;
+            padding: 10px 18px; font-weight: 800; font-family: 'Cairo'; font-size: 0.82rem;
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        }
+        .apply-btn:active, .pdf-btn-danger:active { transform: scale(0.96); }
         .reset-link { font-size: 0.74rem; color: var(--text-secondary); text-decoration: underline; cursor: pointer; }
 
         .section-title {
@@ -115,6 +121,8 @@
         .empty-state { text-align: center; padding: 40px 10px; color: var(--text-secondary); }
         .empty-state i { color: #cbd5e1; }
         .loading-note { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-weight: 700; }
+        
+        #pdfTemplate { display: none; background: #fff; padding: 15px; font-family: 'Cairo', sans-serif; direction: rtl; }
     </style>
 </head>
 <body>
@@ -122,7 +130,10 @@
 <div class="header-nav">
     <a href="sales-history.html" class="add-btn" title="رجوع لسجل المبيعات"><i class="fas fa-arrow-right"></i></a>
     <h6><i class="fas fa-truck-loading me-1"></i> تقرير نقدية العربية والسندات</h6>
-    <button class="add-btn" id="refreshBtn" title="تحديث"><i class="fas fa-sync-alt"></i></button>
+    <div class="d-flex gap-2">
+        <button class="add-btn" id="exportPdfTopBtn" title="تصدير PDF"><i class="fas fa-file-pdf"></i> PDF</button>
+        <button class="add-btn" id="refreshBtn" title="تحديث"><i class="fas fa-sync-alt"></i></button>
+    </div>
 </div>
 
 <div class="container px-2 mt-3">
@@ -154,6 +165,9 @@
 
 </div>
 
+<!-- قالب طباعة الـ PDF المخفي -->
+<div id="pdfTemplate"></div>
+
 <script>
     (function checkLoginGuard() {
         const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
@@ -176,7 +190,6 @@
     let allInvoices = [];
     let allVouchers = [];
     let isLoading = false;
-    let lastLoadedRangeKey = null;
 
     function convertToEnglishNumbers(str) {
         if (!str) return "";
@@ -276,7 +289,7 @@
     function writeCache(from, to, invoices, vouchers) {
         try {
             localStorage.setItem(cacheKey(from, to), JSON.stringify({ invoices, vouchers, savedAt: Date.now() }));
-        } catch (e) { /* تجاهل امتلاء التخزين المحلي */ }
+        } catch (e) { }
     }
 
     async function fetchRange(from, to) {
@@ -306,7 +319,6 @@
     async function loadData(from, to, { showSpinner = true } = {}) {
         if (isLoading) return;
         isLoading = true;
-        const rangeKey = cacheKey(from, to);
 
         const cached = readCache(from, to);
         if (cached) {
@@ -323,7 +335,6 @@
             allInvoices = fresh.invoices;
             allVouchers = fresh.vouchers;
             writeCache(from, to, fresh.invoices, fresh.vouchers);
-            lastLoadedRangeKey = rangeKey;
             document.getElementById('cacheNote').style.display = 'none';
             render();
         } catch (e) {
@@ -361,7 +372,6 @@
         const distinctDaysCount = distinctDaysSet.size || 0;
         const avgDailySalesAll = distinctDaysCount > 0 ? (totalSalesAll / distinctDaysCount) : 0;
 
-        // تجميع يومي للتفصيل
         const dailyMap = {};
         vanInvoices.forEach(inv => {
             const k = inv.dateKey || 'بلا تاريخ';
@@ -382,7 +392,6 @@
 
         const sortedDays = Object.keys(dailyMap).filter(k => k !== 'بلا تاريخ').sort().reverse();
 
-        // تجميع حسب أيام الأسبوع (ترتيب مخصص: السبت، الأحد، الإثنين، الثلاثاء، الأربعاء، الخميس، الجمعة)
         const weekDayOrder = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
         const dayNamesMap = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
         
@@ -394,7 +403,7 @@
         sortedDays.forEach(dayStr => {
             const dObj = new Date(dayStr);
             if (isNaN(dObj)) return;
-            const jsDayIndex = dObj.getDay(); // 0: Sun, 1: Mon ... 6: Sat
+            const jsDayIndex = dObj.getDay();
             const arabicDayName = dayNamesMap[jsDayIndex];
             
             if (groupByDayOfWeek[arabicDayName]) {
@@ -435,7 +444,6 @@
             dailyRowsHtml = `<tr><td colspan="6" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
         }
 
-        // بناء تفاصيل كل يوم أسبوعياً بالتاريخ (المتوسط يُحسب من نقدية العربية والسندات فقط)
         let weekDayDetailsHtml = '';
         const exportWeekList = [];
 
@@ -469,7 +477,6 @@
                 }).join('');
 
                 const combinedGroupTotal = group.vanCash + group.voucherCash + group.voucherWallet;
-                // متوسط هذا اليوم خاص بإجمالي نقدية العربية والسند فقط
                 const avgGroupVanCombined = group.count > 0 ? (combinedGroupTotal / group.count) : 0;
 
                 weekDayDetailsHtml += `
@@ -536,7 +543,6 @@
                 <div class="grand-row"><span><i class="fas fa-percentage me-1" style="color:var(--germany-gold);"></i> متوسط المبيعات اليومي ككل</span><span class="num">${fmt(avgDailySalesAll)}</span></div>
             </div>
 
-            <!-- قسم مقارنة الأسبوع بالأسبوع بالتفصيل لكل يوم -->
             <div class="section-title"><i class="fas fa-tasks"></i> 1. تفاصيل كل يوم أسبوعياً بالتاريخ (لمقارنة الأسبوع بالأسبوع)</div>
             <div class="mb-4">
                 ${weekDayDetailsHtml || '<div class="text-center text-muted p-3 background-white border-radius-14">لا توجد تواريخ مقسمة</div>'}
@@ -570,6 +576,7 @@
             </div>
             <div class="stat-sub text-center mt-2">الترتيب من الأحدث للأقدم — رأس الجدول ثابت أثناء التمرير</div>
             <div class="text-center mt-3 d-flex justify-content-center gap-2 flex-wrap">
+                <button class="pdf-btn-danger" id="exportPdfBtn"><i class="fas fa-file-pdf"></i> تصدير التقرير PDF</button>
                 <button class="apply-btn" id="exportWeekExcelBtn"><i class="fas fa-file-excel"></i> تصدير تحليل الأسبوع إكسيل</button>
                 <button class="apply-btn" id="exportExcelBtn"><i class="fas fa-file-excel"></i> تصدير التفصيل اليومي إكسيل</button>
             </div>
@@ -577,10 +584,91 @@
 
         document.getElementById('mainContent').innerHTML = html;
 
-        // زر تصدير تجميع وتفاصيل أيام الأسبوع
+        // معالجة تصدير الـ PDF
+        const handleExportPDF = () => {
+            const template = document.getElementById('pdfTemplate');
+            const dateText = (from || to) ? `الفترة: من ${from || 'بداية البيانات'} إلى ${to || 'اليوم'}` : 'الفترة: كل الفترات المتاحة';
+            
+            template.style.display = 'block';
+            template.innerHTML = `
+                <div style="text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px;">
+                    <h3 style="margin: 0; font-weight: 900; color: #000;">شركة الزيادي لزيوت السيارات</h3>
+                    <h5 style="margin: 4px 0; font-weight: 800; color: #dc2626;">تقرير نقدية العربية والسندات</h5>
+                    <div style="font-size: 11px; font-weight: 700; color: #4b5563;">${dateText} | تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
+                </div>
+
+                <table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:11px;">
+                    <tr style="background:#f1f5f9;">
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">إجمالي نقدي العربية:</td>
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold; text-align:left;">${fmt(grandVanCashTotal)} ج.م</td>
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">إجمالي محفظة العربية:</td>
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold; text-align:left;">${fmt(vanVoucherWallet)} ج.م</td>
+                    </tr>
+                    <tr style="background:#f1f5f9;">
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">إجمالي المبيعات ككل:</td>
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold; text-align:left;">${fmt(totalSalesAll)} ج.م</td>
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold;">متوسط العربية اليومي:</td>
+                        <td style="padding:6px; border:1px solid #ccc; font-weight:bold; text-align:left;">${fmt(avgDailyVanCombined)} ج.م</td>
+                    </tr>
+                </table>
+
+                <h6 style="font-weight:bold; margin-top:10px; font-size:12px;">التفصيل اليومي للشحنات والنقدية:</h6>
+                <table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: center;">
+                    <thead>
+                        <tr style="background: #1e293b; color: #fff;">
+                            <th style="padding: 5px; border: 1px solid #000;">التاريخ</th>
+                            <th style="padding: 5px; border: 1px solid #000;">نقدي العربية (مبيعات)</th>
+                            <th style="padding: 5px; border: 1px solid #000;">سندات نقدي</th>
+                            <th style="padding: 5px; border: 1px solid #000;">سندات محفظة</th>
+                            <th style="padding: 5px; border: 1px solid #000;">إجمالي نقدي العربية والسند</th>
+                            <th style="padding: 5px; border: 1px solid #000;">إجمالي مبيعات اليوم (ككل)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sortedDays.map(day => {
+                            const d = dailyMap[day];
+                            return `<tr>
+                                <td style="padding: 4px; border: 1px solid #ccc;">${day}</td>
+                                <td style="padding: 4px; border: 1px solid #ccc;">${fmt(d.vanCash)}</td>
+                                <td style="padding: 4px; border: 1px solid #ccc;">${fmt(d.voucherCash)}</td>
+                                <td style="padding: 4px; border: 1px solid #ccc;">${fmt(d.voucherWallet)}</td>
+                                <td style="padding: 4px; border: 1px solid #ccc; font-weight:bold;">${fmt(d.vanCash + d.voucherCash + d.voucherWallet)}</td>
+                                <td style="padding: 4px; border: 1px solid #ccc;">${fmt(d.totalAll)}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #f8fafc; font-weight: bold;">
+                            <td style="padding: 5px; border: 1px solid #000;">الإجمالي الكلي</td>
+                            <td style="padding: 5px; border: 1px solid #000;">${fmt(vanCashSales)}</td>
+                            <td style="padding: 5px; border: 1px solid #000;">${fmt(vanVoucherCash)}</td>
+                            <td style="padding: 5px; border: 1px solid #000;">${fmt(vanVoucherWallet)}</td>
+                            <td style="padding: 5px; border: 1px solid #000;">${fmt(grandVanCashTotal + vanVoucherWallet)}</td>
+                            <td style="padding: 5px; border: 1px solid #000;">${fmt(totalSalesAll)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+
+            const opt = {
+                margin: [8, 8, 8, 8],
+                filename: `تقرير_نقدية_العربية_${from || 'الكل'}_${to || 'الكل'}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(template).save().then(() => {
+                template.style.display = 'none';
+            });
+        };
+
+        document.getElementById('exportPdfBtn').onclick = handleExportPDF;
+        document.getElementById('exportPdfTopBtn').onclick = handleExportPDF;
+
+        // زر تصدير تجميع وتفاصيل أيام الأسبوع إكسيل
         document.getElementById('exportWeekExcelBtn').onclick = () => {
             const wsData = [["اليوم", "التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)"]];
-            
             exportWeekList.forEach(item => {
                 wsData.push([
                     item.dayName,
@@ -592,14 +680,13 @@
                     item.totalAll
                 ]);
             });
-
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "تفاصيل الأسابيع");
             XLSX.writeFile(wb, `تفاصيل_الاسابيع_${from || 'الكل'}_${to || 'الكل'}.xlsx`);
         };
 
-        // زر تصدير التفصيل اليومي
+        // زر تصدير التفصيل اليومي إكسيل
         document.getElementById('exportExcelBtn').onclick = () => {
             const wsData = [["التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)"]];
             sortedDays.forEach(day => {
