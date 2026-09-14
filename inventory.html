@@ -189,7 +189,7 @@
             z-index: 1000; display: none; align-items: center; justify-content: center; padding: 14px;
         }
         .modal-card {
-            background: var(--card); width: 100%; max-width: 600px; border-radius: var(--r); 
+            background: var(--card); width: 100%; max-width: 500px; border-radius: var(--r); 
             box-shadow: 0 15px 30px rgba(0,0,0,0.15); overflow: hidden; 
             display: flex; flex-direction: column; max-height: 85vh;
         }
@@ -219,56 +219,23 @@
         }
         .mc-current .mini-val { color: var(--accent); font-size: 13.5px; font-weight: 900; }
 
-        /* تعديل تصميم القائمة السريعة لتصبح عمودين (صنفين بجانب بعضهما) */
-        .quick-list { 
-            display: grid; 
-            grid-template-columns: 1fr 1fr; 
-            gap: 8px; 
-        }
+        .quick-list { display: flex; flex-direction: column; gap: 6px; }
         .quick-row-item {
-            background: #ffffff; 
-            border: 1px solid var(--border); 
-            border-radius: 10px;
-            padding: 8px 10px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            gap: 6px;
+            background: #ffffff; border: 1px solid var(--border); border-radius: 10px;
+            padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;
         }
-        .quick-item-name { 
-            font-size: 11px; 
-            font-weight: 800; 
-            color: #0f172a; 
-            flex: 1;
-            min-width: 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .quick-item-qty { 
-            font-size: 11px; 
-            font-weight: 900; 
-            color: var(--accent); 
-            background: #f0fdf4; 
-            border: 1px solid #bbf7d0; 
-            padding: 2px 6px; 
-            border-radius: 6px; 
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        .quick-item-qty.zero { 
-            color: var(--danger); 
-            background: #fef2f2; 
-            border-color: #fecdd3; 
-        }
+        .quick-item-name { font-size: 12px; font-weight: 800; color: #0f172a; }
+        .quick-item-qty { font-size: 12px; font-weight: 900; color: var(--accent); background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 6px; }
+        .quick-item-qty.zero { color: var(--danger); background: #fef2f2; border-color: #fecdd3; }
 
         #pdfExportTemplate { display: none; padding: 20px; background: #fff; font-family: 'Cairo', sans-serif; color: #000; direction: rtl; }
 
-        @media (max-width: 480px) {
-            .quick-list { grid-template-columns: 1fr 1fr; gap: 6px; }
-            .quick-row-item { padding: 6px 8px; }
-            .quick-item-name { font-size: 10px; }
-            .quick-item-qty { font-size: 10px; padding: 2px 4px; }
+        @media (max-width: 400px) {
+            #listBody { grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; }
+            .row-name { font-size: 10.5px; height: 28px; }
+            .qty-main { font-size: 13.5px; }
+            .stats { padding: 10px; gap: 6px; }
+            .stat-num { font-size: 20px; }
         }
     </style>
 </head>
@@ -360,6 +327,7 @@
 
     const app = initializeApp(firebaseConfig);
     
+    // تفعيل الكاش المحلي المتقدم لمنع التعليق وعرض الأصناف بشكل فوري
     const db = initializeFirestore(app, {
         localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
     });
@@ -406,6 +374,7 @@
 
     async function loadLiveInventory() {
         try {
+            // الاستماع المباشر مع استغلال الكاش الفوري
             onSnapshot(collection(db, "inventory"), async (snap) => {
                 const factorsMap = new Map();
                 const namesMap = new Map();
@@ -418,6 +387,7 @@
                 });
 
                 try {
+                    // استخدام getDocs لتجميع المبيعات والمشتريات محلياً أو من السيرفر
                     const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
                         getDocs(collection(db, "invoices")).catch(() => ({ forEach: () => {} })),
                         getDocs(collection(db, "supplier_transactions")).catch(() => ({ forEach: () => {} })),
@@ -681,8 +651,8 @@
 
             listHtml += `
             <div class="quick-row-item">
+                <span class="quick-item-name">${item.name || 'بدون اسم'}</span>
                 <span class="quick-item-qty num${isZero ? ' zero' : ''}">${formattedQty}</span>
-                <span class="quick-item-name" title="${item.name || 'بدون اسم'}">${item.name || 'بدون اسم'}</span>
             </div>`;
         });
         listHtml += '</div>';
@@ -782,7 +752,7 @@
             margin: [6, 6, 6, 6],
             filename: `جرد_الأصناف_${new Date().toISOString().slice(0,10)}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(template).save().then(() => { 
             template.style.display = 'none'; 
