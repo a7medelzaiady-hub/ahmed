@@ -435,34 +435,77 @@
             dailyRowsHtml = `<tr><td colspan="6" class="text-center text-muted">لا توجد بيانات ضمن هذه الفترة</td></tr>`;
         }
 
-        // بناء تفاصيل كل يوم أسبوعياً بالتاريخ (لمقارنة الأسبوع بالأسبوع)
+        // بناء تفاصيل كل يوم أسبوعياً بالتاريخ مع الفوارق والمتوسط الصحيح
         let weekDayDetailsHtml = '';
+        const exportWeekList = [];
+
         weekDayOrder.forEach(dayName => {
             const group = groupByDayOfWeek[dayName];
-            const datesList = Object.keys(group.datesMap).sort().reverse();
+            const datesAsc = Object.keys(group.datesMap).sort();
 
-            if (datesList.length > 0) {
-                let rows = datesList.map(dateStr => {
+            if (datesAsc.length > 0) {
+                let prevTotalAll = null;
+                const rowsData = [];
+
+                datesAsc.forEach(dateStr => {
                     const item = group.datesMap[dateStr];
                     const vanCombined = item.vanCash + item.voucherCash + item.voucherWallet;
+                    let diffVal = 0;
+                    let diffHtml = '<span class="text-muted">-</span>';
+
+                    if (prevTotalAll !== null) {
+                        diffVal = item.totalAll - prevTotalAll;
+                        if (diffVal > 0) {
+                            diffHtml = `<span style="color:#16a34a; font-weight:800;"><i class="fas fa-arrow-up me-1"></i>+${fmt(diffVal)}</span>`;
+                        } else if (diffVal < 0) {
+                            diffHtml = `<span style="color:#dc2626; font-weight:800;"><i class="fas fa-arrow-down me-1"></i>${fmt(diffVal)}</span>`;
+                        } else {
+                            diffHtml = `<span style="color:#64748b; font-weight:800;">0.00</span>`;
+                        }
+                    }
+
+                    rowsData.push({
+                        dateStr,
+                        item,
+                        vanCombined,
+                        diffVal,
+                        diffHtml
+                    });
+
+                    exportWeekList.push({
+                        dayName,
+                        dateStr,
+                        vanCash: item.vanCash,
+                        voucherCash: item.voucherCash,
+                        voucherWallet: item.voucherWallet,
+                        vanCombined,
+                        diffVal,
+                        totalAll: item.totalAll
+                    });
+
+                    prevTotalAll = item.totalAll;
+                });
+
+                const rowsHtml = rowsData.reverse().map(r => {
                     return `<tr>
-                        <td>${dateStr}</td>
-                        <td class="num">${fmt(item.vanCash)}</td>
-                        <td class="num">${fmt(item.voucherCash)}</td>
-                        <td class="num">${fmt(item.voucherWallet)}</td>
-                        <td class="num" style="font-weight:900;">${fmt(vanCombined)}</td>
-                        <td class="num">${fmt(item.totalAll)}</td>
+                        <td>${r.dateStr}</td>
+                        <td class="num">${fmt(r.item.vanCash)}</td>
+                        <td class="num">${fmt(r.item.voucherCash)}</td>
+                        <td class="num">${fmt(r.item.voucherWallet)}</td>
+                        <td class="num" style="font-weight:900;">${fmt(r.vanCombined)}</td>
+                        <td class="num">${fmt(r.item.totalAll)}</td>
+                        <td class="num">${r.diffHtml}</td>
                     </tr>`;
                 }).join('');
 
                 const combinedGroupTotal = group.vanCash + group.voucherCash + group.voucherWallet;
-                const avgGroupCombined = group.count > 0 ? (combinedGroupTotal / group.count) : 0;
+                const avgGroupTotalAll = group.count > 0 ? (group.totalAll / group.count) : 0;
 
                 weekDayDetailsHtml += `
                     <div class="day-group-box">
                         <div class="day-group-header">
                             <span><i class="fas fa-calendar-alt me-1"></i> يوم ${dayName} (${group.count} أسطر/تواريخ)</span>
-                            <span class="num" style="color:var(--germany-gold);">المتوسط لهذا اليوم: ${fmt(avgGroupCombined)}</span>
+                            <span class="num" style="color:var(--germany-gold);">المتوسط لهذا اليوم: ${fmt(avgGroupTotalAll)}</span>
                         </div>
                         <div class="table-responsive">
                             <table class="daily-table mb-0">
@@ -474,9 +517,10 @@
                                         <th>سندات محفظة</th>
                                         <th>إجمالي نقدي العربية والسند</th>
                                         <th>إجمالي مبيعات اليوم (ككل)</th>
+                                        <th>الفارق عن الأسبوع السابق</th>
                                     </tr>
                                 </thead>
-                                <tbody>${rows}</tbody>
+                                <tbody>${rowsHtml}</tbody>
                                 <tfoot>
                                     <tr>
                                         <td>إجمالي أيام (${dayName})</td>
@@ -485,6 +529,7 @@
                                         <td class="num">${fmt(group.voucherWallet)}</td>
                                         <td class="num">${fmt(combinedGroupTotal)}</td>
                                         <td class="num">${fmt(group.totalAll)}</td>
+                                        <td class="num">-</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -523,7 +568,7 @@
             </div>
 
             <!-- قسم مقارنة الأسبوع بالأسبوع بالتفصيل لكل يوم -->
-            <div class="section-title"><i class="fas fa-tasks"></i> 1. تفاصيل كل يوم أسبوعياً بالتاريخ (لمقارنة الأسبوع بالأسبوع)</div>
+            <div class="section-title"><i class="fas fa-tasks"></i> 1. تفاصيل كل يوم أسبوعياً بالتاريخ مع الفروقات الأسبوعية</div>
             <div class="mb-4">
                 ${weekDayDetailsHtml || '<div class="text-center text-muted p-3 background-white border-radius-14">لا توجد تواريخ مقسمة</div>'}
             </div>
@@ -563,32 +608,27 @@
 
         document.getElementById('mainContent').innerHTML = html;
 
-        // زر تصدير تجميع أيام الأسبوع
+        // زر تصدير تجميع وتفاصيل أيام الأسبوع مع الفروقات
         document.getElementById('exportWeekExcelBtn').onclick = () => {
-            const wsData = [["اليوم", "التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)"]];
+            const wsData = [["اليوم", "التاريخ", "نقدي العربية (مبيعات)", "سندات نقدي", "سندات محفظة", "إجمالي نقدي العربية والسند", "إجمالي مبيعات اليوم (ككل)", "الفارق عن اليوم السابق"]];
             
-            weekDayOrder.forEach(dayName => {
-                const group = groupByDayOfWeek[dayName];
-                const datesList = Object.keys(group.datesMap).sort().reverse();
-                
-                datesList.forEach(dateStr => {
-                    const item = group.datesMap[dateStr];
-                    wsData.push([
-                        dayName,
-                        dateStr,
-                        item.vanCash,
-                        item.voucherCash,
-                        item.voucherWallet,
-                        item.vanCash + item.voucherCash + item.voucherWallet,
-                        item.totalAll
-                    ]);
-                });
+            exportWeekList.forEach(item => {
+                wsData.push([
+                    item.dayName,
+                    item.dateStr,
+                    item.vanCash,
+                    item.voucherCash,
+                    item.voucherWallet,
+                    item.vanCombined,
+                    item.totalAll,
+                    item.diffVal
+                ]);
             });
 
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "تفاصيل أيام الأسبوع");
-            XLSX.writeFile(wb, `تفاصيل_ايام_الاسبوع_${from || 'الكل'}_${to || 'الكل'}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "تفاصيل وفروقات الأسابيع");
+            XLSX.writeFile(wb, `تفاصيل_وفروقات_الاسابيع_${from || 'الكل'}_${to || 'الكل'}.xlsx`);
         };
 
         // زر تصدير التفصيل اليومي
