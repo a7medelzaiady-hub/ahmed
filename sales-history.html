@@ -810,7 +810,7 @@
 
     window.openPreviousInvoiceImage = async (lastInvoiceId, customerId) => {
         if (!lastInvoiceId && !customerId) {
-            window.showCustomUi({ title: "تنبيه", message: "لا تتوفر تفاصيل كافية عن الفاتورة السابقة.", icon: "info" });
+            window.showCustomUi({ title: "تنبيه", message: "لا تتوفر تفاصيل كافية عن الفاتورة السابقة لهذا العميل.", icon: "info" });
             return;
         }
 
@@ -836,23 +836,24 @@
                 }
             }
 
-            let query = db.collection("customers_image_archive");
+            let snap;
             if (lastInvoiceId) {
-                query = query.where("invoiceId", "==", lastInvoiceId);
+                snap = await db.collection("customers_image_archive").where("invoiceId", "==", lastInvoiceId).get();
             } else if (customerId) {
-                query = query.where("customerId", "==", customerId).orderBy("timestamp", "desc").limit(1);
+                snap = await db.collection("customers_image_archive").where("customerId", "==", customerId).get();
             }
 
-            const snap = await query.get();
-            if (!snap.empty) {
-                const imgData = snap.docs[0].data();
-                if (imgData.imageUrl) {
-                    window.open(imgData.imageUrl, "_blank");
+            if (snap && !snap.empty) {
+                const docs = snap.docs.map(d => d.data());
+                docs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                
+                if (docs[0].imageUrl) {
+                    window.open(docs[0].imageUrl, "_blank");
                     return;
                 }
             }
 
-            window.showCustomUi({ title: "تنبيه", message: "لم يتم العثور على صورة أرشيفية لهذه الفاتورة السابقة.", icon: "info" });
+            window.showCustomUi({ title: "تنبيه الأرشيف", message: "لم يتم العثور على صورة أرشيفية لهذه الفاتورة السابقة.", icon: "info" });
         } catch (e) {
             console.error("خطأ في جلب صورة الفاتورة السابقة:", e);
             window.showCustomUi({ title: "خطأ", message: "تعذر فتح صورة الفاتورة: " + e.message, icon: "danger" });
@@ -1344,7 +1345,7 @@
         }).join('');
 
         const vouchersHtml = vouchers.map(v => {
-            const safeVoucherName = (v.customerName || 'عميل').replace(/'/g, "\\'");
+            const safeVoucherName = (v.customerName || 'عميل').replace(/'/g, "\\ me-1'");
             return `
             <div class="invoice-item voucher-item">
                 <div class="d-flex justify-content-between align-items-start">
@@ -1384,7 +1385,6 @@
             }
         });
 
-        // احتساب السندات - مع استبعاد يد أحمد تلقائياً لأنها لم تُضف للقائمة أصلًا
         allReceiptVouchers.forEach(v => {
             if (parseVoucherDate(v) === targetDateStr) { voucherCash += Number(v.cashAmount) || 0; voucherWallet += Number(v.walletAmount) || 0; }
         });
@@ -1514,11 +1514,8 @@
                 transSnap.forEach(d => {
                     const tr = d.data(); if (tr.isDeleted) return;
                     
-                    // ==========================================
-                    // فلترة حاسمة: استبعاد السندات المسجلة بـ "يد أحمد"
-                    // ==========================================
                     if (tr.custody === "يد أحمد") {
-                        return; // تجاوز هذه المعاملة وعدم تجميعها بالسجلات
+                        return;
                     }
 
                     rawTransactionsList.push({ id: d.id, ...tr });
