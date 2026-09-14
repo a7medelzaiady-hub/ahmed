@@ -621,9 +621,9 @@ function saveLocalFallback() {
   localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
 }
 
-// تم إلغاء التسجيل التلقائي من الكتابة - التسجيل فقط بالضغط على زر "تم"
+// دالة تفريغ لمنع الاعتماد التلقائي أثناء إدخال الأرقام
 window.handleLiveInputChange = function(itemId) {
-  // دالة مفرغة لمنع التسجيل التلقائي فور الكتابة
+  // إلغاء أي حفظ تلقائي عند الكتابة لحين الضغط على "تم"
 };
 
 function getUnitName(name) {
@@ -1099,7 +1099,6 @@ window.focusNextInput = function(e, primaryTargetId, secondaryTargetId) {
   }
 };
 
-// يتم اعتماد تسجيل التحميل رسمياً وحفظه عند ضغط زر "تم ✔" حصراً
 window.confirmStep = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   
@@ -1130,7 +1129,7 @@ window.confirmStep = function(itemId) {
     const nextStep = document.querySelector('.lstep.pending-step');
     if (nextStep) {
       const nextId = nextStep.dataset.itemid;
-      const inp = document.getElementById(`plc-${nextId}`) || document.getElementById(`pll-${nextId}`) || document.getElementById(`lc-${nextId}`) || document.getElementById(`ll-${nextId}`);
+      const inp = document.getElementById(`lc-${nextId}`) || document.getElementById(`ll-${nextId}`) || document.getElementById(`plc-${nextId}`) || document.getElementById(`pll-${nextId}`);
       
       if (inp) { 
         inp.focus(); 
@@ -1142,22 +1141,26 @@ window.confirmStep = function(itemId) {
   }, 50);
 };
 
-// إصلاح دالة التعديل بشكل نهائي
+// إصلاح دالة التعديل لمنع الاعتماد التلقائي وانتظار إدخال المستخدم
 window.editStep = function(itemId) {
   delete loadedInSession[itemId]; 
+  if (cartItems[itemId]) {
+    delete cartItems[itemId];
+  }
   saveSessionCloud(); 
   renderLoadFlow();
+  
   setTimeout(() => { 
     const step = document.getElementById('step-' + itemId); 
     if (step) { 
       const inp = document.getElementById(`lc-${itemId}`) || document.getElementById(`ll-${itemId}`) || document.getElementById(`plc-${itemId}`) || document.getElementById(`pll-${itemId}`); 
       if (inp) { 
+        inp.value = '';
         inp.focus(); 
-        inp.select(); 
       } 
       step.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
     } 
-  }, 50);
+  }, 80);
 };
 
 window.resetLoad = function() {
@@ -1649,7 +1652,7 @@ window.shareArchiveWhatsApp = async function(d) {
             <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:12px;">${r.name}</td>
             <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:12px;">${r.prevCartons || 0} ك / ${r.prevLoose || 0} ق</td>
             <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:12px;">${r.loadedCartons || 0} ك / ${r.loadedLoose || 0} ق</td>
-            <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:11px;" colspan="4">${r.lastEditedAt || '—'}</td>
+            <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:10px;" colspan="4">${r.lastEditedAt || '—'}</td>
           </tr>`;
       });
     }
