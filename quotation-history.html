@@ -2082,7 +2082,7 @@ window.exportArchiveExcel = async function(d) {
 
     let excelData = [];
 
-    // دالة لاستخراج أرقام الكراتين والقطع/الجركن بدقة من النصوص
+    // دالة مطورة بدقة لتفكيك النصوص المخزنة مثل "3 كرتونة و 6 ق" أو "6 ق" أو "1 كرتونة"
     const parseCartonAndLoose = (str) => {
       if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
       const cleaned = cleanTextForPdf(str);
@@ -2090,27 +2090,24 @@ window.exportArchiveExcel = async function(d) {
       let cartons = 0;
       let loose = 0;
 
-      // فحص صيغة الاختصارات (ك / ق)
-      if (cleaned.includes('ك') || cleaned.includes('ق')) {
-        const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*ك/);
-        const lMatch = cleaned.match(/(\d+)\s*ق/);
-        if (cMatch) cartons = parseFloat(cMatch[1]);
-        if (lMatch) loose = parseInt(lMatch[1]);
-        return { cartons, loose };
+      // 1. البحث عن الكراتين (كلمة كرتونة أو كرتونه أو حرف ك)
+      const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
+      if (cMatch) {
+        cartons = parseFloat(cMatch[1]);
       }
 
-      // فحص كلمة "كرتونة"
-      const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*كرتونة/);
-      if (cMatch) cartons = parseFloat(cMatch[1]);
+      // 2. البحث عن القطع/الجرادين (حرف ق، كلمة قطعة، أو جركن)
+      const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
+      if (lMatch) {
+        loose = parseInt(lMatch[1]);
+      }
 
-      // فحص كلمات المفرد (قطعة / جركن)
-      const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن)/);
-      if (lMatch) loose = parseInt(lMatch[1]);
-
-      // إذا لم يتطابق كرتونة ولا مفرد وكان مجرد رقم (يعتبر مفرد/جركن)
+      // 3. إذا لم يوجد تمييز صريح وكان النص يحتوي على رقم منفرد (مثل "6" أو "-6")
       if (!cMatch && !lMatch) {
-        const numMatch = cleaned.match(/(\d+)/);
-        if (numMatch) loose = parseInt(numMatch[1]);
+        const numMatch = cleaned.match(/(-?\d+)/);
+        if (numMatch) {
+          loose = parseInt(numMatch[1]);
+        }
       }
 
       return { cartons, loose };
@@ -2129,25 +2126,25 @@ window.exportArchiveExcel = async function(d) {
           "م": i + 1,
           "اسم الصنف": r.name,
 
-          // قسم قبل التحميل
-          "قبل التحميل (كرتونة)": prev.cartons,
-          "قبل التحميل (جركن/قطعة)": prev.loose,
+          // قبل التحميل
+          "السابق (كرتونة)": prev.cartons || 0,
+          "السابق (قطعة)": prev.loose || 0,
 
-          // قسم تم تحميله
-          "تم تحميله (كرتونة)": loaded.cartons,
-          "تم تحميله (جركن/قطعة)": loaded.loose,
+          // تم تحميله
+          "الجديد (كرتونة)": loaded.cartons || 0,
+          "الجديد (قطعة)": loaded.loose || 0,
 
-          // قسم المباع
-          "المباع (كرتونة)": sold.cartons,
-          "المباع (جركن/قطعة)": sold.loose,
+          // المباع
+          "المباع (كرتونة)": sold.cartons || 0,
+          "المباع (قطعة)": sold.loose || 0,
 
-          // قسم المتبقي بالعربية
-          "المتبقي بالعربية (كرتونة)": inTruck.cartons,
-          "المتبقي بالعربية (جركن/قطعة)": inTruck.loose,
+          // المتبقي بالعربية
+          "المتبقي بالعربية (كرتونة)": inTruck.cartons || 0,
+          "المتبقي بالعربية (قطعة)": inTruck.loose || 0,
 
-          // قسم الراجع الفعلي
-          "الراجع الفعلي (كرتونة)": returned.cartons,
-          "الراجع الفعلي (جركن/قطعة)": returned.loose,
+          // الراجع الفعلي
+          "الراجع الفعلي (كرتونة)": returned.cartons || 0,
+          "الراجع الفعلي (قطعة)": returned.loose || 0,
 
           "حالة الفرق": r.status || 'مضبوط'
         };
@@ -2157,10 +2154,10 @@ window.exportArchiveExcel = async function(d) {
       excelData = Object.values(loadData).map((r, i) => ({
         "م": i + 1,
         "اسم الصنف": r.name,
-        "قبل التحميل (كرتونة)": Number(r.prevCartons) || 0,
-        "قبل التحميل (جركن/قطعة)": Number(r.prevLoose) || 0,
-        "تم تحميله (كرتونة)": Number(r.loadedCartons) || 0,
-        "تم تحميله (جركن/قطعة)": Number(r.loadedLoose) || 0,
+        "السابق (كرتونة)": Number(r.prevCartons) || 0,
+        "السابق (قطعة)": Number(r.prevLoose) || 0,
+        "الجديد المحمل (كرتونة)": Number(r.loadedCartons) || 0,
+        "الجديد المحمل (قطعة)": Number(r.loadedLoose) || 0,
         "آخر تعديل": r.lastEditedAt || '—'
       }));
     }
@@ -2172,7 +2169,7 @@ window.exportArchiveExcel = async function(d) {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-    // ضبط الاتجاه ليكون من اليمين إلى اليسار تلقائياً
+    // اتجاه الشيت من اليمين لليسار
     if (!worksheet['!views']) worksheet['!views'] = [];
     worksheet['!views'].push({ RTL: true });
 
@@ -2180,7 +2177,7 @@ window.exportArchiveExcel = async function(d) {
     XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
     
     XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
-    window.toast('📊 تم تصدير ملف Excel بنجاح بمشجر الكراتين والجرادين!');
+    window.toast('📊 تم تصدير ملف Excel بنجاح وقراءة جميع القطع والكراتين!');
   } catch (e) {
     console.error(e);
     window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
