@@ -1192,7 +1192,7 @@
 
         if (term.length < 1) { resultadosDiv.style.display = 'none'; return; }
         
-        const filtered = inventory.filter(i => i.name.toLowerCase().includes(term)).slice(0, 15);
+        const filtered = inventory.filter(i => i.name && i.name.toLowerCase().includes(term)).slice(0, 15);
         
         let itemsHtml = filtered.map(p => `
             <div class="search-item" onclick="selectProduct('${rowId}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
@@ -2001,13 +2001,112 @@
         setDataStatus("تم استرجاع الاتصال — البيانات ستتم مزامنتها تلقائيًا", "fa-check-circle");
     });
 
+    // دالة فحص الوحدة إذا كانت كرتونة (مطابقة لصفحة المخزن)
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
+
+    // جلب وحساب البيانات الحقيقية من المبيعات والمشتريات وبداية المدة
     async function fetchFreshLists() {
-        const [cSnap, iSnap] = await Promise.all([
+        const [cSnap, iSnap, invoicesSnap, supplierSnap, transSnap] = await Promise.all([
             getDocs(collection(db, "customers")),
-            getDocs(collection(db, "inventory"))
+            getDocs(collection(db, "inventory")),
+            getDocs(collection(db, "invoices")),
+            getDocs(collection(db, "supplier_transactions")),
+            getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
         ]);
+
+        const factorsMap = new Map();
+        const namesMap = new Map();
+
+        inventory = [];
+        iSnap.forEach(d => {
+            const data = d.data();
+            if (!data.isDeleted) {
+                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                factorsMap.set(d.id, f);
+                if (data.name) namesMap.set(data.name.trim(), d.id);
+                inventory.push({ id: d.id, ...data });
+            }
+        });
+
+        const salesMap = new Map();
+        const purchasesMap = new Map();
+        const openingMap = new Map();
+
+        // حساب أرصدة بداية المدة
+        transSnap.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.productId) {
+                const current = openingMap.get(data.productId) || 0;
+                openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
+            }
+        });
+
+        // حساب المبيعات
+        invoicesSnap.forEach(docSnap => {
+            const items = docSnap.data().items || [];
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const id = item.stockId || namesMap.get(item.name?.trim());
+                if (id) {
+                    const factor = factorsMap.get(id) || 1;
+                    const rawQty = Number(item.qty) || 0;
+                    const isCarton = isCartonUnit(item.unit, item.isCarton);
+                    const pcs = isCarton ? (rawQty * factor) : rawQty;
+                    
+                    const current = salesMap.get(id) || 0;
+                    salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
+                }
+            }
+        });
+
+        // حساب المشتريات
+        supplierSnap.forEach(docSnap => {
+            const items = docSnap.data().items || [];
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const id = item.stockId || namesMap.get(item.name?.trim());
+                if (id) {
+                    const factor = factorsMap.get(id) || 1;
+                    const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                    const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                    const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                    const pcs = isCarton ? (rawQty * factor) : rawQty;
+
+                    const current = purchasesMap.get(id) || 0;
+                    purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
+                }
+            }
+        });
+
+        // دمج الحساب الفعلي داخل مصفوفة الأصناف
+        inventory = inventory.map(item => {
+            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
+            let openingTotalPcs = 0;
+
+            if (item.openingTotalPcs != null) {
+                openingTotalPcs = Number(item.openingTotalPcs);
+            } else if (item.openingQty != null) {
+                openingTotalPcs = Math.round(Number(item.openingQty) * factor);
+            } else if (openingMap.has(item.id)) {
+                openingTotalPcs = openingMap.get(item.id);
+            }
+
+            const salesPcs = salesMap.get(item.id) || 0;
+            const purchasesPcs = purchasesMap.get(item.id) || 0;
+            const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+            return {
+                ...item,
+                totalPcs: calculatedRealPcs
+            };
+        });
+
         customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         persistCache();
     }
 
