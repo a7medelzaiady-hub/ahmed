@@ -76,7 +76,6 @@
         .kpi-icon.green  { background: #dcfce7; color: #15803d; }
         .kpi-icon.amber  { background: #fef3c7; color: #b45309; }
         .kpi-icon.blue   { background: #e0f2fe; color: #0369a1; }
-        .kpi-icon.purple { background: #f3e8ff; color: #7e22ce; }
 
         /* Panels */
         .monitor-panel {
@@ -132,13 +131,13 @@
         /* Modal */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); z-index: 3000; display: none; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(4px); }
         .modal-overlay.open { display: flex; }
-        .modal-card { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.2); animation: popIn 0.2s ease-out; }
+        .modal-card { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 650px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.2); animation: popIn 0.2s ease-out; }
         @keyframes popIn { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .modal-card-header { padding: 16px 20px; border-bottom: 1.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
         .modal-card-body { padding: 16px 20px; overflow-y: auto; flex-grow: 1; }
         .timeline { position: relative; padding-right: 20px; border-right: 2px solid var(--border); }
         .timeline-item { position: relative; margin-bottom: 16px; }
-        .timeline-item::before { content: ""; position: absolute; right: -26px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); border: 2px solid white; box-shadow: 0 0 0 2px var(--border); }
+        .timeline-item::before { content: ""; position: absolute; right: -26px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); border: 2px solid white; box-shadow: 0 0 0 2px var(--border); }
         .timeline-time { font-size: 0.68rem; color: var(--text-muted); font-weight: 700; }
         .timeline-title { font-size: 0.82rem; font-weight: 800; color: var(--text-main); margin-top: 1px; }
     </style>
@@ -251,7 +250,7 @@
         <div class="modal-card-header">
             <div>
                 <h6 class="m-0 fw-bold" id="modalUserName">مسار وتنقلات المستخدم</h6>
-                <span class="text-muted" style="font-size:0.72rem;">الصفحات والتنقلات المسجلة مؤخراً</span>
+                <span class="text-muted" style="font-size:0.72rem;">الصفحات والتنقلات المسجلة لهذا اليوزر</span>
             </div>
             <button class="btn-close" onclick="closeTrailModal()"></button>
         </div>
@@ -372,6 +371,7 @@
                 const durationStr = calculateSessionDuration(s.loginTime);
                 const lastActiveStr = getTimeAgoString(s.lastActive);
                 const userInitial = (s.userName || 'م')[0].toUpperCase();
+                const currentUserId = s.userId || s.id;
 
                 let statusHtml = '';
                 let avatarClass = '';
@@ -411,15 +411,15 @@
                             </div>
                             <div class="detail-item">
                                 <span class="lbl"><i class="fas fa-id-badge text-info"></i> رمز اليوزر:</span>
-                                <span class="val font-monospace">${s.userId || s.id}</span>
+                                <span class="val font-monospace">${currentUserId}</span>
                             </div>
                         </div>
 
                         <div class="action-bar">
-                            <button class="btn-action-sm view" onclick="window.openUserTrail('${s.userId}', '${s.userName}')">
-                                <i class="fas fa-eye"></i> عرض التنقلات والصفحات
+                            <button class="btn-action-sm view" onclick="window.openUserTrail('${currentUserId}', '${s.userName || 'اليوزر'}')">
+                                <i class="fas fa-eye"></i> عرض الصفحات والتنقلات
                             </button>
-                            <button class="btn-action-sm kick" onclick="window.kickUser('${s.id}', '${s.userName}')">
+                            <button class="btn-action-sm kick" onclick="window.kickUser('${s.id}', '${s.userName || 'اليوزر'}')">
                                 <i class="fas fa-power-off"></i> طرد وإنهاء
                             </button>
                         </div>
@@ -448,11 +448,12 @@
             snap.forEach(docSnap => {
                 const log = docSnap.data();
                 const time = log.timestamp ? parseTimestamp(log.timestamp).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'medium' }) : '-';
+                const pageName = log.pageTitle || log.pageUrl || log.page || 'صفحة';
                 
                 let actionBadge = `<span class="badge bg-secondary">${log.action}</span>`;
                 if (log.action === 'LOGIN') actionBadge = `<span class="badge bg-success"><i class="fas fa-sign-in-alt me-1"></i> دخول</span>`;
                 else if (log.action === 'LOGOUT') actionBadge = `<span class="badge bg-danger"><i class="fas fa-sign-out-alt me-1"></i> خروج</span>`;
-                else if (log.action === 'PAGE_VIEW') actionBadge = `<span class="badge bg-info text-dark"><i class="fas fa-file-lines me-1"></i> ${log.pageTitle || 'صفحة'}</span>`;
+                else if (log.action === 'PAGE_VIEW' || log.pageTitle || log.page) actionBadge = `<span class="badge bg-info text-dark"><i class="fas fa-file-lines me-1"></i> ${pageName}</span>`;
 
                 html += `
                     <tr>
@@ -466,12 +467,12 @@
         });
     }
 
-    // 3. عرض الصفحات والتنقلات الزمني للمستخدم المحدد
+    // 3. عرض الصفحات والتنقلات الزمنية للمستخدم المحدد (المحدثة)
     window.openUserTrail = async function(userId, userName) {
         document.getElementById('modalUserName').innerText = `تنقلات ${userName || 'المستخدم'}`;
         document.getElementById('userTrailModal').classList.add('open');
         const container = document.getElementById('modalTimelineContent');
-        container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>جاري جلب التنقلات...</span></div>`;
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>جاري جلب سجل الصفحات...</span></div>`;
 
         try {
             const logsRef = collection(db, "session_logs");
@@ -479,48 +480,61 @@
             const snap = await getDocs(q);
 
             if (snap.empty) {
-                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><span>لا توجد تنقلات مسجلة لهذا المستخدم.</span></div>`;
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><span>لا توجد صفحات أو حركات مسجلة لهذا المستخدم.</span></div>`;
                 return;
             }
 
             let logsList = [];
-            snap.forEach(d => logsList.push({ id: d.id, ...d.data() }));
+            snap.forEach(d => {
+                logsList.push({ id: d.id, ...d.data() });
+            });
 
-            // فرز الحركات من الأحدث إلى الأقدم
+            // فرز الحركات محلياً من الأحدث إلى الأقدم أماناً بالـ Timestamp
             logsList.sort((a, b) => parseTimestamp(b.timestamp).getTime() - parseTimestamp(a.timestamp).getTime());
 
-            const recentLogs = logsList.slice(0, 30);
+            const recentLogs = logsList.slice(0, 50);
 
             let html = '';
             recentLogs.forEach(l => {
                 const timeStr = l.timestamp ? parseTimestamp(l.timestamp).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+                const pageDetails = l.pageTitle || l.pageUrl || l.page || 'صفحة فرعية';
                 
                 let title = "زيارة صفحة";
                 let badgeClass = "bg-primary";
 
                 if (l.action === 'LOGIN') {
-                    title = "تسجيل دخول للنظام";
+                    title = `<i class="fas fa-sign-in-alt text-success me-1"></i> تسجيل دخول للنظام`;
                     badgeClass = "bg-success";
                 } else if (l.action === 'LOGOUT') {
-                    title = "تسجيل خروج";
+                    title = `<i class="fas fa-sign-out-alt text-danger me-1"></i> تسجيل خروج`;
                     badgeClass = "bg-danger";
-                } else if (l.action === 'PAGE_VIEW' || l.pageTitle) {
-                    title = `فتح صفحة: <strong>${l.pageTitle || 'صفحة فرعية'}</strong>`;
+                } else if (l.action === 'PAGE_VIEW' || l.pageTitle || l.page) {
+                    title = `<i class="fas fa-file-lines text-info me-1"></i> فتح صفحة: <strong class="text-dark">${pageDetails}</strong>`;
                     badgeClass = "bg-info text-dark";
+                } else {
+                    title = `<i class="fas fa-mouse text-secondary me-1"></i> إجراء: <strong>${l.action || 'حركة'}</strong>`;
                 }
 
                 html += `
                     <div class="timeline-item">
                         <div class="timeline-time">${timeStr}</div>
-                        <div class="timeline-title">${title} <span class="badge ${badgeClass} ms-2">${l.action || 'VIEW'}</span></div>
+                        <div class="timeline-title d-flex align-items-center justify-content-between">
+                            <span>${title}</span>
+                            <span class="badge ${badgeClass} ms-2">${l.action || 'PAGE_VIEW'}</span>
+                        </div>
                     </div>
                 `;
             });
+
             container.innerHTML = html;
 
         } catch (e) {
-            container.innerHTML = `<div class="empty-state text-danger">حدث خطأ أثناء تحميل سجل التنقلات.</div>`;
-            console.error(e);
+            console.error("خطأ جلب سجل المستخدم:", e);
+            container.innerHTML = `
+                <div class="empty-state text-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>فشل جلب سجل التنقلات. تحقق من الكونسول أو إعدادات قاعدة البيانات.</span>
+                </div>`;
         }
     };
 
