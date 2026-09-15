@@ -231,7 +231,7 @@ tr:hover td { background: var(--brand-lt); }
 
 .lstep{ background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; box-shadow: var(--shadow-3d); }
 .lstep.done{ border-color: var(--green); background: var(--green-lt); opacity: .98; box-shadow: 0 3px 6px rgba(45,106,79,0.08); }
-.lstep.active{ border-color: var(--brand); border-width: 2.5px; box-shadow: var(--shadow-3d-active); transform: translateY(-1px); }
+.lstep.active{ border-color: var(--brand); border-width: 2.5px; box-shadow: var(--shadow-3d-active); }
 .lstep .stitle{font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap: wrap;}
 .snum{width:26px;height:26px;background:var(--brand);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;}
 .snum.dn{background:var(--green);}
@@ -319,7 +319,7 @@ table select:focus { border-color: var(--brand); }
     <div style="margin-bottom:12px;">
       <div class="ph" style="margin-bottom:6px;">
         <h2>تسجيل تحميل حمولة السيارة</h2>
-        <p>سجّل ما كان بداخل العربية + الحمولة الجديدة لربطها بالمبيعات</p>
+        <p>سجّل ما كان بداخل العربية + الحمولة الجديدة لربطها بالمبيعات (تحديث لحظي فور الكتابة)</p>
       </div>
       
       <div class="action-buttons-group">
@@ -345,11 +345,8 @@ table select:focus { border-color: var(--brand); }
     </div>
 
     <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row;">
-      <button class="btn" style="background:#0a4a31; color:#fff; font-size:12px; display:flex; align-items:center; gap:3px;" onclick="window.scrollToFirstPending()">
-        انتقل إليها ⬇️
-      </button>
-      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px;">
-        <span>صنف جديد أضيف للمخزن يحتاج تسجيل تحميل</span>
+      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px; width:100%; justify-content:center;">
+        <span>أصناف جديدة أضيفت للمخزن تحتاج تسجيل تحميل:</span>
         <span class="snum" style="background:#0a4a31; margin:0;">1</span>
       </div>
     </div>
@@ -534,7 +531,6 @@ let memorySalesCache = null;
 let lastFetchedDate = null;
 let cachedCalculatedRows = [];
 let isInventoryLoadedOnce = false;
-let isCurrentlyEditing = false;
 
 let factorsMap = {};
 let namesMap = {};
@@ -553,8 +549,6 @@ function listenToDailyLoadChanges() {
 
   const docRef = doc(db, 'daily_loads', d);
   unsubscribeDailyLoad = onSnapshot(docRef, (docSnap) => {
-    if (isCurrentlyEditing) return;
-
     if (docSnap.exists()) {
       const data = docSnap.data();
       loadedInSession = data.loadedInSession || {};
@@ -567,7 +561,12 @@ function listenToDailyLoadChanges() {
     saveLocalFallback();
 
     if (document.getElementById('pg-load').classList.contains('active')) {
-      renderLoadFlow();
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
+        updateDOMValuesOnly();
+      } else {
+        renderLoadFlow();
+      }
     }
     if (document.getElementById('pg-summary').classList.contains('active')) {
       buildCalculatedRows();
@@ -587,7 +586,29 @@ function listenToDailyLoadChanges() {
       });
     }
     if (document.getElementById('pg-load').classList.contains('active')) {
-      renderLoadFlow();
+      const activeEl = document.activeElement;
+      if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'SELECT')) {
+        renderLoadFlow();
+      }
+    }
+  });
+}
+
+function updateDOMValuesOnly() {
+  firebaseItems.forEach(it => {
+    const isDone = loadedInSession[it.id] !== undefined;
+    const stepEl = document.getElementById('step-' + it.id);
+    if (stepEl && !isDone) {
+      const plc = document.getElementById(`plc-${it.id}`);
+      const pll = document.getElementById(`pll-${it.id}`);
+      const lc  = document.getElementById(`lc-${it.id}`);
+      const ll  = document.getElementById(`ll-${it.id}`);
+      const sess = loadedInSession[it.id] || {};
+
+      if (plc && document.activeElement !== plc) plc.value = sess.prevCartons ?? plc.value;
+      if (pll && document.activeElement !== pll) pll.value = sess.prevLoose ?? pll.value;
+      if (lc && document.activeElement !== lc)   lc.value = sess.cartons ?? lc.value;
+      if (ll && document.activeElement !== ll)   ll.value = sess.loose ?? ll.value;
     }
   });
 }
@@ -619,19 +640,35 @@ function saveLocalFallback() {
   localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
 }
 
-window.handleLiveInputChange = function(itemId) {};
+window.handleLiveInputChange = function(itemId) {
+  const it = firebaseItems.find(i => i.id === itemId);
+  if (!it) return;
+
+  const prevCartons = parseFloat(document.getElementById(`plc-${itemId}`)?.value) || 0;
+  const prevLoose   = parseInt(document.getElementById(`pll-${itemId}`)?.value) || 0;
+  const cartons     = parseFloat(document.getElementById(`lc-${itemId}`)?.value) || 0;
+  const loose       = parseInt(document.getElementById(`ll-${itemId}`)?.value) || 0;
+
+  const now = new Date();
+  const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+  loadedInSession[itemId] = { prevCartons, prevLoose, cartons, loose };
+  if (!cartItems[itemId]) cartItems[itemId] = { name: it.name, capacity: it.capacity };
+  
+  cartItems[itemId].prevCartons   = prevCartons;
+  cartItems[itemId].prevLoose     = prevLoose;
+  cartItems[itemId].loadedCartons = cartons;
+  cartItems[itemId].loadedLoose   = loose;
+  cartItems[itemId].lastEditedAt  = editTimeStr;
+
+  saveSessionCloud();
+};
 
 function getUnitName(name) {
   const n = (name || '').toLowerCase();
   if (n.includes('قطعة') || n.includes('قطعه')) return 'قطعة';
   if (n.includes('كرتونة') || n.includes('كرtونه')) return 'كرتونة';
   return 'جركن';
-}
-
-function isPiecesItem(item) {
-  const name = (item.name || '').toLowerCase();
-  const unit = (item.unit || '').toLowerCase();
-  return unit === 'pcs' || name.includes('قطعة') || name.includes('قطعه');
 }
 
 function cleanItemName(str) {
@@ -748,8 +785,6 @@ window.selectSuggestItem = function(itemId) {
     if (targetEl) {
       targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       targetEl.classList.add('active');
-      const inp = document.getElementById('plc-' + itemId) || document.getElementById('pll-' + itemId) || document.getElementById('lc-' + itemId) || document.getElementById('ll-' + itemId);
-      if (inp) setTimeout(() => { inp.focus(); }, 100);
     }
   }, 80);
 };
@@ -780,19 +815,6 @@ function filterLoadFlow() {
     el.style.display = (!query || cleanItemName(it.name).includes(query)) ? '' : 'none';
   });
 }
-
-window.scrollToFirstPending = function() {
-  const firstPending = document.querySelector('.lstep.pending-step');
-  if (firstPending) {
-    firstPending.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    firstPending.classList.add('active');
-    const id = firstPending.dataset.itemid;
-    const inp = document.getElementById('plc-' + id) || document.getElementById('pll-' + id) || document.getElementById('lc-' + id) || document.getElementById('ll-' + id);
-    if (inp) {
-      inp.focus();
-    }
-  }
-};
 
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
@@ -1014,11 +1036,11 @@ function renderLoadFlow() {
               <div class="load-inputs-flex">
                 <div class="field-inline">
                   <label>📦 كرتونة</label>
-                  <input type="number" inputmode="decimal" id="plc-${it.id}" placeholder="0" min="0" step="any" value="${prevCartonsDefault}" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'pll-${it.id}', 'lc-${it.id}')">
+                  <input type="number" inputmode="decimal" id="plc-${it.id}" placeholder="0" min="0" step="any" value="${prevCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')">
                 </div>
                 <div class="field-inline">
                   <label>📦 ${unit}</label>
-                  <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'lc-${it.id}', 'll-${it.id}')">
+                  <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
                 </div>
               </div>
             </div>
@@ -1028,11 +1050,11 @@ function renderLoadFlow() {
               <div class="load-inputs-flex">
                 <div class="field-inline priority-field">
                   <label>📦 كرتونة</label>
-                  <input type="number" inputmode="decimal" id="lc-${it.id}" placeholder="0" min="0" step="any" value="${loadedCartonsDefault}" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'll-${it.id}', 'btn-${it.id}')">
+                  <input type="number" inputmode="decimal" id="lc-${it.id}" placeholder="0" min="0" step="any" value="${loadedCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')">
                 </div>
                 <div class="field-inline">
                   <label>📦 ${unit}</label>
-                  <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="0" min="0" value="${loadedLooseDefault}" onkeydown="if(event.key==='Enter') window.confirmStep('${it.id}')">
+                  <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="0" min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
                 </div>
               </div>
             </div>
@@ -1047,7 +1069,7 @@ function renderLoadFlow() {
               <div class="load-section-title">🛑 قبل التحميل (سابق)</div>
               <div class="field-inline">
                 <label>الكمية السابقة (${unit})</label>
-                <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" onkeydown="if(event.key==='Enter') window.focusNextInput(event, 'll-${it.id}', 'btn-${it.id}')">
+                <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
               </div>
             </div>
 
@@ -1055,7 +1077,7 @@ function renderLoadFlow() {
               <div class="load-section-title" style="color:var(--brand);">⬆️ التحميل الجديد</div>
               <div class="field-inline">
                 <label>الكمية المحملة (${unit})</label>
-                <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="أدخل عدد الـ ${unit}..." min="0" value="${loadedLooseDefault}" onkeydown="if(event.key==='Enter') window.confirmStep('${it.id}')">
+                <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="أدخل عدد الـ ${unit}..." min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
               </div>
             </div>
           </div>`;
@@ -1081,17 +1103,6 @@ function renderLoadFlow() {
   });
 }
 
-window.focusNextInput = function(e, primaryTargetId, secondaryTargetId) {
-  e.preventDefault();
-  let target = document.getElementById(primaryTargetId);
-  if (!target && secondaryTargetId) {
-    target = document.getElementById(secondaryTargetId);
-  }
-  if (target) {
-    target.focus();
-  }
-};
-
 window.confirmStep = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   
@@ -1112,62 +1123,29 @@ window.confirmStep = function(itemId) {
   cartItems[itemId].loadedLoose   = loose;
   cartItems[itemId].lastEditedAt  = editTimeStr;
   
-  isCurrentlyEditing = false;
-  
   saveSessionCloud();
   const allDone = firebaseItems.every(i => loadedInSession[i.id] !== undefined);
   if (allDone) forceShowLoadList = false;
   
   renderLoadFlow();
-  
-  setTimeout(() => {
-    const nextStep = document.querySelector('.lstep.pending-step');
-    if (nextStep) {
-      const nextId = nextStep.dataset.itemid;
-      const inp = document.getElementById(`lc-${nextId}`) || document.getElementById(`ll-${nextId}`) || document.getElementById(`plc-${nextId}`) || document.getElementById(`pll-${nextId}`);
-      
-      if (inp) { 
-        inp.focus(); 
-        nextStep.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        nextStep.classList.add('active'); 
-      }
-    }
-  }, 50);
 };
 
 window.editStep = function(itemId) {
-  isCurrentlyEditing = true;
-  
   delete loadedInSession[itemId]; 
   if (cartItems[itemId]) {
     delete cartItems[itemId];
   }
   
   renderLoadFlow();
-  
-  setTimeout(() => { 
-    const step = document.getElementById('step-' + itemId); 
-    if (step) { 
-      const inp = document.getElementById(`lc-${itemId}`) || document.getElementById(`ll-${itemId}`) || document.getElementById(`plc-${itemId}`) || document.getElementById(`pll-${itemId}`); 
-      if (inp) { 
-        inp.value = '';
-        inp.focus(); 
-      } 
-      step.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
-    } 
-  }, 100);
 };
 
 window.resetLoad = function() {
   if(!confirm('هل أنت متأكد من تصفير جميع الكميات وبدء تحميل جديد؟')) return;
-  isCurrentlyEditing = false;
   loadedInSession = {}; cartItems = {}; forceShowLoadList = false; document.getElementById('searchLoad').value = ''; document.getElementById('searchSuggestList').classList.remove('open'); saveSessionCloud(); renderLoadFlow();
 };
 
 window.editAllLoad = function() {
-  isCurrentlyEditing = true;
   forceShowLoadList = true; document.getElementById('loadDoneMsg').style.display = 'none'; renderLoadFlow();
-  setTimeout(() => { const firstStep = document.querySelector('#loadFlow .lstep'); if (firstStep) { firstStep.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }, 100);
 };
 
 window.updateManualSummaryField = function(itemId, field, val) {
@@ -1445,11 +1423,6 @@ window.openEditLoadModal = function(itemId) {
   }
 
   document.getElementById('editLoadModal').classList.add('open'); 
-
-  setTimeout(() => { 
-    const inp = document.getElementById('m-lc') || document.getElementById('m-ll') || document.getElementById('m-plc') || document.getElementById('m-pll'); 
-    if (inp) { inp.focus(); } 
-  }, 150);
 };
 
 window.closeEditLoadModal = function() { document.getElementById('editLoadModal').classList.remove('open'); };
@@ -1481,7 +1454,6 @@ window.saveQuickLoadEdit = function() {
   cartItems[itemId].loadedLoose   = loose; 
   cartItems[itemId].lastEditedAt  = editTimeStr;
 
-  isCurrentlyEditing = false;
   saveSessionCloud(); 
   closeEditLoadModal(); 
   
@@ -2011,7 +1983,6 @@ window.exportLoadPDF = async function() {
   }).catch(err => { console.error(err); window.toast('❌ حدث خطأ أثناء المعاينة'); document.body.removeChild(container); });
 };
 
-// =================== دوال تصدير Excel ===================
 window.exportLoadExcel = function() {
   const loadedKeys = Object.keys(loadedInSession);
   if (loadedKeys.length === 0) { window.toast('⚠️ لا توجد أصناف محملة لتصديرها'); return; }
