@@ -1194,10 +1194,30 @@
         
         const filtered = inventory.filter(i => i.name && i.name.toLowerCase().includes(term)).slice(0, 15);
         
-        let itemsHtml = filtered.map(p => `
-            <div class="search-item" onclick="selectProduct('${rowId}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
-                <b>${p.name}</b> <span style="font-size:0.7rem; color:#6c757d; display:block; margin-top:2px;">المخزن: ${p.totalPcs} قطعة</span>
-            </div>`).join('');
+        let itemsHtml = filtered.map(p => {
+            const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
+            const total = Number(p.totalPcs || 0);
+            const isNegative = total < 0;
+            const absTotal = Math.abs(total);
+
+            // تحويل قطع الكلي إلى (كرتونة + جركن/قطعة) كما في صفحة المخزن
+            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
+
+            let qtyDisplay = '';
+            if (cartons !== 0 && jerrycans !== 0) {
+                qtyDisplay = `${cartons} كرتونة و ${jerrycans} قطعة`;
+            } else if (cartons !== 0) {
+                qtyDisplay = `${cartons} كرتونة`;
+            } else {
+                qtyDisplay = `${jerrycans} قطعة`;
+            }
+
+            return `
+                <div class="search-item" onclick="selectProduct('${rowId}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
+                    <b>${p.name}</b> <span style="font-size:0.75rem; color:#0b6641; font-weight:700; display:block; margin-top:2px;">المخزن: ${qtyDisplay}</span>
+                </div>`;
+        }).join('');
 
         // زر إضافة صنف جديد في حال عدم توفره بـ الداتابيز
         const safeName = input.value.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -1304,9 +1324,25 @@
         const p = inventory.find(i => i.id === pid);
 
         if (p) {
-            row.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${p.totalPcs} ق`;
+            const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
+            const total = Number(p.totalPcs || 0);
+            const isNegative = total < 0;
+            const absTotal = Math.abs(total);
+
+            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
+
+            let qtyText = '';
+            if (cartons !== 0 && jerrycans !== 0) {
+                qtyText = `${cartons} كرتونة و ${jerrycans} قطعة`;
+            } else if (cartons !== 0) {
+                qtyText = `${cartons} كرتونة`;
+            } else {
+                qtyText = `${jerrycans} قطعة`;
+            }
+
+            row.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText}`;
             
-            const factor = Number(p.unitFactor) || 1;
             const defaultPriceVal = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
             priceInput.dataset.defaultPrice = defaultPriceVal.toString();
 
@@ -1409,7 +1445,17 @@
             setTimeout(() => {
                 const r = document.getElementById(id);
                 const p = inventory.find(i => i.id === oldData.stockId);
-                if (p) r.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${p.totalPcs} ق`;
+                if (p) {
+                    const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
+                    const total = Number(p.totalPcs || 0);
+                    const isNegative = total < 0;
+                    const absTotal = Math.abs(total);
+                    const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+                    const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
+                    let qtyText = cartons !== 0 ? `${cartons} كرتونة` : '';
+                    if (jerrycans !== 0) qtyText += (qtyText ? ' و ' : '') + `${jerrycans} قطعة`;
+                    r.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText || '0 قطعة'}`;
+                }
             }, 50);
         }
         if (!oldData) isChanged = true;
@@ -2001,7 +2047,7 @@
         setDataStatus("تم استرجاع الاتصال — البيانات ستتم مزامنتها تلقائيًا", "fa-check-circle");
     });
 
-    // دالة فحص الوحدة إذا كانت كرتونة (مطابقة لصفحة المخزن)
+    // دالة فحص الوحدة إذا كانت كرتونة
     function isCartonUnit(unitValue, isCartonFlag) {
         if (isCartonFlag === true) return true;
         if (!unitValue) return false;
