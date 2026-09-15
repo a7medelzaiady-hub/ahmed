@@ -472,16 +472,22 @@
 
 </div>
 
-<!-- Success Modal -->
+<!-- Success Modal (تم تعديله لإضافة زر الشير) -->
 <div class="modal-overlay" id="successModal" style="display: none;">
     <div class="modal-box">
         <div class="modal-icon">
             <i class="fas fa-check-circle" style="color: var(--accent); font-size: 2rem;"></i>
         </div>
         <h5 class="fw-bold mb-1" style="color: var(--text-primary);">تم تسجيل الطلبية!</h5>
-        <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 20px;">
+        <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 15px;">
             تم حفظ طلبية العميل <b id="successCustomerName"></b> بنجاح
         </p>
+
+        <!-- زر الشير الجديد -->
+        <button class="btn btn-primary w-100 fw-bold py-2 mb-3" style="border-radius: 10px; background-color: #25D366; border: none; font-size: 0.9rem;" onclick="shareOrderDetails()">
+            <i class="fab fa-whatsapp me-1" style="font-size: 1.1rem;"></i> مشاركة تفاصيل الطلبية
+        </button>
+
         <div class="d-flex flex-wrap gap-2">
             <button class="btn btn-success flex-fill fw-bold py-2" style="border-radius: 10px; font-size: 0.85rem;" onclick="goToOrders()">
                 <i class="fas fa-list me-1"></i> كل الطلبات
@@ -498,7 +504,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-   import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
     collection,
     getDocs,
     addDoc,
@@ -530,6 +536,7 @@
     let customers = [];
     let inventory = [];
     let rowCounter = 0;
+    let lastSavedOrder = null; // متغير لحفظ بيانات أحدث طلبية للمشاركة
     
     // فحص ما إذا كانت الصفحة في وضع التعديل لعدم إظهار نافذة التاريخ الإجبارية
     const params = new URLSearchParams(window.location.search);
@@ -834,6 +841,9 @@
                 await addDoc(collection(db, 'orders'), orderData);
             }
 
+            // حفظ الطلبية الأخيرة للمشاركة
+            lastSavedOrder = orderData;
+
             document.getElementById('successCustomerName').innerText = customerName;
             document.querySelector('.modal-box h5').innerText = editOrderId ? 'تم تعديل الطلبية!' : 'تم تسجيل الطلبية!';
             document.getElementById('successModal').style.display = 'flex';
@@ -847,6 +857,38 @@
         }
     };
 
+    // ---------- دالة مشاركة الطلبية (الجديدة) ----------
+    window.shareOrderDetails = () => {
+        if (!lastSavedOrder) return;
+
+        let itemsText = lastSavedOrder.items.map((item, index) => {
+            const unitText = item.unit === 'box' ? 'كرتونة' : 'قطعة';
+            return `${index + 1}. ${item.name} (${item.qty} ${unitText}) - ${item.price * item.qty} ج.م`;
+        }).join('\n');
+
+        let text = `📦 *تفاصيل طلبية جديدة - شركة الزيادي*\n`;
+        text += `👤 *العميل:* ${lastSavedOrder.customerName}\n`;
+        text += `📅 *التاريخ:* ${lastSavedOrder.date}\n`;
+        text += `------------------------------------\n`;
+        text += `📝 *الأصناف:*\n${itemsText}\n`;
+        text += `------------------------------------\n`;
+        text += `💰 *الإجمالي النهائي:* ${lastSavedOrder.total.toFixed(2)} ج.م\n`;
+        if (lastSavedOrder.notes) {
+            text += `📌 *ملاحظات:* ${lastSavedOrder.notes}\n`;
+        }
+
+        if (navigator.share) {
+            navigator.share({
+                title: 'طلبية شركة الزيادي',
+                text: text
+            }).catch(err => console.log('تعذر المشاركة:', err));
+        } else {
+            // البديل عند فتح التطبيق من متصفح لا يدعم Web Share
+            const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+            window.open(whatsappUrl, '_blank');
+        }
+    };
+
     window.goToOrders = () => {
         window.location.href = 'all-orders.html';
     };
@@ -856,6 +898,7 @@
         document.getElementById('customerInput').value = '';
         document.getElementById('customerId').value = '';
         document.getElementById('orderNotes').value = '';
+        lastSavedOrder = null;
         
         // إظهار نافذة التاريخ الإجبارية مرة أخرى عند طلب تسجيل طلبية جديدة
         const today = new Date().toISOString().split('T')[0];
