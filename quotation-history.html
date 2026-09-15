@@ -517,6 +517,7 @@ function startApp() {
   document.getElementById('app-content').style.display = 'block';
   if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
   listenToDailyLoadChanges();
+  listenToLiveInvoices();
 }
 
 let firebaseItems = [];
@@ -542,6 +543,50 @@ const defaultDateStr = localToday.toISOString().split('T')[0];
 document.getElementById('summaryDate').value = defaultDateStr;
 
 let unsubscribeDailyLoad = null;
+let unsubscribeInvoices = null;
+
+function listenToLiveInvoices() {
+  const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
+  if (unsubscribeInvoices) unsubscribeInvoices();
+
+  const syncStatus = document.getElementById('syncStatus');
+  if (syncStatus) syncStatus.innerHTML = '⚡ مزامنة المبيعات لحظياً...';
+
+  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snapshot) => {
+    memorySalesCache = {};
+    snapshot.forEach(docSnap => {
+      const inv = docSnap.data();
+      if (inv.isDeleted) return;
+      if (parseDate(inv.date, inv.timestamp) !== selectedDate) return;
+      if (!Array.isArray(inv.items)) return;
+
+      inv.items.forEach(itm => {
+        const itemId = getProductIdForItem(itm);
+        if (itemId) {
+          const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
+          const rawQty = Math.abs(Number(itm.qty) || 0);
+          const isCartonItem = isCarton(itm);
+          const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
+
+          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true || Number(itm.qty) < 0;
+
+          if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
+          memorySalesCache[itemId] += isReturn ? -totalPcsSold : totalPcsSold;
+        }
+      });
+    });
+    lastFetchedDate = selectedDate;
+    if (syncStatus) syncStatus.innerHTML = '🟢 متزامن لحظياً عبر كافة الأجهزة';
+    
+    buildCalculatedRows();
+    if (document.getElementById('pg-summary').classList.contains('active')) {
+      window.filterSummaryUI();
+    }
+  }, (err) => {
+    console.error("خطأ في استماع المبيعات:", err);
+    if (syncStatus) syncStatus.innerHTML = '⚠️ خطأ بالاتصال المباشر';
+  });
+}
 
 function listenToDailyLoadChanges() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
@@ -748,13 +793,14 @@ function getProductIdForItem(item) {
 
 window.showPage = function(id, btn) {
   listenToDailyLoadChanges();
+  listenToLiveInvoices();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('active');
 
   if (id === 'pg-load')    initLoadFlow();
-  if (id === 'pg-summary') window.refreshSummaryData(false);
+  if (id === 'pg-summary') buildCalculatedRows(), window.filterSummaryUI();
   if (id === 'pg-archive') window.fetchArchive();
 };
 
@@ -923,6 +969,7 @@ window.fetchInventoryFresh = async function() {
 
     renderItemsPage();
     listenToDailyLoadChanges();
+    listenToLiveInvoices();
     firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
     saveSessionCloud();
     isInventoryLoadedOnce = true;
@@ -1200,36 +1247,10 @@ window.switchSummaryTab = function(tab) {
   currentSummaryTab = tab; document.getElementById('btnTabActive').classList.toggle('active', tab === 'active'); document.getElementById('btnTabCompleted').classList.toggle('active', tab === 'completed'); window.filterSummaryUI();
 };
 
-window.onSummaryDateChange = function() { listenToDailyLoadChanges(); window.refreshSummaryData(true); };
+window.onSummaryDateChange = function() { listenToDailyLoadChanges(); listenToLiveInvoices(); };
 
-window.refreshSummaryData = async function(forceFetch = false) {
-  const syncStatus = document.getElementById('syncStatus'); const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
-  if (forceFetch || !memorySalesCache || lastFetchedDate !== selectedDate) {
-    syncStatus.innerHTML = '⏳ جاري جلب المبيعات من السيرفر...'; memorySalesCache = {};
-    try {
-      const sSnap = await getDocs(collection(db, "invoices"));
-      sSnap.forEach(doc => {
-        const inv = doc.data(); if (inv.isDeleted) return; if (parseDate(inv.date, inv.timestamp) !== selectedDate) return; if (!Array.isArray(inv.items)) return;
-        
-        inv.items.forEach(itm => {
-          const itemId = getProductIdForItem(itm);
-          if (itemId) {
-            const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-            const rawQty = Math.abs(Number(itm.qty) || 0);
-            const isCartonItem = isCarton(itm);
-            const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
-
-            const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true || Number(itm.qty) < 0;
-
-            if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
-            memorySalesCache[itemId] += isReturn ? -totalPcsSold : totalPcsSold;
-          }
-        });
-      });
-      lastFetchedDate = selectedDate; syncStatus.innerHTML = '✅ متزامن ومحفوظ سحابياً';
-    } catch(e) { console.error(e); syncStatus.innerHTML = '⚠️ خطأ في الاتصال بالسيرفر'; }
-  } else { syncStatus.innerHTML = '⚡ يعرض من الذاكرة (متطابق سحابياً)'; }
-  buildCalculatedRows(); window.filterSummaryUI();
+window.refreshSummaryData = function(forceFetch = false) {
+  listenToLiveInvoices();
 };
 
 function buildCalculatedRows() {
@@ -1383,7 +1404,7 @@ window.openEditLoadModal = function(itemId) {
   const prevCartonsVal = currentSess.prevCartons !== undefined ? currentSess.prevCartons : (currentCart.prevCartons ?? '');
   const prevLooseVal   = currentSess.prevLoose   !== undefined ? currentSess.prevLoose   : (currentCart.prevLoose   ?? '');
   const cartonsVal     = currentSess.cartons     !== undefined ? currentSess.cartons     : (currentCart.loadedCartons ?? '');
-  const looseVal       = currentSess.loose       !== undefined ? currentSess.loose       : (currentCart.loadedLoose   ?? '');
+  const looseVal       = currentSess.loose       !== undefined ? currentSess.loadedLoose   : (currentCart.loadedLoose   ?? '');
 
   const unit = getUnitName(fbItem.name);
 
@@ -2061,18 +2082,60 @@ window.exportArchiveExcel = async function(d) {
 
     let excelData = [];
 
+    const parseCartonAndLoose = (str) => {
+      if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
+      const cleaned = cleanTextForPdf(str);
+      
+      let cartons = 0;
+      let loose = 0;
+
+      if (cleaned.includes('ك') || cleaned.includes('ق')) {
+        const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*ك/);
+        const lMatch = cleaned.match(/(\d+)\s*ق/);
+        if (cMatch) cartons = parseFloat(cMatch[1]);
+        if (lMatch) loose = parseInt(lMatch[1]);
+        return { cartons, loose };
+      }
+
+      const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*كرتونة/);
+      if (cMatch) cartons = parseFloat(cMatch[1]);
+
+      const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|جركن)/);
+      if (lMatch) loose = parseInt(lMatch[1]);
+
+      if (!cMatch && !lMatch) {
+        const numMatch = cleaned.match(/(\d+)/);
+        if (numMatch) loose = parseInt(numMatch[1]);
+      }
+
+      return { cartons, loose };
+    };
+
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
-      excelData = data.map((r, i) => ({
-        "م": i + 1,
-        "اسم الصنف": r.name,
-        "قبل التحميل": cleanTextForPdf(r.prevLoaded) || '—',
-        "تم تحميله": cleanTextForPdf(r.newLoaded || r.loaded),
-        "المباع": cleanTextForPdf(r.sold),
-        "المتبقي بالعربية": cleanTextForPdf(r.inTruck) || '—',
-        "الراجع الفعلي": cleanTextForPdf(r.returnedManual),
-        "حالة الفرق": r.status
-      }));
+      excelData = data.map((r, i) => {
+        const prev = parseCartonAndLoose(r.prevLoaded);
+        const loaded = parseCartonAndLoose(r.newLoaded || r.loaded);
+        const sold = parseCartonAndLoose(r.sold);
+        const inTruck = parseCartonAndLoose(r.inTruck);
+        const returned = parseCartonAndLoose(r.returnedManual);
+
+        return {
+          "م": i + 1,
+          "اسم الصنف": r.name,
+          "السابق (كرتونة)": prev.cartons,
+          "السابق (قطعة)": prev.loose,
+          "الجديد (كرتونة)": loaded.cartons,
+          "الجديد (قطعة)": loaded.loose,
+          "المباع (كرتونة)": sold.cartons,
+          "المباع (قطعة)": sold.loose,
+          "المتبقي بالعربية (كرتونة)": inTruck.cartons,
+          "المتبقي بالعربية (قطعة)": inTruck.loose,
+          "الراجع الفعلي (كرتونة)": returned.cartons,
+          "الراجع الفعلي (قطعة)": returned.loose,
+          "حالة الفرق": r.status || 'مضبوط'
+        };
+      });
     } else if (loadDoc.exists()) {
       const loadData = loadDoc.data().cartItems || {};
       excelData = Object.values(loadData).map((r, i) => ({
