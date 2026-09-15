@@ -136,6 +136,17 @@ background: #f1f5f9;
 color: var(--text-secondary);
 }
 
+.btn-quick-summary {
+background: #fff8e1;
+border-color: #fde68a;
+color: #d97706;
+}
+.btn-quick-summary.active {
+background: #d97706;
+border-color: #d97706;
+color: white;
+}
+
 #ordersList {
 width: 100%;
 }
@@ -340,6 +351,14 @@ text-align: right;
 vertical-align: middle;
 }
 
+.summary-row-clickable {
+cursor: pointer;
+transition: background 0.15s;
+}
+.summary-row-clickable:hover {
+background: #f0faf4 !important;
+}
+
 .fab {
 position: fixed;
 bottom: 16px;
@@ -469,6 +488,9 @@ max-width: 320px;
 <div class="stat-chip" onclick="setFilter('done', this)">
 <i class="fas fa-check-circle"></i> تم الفوترة <span class="chip-num" id="chipDone">0</span>
 </div>
+<div class="stat-chip btn-quick-summary" id="btnQuickSummary" onclick="toggleQuickSummary()">
+<i class="fas fa-bolt"></i> نظرة سريعة
+</div>
 </div>
 
 <!-- جدول ملخص الأصناف المطلوبة للتجهيز -->
@@ -485,8 +507,8 @@ max-width: 320px;
       <table class="table table-sm table-borderless m-0" style="font-size: 0.72rem; font-weight: 700;">
         <thead>
           <tr style="border-bottom: 1px dashed var(--border); color: var(--text-secondary);">
-            <th class="py-1">الصنف</th>
-            <th class="py-1 text-center" style="width: 70px;">الكمية</th>
+            <th class="py-1">الصنف (اضغط لتفاصيل العملاء)</th>
+            <th class="py-1 text-center" style="width: 70px;">إجمالي الكمية</th>
           </tr>
         </thead>
         <tbody id="summaryTableBody">
@@ -513,6 +535,29 @@ max-width: 320px;
 <a href="customer-orders.html" class="fab">
 <i class="fas fa-plus"></i>
 </a>
+
+<!-- مودال تفاصيل العملاء الطالبين للصنف -->
+<div class="modal-overlay" id="itemCustomersModal">
+<div class="modal-box" style="max-width: 360px;">
+<div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+  <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;" id="itemCustomersTitle">تفاصيل الطلبات</h6>
+  <button class="btn-close" style="font-size: 0.75rem;" onclick="closeItemCustomersModal()"></button>
+</div>
+<div style="max-height: 240px; overflow-y: auto; text-align: right;">
+  <table class="table table-sm table-striped m-0" style="font-size: 0.75rem;">
+    <thead>
+      <tr class="table-light">
+        <th>اسم العميل / المورد</th>
+        <th class="text-center" style="width: 60px;">الكمية</th>
+      </tr>
+    </thead>
+    <tbody id="itemCustomersTableBody">
+    </tbody>
+  </table>
+</div>
+<button class="btn btn-secondary w-100 fw-bold mt-3 py-1" style="border-radius:8px; font-size: 0.75rem;" onclick="closeItemCustomersModal()">إغلاق</button>
+</div>
+</div>
 
 <div class="modal-overlay" id="convertModal">
 <div class="modal-box">
@@ -619,6 +664,8 @@ let supplierBalancesMap = {};
 let customerBalancesMap = {};
 let currentFilter = 'all';
 let pendingOrderForConvert = null;
+let isQuickSummaryVisible = false;
+let currentSummaryCustomersMap = {}; // لتخزين تفاصيل العملاء لكل صنف
 
 function num(v) {
     if (v === null || v === undefined) return 0;
@@ -815,23 +862,32 @@ function renderOrders() {
         return;
     }
 
-    // --- حساب ملخص التجهيز للأصناف ---
+    // --- حساب ملخص التجهيز وتجميع العملاء حسب الصنف ---
     const itemsMap = {};
+    currentSummaryCustomersMap = {};
+
     filtered.forEach(order => {
+        const clientName = order.supplierName || order.customerName || 'عميل غير معروف';
         order.items?.forEach(item => {
             const name = item.name ? item.name.trim() : 'صنف غير مسمى';
             const qty = num(item.quantity || item.qty);
+
             itemsMap[name] = (itemsMap[name] || 0) + qty;
+
+            if (!currentSummaryCustomersMap[name]) {
+                currentSummaryCustomersMap[name] = {};
+            }
+            currentSummaryCustomersMap[name][clientName] = (currentSummaryCustomersMap[name][clientName] || 0) + qty;
         });
     });
 
     const summaryKeys = Object.keys(itemsMap);
-    if (summaryKeys.length > 0 && summarySection) {
+    if (summaryKeys.length > 0 && isQuickSummaryVisible && summarySection) {
         summarySection.style.display = 'block';
         summaryItemsCount.innerText = `${summaryKeys.length} أصناف`;
         summaryTableBody.innerHTML = summaryKeys.map(name => `
-            <tr style="border-bottom: 1px solid #f8fafc;">
-                <td class="py-1 text-dark">${name}</td>
+            <tr class="summary-row-clickable" style="border-bottom: 1px solid #f8fafc;" onclick="showItemCustomersDetails('${encodeURIComponent(name)}')">
+                <td class="py-1 text-dark fw-bold">${name} <i class="fas fa-info-circle text-primary ms-1" style="font-size:0.65rem;"></i></td>
                 <td class="py-1 text-center text-success font-monospace fw-bold">${itemsMap[name]}</td>
             </tr>
         `).join('');
@@ -854,7 +910,7 @@ function renderOrders() {
         const total = num(order.total).toFixed(2);
         const daysRemaining = calculateRemainingDays(order.date);
 
-        // تنسيق الوقت والتاريخ (إظهار الساعة إذا كانت مسجلة)
+        // تنسيق الوقت والتاريخ (إظهار الساعة والدقيقة)
         let formattedDate = order.date || '—';
         if (order.createdAt?.toDate) {
             formattedDate = moment(order.createdAt.toDate()).format('DD-MM-YYYY hh:mm A');
@@ -941,12 +997,49 @@ function renderOrders() {
     container.innerHTML = html;
 }
 
+window.toggleQuickSummary = () => {
+    isQuickSummaryVisible = !isQuickSummaryVisible;
+    const btn = document.getElementById('btnQuickSummary');
+    if (isQuickSummaryVisible) {
+        btn.classList.add('active');
+    } else {
+        btn.classList.remove('active');
+    }
+    renderOrders();
+};
+
+window.showItemCustomersDetails = (encodedItemName) => {
+    const name = decodeURIComponent(encodedItemName);
+    const clientsData = currentSummaryCustomersMap[name] || {};
+    
+    document.getElementById('itemCustomersTitle').innerText = `طالبين: ${name}`;
+    const tbody = document.getElementById('itemCustomersTableBody');
+    
+    const clientKeys = Object.keys(clientsData);
+    if (!clientKeys.length) {
+        tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">لا يوجد تفاصيل</td></tr>`;
+    } else {
+        tbody.innerHTML = clientKeys.map(client => `
+            <tr>
+                <td class="fw-bold">${client}</td>
+                <td class="text-center font-monospace text-success fw-bold">${clientsData[client]}</td>
+            </tr>
+        `).join('');
+    }
+    
+    document.getElementById('itemCustomersModal').style.display = 'flex';
+};
+
+window.closeItemCustomersModal = () => {
+    document.getElementById('itemCustomersModal').style.display = 'none';
+};
+
 // تصحيح نطاق الدوال لربطها بـ window مباشرة
 window.dismissToast = () => document.getElementById('orderToastNotification').classList.remove('show');
 
 window.setFilter = (filter, el) => {
     currentFilter = filter;
-    document.querySelectorAll('.stat-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.stat-chip:not(#btnQuickSummary)').forEach(c => c.classList.remove('active'));
     el.classList.add('active');
     renderOrders();
 };
