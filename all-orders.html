@@ -471,6 +471,32 @@ max-width: 320px;
 </div>
 </div>
 
+<!-- جدول ملخص الأصناف المطلوبة للتجهيز -->
+<div id="summarySection" class="px-3 my-2" style="display: none;">
+  <div style="background: white; border: 1.5px solid var(--border); border-radius: var(--card-radius); padding: 10px 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+    <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+      <span style="font-size: 0.78rem; font-weight: 800; color: var(--accent);">
+        <i class="fas fa-boxes-packing me-1"></i> ملخص الأصناف للتجهيز
+      </span>
+      <span class="badge bg-light text-dark border" id="summaryItemsCount" style="font-size: 0.65rem;">0 أصناف</span>
+    </div>
+    
+    <div style="max-height: 180px; overflow-y: auto;">
+      <table class="table table-sm table-borderless m-0" style="font-size: 0.72rem; font-weight: 700;">
+        <thead>
+          <tr style="border-bottom: 1px dashed var(--border); color: var(--text-secondary);">
+            <th class="py-1">الصنف</th>
+            <th class="py-1 text-center" style="width: 70px;">الكمية</th>
+          </tr>
+        </thead>
+        <tbody id="summaryTableBody">
+          <!-- يملأ ديناميكياً -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div id="ordersList">
 <div class="loading-state">
 <div class="spinner"></div>
@@ -779,11 +805,41 @@ function renderOrders() {
     }
 
     const container = document.getElementById('ordersList');
+    const summarySection = document.getElementById('summarySection');
+    const summaryTableBody = document.getElementById('summaryTableBody');
+    const summaryItemsCount = document.getElementById('summaryItemsCount');
+
     if (!filtered.length) {
         container.innerHTML = `<div class="empty-state"><h6>لا توجد طلبات</h6></div>`;
+        if (summarySection) summarySection.style.display = 'none';
         return;
     }
 
+    // --- حساب ملخص التجهيز للأصناف ---
+    const itemsMap = {};
+    filtered.forEach(order => {
+        order.items?.forEach(item => {
+            const name = item.name ? item.name.trim() : 'صنف غير مسمى';
+            const qty = num(item.quantity || item.qty);
+            itemsMap[name] = (itemsMap[name] || 0) + qty;
+        });
+    });
+
+    const summaryKeys = Object.keys(itemsMap);
+    if (summaryKeys.length > 0 && summarySection) {
+        summarySection.style.display = 'block';
+        summaryItemsCount.innerText = `${summaryKeys.length} أصناف`;
+        summaryTableBody.innerHTML = summaryKeys.map(name => `
+            <tr style="border-bottom: 1px solid #f8fafc;">
+                <td class="py-1 text-dark">${name}</td>
+                <td class="py-1 text-center text-success font-monospace fw-bold">${itemsMap[name]}</td>
+            </tr>
+        `).join('');
+    } else if (summarySection) {
+        summarySection.style.display = 'none';
+    }
+
+    // --- ترتيب وإظهار الطلبيات ---
     filtered.sort((a, b) => {
         if (a.status === 'done' && b.status !== 'done') return 1;
         if (a.status !== 'done' && b.status === 'done') return -1;
@@ -797,6 +853,14 @@ function renderOrders() {
         const initials = displayName.charAt(0);
         const total = num(order.total).toFixed(2);
         const daysRemaining = calculateRemainingDays(order.date);
+
+        // تنسيق الوقت والتاريخ (إظهار الساعة إذا كانت مسجلة)
+        let formattedDate = order.date || '—';
+        if (order.createdAt?.toDate) {
+            formattedDate = moment(order.createdAt.toDate()).format('DD-MM-YYYY hh:mm A');
+        } else if (order.date && order.date.includes(':')) {
+            formattedDate = order.date;
+        }
 
         let badgeHTML = '';
         if (isDone) {
@@ -866,7 +930,7 @@ function renderOrders() {
         </table>
         </div>
         <div class="card-footer-row mt-2">
-        <div class="order-meta"><i class="fas fa-clock"></i> التسليم: ${order.date || '—'}</div>
+        <div class="order-meta"><i class="fas fa-clock"></i> ${formattedDate}</div>
         <div class="order-total">${total} ج.م</div>
         </div>
         ${tapHint}
