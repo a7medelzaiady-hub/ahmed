@@ -250,7 +250,7 @@
         <div class="modal-card-header">
             <div>
                 <h6 class="m-0 fw-bold" id="modalUserName">مسار وتنقلات المستخدم</h6>
-                <span class="text-muted" style="font-size:0.72rem;">الصفحات والتنقلات المسجلة لهذا اليوزر</span>
+                <span class="text-muted" style="font-size:0.72rem;">جميع الصفحات والتنقلات المسجلة لهذا اليوزر</span>
             </div>
             <button class="btn-close" onclick="closeTrailModal()"></button>
         </div>
@@ -417,7 +417,7 @@
 
                         <div class="action-bar">
                             <button class="btn-action-sm view" onclick="window.openUserTrail('${currentUserId}', '${s.userName || 'اليوزر'}')">
-                                <i class="fas fa-eye"></i> عرض الصفحات والتنقلات
+                                <i class="fas fa-eye"></i> عرض كافة التنقلات والصفحات
                             </button>
                             <button class="btn-action-sm kick" onclick="window.kickUser('${s.id}', '${s.userName || 'اليوزر'}')">
                                 <i class="fas fa-power-off"></i> طرد وإنهاء
@@ -434,7 +434,7 @@
         const tbody = document.getElementById('globalLogsTbody');
         const kpiTotalLogs = document.getElementById('kpiTotalLogs');
         const logsRef = collection(db, "session_logs");
-        const q = query(logsRef, orderBy("timestamp", "desc"), limit(40));
+        const q = query(logsRef, orderBy("timestamp", "desc"), limit(50));
 
         onSnapshot(q, (snap) => {
             if (snap.empty) {
@@ -453,7 +453,7 @@
                 let actionBadge = `<span class="badge bg-secondary">${log.action}</span>`;
                 if (log.action === 'LOGIN') actionBadge = `<span class="badge bg-success"><i class="fas fa-sign-in-alt me-1"></i> دخول</span>`;
                 else if (log.action === 'LOGOUT') actionBadge = `<span class="badge bg-danger"><i class="fas fa-sign-out-alt me-1"></i> خروج</span>`;
-                else if (log.action === 'PAGE_VIEW' || log.pageTitle || log.page) actionBadge = `<span class="badge bg-info text-dark"><i class="fas fa-file-lines me-1"></i> ${pageName}</span>`;
+                else if (log.action === 'PAGE_VIEW' || log.pageTitle || log.page) actionBadge = `<span class="badge bg-info text-dark"><i class="fas fa-file-lines me-1"></i> فتح ${pageName}</span>`;
 
                 html += `
                     <tr>
@@ -467,39 +467,37 @@
         });
     }
 
-    // 3. عرض الصفحات والتنقلات الزمنية للمستخدم المحدد (المحدثة)
+    // 3. عرض جميع التنقلات والصفحات المسجلة لليوزر
     window.openUserTrail = async function(userId, userName) {
         document.getElementById('modalUserName').innerText = `تنقلات ${userName || 'المستخدم'}`;
         document.getElementById('userTrailModal').classList.add('open');
         const container = document.getElementById('modalTimelineContent');
-        container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>جاري جلب سجل الصفحات...</span></div>`;
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>جاري جلب سجل التنقلات...</span></div>`;
 
         try {
             const logsRef = collection(db, "session_logs");
+            
+            // جلب السجلات التابعة للـ userId المسجل
             const q = query(logsRef, where("userId", "==", userId));
             const snap = await getDocs(q);
 
             if (snap.empty) {
-                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><span>لا توجد صفحات أو حركات مسجلة لهذا المستخدم.</span></div>`;
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><span>لا توجد صفحات أو تنقلات مسجلة لهذا اليوزر حتى الآن.</span></div>`;
                 return;
             }
 
             let logsList = [];
-            snap.forEach(d => {
-                logsList.push({ id: d.id, ...d.data() });
-            });
+            snap.forEach(d => logsList.push({ id: d.id, ...d.data() }));
 
-            // فرز الحركات محلياً من الأحدث إلى الأقدم أماناً بالـ Timestamp
+            // ترتيب السجلات زمنياً من الأحدث إلى الأقدم
             logsList.sort((a, b) => parseTimestamp(b.timestamp).getTime() - parseTimestamp(a.timestamp).getTime());
 
-            const recentLogs = logsList.slice(0, 50);
-
             let html = '';
-            recentLogs.forEach(l => {
+            logsList.forEach(l => {
                 const timeStr = l.timestamp ? parseTimestamp(l.timestamp).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '-';
                 const pageDetails = l.pageTitle || l.pageUrl || l.page || 'صفحة فرعية';
                 
-                let title = "زيارة صفحة";
+                let title = "";
                 let badgeClass = "bg-primary";
 
                 if (l.action === 'LOGIN') {
@@ -508,11 +506,11 @@
                 } else if (l.action === 'LOGOUT') {
                     title = `<i class="fas fa-sign-out-alt text-danger me-1"></i> تسجيل خروج`;
                     badgeClass = "bg-danger";
-                } else if (l.action === 'PAGE_VIEW' || l.pageTitle || l.page) {
-                    title = `<i class="fas fa-file-lines text-info me-1"></i> فتح صفحة: <strong class="text-dark">${pageDetails}</strong>`;
+                } else if (l.action === 'PAGE_VIEW' || l.pageTitle || l.pageUrl) {
+                    title = `<i class="fas fa-file-lines text-info me-1"></i> زيارة صفحة: <strong class="text-dark">${pageDetails}</strong>`;
                     badgeClass = "bg-info text-dark";
                 } else {
-                    title = `<i class="fas fa-mouse text-secondary me-1"></i> إجراء: <strong>${l.action || 'حركة'}</strong>`;
+                    title = `<i class="fas fa-hand-pointer text-secondary me-1"></i> إجراء: <strong>${l.action || 'حركة'}</strong>`;
                 }
 
                 html += `
@@ -533,7 +531,7 @@
             container.innerHTML = `
                 <div class="empty-state text-danger">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <span>فشل جلب سجل التنقلات. تحقق من الكونسول أو إعدادات قاعدة البيانات.</span>
+                    <span>حدث خطأ أثناء تحميل سجل التنقلات.</span>
                 </div>`;
         }
     };
