@@ -765,6 +765,25 @@
         return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
     }
 
+    // دالة تحويل العدد الكلي إلى كرتونة وقطعة
+    function formatStockQuantity(totalPcs, unitFactor) {
+        const factor = Math.max(1, Number(unitFactor) || 1);
+        const total = Number(totalPcs || 0);
+        const isNegative = total < 0;
+        const absTotal = Math.abs(total);
+
+        const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+        const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
+
+        if (cartons !== 0 && jerrycans !== 0) {
+            return `${cartons} كرتونة و ${jerrycans} قطعة`;
+        } else if (cartons !== 0) {
+            return `${cartons} كرتونة`;
+        } else {
+            return `${jerrycans} قطعة`;
+        }
+    }
+
     function playAlertSound() {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1196,22 +1215,7 @@
         
         let itemsHtml = filtered.map(p => {
             const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
-            const total = Number(p.totalPcs || 0);
-            const isNegative = total < 0;
-            const absTotal = Math.abs(total);
-
-            // تحويل قطع الكلي إلى (كرتونة + جركن/قطعة) كما في صفحة المخزن
-            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
-            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
-
-            let qtyDisplay = '';
-            if (cartons !== 0 && jerrycans !== 0) {
-                qtyDisplay = `${cartons} كرتونة و ${jerrycans} قطعة`;
-            } else if (cartons !== 0) {
-                qtyDisplay = `${cartons} كرتونة`;
-            } else {
-                qtyDisplay = `${jerrycans} قطعة`;
-            }
+            const qtyDisplay = formatStockQuantity(p.totalPcs, factor);
 
             return `
                 <div class="search-item" onclick="selectProduct('${rowId}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
@@ -1219,7 +1223,6 @@
                 </div>`;
         }).join('');
 
-        // زر إضافة صنف جديد في حال عدم توفره بـ الداتابيز
         const safeName = input.value.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         itemsHtml += `
             <div class="search-item bg-light text-success fw-bold border-top" onclick="openNewProductModal('${rowId}', '${safeName}')">
@@ -1325,21 +1328,7 @@
 
         if (p) {
             const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
-            const total = Number(p.totalPcs || 0);
-            const isNegative = total < 0;
-            const absTotal = Math.abs(total);
-
-            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
-            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
-
-            let qtyText = '';
-            if (cartons !== 0 && jerrycans !== 0) {
-                qtyText = `${cartons} كرتونة و ${jerrycans} قطعة`;
-            } else if (cartons !== 0) {
-                qtyText = `${cartons} كرتونة`;
-            } else {
-                qtyText = `${jerrycans} قطعة`;
-            }
+            const qtyText = formatStockQuantity(p.totalPcs, factor);
 
             row.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText}`;
             
@@ -1447,14 +1436,8 @@
                 const p = inventory.find(i => i.id === oldData.stockId);
                 if (p) {
                     const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
-                    const total = Number(p.totalPcs || 0);
-                    const isNegative = total < 0;
-                    const absTotal = Math.abs(total);
-                    const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
-                    const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
-                    let qtyText = cartons !== 0 ? `${cartons} كرتونة` : '';
-                    if (jerrycans !== 0) qtyText += (qtyText ? ' و ' : '') + `${jerrycans} قطعة`;
-                    r.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText || '0 قطعة'}`;
+                    const qtyText = formatStockQuantity(p.totalPcs, factor);
+                    r.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText}`;
                 }
             }, 50);
         }
@@ -2047,7 +2030,6 @@
         setDataStatus("تم استرجاع الاتصال — البيانات ستتم مزامنتها تلقائيًا", "fa-check-circle");
     });
 
-    // دالة فحص الوحدة إذا كانت كرتونة
     function isCartonUnit(unitValue, isCartonFlag) {
         if (isCartonFlag === true) return true;
         if (!unitValue) return false;
@@ -2055,7 +2037,6 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
-    // جلب وحساب البيانات الحقيقية من المبيعات والمشتريات وبداية المدة
     async function fetchFreshLists() {
         const [cSnap, iSnap, invoicesSnap, supplierSnap, transSnap] = await Promise.all([
             getDocs(collection(db, "customers")),
@@ -2083,7 +2064,6 @@
         const purchasesMap = new Map();
         const openingMap = new Map();
 
-        // حساب أرصدة بداية المدة
         transSnap.forEach(docSnap => {
             const data = docSnap.data();
             if (data.productId) {
@@ -2092,7 +2072,6 @@
             }
         });
 
-        // حساب المبيعات
         invoicesSnap.forEach(docSnap => {
             const items = docSnap.data().items || [];
             for (let i = 0; i < items.length; i++) {
@@ -2110,7 +2089,6 @@
             }
         });
 
-        // حساب المشتريات
         supplierSnap.forEach(docSnap => {
             const items = docSnap.data().items || [];
             for (let i = 0; i < items.length; i++) {
@@ -2129,7 +2107,6 @@
             }
         });
 
-        // دمج الحساب الفعلي داخل مصفوفة الأصناف
         inventory = inventory.map(item => {
             const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
             let openingTotalPcs = 0;
@@ -2157,22 +2134,10 @@
     }
 
     async function loadCustomersAndInventory() {
-        const cachedCustomers = localStorage.getItem(CACHE_KEYS.customers);
-        const cachedInventory = localStorage.getItem(CACHE_KEYS.inventory);
-        const cachedTs = Number(localStorage.getItem(CACHE_KEYS.ts) || 0);
-        const age = Date.now() - cachedTs;
-
-        if (cachedCustomers && cachedInventory && cachedTs && age < CACHE_TTL_MS) {
-            customers = JSON.parse(cachedCustomers);
-            inventory = JSON.parse(cachedInventory);
-            setDataStatus(`بيانات محفوظة محليًا — ${customers.length} عميل، ${inventory.length} صنف`, "fa-check-circle");
-            return;
-        }
-
-        if (cachedCustomers && cachedInventory) {
-            customers = JSON.parse(cachedCustomers);
-            inventory = JSON.parse(cachedInventory);
-        }
+        // تفريغ الكاش المباشر عند بدء التشغيل لضمان التطبيق الفوري للتعديل
+        localStorage.removeItem(CACHE_KEYS.inventory);
+        localStorage.removeItem(CACHE_KEYS.customers);
+        
         setDataStatus("جاري تحديث قوائم العملاء والأصناف...", "fa-spinner fa-spin");
         await fetchFreshLists();
         setDataStatus(`تم التحديث — ${customers.length} عميل، ${inventory.length} صنف`, "fa-check-circle");
