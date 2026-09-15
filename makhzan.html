@@ -2078,14 +2078,14 @@ window.exportSummaryExcel = function() {
 // دالة تصدير الأرشيف إلى إكسيل بالتحليل الدقيق
 // ==========================================
 window.exportArchiveExcel = async function(d) {
-  window.toast('⏳ جاري إعداد ملف Excel تفصيلي للأرشيف...');
+  window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
   try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
     let excelData = [];
 
-    // دالة لاستخراج الأرقام سواء مكتوبة بصيغة (ك/ق) أو (كرتونة/جركن/قطعة)
+    // دالة لتفكيك النصوص المخزنة واستخراج الأرقام للكراتين والقطع
     const parseCartonAndLoose = (str) => {
       if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
       const cleaned = cleanTextForPdf(str);
@@ -2093,76 +2093,74 @@ window.exportArchiveExcel = async function(d) {
       let cartons = 0;
       let loose = 0;
 
-      // 1. البحث عن الكراتين
+      // 1. الكراتين
       const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
-      if (cMatch) {
-        cartons = parseFloat(cMatch[1]);
-      }
+      if (cMatch) cartons = parseFloat(cMatch[1]);
 
-      // 2. البحث عن القطع / الجرادين (تشمل حرف ق، قطعة، أو جركن)
+      // 2. القطع / الجرادين
       const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
-      if (lMatch) {
-        loose = parseInt(lMatch[1]);
-      }
+      if (lMatch) loose = parseInt(lMatch[1]);
 
-      // 3. حالة عدم وجود تمييز وكان الرقم مجرد (مثل 6 أو -6)
+      // 3. رقم مجرد
       if (!cMatch && !lMatch) {
         const numMatch = cleaned.match(/(-?\d+)/);
-        if (numMatch) {
-          loose = parseInt(numMatch[1]);
-        }
+        if (numMatch) loose = parseInt(numMatch[1]);
       }
 
       return { cartons, loose };
     };
 
+    // دالة مساعدة لإرجاع القيمة أو ترك الخانة فارغة تماماً إذا كانت 0
+    const valOrEmpty = (v) => (v && v !== 0 ? v : "");
+
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
-      excelData = data.map((r, i) => {
+      excelData = data.map((r) => {
         const prev     = parseCartonAndLoose(r.prevLoaded);
         const loaded   = parseCartonAndLoose(r.newLoaded || r.loaded);
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
-        const returned = parseCartonAndLoose(r.returnedManual);
+
+        // حساب الإجمالي (السابق + الجديد)
+        const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
+        const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
         return {
-          "م": i + 1,
           "اسم الصنف": r.name,
-
-          // قسم قبل التحميل
-          "السابق (كرتونة)": prev.cartons || 0,
-          "السابق (قطعة)": prev.loose || 0,
-
-          // قسم تم تحميله
-          "الجديد (كرتونة)": loaded.cartons || 0,
-          "الجديد (قطعة)": loaded.loose || 0,
-
-          // قسم المباع
-          "المباع (كرتونة)": sold.cartons || 0,
-          "المباع (قطعة)": sold.loose || 0,
-
-          // قسم المتبقي بالعربية
-          "المتبقي بالعربية (كرتونة)": inTruck.cartons || 0,
-          "المتبقي بالعربية (قطعة)": inTruck.loose || 0,
-
-          // قسم الراجع الفعلي
-          "الراجع الفعلي (كرتونة)": returned.cartons || 0,
-          "الراجع الفعلي (قطعة)": returned.loose || 0,
-
-          "حالة الفرق": r.status || 'مضبوط'
+          "سابق ك": valOrEmpty(prev.cartons),
+          "سابق ق": valOrEmpty(prev.loose),
+          "جديد ك": valOrEmpty(loaded.cartons),
+          "جديد ق": valOrEmpty(loaded.loose),
+          "اجمالي ك": valOrEmpty(totalCartons),
+          "اجمالي ق": valOrEmpty(totalLoose),
+          "مباع ك": valOrEmpty(sold.cartons),
+          "مباع ق": valOrEmpty(sold.loose),
+          "متبقى ك": valOrEmpty(inTruck.cartons),
+          "متبقى ق": valOrEmpty(inTruck.loose)
         };
       });
     } else if (loadDoc.exists()) {
       const loadData = loadDoc.data().cartItems || {};
-      excelData = Object.values(loadData).map((r, i) => ({
-        "م": i + 1,
-        "اسم الصنف": r.name,
-        "السابق (كرتونة)": Number(r.prevCartons) || 0,
-        "السابق (قطعة)": Number(r.prevLoose) || 0,
-        "الجديد المحمل (كرتونة)": Number(r.loadedCartons) || 0,
-        "الجديد المحمل (قطعة)": Number(r.loadedLoose) || 0,
-        "آخر تعديل": r.lastEditedAt || '—'
-      }));
+      excelData = Object.values(loadData).map((r) => {
+        const prevCartons   = Number(r.prevCartons) || 0;
+        const prevLoose     = Number(r.prevLoose) || 0;
+        const loadedCartons = Number(r.loadedCartons) || 0;
+        const loadedLoose   = Number(r.loadedLoose) || 0;
+
+        return {
+          "اسم الصنف": r.name,
+          "سابق ك": valOrEmpty(prevCartons),
+          "سابق ق": valOrEmpty(prevLoose),
+          "جديد ك": valOrEmpty(loadedCartons),
+          "جديد ق": valOrEmpty(loadedLoose),
+          "اجمالي ك": valOrEmpty(prevCartons + loadedCartons),
+          "اجمالي ق": valOrEmpty(prevLoose + loadedLoose),
+          "مباع ك": "",
+          "مباع ق": "",
+          "متبقى ك": "",
+          "متبقى ق": ""
+        };
+      });
     }
 
     if (!excelData.length) {
@@ -2172,15 +2170,37 @@ window.exportArchiveExcel = async function(d) {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-    // إجبار اتجاه شيت الإكسيل ليكون من اليمين إلى اليسار (RTL)
+    // 1. اتجاه الشيت من اليمين إلى اليسار
     if (!worksheet['!views']) worksheet['!views'] = [];
     worksheet['!views'].push({ RTL: true });
+
+    // 2. تطبيق التنسيق (حدود سوداء + خط عريض Bold لكل الخانات)
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const borderStyle = {
+      top:    { style: 'thin', color: { rgb: "000000" } },
+      bottom: { style: 'thin', color: { rgb: "000000" } },
+      left:   { style: 'thin', color: { rgb: "000000" } },
+      right:  { style: 'thin', color: { rgb: "000000" } }
+    };
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cell_address]) continue;
+        
+        worksheet[cell_address].s = {
+          font: { bold: true, name: "Cairo" },
+          border: borderStyle,
+          alignment: { horizontal: C === 0 ? "right" : "center", vertical: "center" }
+        };
+      }
+    }
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
     
     XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
-    window.toast('📊 تم تصدير ملف Excel بنجاح بمشجر الكراتين والجرادين!');
+    window.toast('📊 تم تصدير ملف Excel بالتنسيق الجديد بنجاح!');
   } catch (e) {
     console.error(e);
     window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
