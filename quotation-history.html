@@ -1323,7 +1323,29 @@ function buildCalculatedRows() {
     if (currentManualCartons !== '' || currentManualLoose !== '') { manualText = formatQuantityDetailed(totalReturnedPcs, cap, unit); }
     const stockText = formatQuantityDetailed(fbItem.totalPcs, cap, unit);
 
-    rows.push({ id: fbItem.id, it: cartData, unit, cap, prevLoadedText, newLoadedText, totalLoadedPcs, totalSoldPcs, loadedText, soldText, manualText, inTruckPcs, inTruckText, stockText, calculatedStatus, currentManualCartons, currentManualLoose, lastEditedAt, totalRemPcs, isInventoryDone });
+    rows.push({ 
+      id: fbItem.id, 
+      it: cartData, 
+      unit, 
+      cap, 
+      stockTotalPcs: fbItem.totalPcs,
+      prevLoadedText, 
+      newLoadedText, 
+      totalLoadedPcs, 
+      totalSoldPcs, 
+      loadedText, 
+      soldText, 
+      manualText, 
+      inTruckPcs, 
+      inTruckText, 
+      stockText, 
+      calculatedStatus, 
+      currentManualCartons, 
+      currentManualLoose, 
+      lastEditedAt, 
+      totalRemPcs, 
+      isInventoryDone 
+    });
   });
 
   rows.sort((a, b) => {
@@ -2045,7 +2067,7 @@ window.exportLoadExcel = function() {
 };
 
 // ==========================================
-// دالة تصدير الجرد المباشر إلى إكسيل بالتنسيق المطور
+// دالة تصدير الجرد المباشر إلى إكسيل بالتنسيق المطور (تتضمن أعمدة المخزن)
 // ==========================================
 window.exportSummaryExcel = function() {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { 
@@ -2084,11 +2106,30 @@ window.exportSummaryExcel = function() {
     const sold     = parseCartonAndLoose(r.soldText);
     const inTruck  = parseCartonAndLoose(r.inTruckText);
 
+    // حساب بضاعة المخزن
+    const cap = r.cap || 1;
+    const totalStockPcs = r.stockTotalPcs || 0;
+    let stockCartons = 0;
+    let stockLoose = 0;
+
+    if (cap > 1) {
+      stockCartons = Math.floor(Math.abs(totalStockPcs) / cap);
+      stockLoose   = Math.abs(totalStockPcs) % cap;
+      if (totalStockPcs < 0) {
+        stockCartons = -stockCartons;
+        stockLoose   = -stockLoose;
+      }
+    } else {
+      stockLoose = totalStockPcs;
+    }
+
     const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
     const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
     return {
       "اسم الصنف": r.it.name,
+      "مخزن ك": valOrEmpty(stockCartons),
+      "مخزن ق": valOrEmpty(stockLoose),
       "سابق ك": valOrEmpty(prev.cartons),
       "سابق ق": valOrEmpty(prev.loose),
       "جديد ك": valOrEmpty(loaded.cartons),
@@ -2115,7 +2156,7 @@ window.exportSummaryExcel = function() {
 };
 
 // ==========================================
-// دالة تصدير الأرشيف إلى إكسيل بالتنسيق المطور
+// دالة تصدير الأرشيف إلى إكسيل بالتنسيق المطور (تتضمن أعمدة المخزن)
 // ==========================================
 window.exportArchiveExcel = async function(d) {
   window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور للأرشيف...');
@@ -2156,11 +2197,32 @@ window.exportArchiveExcel = async function(d) {
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
 
+        // جلب سعة ومخزون الصنف إن وجد في القائمة
+        const fbItem = firebaseItems.find(i => cleanItemName(i.name) === cleanItemName(r.name));
+        const cap = fbItem ? fbItem.capacity : 1;
+        const totalStockPcs = fbItem ? fbItem.totalPcs : 0;
+
+        let stockCartons = 0;
+        let stockLoose = 0;
+
+        if (cap > 1) {
+          stockCartons = Math.floor(Math.abs(totalStockPcs) / cap);
+          stockLoose   = Math.abs(totalStockPcs) % cap;
+          if (totalStockPcs < 0) {
+            stockCartons = -stockCartons;
+            stockLoose   = -stockLoose;
+          }
+        } else {
+          stockLoose = totalStockPcs;
+        }
+
         const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
         const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
         return {
           "اسم الصنف": r.name,
+          "مخزن ك": valOrEmpty(stockCartons),
+          "مخزن ق": valOrEmpty(stockLoose),
           "سابق ك": valOrEmpty(prev.cartons),
           "سابق ق": valOrEmpty(prev.loose),
           "جديد ك": valOrEmpty(loaded.cartons),
@@ -2181,8 +2243,28 @@ window.exportArchiveExcel = async function(d) {
         const loadedCartons = Number(r.loadedCartons) || 0;
         const loadedLoose   = Number(r.loadedLoose) || 0;
 
+        const fbItem = firebaseItems.find(i => cleanItemName(i.name) === cleanItemName(r.name));
+        const cap = fbItem ? fbItem.capacity : 1;
+        const totalStockPcs = fbItem ? fbItem.totalPcs : 0;
+
+        let stockCartons = 0;
+        let stockLoose = 0;
+
+        if (cap > 1) {
+          stockCartons = Math.floor(Math.abs(totalStockPcs) / cap);
+          stockLoose   = Math.abs(totalStockPcs) % cap;
+          if (totalStockPcs < 0) {
+            stockCartons = -stockCartons;
+            stockLoose   = -stockLoose;
+          }
+        } else {
+          stockLoose = totalStockPcs;
+        }
+
         return {
           "اسم الصنف": r.name,
+          "مخزن ك": valOrEmpty(stockCartons),
+          "مخزن ق": valOrEmpty(stockLoose),
           "سابق ك": valOrEmpty(prevCartons),
           "سابق ق": valOrEmpty(prevLoose),
           "جديد ك": valOrEmpty(loadedCartons),
