@@ -219,6 +219,20 @@
         }
         .mc-current .mini-val { color: var(--accent); font-size: 13.5px; font-weight: 900; }
 
+        /* شريط بحث المودال */
+        .modal-search-wrap {
+            padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--border);
+        }
+        .modal-search-inner {
+            background: #f1f5f9; border: 1px solid var(--border);
+            border-radius: 10px; padding: 6px 10px; display: flex; align-items: center; gap: 6px;
+        }
+        .modal-search-inner input {
+            border: none; background: transparent; width: 100%;
+            font-family: 'Cairo', sans-serif; font-size: 12px; font-weight: 700;
+            color: var(--text); outline: none; text-align: right;
+        }
+
         .quick-list { display: flex; flex-direction: column; gap: 6px; }
         .quick-row-item {
             background: #ffffff; border: 1px solid var(--border); border-radius: 10px;
@@ -298,12 +312,18 @@
     </div>
 </div>
 
-<!-- مودال النظرة السريعة -->
+<!-- مودال النظرة السريعة مع شريط البحث -->
 <div class="modal-overlay" id="quickViewModal">
     <div class="modal-card">
         <div class="modal-header" style="background: #0284c7;">
             <h4><i class="fas fa-list-ul me-1"></i> نظرة سريعة على الأصناف</h4>
             <button class="close-modal" id="btnCloseQuickModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-search-wrap">
+            <div class="modal-search-inner">
+                <i class="fas fa-search" style="color: var(--sub); font-size: 11px;"></i>
+                <input type="text" id="quickSearchInput" placeholder="ابحث داخل العرض السريع...">
+            </div>
         </div>
         <div class="modal-body" id="quickModalBody"></div>
     </div>
@@ -354,6 +374,7 @@
         btnQuickView: document.getElementById('btnQuickView'),
         quickViewModal: document.getElementById('quickViewModal'),
         quickModalBody: document.getElementById('quickModalBody'),
+        quickSearchInput: document.getElementById('quickSearchInput'),
         btnCloseQuickModal: document.getElementById('btnCloseQuickModal')
     };
 
@@ -636,11 +657,24 @@
         </div>`;
     }
 
-    function showQuickView() {
-        if (!allItems.length) return alert('لا توجد أصناف حالياً!');
+    function renderQuickList() {
+        if (!allItems.length) {
+            dom.quickModalBody.innerHTML = `<div class="empty-state"><p>لا توجد أصناف حالياً!</p></div>`;
+            return;
+        }
+
+        const query = dom.quickSearchInput.value.trim().toLowerCase();
+        const filtered = query 
+            ? allItems.filter(i => (i.name || '').toLowerCase().includes(query) || (i.barcode || '').toLowerCase().includes(query))
+            : allItems;
+
+        if (filtered.length === 0) {
+            dom.quickModalBody.innerHTML = `<div class="empty-state"><p>لا توجد أصناف مطابقة</p></div>`;
+            return;
+        }
 
         let listHtml = '<div class="quick-list">';
-        allItems.forEach(item => {
+        filtered.forEach(item => {
             const totalPcs = Number(item.totalPcs) || 0;
             const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
             const rawUnit = (item.unitName || item.unit || 'جركن').trim();
@@ -658,7 +692,14 @@
         listHtml += '</div>';
 
         dom.quickModalBody.innerHTML = listHtml;
+    }
+
+    function showQuickView() {
+        if (!allItems.length) return alert('لا توجد أصناف حالياً!');
+        dom.quickSearchInput.value = '';
+        renderQuickList();
         dom.quickViewModal.style.display = 'flex';
+        setTimeout(() => dom.quickSearchInput.focus(), 100);
     }
 
     async function showItemHistory(itemId, itemName) {
@@ -760,6 +801,7 @@
     }
 
     dom.searchInput.addEventListener('input', renderList);
+    dom.quickSearchInput.addEventListener('input', renderQuickList);
 
     dom.listBody.addEventListener('click', (e) => {
         const card = e.target.closest('.item-card');
