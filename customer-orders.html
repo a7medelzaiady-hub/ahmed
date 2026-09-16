@@ -14,6 +14,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- مكتبة html2canvas لتحويل الفاتورة الحرارية إلى صورة -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <style>
         :root {
             --accent: #0b5e3d;
@@ -344,6 +348,23 @@
             margin-top: 4px;
             display: none;
         }
+
+        /* تنسيقات الفاتورة الحرارية للشير */
+        .thermal-capture-container { position: absolute; left: -9999px; top: 0; }
+        #thermalReceiptArea { background: #ffffff; width: 380px; padding: 18px; color: #000000; font-family: 'Cairo', sans-serif; }
+        .receipt-header { text-align: center; border-bottom: 2px dashed #000000; padding-bottom: 12px; margin-bottom: 12px; }
+        .receipt-header h3 { margin: 0; font-size: 21px; font-weight: 800; }
+        .receipt-header p { margin: 4px 0 8px; font-size: 13px; font-weight: 700; }
+        .receipt-header .order-prep-badge { font-size: 15px; font-weight: 800; border: 1.5px solid #000; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 5px;}
+        .receipt-info { font-size: 13.5px; font-weight: 800; border-bottom: 1px dashed #000000; padding-bottom: 10px; margin-bottom: 12px; }
+        .receipt-info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .receipt-table th { border-bottom: 2px solid #000000; text-align: right; font-size: 12.5px; font-weight: 800; padding: 4px 2px; }
+        .receipt-table td { padding: 7px 2px; font-size: 12.5px; font-weight: 700; border-bottom: 1px dashed #cccccc; }
+        .receipt-totals { border-top: 2px dashed #000000; padding-top: 8px; margin-top: 10px; }
+        .receipt-total-row { padding-top: 4px; font-size: 14px; font-weight: 800; display: flex; justify-content: space-between; color: #333;}
+        .receipt-total-row.grand-total { border-top: 1px solid #000; margin-top: 8px; padding-top: 8px; font-size: 17px; font-weight: 900; color: #000;}
+        .receipt-footer-note { text-align: center; margin-top: 15px; font-size: 12.5px; font-weight: 800; border-top: 1px dashed #ccc; padding-top: 10px; }
     </style>
 </head>
 <body>
@@ -472,7 +493,7 @@
 
 </div>
 
-<!-- Success Modal (تم تعديله لإضافة زر الشير) -->
+<!-- Success Modal -->
 <div class="modal-overlay" id="successModal" style="display: none;">
     <div class="modal-box">
         <div class="modal-icon">
@@ -483,7 +504,7 @@
             تم حفظ طلبية العميل <b id="successCustomerName"></b> بنجاح
         </p>
 
-        <!-- زر الشير الجديد -->
+        <!-- زر مشاركة الفاتورة الحرارية -->
         <button class="btn btn-primary w-100 fw-bold py-2 mb-3" style="border-radius: 10px; background-color: #25D366; border: none; font-size: 0.9rem;" onclick="shareOrderDetails()">
             <i class="fab fa-whatsapp me-1" style="font-size: 1.1rem;"></i> مشاركة تفاصيل الطلبية
         </button>
@@ -498,6 +519,49 @@
             <button class="btn btn-outline-dark flex-fill fw-bold py-2" style="border-radius: 10px; border: 1.5px solid #dce3de; font-size: 0.85rem;" onclick="window.location.href='index.html'">
                 <i class="fas fa-home me-1"></i> الرئيسية
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- مودال تحميل إنشاء الصورة -->
+<div class="modal-overlay" id="shareLoadingModal">
+    <div class="modal-box" style="max-width: 260px;">
+        <div class="spinner-border text-success mb-3" role="status"></div>
+        <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">جاري إنشاء الصورة...</h6>
+    </div>
+</div>
+
+<!-- منطقة الفاتورة الحرارية الخفية لعمل سكرين شوت -->
+<div class="thermal-capture-container">
+    <div id="thermalReceiptArea">
+        <div class="receipt-header">
+            <h3>شركة الزيادي</h3>
+            <p>لزيوت وفلاتر السيارات</p>
+            <span class="order-prep-badge">قائمة بتجهيز الطلبية</span>
+        </div>
+        <div class="receipt-info">
+            <div class="receipt-info-row"><span>تاريخ الطلبية: <span id="thOrderDate">0000</span></span></div>
+            <div class="receipt-info-row"><span>العميل: <strong id="thCustomerName">—</strong></span></div>
+        </div>
+        <table class="receipt-table">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">الصنف</th>
+                    <th style="text-align:center; width:55px;">الوحدة</th>
+                    <th style="text-align:center; width:45px;">العدد</th>
+                    <th style="text-align:center; width:65px;">السعر</th>
+                    <th style="text-align:left; width:75px;">الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody id="thReceiptItems"></tbody>
+        </table>
+        <div class="receipt-totals">
+            <div class="receipt-total-row grand-total"><span>إجمالي الطلبية:</span><span id="thGrandTotal">0.00 ج.م</span></div>
+        </div>
+        <div class="receipt-footer-note">
+            برجاء مراجعة الأصناف والأعداد والأسعار جيدا وتأكيدها معنا
+            <br>
+            <span style="font-size: 15px; font-weight: 900; margin-top: 8px; display: inline-block;">01027830834</span>
         </div>
     </div>
 </div>
@@ -536,9 +600,9 @@
     let customers = [];
     let inventory = [];
     let rowCounter = 0;
-    let lastSavedOrder = null; // متغير لحفظ بيانات أحدث طلبية للمشاركة
+    let lastSavedOrder = null; // حفظ بيانات أحدث طلبية للمشاركة
     
-    // فحص ما إذا كانت الصفحة في وضع التعديل لعدم إظهار نافذة التاريخ الإجبارية
+    // فحص ما إذا كانت الصفحة في وضع التعديل
     const params = new URLSearchParams(window.location.search);
     let editOrderId = params.get("editOrderId");
 
@@ -546,23 +610,19 @@
     async function init() {
         const today = new Date().toISOString().split('T')[0];
         
-        // إعداد التاريخ الافتراضي في نافذة الإدخال الإجباري
         document.getElementById('promptDateInput').value = today;
 
         if (!editOrderId) {
-            // إظهار نافذة التاريخ في حالة طلبية جديدة
             document.getElementById('datePromptModal').style.display = 'flex';
         }
 
-        // load cache first
         const cCache = localStorage.getItem('cache_customers');
         const iCache = localStorage.getItem('cache_inventory');
         if (cCache) customers = JSON.parse(cCache);
         if (iCache) inventory = JSON.parse(iCache);
 
-        addItemRow(); // start with one empty row
+        addItemRow(); 
 
-        // fetch fresh
         const [cSnap, iSnap] = await Promise.all([
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'inventory'))
@@ -573,7 +633,6 @@
         localStorage.setItem('cache_inventory', JSON.stringify(inventory));
     }
 
-    // دالة تأكيد التاريخ من النافذة الإجبارية
     window.confirmInitialDate = () => {
         const selectedDate = document.getElementById('promptDateInput').value;
         if (!selectedDate) {
@@ -628,7 +687,6 @@
         document.getElementById('customerBadge').style.display = 'none';
     }
 
-    // close dropdown when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.autocomplete-wrap')) {
             document.querySelectorAll('.dropdown-list').forEach(d => d.style.display = 'none');
@@ -646,7 +704,6 @@
                 </button>
 
                 <div class="row g-2 mb-2">
-                    <!-- Product -->
                     <div class="col-8">
                         <label class="sub-lbl">اسم الصنف</label>
                         <div class="autocomplete-wrap">
@@ -657,7 +714,6 @@
                         </div>
                         <div class="stock-hint p-stock"><i class="fas fa-warehouse me-1"></i><span></span></div>
                     </div>
-                    <!-- Unit -->
                     <div class="col-4">
                         <label class="sub-lbl">الوحدة</label>
                         <select class="form-select p-unit" onchange="onUnitChange(this, '${id}')">
@@ -730,7 +786,6 @@
             const stockHint = row.querySelector('.p-stock');
             stockHint.querySelector('span').innerText = `رصيد المخزن: ${p.totalPcs || 0} قطعة`;
             stockHint.style.display = 'block';
-            // auto-set price by unit
             setRowPrice(row, p);
         }
         recalc();
@@ -778,14 +833,12 @@
         const customerName = document.getElementById('customerInput').value.trim();
         const orderDate = document.getElementById('orderDate').value;
 
-        // التحقق من العميل
         if (!customerId) {
             document.getElementById('customerInput').classList.add('field-error');
             document.getElementById('customerError').style.display = 'block';
             valid = false;
         }
 
-        // التحقق من التاريخ
         if (!orderDate) {
             document.getElementById('orderDate').classList.add('field-error');
             valid = false;
@@ -841,7 +894,6 @@
                 await addDoc(collection(db, 'orders'), orderData);
             }
 
-            // حفظ الطلبية الأخيرة للمشاركة
             lastSavedOrder = orderData;
 
             document.getElementById('successCustomerName').innerText = customerName;
@@ -857,36 +909,50 @@
         }
     };
 
-    // ---------- دالة مشاركة الطلبية (الجديدة) ----------
+    // ---------- دالة مشاركة الفاتورة الحرارية كصورة ----------
     window.shareOrderDetails = () => {
         if (!lastSavedOrder) return;
 
-        let itemsText = lastSavedOrder.items.map((item, index) => {
-            const unitText = item.unit === 'box' ? 'كرتونة' : 'قطعة';
-            return `${index + 1}. ${item.name} (${item.qty} ${unitText}) - ${item.price * item.qty} ج.م`;
-        }).join('\n');
+        document.getElementById('shareLoadingModal').style.display = 'flex';
 
-        let text = `📦 *تفاصيل طلبية جديدة - شركة الزيادي*\n`;
-        text += `👤 *العميل:* ${lastSavedOrder.customerName}\n`;
-        text += `📅 *التاريخ:* ${lastSavedOrder.date}\n`;
-        text += `------------------------------------\n`;
-        text += `📝 *الأصناف:*\n${itemsText}\n`;
-        text += `------------------------------------\n`;
-        text += `💰 *الإجمالي النهائي:* ${lastSavedOrder.total.toFixed(2)} ج.م\n`;
-        if (lastSavedOrder.notes) {
-            text += `📌 *ملاحظات:* ${lastSavedOrder.notes}\n`;
-        }
+        document.getElementById('thOrderDate').innerText = lastSavedOrder.date || '—';
+        document.getElementById('thCustomerName').innerText = lastSavedOrder.customerName || 'عميل';
+        document.getElementById('thGrandTotal').innerText = `${lastSavedOrder.total.toFixed(2)} ج.م`;
 
-        if (navigator.share) {
-            navigator.share({
-                title: 'طلبية شركة الزيادي',
-                text: text
-            }).catch(err => console.log('تعذر المشاركة:', err));
-        } else {
-            // البديل عند فتح التطبيق من متصفح لا يدعم Web Share
-            const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-            window.open(whatsappUrl, '_blank');
-        }
+        document.getElementById('thReceiptItems').innerHTML = lastSavedOrder.items.map(i => {
+            const qty = parseFloat(i.qty) || 0;
+            const price = parseFloat(i.price) || 0;
+            const sub = qty * price;
+            const unitText = i.unit === 'box' ? 'كرتونة' : 'قطعة';
+            return `<tr>
+                <td style="text-align:right;">${i.name || '—'}</td>
+                <td style="text-align:center;">${unitText}</td>
+                <td style="text-align:center;">${qty}</td>
+                <td style="text-align:center;">${price.toFixed(2)}</td>
+                <td style="text-align:left;">${sub.toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+
+        setTimeout(() => {
+            html2canvas(document.getElementById('thermalReceiptArea'), { scale: 2 }).then(canvas => {
+                canvas.toBlob(blob => {
+                    document.getElementById('shareLoadingModal').style.display = 'none';
+                    const file = new File([blob], `order_${lastSavedOrder.customerName}.png`, { type: 'image/png' });
+
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        navigator.share({
+                            files: [file],
+                            title: 'طلبية شركة الزيادي'
+                        }).catch(err => console.log('تعذر المشاركة:', err));
+                    } else {
+                        const link = document.createElement('a');
+                        link.download = `order_${lastSavedOrder.customerName}.png`;
+                        link.href = canvas.toDataURL();
+                        link.click();
+                    }
+                });
+            });
+        }, 400);
     };
 
     window.goToOrders = () => {
@@ -900,7 +966,6 @@
         document.getElementById('orderNotes').value = '';
         lastSavedOrder = null;
         
-        // إظهار نافذة التاريخ الإجبارية مرة أخرى عند طلب تسجيل طلبية جديدة
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('promptDateInput').value = today;
         document.getElementById('orderDate').value = ''; 
@@ -911,7 +976,6 @@
         rowCounter = 0;
         editOrderId = null;
         
-        // إزالة معاملات التعديل من الرابط إن وجدت
         window.history.replaceState({}, document.title, window.location.pathname);
 
         addItemRow();
@@ -919,7 +983,6 @@
         document.getElementById('submitBtn').innerHTML = '<i class="fas fa-paper-plane"></i> تسجيل الطلبية';
     };
 
-    // ------------------ تحميل الطلبية للتعديل ------------------
     async function loadOrderForEdit() {
         if (!editOrderId) return;
 
@@ -967,7 +1030,6 @@
         }
     }
 
-    // ------------------ تشغيل التهيئة ------------------
     await init();
     await loadOrderForEdit();
 </script>
