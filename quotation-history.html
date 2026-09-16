@@ -1374,8 +1374,8 @@ window.filterSummaryUI = function() {
       <div class="inv-bottom-row">
         <div class="inv-return-group"><label>الراجع:</label>${returnFieldsHtml}</div>
         <select class="inv-status-select ${statusClass}" onchange="this.className='inv-status-select '+(this.value==='عجز'?'status-ajz':this.value==='زيادة'?'status-zyada':''); window.updateManualSummaryField('${id}','diffStatus',this.value)">
-          <option value=""       ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
-          <option value="عجز"   ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
+          <option value=""        ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
+          <option value="عجز"    ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
           <option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option>
         </select>
       </div>`;
@@ -1544,7 +1544,7 @@ window.fetchArchive = async function() {
     if (selectedDate) {
       const [loadSnap, invSnap] = await Promise.all([
         getDoc(doc(db, 'archived_loads', selectedDate)),
-        getDoc(doc(db, 'archived_inventory', selectedDate))
+        getDoc(doc(doc(db, 'archived_inventory', selectedDate)))
       ]);
       if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
       if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
@@ -2074,6 +2074,9 @@ window.exportSummaryExcel = function() {
   window.toast('📊 تم تصدير ملف Excel لتقرير الجرد بنجاح!');
 };
 
+// ==========================================
+// دالة تصدير الأرشيف إلى إكسيل بالتحليل الدقيق
+// ==========================================
 window.exportArchiveExcel = async function(d) {
   window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
   try {
@@ -2082,6 +2085,7 @@ window.exportArchiveExcel = async function(d) {
 
     let excelData = [];
 
+    // دالة لتفكيك النصوص المخزنة واستخراج الأرقام للكراتين والقطع
     const parseCartonAndLoose = (str) => {
       if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
       const cleaned = cleanTextForPdf(str);
@@ -2089,12 +2093,15 @@ window.exportArchiveExcel = async function(d) {
       let cartons = 0;
       let loose = 0;
 
+      // 1. الكراتين
       const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
       if (cMatch) cartons = parseFloat(cMatch[1]);
 
+      // 2. القطع / الجرادين
       const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
       if (lMatch) loose = parseInt(lMatch[1]);
 
+      // 3. رقم مجرد
       if (!cMatch && !lMatch) {
         const numMatch = cleaned.match(/(-?\d+)/);
         if (numMatch) loose = parseInt(numMatch[1]);
@@ -2103,6 +2110,7 @@ window.exportArchiveExcel = async function(d) {
       return { cartons, loose };
     };
 
+    // دالة مساعدة لإرجاع القيمة أو ترك الخانة فارغة تماماً إذا كانت 0
     const valOrEmpty = (v) => (v && v !== 0 ? v : "");
 
     if (invDoc.exists()) {
@@ -2113,6 +2121,7 @@ window.exportArchiveExcel = async function(d) {
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
 
+        // حساب الإجمالي (السابق + الجديد)
         const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
         const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
@@ -2161,14 +2170,37 @@ window.exportArchiveExcel = async function(d) {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
 
+    // 1. اتجاه الشيت من اليمين إلى اليسار
     if (!worksheet['!views']) worksheet['!views'] = [];
     worksheet['!views'].push({ RTL: true });
+
+    // 2. تطبيق التنسيق (حدود سوداء + خط عريض Bold لكل الخانات)
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const borderStyle = {
+      top:    { style: 'thin', color: { rgb: "000000" } },
+      bottom: { style: 'thin', color: { rgb: "000000" } },
+      left:   { style: 'thin', color: { rgb: "000000" } },
+      right:  { style: 'thin', color: { rgb: "000000" } }
+    };
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cell_address]) continue;
+        
+        worksheet[cell_address].s = {
+          font: { bold: true, name: "Cairo" },
+          border: borderStyle,
+          alignment: { horizontal: C === 0 ? "right" : "center", vertical: "center" }
+        };
+      }
+    }
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
     
     XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
-    window.toast('📊 تم تصدير ملف Excel بنجاح!');
+    window.toast('📊 تم تصدير ملف Excel بالتنسيق الجديد بنجاح!');
   } catch (e) {
     console.error(e);
     window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
