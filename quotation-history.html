@@ -545,6 +545,39 @@ document.getElementById('summaryDate').value = defaultDateStr;
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
 
+// توحيد تنظيف اسم الصنف بنفس الطريقة الدقيقة للملف الآخر
+function cleanItemName(str) {
+  if (!str) return "";
+  return String(str).trim()
+    .replace(/[\u064B-\u0652]/g, '')
+    .replace(/[أإآا]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .toLowerCase();
+}
+
+function isCartonUnit(unitValue, isCartonFlag) {
+  if (isCartonFlag === true) return true;
+  if (!unitValue) return false;
+  const u = String(unitValue).trim().toLowerCase();
+  return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+}
+
+function getProductIdForItem(item) {
+  if (item.stockId && factorsMap[item.stockId]) return item.stockId;
+  if (item.productId && factorsMap[item.productId]) return item.productId;
+  if (item.id && factorsMap[item.id]) return item.id;
+  
+  if (item.name) {
+    const cleanName = cleanItemName(item.name);
+    if (namesMap[cleanName]) return namesMap[cleanName];
+  }
+  return item.stockId || item.productId || item.id || null;
+}
+
+// -------------------------------------------------------------
+// تعديل محوري: ضبط دالة المبيعات المباشرة لتفادي انعكاس الإشارة بالسالب
+// -------------------------------------------------------------
 function listenToLiveInvoices() {
   const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
   if (unsubscribeInvoices) unsubscribeInvoices();
@@ -564,14 +597,20 @@ function listenToLiveInvoices() {
         const itemId = getProductIdForItem(itm);
         if (itemId) {
           const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-          const rawQty = Math.abs(Number(itm.qty) || 0);
-          const isCartonItem = isCarton(itm);
+          const rawQty = Number(itm.qty) || 0; // إزالة Math.abs لتفادي حساب الإشارة مرتين
+          const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
           const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
 
-          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true || Number(itm.qty) < 0;
+          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true;
 
           if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
-          memorySalesCache[itemId] += isReturn ? -totalPcsSold : totalPcsSold;
+          
+          // الاعتماد على إشارة العدد المباشرة أو معالجة المرتجع بخصمه
+          if (isReturn) {
+            memorySalesCache[itemId] -= Math.abs(totalPcsSold);
+          } else {
+            memorySalesCache[itemId] += totalPcsSold;
+          }
         }
       });
     });
@@ -716,11 +755,6 @@ function getUnitName(name) {
   return 'جركن';
 }
 
-function cleanItemName(str) {
-  if (!str) return "";
-  return str.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
-}
-
 function cleanTextForPdf(str) {
   if (!str) return "0";
   return str.replace(/&nbsp;/g, ' ').replace(/nbsp;/g, ' ').replace(/&/g, '');
@@ -769,26 +803,6 @@ function parseDate(df,ts){
   }
   if(ts?.seconds)return new Date(ts.seconds*1000).toISOString().slice(0,10);
   return"";
-}
-
-function isCarton(item){
-  const u=(item.unit||"").trim().toLowerCase();
-  if(u==="box" || u==="carton")return true;
-  if(u==="pcs")return false;
-  const un=(item.unitName||"").trim();
-  return un==="كرتونة"||un==="كرtونه"||item.isCarton===true;
-}
-
-function getProductIdForItem(item) {
-  if (item.stockId && factorsMap[item.stockId]) return item.stockId;
-  if (item.productId && factorsMap[item.productId]) return item.productId;
-  if (item.id && factorsMap[item.id]) return item.id;
-  
-  if (item.name) {
-    const cleanName = cleanItemName(item.name);
-    if (namesMap[cleanName]) return namesMap[cleanName];
-  }
-  return item.stockId || item.productId || item.id || null;
 }
 
 window.showPage = function(id, btn) {
@@ -862,6 +876,9 @@ function filterLoadFlow() {
   });
 }
 
+// -------------------------------------------------------------
+// توحيد تجميع المشتريات والمبيعات مع الصفحة الكبرى بنفس المنطق الدقيق
+// -------------------------------------------------------------
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -901,14 +918,14 @@ window.fetchInventoryFresh = async function() {
         if (id) {
           if (!salesMap[id]) salesMap[id] = 0;
           const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
-          const rawQty = Math.abs(Number(item.qty) || 0);
-          const isCartonItem = isCarton(item);
+          const rawQty = Number(item.qty) || 0;
+          const isCartonItem = isCartonUnit(item.unit || item.unitName, item.isCarton);
           const pcs = isCartonItem ? (rawQty * factor) : rawQty;
           
-          const isReturn = docSnap.data().type === 'return' || docSnap.data().isReturn === true || item.isReturn === true || Number(item.qty) < 0;
+          const isReturn = docSnap.data().type === 'return' || docSnap.data().isReturn === true || item.isReturn === true;
 
           if (isReturn) {
-            salesMap[id] -= pcs;
+            salesMap[id] -= Math.abs(pcs);
           } else {
             salesMap[id] += pcs;
           }
@@ -923,12 +940,13 @@ window.fetchInventoryFresh = async function() {
         if (id) {
           if (!purchasesMap[id]) purchasesMap[id] = 0;
           const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
-          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true || Number(item.qty) < 0;
-          const rawQty = Math.abs(isReturn ? Number(item.returnQty || item.qty) : Number(item.qty || 0));
-          const pcs = isCarton(item) ? (rawQty * factor) : rawQty;
+          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+          const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty || 0);
+          const isCartonItem = isCartonUnit(item.unitName || item.unit, item.isCarton);
+          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
 
           if (isReturn) {
-            purchasesMap[id] -= pcs;
+            purchasesMap[id] -= Math.abs(pcs);
           } else {
             purchasesMap[id] += pcs;
           }
@@ -2074,9 +2092,6 @@ window.exportSummaryExcel = function() {
   window.toast('📊 تم تصدير ملف Excel لتقرير الجرد بنجاح!');
 };
 
-// ==========================================
-// دالة تصدير الأرشيف إلى إكسيل (المعدلة بالكامل)
-// ==========================================
 window.exportArchiveExcel = async function(d) {
   window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
   try {
@@ -2085,7 +2100,6 @@ window.exportArchiveExcel = async function(d) {
 
     let excelData = [];
 
-    // دالة لتفكيك النصوص المخزنة واستخراج الأرقام للكراتين والقطع
     const parseCartonAndLoose = (str) => {
       if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
       const cleaned = cleanTextForPdf(str);
@@ -2093,15 +2107,12 @@ window.exportArchiveExcel = async function(d) {
       let cartons = 0;
       let loose = 0;
 
-      // 1. الكراتين
       const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
       if (cMatch) cartons = parseFloat(cMatch[1]);
 
-      // 2. القطع / الجرادين
       const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
       if (lMatch) loose = parseInt(lMatch[1]);
 
-      // 3. رقم مجرد
       if (!cMatch && !lMatch) {
         const numMatch = cleaned.match(/(-?\d+)/);
         if (numMatch) loose = parseInt(numMatch[1]);
@@ -2110,13 +2121,11 @@ window.exportArchiveExcel = async function(d) {
       return { cartons, loose };
     };
 
-    // دالة مساعدة لإرجاع القيمة أو ترك الخانة فارغة تماماً إذا كانت 0
     const valOrEmpty = (v) => (v && v !== 0 ? v : "");
 
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       excelData = data.map((r) => {
-        // حساب مخزون المخزن الرئيسي الحالي
         const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
         let mainStockCartons = 0;
         let mainStockLoose = 0;
@@ -2137,7 +2146,6 @@ window.exportArchiveExcel = async function(d) {
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
 
-        // حساب الإجمالي (السابق + الجديد)
         const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
         const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
@@ -2205,11 +2213,9 @@ window.exportArchiveExcel = async function(d) {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-    // 1. اتجاه الشيت من اليمين إلى اليسار
     if (!worksheet['!views']) worksheet['!views'] = [];
     worksheet['!views'].push({ RTL: true });
 
-    // 2. تطبيق التنسيق (حدود سوداء + خط عريض Bold لكل الخانات)
     const range = XLSX.utils.decode_range(worksheet['!ref']);
     const borderStyle = {
       top:    { style: 'thin', color: { rgb: "000000" } },
