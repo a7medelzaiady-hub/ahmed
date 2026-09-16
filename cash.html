@@ -221,7 +221,7 @@ let db;
 try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) }); }
 catch (e) { db = getFirestore(app); }
 
-let currentTab = 'cash'; // 'cash' or 'wallet'
+let currentTab = 'cash'; 
 let openingBalance = 0;
 let allMovements = [];
 
@@ -253,6 +253,12 @@ function getDateStr(item) {
 }
 
 function fmt(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function isWalletPayment(methodStr) {
+    if (!methodStr) return false;
+    const m = String(methodStr).toLowerCase();
+    return m.includes('فودافون') || m.includes('vodafone') || m.includes('انستا') || m.includes('instapay') || m.includes('redot') || m.includes('محفظة') || m.includes('wallet');
+}
 
 window.switchTab = function(tab) {
     currentTab = tab;
@@ -325,10 +331,13 @@ async function loadCashData() {
 
     const movements = [];
 
-    // مبيعات نقدية
+    // مبيعات نقدية (التي ليست عبر المحفظة)
     invSnap.forEach(d => {
         const data = d.data();
         if (data.isDeleted) return;
+        const method = data.paymentMethod || data.method || 'نقدي';
+        if (isWalletPayment(method)) return; // يتم معالجتها في المحفظة
+        
         const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
         if (cash > 0) {
             movements.push({
@@ -345,6 +354,8 @@ async function loadCashData() {
         if (tr.isDeleted) return;
         if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
         const method = tr.method || tr.paymentMethod || 'نقدى';
+        if (isWalletPayment(method)) return; // للمحفظة
+
         const isCash = (method === 'نقدى' || method === 'نقدي' || method === 'كاش');
         const cashAmt = tr.cashPaid !== undefined ? Number(tr.cashPaid) : (isCash ? Number(tr.amount || tr.total || 0) : 0);
         if (cashAmt <= 0) return;
@@ -363,9 +374,12 @@ async function loadCashData() {
         }
     });
 
-    // مشتريات نقدية
+    // مشتريات نقدية (غير المحفظة)
     supTransSnap.forEach(d => {
         const data = d.data();
+        const method = data.paymentMethod || data.method || '';
+        if (isWalletPayment(method)) return;
+
         const cashPaid = Number(data.cashPaid || 0);
         if (cashPaid <= 0) return;
         const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
@@ -413,19 +427,64 @@ async function loadCashData() {
 }
 
 async function loadWalletData() {
-    const [openingSnap, manualSnap, expSnap, transSnap] = await Promise.all([
+    const [openingSnap, manualSnap, expSnap, transSnap, invSnap, supTransSnap, suppliersSnap] = await Promise.all([
         getDoc(doc(db, "wallet_settings", "opening")),
         getDocs(collection(db, "wallet_entries")),
         getDocs(collection(db, "expenses")),
-        getDocs(collection(db, "transactions"))
+        getDocs(collection(db, "transactions")),
+        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "supplier_transactions")),
+        getDocs(collection(db, "suppliers"))
     ]);
 
     openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
     document.getElementById('openingBalanceDisplay').innerText = fmt(openingBalance);
 
+    const suppliersMap = {};
+    suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
+
     const movements = [];
 
-    // حركات محفظة يدوية
+    // 1. فواتير المبيعات المسددة عبر المحفظة
+    invSnap.forEach(d => {
+        const data = d.data();
+        if (data.isDeleted) return;
+        const method = data.paymentMethod || data.method || '';
+        const walletPaid = Number(data.walletAmount ?? (isWalletPayment(method) ? (data.cashAmount ?? data.cashPaid ?? data.paid) : 0)) || 0;
+        
+        if (walletPaid > 0 || isWalletPayment(method)) {
+            const amt = walletPaid > 0 ? walletPaid : (Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0);
+            if (amt > 0) {
+                movements.push({
+                    id: 'inv_wal_' + d.id, direction: 'in', amount: amt,
+                    provider: method || 'محفظة إلكترونية',
+                    note: `مبيعات محفظة - ${data.customerName || 'عميل'}`,
+                    date: getDateStr(data), timeMs: toMillis(data)
+                });
+            }
+        }
+    });
+
+    // 2. فواتير المشتريات المسددة عبر المحفظة
+    supTransSnap.forEach(d => {
+        const data = d.data();
+        const method = data.paymentMethod || data.method || '';
+        if (isWalletPayment(method)) {
+            const paidAmt = Number(data.walletPaid || data.cashPaid || data.paid || 0);
+            if (paidAmt > 0) {
+                const supName = suppliersMap[data.supplierId] || 'مورد';
+                const isReturn = data.type === 'مرتجع شراء';
+                movements.push({
+                    id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
+                    provider: method || 'محفظة إلكترونية',
+                    note: isReturn ? `مرتجع مشتريات محفظة - ${supName}` : `مشتريات محفظة - ${supName}`,
+                    date: getDateStr(data), timeMs: toMillis(data)
+                });
+            }
+        }
+    });
+
+    // 3. حركات محفظة يدوية
     manualSnap.forEach(d => {
         const data = d.data();
         const amt = Number(data.amount || 0);
@@ -438,10 +497,10 @@ async function loadWalletData() {
         });
     });
 
-    // مصروفات عبر المحفظة
+    // 4. مصروفات عبر المحفظة
     expSnap.forEach(d => {
         const data = d.data();
-        if (!data.paymentMethod || !['فودافون كاش', 'Vodafone Cash', 'انستا باي', 'Instapay', 'RedotPay', 'محفظة'].includes(data.paymentMethod)) return;
+        if (!isWalletPayment(data.paymentMethod)) return;
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
         movements.push({
@@ -452,13 +511,12 @@ async function loadWalletData() {
         });
     });
 
-    // سندات عبر المحفظة
+    // 5. سندات عبر المحفظة
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
         const method = tr.method || tr.paymentMethod || '';
-        const isWallet = ['فودافون كاش', 'Vodafone Cash', 'انستا باي', 'Instapay', 'RedotPay', 'محفظة'].some(m => method.includes(m));
-        if (!isWallet) return;
+        if (!isWalletPayment(method)) return;
         const amt = Number(tr.amount || tr.total || 0);
         if (amt <= 0) return;
 
