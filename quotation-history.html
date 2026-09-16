@@ -2067,7 +2067,7 @@ window.exportLoadExcel = function() {
 };
 
 // ==========================================
-// دالة تصدير الجرد المباشر المحدثة بالتنسيق الشامل
+// دالة تصدير الجرد المباشر إلى إكسيل بالتنسيق المطور (تتضمن أعمدة المخزن)
 // ==========================================
 window.exportSummaryExcel = function() {
   if (!cachedCalculatedRows || !cachedCalculatedRows.length) { 
@@ -2106,6 +2106,7 @@ window.exportSummaryExcel = function() {
     const sold     = parseCartonAndLoose(r.soldText);
     const inTruck  = parseCartonAndLoose(r.inTruckText);
 
+    // حساب بضاعة المخزن
     const cap = r.cap || 1;
     const totalStockPcs = r.stockTotalPcs || 0;
     let stockCartons = 0;
@@ -2144,143 +2145,18 @@ window.exportSummaryExcel = function() {
 
   const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-  // 1. الاتجاه من اليمين للسيار
   if (!worksheet['!views']) worksheet['!views'] = [];
   worksheet['!views'].push({ RTL: true });
-
-  // 2. التسطير + خط Bold + محاذاة في المنتصف
-  const range = XLSX.utils.decode_range(worksheet['!ref']);
-  const borderStyle = {
-    top:    { style: 'thin', color: { rgb: "000000" } },
-    bottom: { style: 'thin', color: { rgb: "000000" } },
-    left:   { style: 'thin', color: { rgb: "000000" } },
-    right:  { style: 'thin', color: { rgb: "000000" } }
-  };
-
-  for (let R = range.s.r; R <= range.e.r; ++R) {
-    for (let C = range.s.إليك التعديلات المطلوبة على دوال تصدير الإكسيل (`exportSummaryExcel` و `exportArchiveExcel`) لتطبيق التنسيق التلقائي كاملاً:
-
-* **تسطير وتحديد الخانات:** إضافة حدود سوداء داكنة (`thin border`) حول كل خلية.
-* **محاذاة النصوص:** ضبط محاذاة كافة النصوص والأرقام في منتصف الخلية تماماً (`horizontal: "center"`, `vertical: "center"`).
-* **خط عريض (Bold):** تطبيق خط عريض لكافة الخلايا بدون استثناء.
-* **اتجاه الشيت:** ضبط الاتجاه من اليمين إلى اليسار (`RTL: true`).
-
-استبدل دالتي التصدير في الكود الخاص بك بالدويلتين التاليتين:
-
-```javascript
-// ==========================================
-// دالة تصدير الجرد المباشر إلى إكسيل بالتنسيق المطور
-// ==========================================
-window.exportSummaryExcel = function() {
-  if (!cachedCalculatedRows || !cachedCalculatedRows.length) { 
-    window.toast('⚠️ لا توجد بيانات جرد لتصديرها'); 
-    return; 
-  }
-  
-  const reportDate = document.getElementById('summaryDate').value || defaultDateStr;
-
-  const parseCartonAndLoose = (str) => {
-    if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
-    const cleaned = cleanTextForPdf(str);
-    
-    let cartons = 0;
-    let loose = 0;
-
-    const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
-    if (cMatch) cartons = parseFloat(cMatch[1]);
-
-    const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
-    if (lMatch) loose = parseInt(lMatch[1]);
-
-    if (!cMatch && !lMatch) {
-      const numMatch = cleaned.match(/(-?\d+)/);
-      if (numMatch) loose = parseInt(numMatch[1]);
-    }
-
-    return { cartons, loose };
-  };
-
-  const valOrEmpty = (v) => (v && v !== 0 ? v : "");
-
-  const excelData = cachedCalculatedRows.map((r) => {
-    const prev     = parseCartonAndLoose(r.prevLoadedText);
-    const loaded   = parseCartonAndLoose(r.newLoadedText);
-    const sold     = parseCartonAndLoose(r.soldText);
-    const inTruck  = parseCartonAndLoose(r.inTruckText);
-
-    const cap = r.cap || 1;
-    const totalStockPcs = r.stockTotalPcs || 0;
-    let stockCartons = 0;
-    let stockLoose = 0;
-
-    if (cap > 1) {
-      stockCartons = Math.floor(Math.abs(totalStockPcs) / cap);
-      stockLoose   = Math.abs(totalStockPcs) % cap;
-      if (totalStockPcs < 0) {
-        stockCartons = -stockCartons;
-        stockLoose   = -stockLoose;
-      }
-    } else {
-      stockLoose = totalStockPcs;
-    }
-
-    const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
-    const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
-
-    return {
-      "اسم الصنف": r.it.name,
-      "مخزن ك": valOrEmpty(stockCartons),
-      "مخزن ق": valOrEmpty(stockLoose),
-      "سابق ك": valOrEmpty(prev.cartons),
-      "سابق ق": valOrEmpty(prev.loose),
-      "جديد ك": valOrEmpty(loaded.cartons),
-      "جديد ق": valOrEmpty(loaded.loose),
-      "اجمالي ك": valOrEmpty(totalCartons),
-      "اجمالي ق": valOrEmpty(totalLoose),
-      "مباع ك": valOrEmpty(sold.cartons),
-      "مباع ق": valOrEmpty(sold.loose),
-      "متبقى ك": valOrEmpty(inTruck.cartons),
-      "متبقى ق": valOrEmpty(inTruck.loose)
-    };
-  });
-
-  const worksheet = XLSX.utils.json_to_sheet(excelData);
-
-  // 1. اتجاه الشيت من اليمين إلى اليسار
-  if (!worksheet['!views']) worksheet['!views'] = [];
-  worksheet['!views'].push({ RTL: true });
-
-  // 2. تطبيق التنسيق (تسطير + محاذاة للوسط + خط Bold)
-  const range = XLSX.utils.decode_range(worksheet['!ref']);
-  const borderStyle = {
-    top:    { style: 'thin', color: { rgb: "000000" } },
-    bottom: { style: 'thin', color: { rgb: "000000" } },
-    left:   { style: 'thin', color: { rgb: "000000" } },
-    right:  { style: 'thin', color: { rgb: "000000" } }
-  };
-
-  for (let R = range.s.r; R <= range.e.r; ++R) {
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
-      if (!worksheet[cell_address]) continue;
-      
-      worksheet[cell_address].s = {
-        font: { bold: true, name: "Cairo" },
-        border: borderStyle,
-        alignment: { horizontal: "center", vertical: "center" }
-      };
-    }
-  }
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "جرد حمولة السيارة");
   
   XLSX.writeFile(workbook, `تقرير_جرد_العربة_${reportDate}.xlsx`);
-  window.toast('📊 تم تصدير ملف Excel بالتنسيق الجديد بنجاح!');
+  window.toast('📊 تم تصدير ملف Excel للتقرير بنجاح!');
 };
 
 // ==========================================
-// دالة تصدير الأرشيف إلى إكسيل بالتنسيق المطور
+// دالة تصدير الأرشيف إلى إكسيل بالتنسيق المطور (تتضمن أعمدة المخزن)
 // ==========================================
 window.exportArchiveExcel = async function(d) {
   window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور للأرشيف...');
@@ -2321,6 +2197,7 @@ window.exportArchiveExcel = async function(d) {
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
 
+        // جلب سعة ومخزون الصنف إن وجد في القائمة
         const fbItem = firebaseItems.find(i => cleanItemName(i.name) === cleanItemName(r.name));
         const cap = fbItem ? fbItem.capacity : 1;
         const totalStockPcs = fbItem ? fbItem.totalPcs : 0;
@@ -2409,31 +2286,8 @@ window.exportArchiveExcel = async function(d) {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-    // 1. اتجاه الشيت من اليمين إلى اليسار
     if (!worksheet['!views']) worksheet['!views'] = [];
     worksheet['!views'].push({ RTL: true });
-
-    // 2. تطبيق التنسيق (تسطير + محاذاة للوسط + خط Bold)
-    const range = XLSX.utils.decode_range(worksheet['!ref']);
-    const borderStyle = {
-      top:    { style: 'thin', color: { rgb: "000000" } },
-      bottom: { style: 'thin', color: { rgb: "000000" } },
-      left:   { style: 'thin', color: { rgb: "000000" } },
-      right:  { style: 'thin', color: { rgb: "000000" } }
-    };
-
-    for (let R = range.s.r; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!worksheet[cell_address]) continue;
-        
-        worksheet[cell_address].s = {
-          font: { bold: true, name: "Cairo" },
-          border: borderStyle,
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
-    }
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
@@ -2445,3 +2299,19 @@ window.exportArchiveExcel = async function(d) {
     window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
   }
 };
+
+let toastTimer;
+window.toast = function(msg) {
+  const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+};
+
+startApp();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").then(() => console.log("SW Registered")).catch(err => console.log("SW Failed", err));
+}
+</script>
+</body>
+</html>
