@@ -1015,8 +1015,8 @@ function renderLoadFlow() {
   flow.innerHTML = '';
   const searchVal = cleanItemName(document.getElementById('searchLoad').value);
   const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
-  const loadedCount  = Object.keys(loadedInSession).length;
-  const alertBanner  = document.getElementById('newItemsAlertBanner');
+  const loadedCount   = Object.keys(loadedInSession).length;
+  const alertBanner   = document.getElementById('newItemsAlertBanner');
   if (alertBanner) {
     if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
     else { alertBanner.style.display = 'none'; }
@@ -1374,7 +1374,7 @@ window.filterSummaryUI = function() {
       <div class="inv-bottom-row">
         <div class="inv-return-group"><label>الراجع:</label>${returnFieldsHtml}</div>
         <select class="inv-status-select ${statusClass}" onchange="this.className='inv-status-select '+(this.value==='عجز'?'status-ajz':this.value==='زيادة'?'status-zyada':''); window.updateManualSummaryField('${id}','diffStatus',this.value)">
-          <option value=""        ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
+          <option value=""         ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
           <option value="عجز"    ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
           <option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option>
         </select>
@@ -1592,7 +1592,7 @@ window.fetchArchive = async function() {
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
               👁️ قراءة PDF
             </button>
-            <button class="btn btn-excel btn-sm" onclick="('${d}')">
+            <button class="btn btn-excel btn-sm" onclick="window.exportArchiveExcel('${d}')">
               📊 تصدير Excel
             </button>
             <button class="btn btn-primary btn-sm" style="background:#0284c7; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
@@ -1791,7 +1791,7 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(db, 'archived_inventory', d));
+    await deleteDoc(doc(doc(db, 'archived_inventory', d)));
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
@@ -2075,13 +2075,10 @@ window.exportSummaryExcel = function() {
 };
 
 // ==========================================
-// دالة تصدير الأرشيف إلى إكسيل بالتحليل الدقيق
-// ==========================================
-// ==========================================
-// دالة تصدير الأرشيف إلى إكسيل المعدلة (تطبيق الزيادي)
+// دالة تصدير الأرشيف إلى إكسيل (المعدلة بالكامل)
 // ==========================================
 window.exportArchiveExcel = async function(d) {
-  window.toast('⏳ جاري إعداد ملف Excel بالتعديلات الجديدة...');
+  window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
   try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
@@ -2119,7 +2116,7 @@ window.exportArchiveExcel = async function(d) {
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       excelData = data.map((r) => {
-        // جلب بيانات المخزون الرئيسي الحالي من المصفوفة المحملة firebaseItems
+        // حساب مخزون المخزن الرئيسي الحالي
         const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
         let mainStockCartons = 0;
         let mainStockLoose = 0;
@@ -2140,7 +2137,7 @@ window.exportArchiveExcel = async function(d) {
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
 
-        // حساب الإجمالي بالعربة (السابق + الجديد)
+        // حساب الإجمالي (السابق + الجديد)
         const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
         const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
@@ -2238,7 +2235,7 @@ window.exportArchiveExcel = async function(d) {
     XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
     
     XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
-    window.toast('📊 تم تصدير ملف Excel وتحديث ترتيب أعمدة المخزن بنجاح!');
+    window.toast('📊 تم تصدير ملف Excel وتحديث الترتيب بنجاح!');
   } catch (e) {
     console.error(e);
     window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
