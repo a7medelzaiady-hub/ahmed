@@ -1592,7 +1592,7 @@ window.fetchArchive = async function() {
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
               👁️ قراءة PDF
             </button>
-            <button class="btn btn-excel btn-sm" onclick="window.exportArchiveExcel('${d}')">
+            <button class="btn btn-excel btn-sm" onclick="('${d}')">
               📊 تصدير Excel
             </button>
             <button class="btn btn-primary btn-sm" style="background:#0284c7; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
@@ -2077,8 +2077,11 @@ window.exportSummaryExcel = function() {
 // ==========================================
 // دالة تصدير الأرشيف إلى إكسيل بالتحليل الدقيق
 // ==========================================
+// ==========================================
+// دالة تصدير الأرشيف إلى إكسيل المعدلة (تطبيق الزيادي)
+// ==========================================
 window.exportArchiveExcel = async function(d) {
-  window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
+  window.toast('⏳ جاري إعداد ملف Excel بالتعديلات الجديدة...');
   try {
     const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
     const loadDoc = await getDoc(doc(db, 'archived_loads', d));
@@ -2116,16 +2119,34 @@ window.exportArchiveExcel = async function(d) {
     if (invDoc.exists()) {
       const data = invDoc.data().inventoryData;
       excelData = data.map((r) => {
+        // جلب بيانات المخزون الرئيسي الحالي من المصفوفة المحملة firebaseItems
+        const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
+        let mainStockCartons = 0;
+        let mainStockLoose = 0;
+
+        if (fbItem) {
+          const cap = fbItem.capacity || 1;
+          const totalPcs = fbItem.totalPcs || 0;
+          if (cap > 1) {
+            mainStockCartons = Math.floor(Math.abs(totalPcs) / cap) * (totalPcs < 0 ? -1 : 1);
+            mainStockLoose = (Math.abs(totalPcs) % cap) * (totalPcs < 0 ? -1 : 1);
+          } else {
+            mainStockLoose = totalPcs;
+          }
+        }
+
         const prev     = parseCartonAndLoose(r.prevLoaded);
         const loaded   = parseCartonAndLoose(r.newLoaded || r.loaded);
         const sold     = parseCartonAndLoose(r.sold);
         const inTruck  = parseCartonAndLoose(r.inTruck);
 
-        // حساب الإجمالي (السابق + الجديد)
+        // حساب الإجمالي بالعربة (السابق + الجديد)
         const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
         const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
 
         return {
+          "مخزن ك": valOrEmpty(mainStockCartons),
+          "مخزن ق": valOrEmpty(mainStockLoose),
           "اسم الصنف": r.name,
           "سابق ك": valOrEmpty(prev.cartons),
           "سابق ق": valOrEmpty(prev.loose),
@@ -2142,12 +2163,29 @@ window.exportArchiveExcel = async function(d) {
     } else if (loadDoc.exists()) {
       const loadData = loadDoc.data().cartItems || {};
       excelData = Object.values(loadData).map((r) => {
+        const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
+        let mainStockCartons = 0;
+        let mainStockLoose = 0;
+
+        if (fbItem) {
+          const cap = fbItem.capacity || 1;
+          const totalPcs = fbItem.totalPcs || 0;
+          if (cap > 1) {
+            mainStockCartons = Math.floor(Math.abs(totalPcs) / cap) * (totalPcs < 0 ? -1 : 1);
+            mainStockLoose = (Math.abs(totalPcs) % cap) * (totalPcs < 0 ? -1 : 1);
+          } else {
+            mainStockLoose = totalPcs;
+          }
+        }
+
         const prevCartons   = Number(r.prevCartons) || 0;
         const prevLoose     = Number(r.prevLoose) || 0;
         const loadedCartons = Number(r.loadedCartons) || 0;
         const loadedLoose   = Number(r.loadedLoose) || 0;
 
         return {
+          "مخزن ك": valOrEmpty(mainStockCartons),
+          "مخزن ق": valOrEmpty(mainStockLoose),
           "اسم الصنف": r.name,
           "سابق ك": valOrEmpty(prevCartons),
           "سابق ق": valOrEmpty(prevLoose),
@@ -2191,7 +2229,7 @@ window.exportArchiveExcel = async function(d) {
         worksheet[cell_address].s = {
           font: { bold: true, name: "Cairo" },
           border: borderStyle,
-          alignment: { horizontal: C === 0 ? "right" : "center", vertical: "center" }
+          alignment: { horizontal: C === 2 ? "right" : "center", vertical: "center" }
         };
       }
     }
@@ -2200,7 +2238,7 @@ window.exportArchiveExcel = async function(d) {
     XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
     
     XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
-    window.toast('📊 تم تصدير ملف Excel بالتنسيق الجديد بنجاح!');
+    window.toast('📊 تم تصدير ملف Excel وتحديث ترتيب أعمدة المخزن بنجاح!');
   } catch (e) {
     console.error(e);
     window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
