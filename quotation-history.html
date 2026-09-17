@@ -344,11 +344,15 @@ table select:focus { border-color: var(--brand); }
       </div>
     </div>
 
-    <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row;">
-      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px; width:100%; justify-content:center;">
+    <!-- Banner التنبيه الخاص بالأصناف الجديدة مع زر الانتقال إليها -->
+    <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row; gap:8px;">
+      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px;">
         <span>أصناف جديدة أضيفت للمخزن تحتاج تسجيل تحميل:</span>
-        <span class="snum" style="background:#0a4a31; margin:0;">1</span>
+        <span class="snum" style="background:#0a4a31; margin:0;">0</span>
       </div>
+      <button class="btn btn-sm" onclick="scrollToPendingItems()" style="background:#0b5e3d; color:#fff; font-size:11px; padding:4px 8px; font-weight:800;">
+        الانتقال إليها ⬇️
+      </button>
     </div>
 
     <div class="card load-search-box">
@@ -492,7 +496,7 @@ table select:focus { border-color: var(--brand); }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -504,14 +508,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-let db;
-try {
-    db = initializeFirestore(app, {
-        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-    });
-} catch (e) {
-    db = getFirestore(app);
-}
+const db = getFirestore(app);
 
 function startApp() {
   document.getElementById('app-content').style.display = 'block';
@@ -545,7 +542,6 @@ document.getElementById('summaryDate').value = defaultDateStr;
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
 
-// توحيد تنظيف اسم الصنف بنفس الطريقة الدقيقة للملف الآخر
 function cleanItemName(str) {
   if (!str) return "";
   return String(str).trim()
@@ -575,9 +571,6 @@ function getProductIdForItem(item) {
   return item.stockId || item.productId || item.id || null;
 }
 
-// -------------------------------------------------------------
-// تعديل محوري: ضبط دالة المبيعات المباشرة لتفادي انعكاس الإشارة بالسالب
-// -------------------------------------------------------------
 function listenToLiveInvoices() {
   const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
   if (unsubscribeInvoices) unsubscribeInvoices();
@@ -597,7 +590,7 @@ function listenToLiveInvoices() {
         const itemId = getProductIdForItem(itm);
         if (itemId) {
           const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-          const rawQty = Number(itm.qty) || 0; // إزالة Math.abs لتفادي حساب الإشارة مرتين
+          const rawQty = Number(itm.qty) || 0;
           const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
           const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
 
@@ -605,7 +598,6 @@ function listenToLiveInvoices() {
 
           if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
           
-          // الاعتماد على إشارة العدد المباشرة أو معالجة المرتجع بخصمه
           if (isReturn) {
             memorySalesCache[itemId] -= Math.abs(totalPcsSold);
           } else {
@@ -641,8 +633,6 @@ function listenToDailyLoadChanges() {
       loadedInSession = {};
       cartItems       = {};
     }
-    
-    saveLocalFallback();
 
     if (document.getElementById('pg-load').classList.contains('active')) {
       const activeEl = document.activeElement;
@@ -705,7 +695,6 @@ function getPreviousDateStr(dateStr) {
 
 async function saveSessionCloud() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
-  saveLocalFallback();
   try {
     await setDoc(doc(db, 'daily_loads', d), {
       date: d,
@@ -716,12 +705,6 @@ async function saveSessionCloud() {
   } catch(e) {
     console.error("خطأ المزامنة السحابية:", e);
   }
-}
-
-function saveLocalFallback() {
-  const d = document.getElementById('summaryDate').value || defaultDateStr;
-  localStorage.setItem('cartItems_' + d, JSON.stringify(cartItems));
-  localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
 }
 
 window.handleLiveInputChange = function(itemId) {
@@ -876,9 +859,6 @@ function filterLoadFlow() {
   });
 }
 
-// -------------------------------------------------------------
-// توحيد تجميع المشتريات والمبيعات مع الصفحة الكبرى بنفس المنطق الدقيق
-// -------------------------------------------------------------
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -1026,6 +1006,16 @@ function initLoadFlow() {
   renderLoadFlow();
 }
 
+window.scrollToPendingItems = function() {
+  const pendingStep = document.querySelector('#loadFlow .pending-step');
+  if (pendingStep) {
+    pendingStep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    pendingStep.classList.add('active');
+  } else {
+    window.toast('جميع الأصناف تم تسجيلها بالفعل 👍');
+  }
+};
+
 function renderLoadFlow() {
   const flow    = document.getElementById('loadFlow');
   const doneMsg = document.getElementById('loadDoneMsg');
@@ -1036,8 +1026,12 @@ function renderLoadFlow() {
   const loadedCount   = Object.keys(loadedInSession).length;
   const alertBanner   = document.getElementById('newItemsAlertBanner');
   if (alertBanner) {
-    if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
-    else { alertBanner.style.display = 'none'; }
+    if (pendingItems.length > 0 && loadedCount > 0) { 
+      alertBanner.style.display = 'flex'; 
+      alertBanner.querySelector('.snum').textContent = pendingItems.length; 
+    } else { 
+      alertBanner.style.display = 'none'; 
+    }
   }
   const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined);
   if (allDone && !forceShowLoadList && !searchVal) { doneMsg.style.display = 'block'; return; }
@@ -1541,8 +1535,6 @@ window.archiveInventory = async function() {
       date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
     });
     
-    localStorage.removeItem('cartItems_' + d);
-    localStorage.removeItem('loadedInSession_' + d);
     loadedInSession = {}; cartItems = {};
     
     window.toast('✅ تم ترحيل الجرد وإغلاق اليوم بنجاح!');
