@@ -345,10 +345,13 @@ table select:focus { border-color: var(--brand); }
     </div>
 
     <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row;">
-      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px; width:100%; justify-content:center;">
+      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px;">
         <span>أصناف جديدة أضيفت للمخزن تحتاج تسجيل تحميل:</span>
-        <span class="snum" style="background:#0a4a31; margin:0;">1</span>
+        <span class="snum" id="newItemsCount" style="background:#0a4a31; margin:0;">0</span>
       </div>
+      <button class="btn btn-sm btn-primary" style="background:#0a4a31; padding:4px 10px; font-size:11px;" onclick="window.scrollToPendingItem()">
+        ⬇️ انتقل إليها
+      </button>
     </div>
 
     <div class="card load-search-box">
@@ -518,7 +521,6 @@ function startApp() {
   if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
   listenToDailyLoadChanges();
   listenToLiveInvoices();
-  listenToArchiveRealtime();
 }
 
 let firebaseItems = [];
@@ -536,12 +538,7 @@ let isInventoryLoadedOnce = false;
 
 let factorsMap = {};
 let namesMap = {};
-
-// ذاكرة الكاش السريعة للأرشيف للتحميل اللحظي
-let archiveCacheData = {
-  archivedLoadsMap: {},
-  archivedInventoryMap: {}
-};
+let archiveCacheData = {};
 
 const today = new Date();
 const offset = today.getTimezoneOffset();
@@ -551,8 +548,6 @@ document.getElementById('summaryDate').value = defaultDateStr;
 
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
-let unsubscribeArchivedLoads = null;
-let unsubscribeArchivedInventory = null;
 
 function cleanItemName(str) {
   if (!str) return "";
@@ -678,30 +673,6 @@ function listenToDailyLoadChanges() {
       if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'SELECT')) {
         renderLoadFlow();
       }
-    }
-  });
-}
-
-// استماع لحظي ومباشر للأرشيف لمنع التأخير والبطء
-function listenToArchiveRealtime() {
-  if (unsubscribeArchivedLoads) unsubscribeArchivedLoads();
-  if (unsubscribeArchivedInventory) unsubscribeArchivedInventory();
-
-  unsubscribeArchivedLoads = onSnapshot(collection(db, 'archived_loads'), (snapshot) => {
-    snapshot.forEach(docSnap => {
-      archiveCacheData.archivedLoadsMap[docSnap.id] = docSnap.data();
-    });
-    if (document.getElementById('pg-archive').classList.contains('active')) {
-      window.fetchArchive();
-    }
-  });
-
-  unsubscribeArchivedInventory = onSnapshot(collection(db, 'archived_inventory'), (snapshot) => {
-    snapshot.forEach(docSnap => {
-      archiveCacheData.archivedInventoryMap[docSnap.id] = docSnap.data();
-    });
-    if (document.getElementById('pg-archive').classList.contains('active')) {
-      window.fetchArchive();
     }
   });
 }
@@ -904,6 +875,23 @@ function filterLoadFlow() {
   });
 }
 
+window.scrollToPendingItem = function() {
+  const pendingItem = firebaseItems.find(it => loadedInSession[it.id] === undefined);
+  if (pendingItem) {
+    document.getElementById('searchLoad').value = '';
+    filterLoadFlow();
+    setTimeout(() => {
+      const targetEl = document.getElementById('step-' + pendingItem.id);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetEl.classList.add('active');
+      }
+    }, 100);
+  } else {
+    window.toast('✅ تم تسجيل تحميل كافة الأصناف بالفعل!');
+  }
+};
+
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -1060,10 +1048,16 @@ function renderLoadFlow() {
   const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
   const loadedCount   = Object.keys(loadedInSession).length;
   const alertBanner   = document.getElementById('newItemsAlertBanner');
+
   if (alertBanner) {
-    if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
-    else { alertBanner.style.display = 'none'; }
+    if (pendingItems.length > 0 && loadedCount > 0) { 
+      alertBanner.style.display = 'flex'; 
+      document.getElementById('newItemsCount').textContent = pendingItems.length; 
+    } else { 
+      alertBanner.style.display = 'none'; 
+    }
   }
+
   const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined);
   if (allDone && !forceShowLoadList && !searchVal) { doneMsg.style.display = 'block'; return; }
   doneMsg.style.display = 'none';
@@ -1575,75 +1569,91 @@ window.archiveInventory = async function() {
   } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
 };
 
-// ==========================================
-// التحميل اللحظي السريع للأرشيف بدون قراءات مكررة
-// ==========================================
-window.fetchArchive = function() {
+window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
+  container.innerHTML = '<div class="spin"></div>';
 
-  let archivedLoadsMap = archiveCacheData.archivedLoadsMap || {};
-  let archivedInventoryMap = archiveCacheData.archivedInventoryMap || {};
+  try {
+    let archivedLoadsMap = {};
+    let archivedInventoryMap = {};
 
-  let datesList = Array.from(new Set([...Object.keys(archivedLoadsMap), ...Object.keys(archivedInventoryMap)])).sort().reverse();
+    if (selectedDate) {
+      const [loadSnap, invSnap] = await Promise.all([
+        getDoc(doc(db, 'archived_loads', selectedDate)),
+        getDoc(doc(db, 'archived_inventory', selectedDate))
+      ]);
+      if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
+      if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
+    } else {
+      const [loadSnap, invSnap] = await Promise.all([
+        getDocs(query(collection(db, 'archived_loads'))),
+        getDocs(query(collection(db, 'archived_inventory')))
+      ]);
+      loadSnap.forEach(d => archivedLoadsMap[d.id] = d.data());
+      invSnap.forEach(d => archivedInventoryMap[d.id] = d.data());
+    }
 
-  if (selectedDate) {
-    datesList = datesList.filter(d => d === selectedDate);
+    const allDates = Array.from(new Set([...Object.keys(archivedLoadsMap), ...Object.keys(archivedInventoryMap)])).sort().reverse();
+
+    if (!allDates.length) {
+      container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
+      return;
+    }
+
+    archiveCacheData = { archivedLoadsMap, archivedInventoryMap };
+
+    let cardsHtml = '';
+    allDates.forEach(d => {
+      const invData  = archivedInventoryMap[d];
+      const loadData = archivedLoadsMap[d];
+
+      const isClosed = !!invData;
+      const user = (invData?.user || loadData?.user) || 'أحمد محمود الزيادي';
+
+      cardsHtml += `
+        <div class="archive-card" id="arch-card-${d}">
+          <div class="archive-card-header" onclick="window.toggleArchiveDetails('${d}')">
+            <div class="archive-card-title">📅 يوم: ${d}</div>
+            <span class="archive-status-badge ${isClosed ? 'closed' : 'pending'}">
+              ${isClosed ? '🔒 مغلق نهائياً' : '⚠️ غير مغلق'}
+            </span>
+          </div>
+
+          <div style="font-size:12px; color:var(--gray); margin-bottom:6px; font-weight:700;">
+            👤 بواسطة: <b>${user}</b>
+          </div>
+
+          <div class="archive-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-primary btn-sm" onclick="window.toggleArchiveDetails('${d}')">
+              👁️ عرض التفاصيل
+            </button>
+            <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
+              👁️ قراءة PDF
+            </button>
+            <button class="btn btn-excel btn-sm" onclick="window.exportArchiveExcel('${d}')">
+              📊 تصدير Excel
+            </button>
+            <button class="btn btn-primary btn-sm" style="background:#0284c7; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
+              📤 مشاركة ملف PDF
+            </button>
+            <button class="btn btn-danger btn-sm admin-only" onclick="window.deleteArchiveDate('${d}')">
+              🗑️ مسح
+            </button>
+          </div>
+
+          <div id="arch-details-${d}" style="display:none; margin-top:10px; padding-top:8px; border-top:1.5px dashed var(--border);"></div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = cardsHtml;
+  } catch (e) {
+    console.error(e);
+    container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
   }
-
-  if (!datesList.length) {
-    container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
-    return;
-  }
-
-  let cardsHtml = '';
-  datesList.forEach(d => {
-    const invData  = archivedInventoryMap[d];
-    const loadData = archivedLoadsMap[d];
-
-    const isClosed = !!invData;
-    const user = (invData?.user || loadData?.user) || 'أحمد محمود الزيادي';
-
-    cardsHtml += `
-      <div class="archive-card" id="arch-card-${d}">
-        <div class="archive-card-header" onclick="window.toggleArchiveDetails('${d}')">
-          <div class="archive-card-title">📅 يوم: ${d}</div>
-          <span class="archive-status-badge ${isClosed ? 'closed' : 'pending'}">
-            ${isClosed ? '🔒 مغلق نهائياً' : '⚠️ غير مغلق'}
-          </span>
-        </div>
-
-        <div style="font-size:12px; color:var(--gray); margin-bottom:6px; font-weight:700;">
-          👤 بواسطة: <b>${user}</b>
-        </div>
-
-        <div class="archive-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" onclick="window.toggleArchiveDetails('${d}')">
-            👁️ عرض التفاصيل
-          </button>
-          <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
-            👁️ قراءة PDF
-          </button>
-          <button class="btn btn-excel btn-sm" onclick="window.exportArchiveExcel('${d}')">
-            📊 تصدير Excel
-          </button>
-          <button class="btn btn-primary btn-sm" style="background:#0284c7; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
-            📤 مشاركة ملف PDF
-          </button>
-          <button class="btn btn-danger btn-sm admin-only" onclick="window.deleteArchiveDate('${d}')">
-            🗑️ مسح
-          </button>
-        </div>
-
-        <div id="arch-details-${d}" style="display:none; margin-top:10px; padding-top:8px; border-top:1.5px dashed var(--border);"></div>
-      </div>
-    `;
-  });
-
-  container.innerHTML = cardsHtml;
 };
 
-// فتح واختفاء التفاصيل بلحظتها بدون استعلامات من السيرفر
 window.toggleArchiveDetails = function(d) {
   const detailsEl = document.getElementById(`arch-details-${d}`);
   if (!detailsEl) return;
@@ -1703,8 +1713,8 @@ window.toggleArchiveDetails = function(d) {
             ${itemsList.map(item => `
               <tr>
                 <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
-                <td style="color:var(--gray); font-weight:bold;">${item.prevCartons || 0} ك / ${item.prevLoose || 0} ق</td>
-                <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0} ك / ${item.loadedLoose || 0} ق</td>
+                <td style="color:var(--gray); font-weight:bold;">${item.prevCartons \vert{}\vert{} 0} ك / ${item.prevLoose || 0} ق</td>
+                <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons \vert{}\vert{} 0} ك / ${item.loadedLoose || 0} ق</td>
                 <td style="font-size:10px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
               </tr>
             `).join('')}
@@ -1714,21 +1724,21 @@ window.toggleArchiveDetails = function(d) {
   } else {
     html = '<div style="color:var(--gray); font-size:11px; text-align:center;">لا توجد تفاصيل لهذا اليوم</div>';
   }
-
+  
   detailsEl.innerHTML = html;
 };
 
 window.shareArchiveWhatsApp = async function(d) {
   window.toast('⏳ جاري تجهيز ملف الـ PDF للمشاركة العامة...');
   try {
-    const invDoc  = archiveCacheData.archivedInventoryMap[d];
-    const loadDoc = archiveCacheData.archivedLoadsMap[d];
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
     let tbody = '';
     const printDateStr = new Date().toLocaleDateString('ar-EG');
 
-    if (invDoc && invDoc.inventoryData) {
-      const data = invDoc.inventoryData;
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
       data.forEach(r => {
         tbody += `
           <tr style="page-break-inside: avoid;">
@@ -1741,8 +1751,8 @@ window.shareArchiveWhatsApp = async function(d) {
             <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:12px;">${r.status}</td>
           </tr>`;
       });
-    } else if (loadDoc && loadDoc.cartItems) {
-      const loadData = loadDoc.cartItems;
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
       Object.values(loadData).forEach(r => {
         tbody += `
           <tr style="page-break-inside: avoid;">
@@ -1816,9 +1826,7 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(db, 'archived_inventory', d));
-    delete archiveCacheData.archivedLoadsMap[d];
-    delete archiveCacheData.archivedInventoryMap[d];
+    await deleteDoc(doc(doc(db, 'archived_inventory', d)));
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
@@ -1831,15 +1839,15 @@ window.deleteArchiveDate = async function(d) {
 window.exportArchivePDF = async function(d) {
   window.toast('⏳ جاري فتح تقرير الـ PDF للعرض...');
   try {
-    const invDoc  = archiveCacheData.archivedInventoryMap[d];
-    const loadDoc = archiveCacheData.archivedLoadsMap[d];
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
     let tbody = '';
     let titleText = `تقرير جرد وتتبع حركة حمولة السيارة الفعلي`;
     const printDateStr = new Date().toLocaleDateString('ar-EG');
 
-    if (invDoc && invDoc.inventoryData) {
-      const data = invDoc.inventoryData;
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
       data.forEach(r => {
         tbody += `
           <tr style="page-break-inside: avoid;">
@@ -1852,8 +1860,8 @@ window.exportArchivePDF = async function(d) {
             <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-weight:bold; font-size:12px;">${r.status}</td>
           </tr>`;
       });
-    } else if (loadDoc && loadDoc.cartItems) {
-      const loadData = loadDoc.cartItems;
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
       Object.values(loadData).forEach(r => {
         tbody += `
           <tr style="page-break-inside: avoid;">
@@ -2104,8 +2112,8 @@ window.exportSummaryExcel = function() {
 window.exportArchiveExcel = async function(d) {
   window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
   try {
-    const invDoc  = archiveCacheData.archivedInventoryMap[d];
-    const loadDoc = archiveCacheData.archivedLoadsMap[d];
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
     let excelData = [];
 
@@ -2132,8 +2140,8 @@ window.exportArchiveExcel = async function(d) {
 
     const valOrEmpty = (v) => (v && v !== 0 ? v : "");
 
-    if (invDoc && invDoc.inventoryData) {
-      const data = invDoc.inventoryData;
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
       excelData = data.map((r) => {
         const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
         let mainStockCartons = 0;
@@ -2174,8 +2182,8 @@ window.exportArchiveExcel = async function(d) {
           "متبقى ق": valOrEmpty(inTruck.loose)
         };
       });
-    } else if (loadDoc && loadDoc.cartItems) {
-      const loadData = loadDoc.cartItems;
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
       excelData = Object.values(loadData).map((r) => {
         const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
         let mainStockCartons = 0;
