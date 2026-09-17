@@ -345,13 +345,10 @@ table select:focus { border-color: var(--brand); }
     </div>
 
     <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row;">
-      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px;">
+      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px; width:100%; justify-content:center;">
         <span>أصناف جديدة أضيفت للمخزن تحتاج تسجيل تحميل:</span>
-        <span class="snum" id="newItemsCount" style="background:#0a4a31; margin:0;">0</span>
+        <span class="snum" style="background:#0a4a31; margin:0;">1</span>
       </div>
-      <button class="btn btn-sm btn-primary" style="background:#0a4a31; padding:4px 10px; font-size:11px;" onclick="window.scrollToPendingItem()">
-        ⬇️ انتقل إليها
-      </button>
     </div>
 
     <div class="card load-search-box">
@@ -538,7 +535,6 @@ let isInventoryLoadedOnce = false;
 
 let factorsMap = {};
 let namesMap = {};
-let archiveCacheData = {};
 
 const today = new Date();
 const offset = today.getTimezoneOffset();
@@ -549,6 +545,7 @@ document.getElementById('summaryDate').value = defaultDateStr;
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
 
+// توحيد تنظيف اسم الصنف بنفس الطريقة الدقيقة للملف الآخر
 function cleanItemName(str) {
   if (!str) return "";
   return String(str).trim()
@@ -578,6 +575,9 @@ function getProductIdForItem(item) {
   return item.stockId || item.productId || item.id || null;
 }
 
+// -------------------------------------------------------------
+// تعديل محوري: ضبط دالة المبيعات المباشرة لتفادي انعكاس الإشارة بالسالب
+// -------------------------------------------------------------
 function listenToLiveInvoices() {
   const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
   if (unsubscribeInvoices) unsubscribeInvoices();
@@ -597,7 +597,7 @@ function listenToLiveInvoices() {
         const itemId = getProductIdForItem(itm);
         if (itemId) {
           const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-          const rawQty = Number(itm.qty) || 0;
+          const rawQty = Number(itm.qty) || 0; // إزالة Math.abs لتفادي حساب الإشارة مرتين
           const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
           const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
 
@@ -605,6 +605,7 @@ function listenToLiveInvoices() {
 
           if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
           
+          // الاعتماد على إشارة العدد المباشرة أو معالجة المرتجع بخصمه
           if (isReturn) {
             memorySalesCache[itemId] -= Math.abs(totalPcsSold);
           } else {
@@ -875,23 +876,9 @@ function filterLoadFlow() {
   });
 }
 
-window.scrollToPendingItem = function() {
-  const pendingItem = firebaseItems.find(it => loadedInSession[it.id] === undefined);
-  if (pendingItem) {
-    document.getElementById('searchLoad').value = '';
-    filterLoadFlow();
-    setTimeout(() => {
-      const targetEl = document.getElementById('step-' + pendingItem.id);
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        targetEl.classList.add('active');
-      }
-    }, 100);
-  } else {
-    window.toast('✅ تم تسجيل تحميل كافة الأصناف بالفعل!');
-  }
-};
-
+// -------------------------------------------------------------
+// توحيد تجميع المشتريات والمبيعات مع الصفحة الكبرى بنفس المنطق الدقيق
+// -------------------------------------------------------------
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -1048,16 +1035,10 @@ function renderLoadFlow() {
   const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
   const loadedCount   = Object.keys(loadedInSession).length;
   const alertBanner   = document.getElementById('newItemsAlertBanner');
-
   if (alertBanner) {
-    if (pendingItems.length > 0 && loadedCount > 0) { 
-      alertBanner.style.display = 'flex'; 
-      document.getElementById('newItemsCount').textContent = pendingItems.length; 
-    } else { 
-      alertBanner.style.display = 'none'; 
-    }
+    if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
+    else { alertBanner.style.display = 'none'; }
   }
-
   const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined);
   if (allDone && !forceShowLoadList && !searchVal) { doneMsg.style.display = 'block'; return; }
   doneMsg.style.display = 'none';
@@ -1581,14 +1562,14 @@ window.fetchArchive = async function() {
     if (selectedDate) {
       const [loadSnap, invSnap] = await Promise.all([
         getDoc(doc(db, 'archived_loads', selectedDate)),
-        getDoc(doc(db, 'archived_inventory', selectedDate))
+        getDoc(doc(doc(db, 'archived_inventory', selectedDate)))
       ]);
       if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
       if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
     } else {
       const [loadSnap, invSnap] = await Promise.all([
-        getDocs(query(collection(db, 'archived_loads'))),
-        getDocs(query(collection(db, 'archived_inventory')))
+        getDocs(collection(db, 'archived_loads')),
+        getDocs(collection(db, 'archived_inventory'))
       ]);
       loadSnap.forEach(d => archivedLoadsMap[d.id] = d.data());
       invSnap.forEach(d => archivedInventoryMap[d.id] = d.data());
@@ -1600,8 +1581,6 @@ window.fetchArchive = async function() {
       container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
       return;
     }
-
-    archiveCacheData = { archivedLoadsMap, archivedInventoryMap };
 
     let cardsHtml = '';
     allDates.forEach(d => {
@@ -1652,80 +1631,6 @@ window.fetchArchive = async function() {
     console.error(e);
     container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
   }
-};
-
-window.toggleArchiveDetails = function(d) {
-  const detailsEl = document.getElementById(`arch-details-${d}`);
-  if (!detailsEl) return;
-
-  if (detailsEl.style.display === 'block') {
-    detailsEl.style.display = 'none';
-    return;
-  }
-
-  detailsEl.style.display = 'block';
-
-  const invData  = archiveCacheData.archivedInventoryMap ? archiveCacheData.archivedInventoryMap[d] : null;
-  const loadData = archiveCacheData.archivedLoadsMap ? archiveCacheData.archivedLoadsMap[d] : null;
-
-  let html = '';
-  if (invData && invData.inventoryData) {
-    const data = invData.inventoryData;
-    html = `
-      <div class="tbl-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="text-align:right;">اسم الصنف</th>
-              <th>قبل التحميل</th>
-              <th>تم تحميله</th>
-              <th>المباع</th>
-              <th>المتبقي بالعربية</th>
-              <th>الراجع</th>
-              <th>الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.map(r => `
-              <tr>
-                <td style="text-align:right; font-weight:bold; color:var(--brand-d);">${r.name}</td>
-                <td style="color:var(--gray);">${cleanTextForPdf(r.prevLoaded) || '—'}</td>
-                <td style="color:var(--brand); font-weight:bold;">${cleanTextForPdf(r.newLoaded || r.loaded)}</td>
-                <td style="color:var(--red); font-weight:bold;">${cleanTextForPdf(r.sold)}</td>
-                <td style="color:var(--blue); font-weight:bold;">${cleanTextForPdf(r.inTruck) || '—'}</td>
-                <td style="font-weight:bold;">${cleanTextForPdf(r.returnedManual)}</td>
-                <td style="color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--text)'}; font-weight:bold;">${r.status}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
-  } else if (loadData && loadData.cartItems) {
-    const itemsList = Object.values(loadData.cartItems);
-    html = `
-      <div style="font-size:11px; color:#8a5b00; font-weight:bold; margin-bottom:6px;">⚠️ بيانات الحمولة المسجلة (لم يُغلق اليوم نهائياً):</div>
-      <div class="tbl-wrap">
-        <table>
-          <thead>
-            <tr><th style="text-align:right;">اسم الصنف</th><th>السابق</th><th>الجديد</th><th>آخر تعديل</th></tr>
-          </thead>
-          <tbody>
-            ${itemsList.map(item => `
-              <tr>
-                <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
-                <td style="color:var(--gray); font-weight:bold;">${item.prevCartons \vert{}\vert{} 0} ك / ${item.prevLoose || 0} ق</td>
-                <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons \vert{}\vert{} 0} ك / ${item.loadedLoose || 0} ق</td>
-                <td style="font-size:10px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
-  } else {
-    html = '<div style="color:var(--gray); font-size:11px; text-align:center;">لا توجد تفاصيل لهذا اليوم</div>';
-  }
-  
-  detailsEl.innerHTML = html;
 };
 
 window.shareArchiveWhatsApp = async function(d) {
@@ -1818,6 +1723,84 @@ window.shareArchiveWhatsApp = async function(d) {
   } catch (e) {
     console.error(e);
     window.toast('❌ حدث خطأ أثناء إعداد ملف الـ PDF للمشاركة');
+  }
+};
+
+window.toggleArchiveDetails = async function(d) {
+  const detailsEl = document.getElementById(`arch-details-${d}`);
+  if (!detailsEl) return;
+
+  if (detailsEl.style.display === 'block') {
+    detailsEl.style.display = 'none';
+    return;
+  }
+
+  detailsEl.style.display = 'block';
+  detailsEl.innerHTML = '<div class="spin" style="width:18px;height:18px;"></div>';
+
+  try {
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+
+    let html = '';
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
+      html = `
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:right;">اسم الصنف</th>
+                <th>قبل التحميل</th>
+                <th>تم تحميله</th>
+                <th>المباع</th>
+                <th>المتبقي بالعربية</th>
+                <th>الراجع</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.map(r => `
+                <tr>
+                  <td style="text-align:right; font-weight:bold; color:var(--brand-d);">${r.name}</td>
+                  <td style="color:var(--gray);">${cleanTextForPdf(r.prevLoaded) || '—'}</td>
+                  <td style="color:var(--brand); font-weight:bold;">${cleanTextForPdf(r.newLoaded || r.loaded)}</td>
+                  <td style="color:var(--red); font-weight:bold;">${cleanTextForPdf(r.sold)}</td>
+                  <td style="color:var(--blue); font-weight:bold;">${cleanTextForPdf(r.inTruck) || '—'}</td>
+                  <td style="font-weight:bold;">${cleanTextForPdf(r.returnedManual)}</td>
+                  <td style="color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--text)'}; font-weight:bold;">${r.status}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
+      const itemsList = Object.values(loadData);
+      html = `
+        <div style="font-size:11px; color:#8a5b00; font-weight:bold; margin-bottom:6px;">⚠️ بيانات الحمولة المسجلة (لم يُغلق اليوم نهائياً):</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th style="text-align:right;">اسم الصنف</th><th>السابق</th><th>الجديد</th><th>آخر تعديل</th></tr>
+            </thead>
+            <tbody>
+              ${itemsList.map(item => `
+                <tr>
+                  <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
+                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons || 0} ك / ${item.prevLoose || 0} ق</td>
+                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0} ك / ${item.loadedLoose || 0} ق</td>
+                  <td style="font-size:10px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+    detailsEl.innerHTML = html;
+  } catch (e) {
+    console.error(e);
+    detailsEl.innerHTML = '<div style="color:var(--red); font-size:11px;">❌ خطأ في تحميل التفاصيل</div>';
   }
 };
 
