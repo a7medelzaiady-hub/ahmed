@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <script src="auth-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>جرد وتفريغ حمولة السيارة - شركة الزيادي</title>
+    <title>جرد وحمولة السيارة - شركة الزيادي</title>
     <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b5e3d">
@@ -95,33 +95,49 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         }
 
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed var(--border-color);
+        }
+
         .item-title {
             font-weight: 800;
-            font-size: 1rem;
+            font-size: 0.98rem;
             color: var(--text-dark);
-            margin-bottom: 4px;
+            line-height: 1.3;
         }
-        .item-subtitle {
+
+        .warehouse-stock-badge {
             font-size: 0.78rem;
-            color: var(--text-muted);
-            margin-bottom: 12px;
+            font-weight: 700;
+            color: #047857;
+            background: #ecfdf5;
+            padding: 4px 10px;
+            border-radius: 10px;
+            border: 1px solid #a7f3d0;
+            white-space: nowrap;
+            display: inline-block;
         }
 
         .unit-label {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             font-weight: 700;
             color: var(--text-muted);
-            margin-bottom: 4px;
+            margin-bottom: 3px;
             text-align: center;
         }
 
         .input-qty {
             width: 100%;
             text-align: center;
-            font-weight: 700;
+            font-weight: 800;
             border: 1px solid var(--border-color);
             border-radius: 10px;
-            padding: 6px;
+            padding: 6px 2px;
             font-size: 0.9rem;
             outline: none;
         }
@@ -130,14 +146,36 @@
             background-color: #f0fdf4;
         }
 
+        .section-box {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 8px;
+        }
+
+        .section-box.after-load {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 6px;
+            color: var(--text-dark);
+        }
+
+        .section-title i { margin-left: 4px; }
+
         .readonly-box {
-            background: #f1f5f9;
+            background: #ffffff;
             border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 6px;
             text-align: center;
             font-weight: 800;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             color: var(--text-dark);
         }
 
@@ -157,17 +195,6 @@
             background: #ffe4e6;
             color: var(--danger);
             border-color: #fecdd3;
-        }
-
-        .section-header {
-            font-size: 0.8rem;
-            font-weight: 800;
-            color: var(--primary-green);
-            background: #f0fdf4;
-            padding: 6px 10px;
-            border-radius: 8px;
-            text-align: center;
-            margin-bottom: 8px;
         }
 
         .bottom-bar {
@@ -197,17 +224,18 @@
             gap: 8px;
         }
 
-        .btn-save {
+        .btn-approve {
             background: var(--primary-green);
             color: white;
         }
-        .btn-save:active { background: #0a5234; }
+        .btn-approve:active { background: #0a5234; }
 
         .sync-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             background: #d1d5db;
+            display: inline-block;
         }
         .sync-dot.fresh { background: #10b981; }
         .sync-dot.syncing { background: #f59e0b; animation: pulse 1s infinite; }
@@ -221,7 +249,10 @@
         <a href="index.html" class="nav-icon" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
         <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
     </div>
-    <span class="fw-bold">جرد وحمولة السيارة</span>
+    <div class="d-flex align-items-center gap-2">
+        <span class="fw-bold">حمولة وجرد العربية</span>
+        <span class="sync-dot" id="syncDot" title="حالة الربط اللحظي"></span>
+    </div>
     <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
 </div>
 
@@ -234,19 +265,19 @@
 
 <div id="cardsContainer">
     <div class="text-center text-muted mt-5 fw-bold">
-        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل أصناف التوزيع...
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل أصناف المخزن وحمولة العربية...
     </div>
 </div>
 
 <div class="bottom-bar">
-    <button class="btn-action btn-save" onclick="saveAuditLog()">
-        <i class="fas fa-save"></i> حفظ وتأكيد الجرد
+    <button class="btn-action btn-approve" onclick="approveLoading()">
+        <i class="fas fa-check-circle"></i> تم (اعتماد الحمولة وتحديث باقي الأجهزة)
     </button>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -269,19 +300,39 @@
     }
 
     let inventoryList = [];
-    let salesMap = new Map(); // مبيعات اليوم بالفواتير
-    const inputState = {}; // تخزين المدخلات قبل الحفظ
+    let salesMap = new Map();
+    let loadStateMap = new Map();
+    const todayDocId = new Date().toISOString().split('T')[0];
 
-    // جلب بيانات الأصناف والمبيعات
+    function setSyncState(state) {
+        const dot = document.getElementById('syncDot');
+        if (!dot) return;
+        dot.classList.remove('syncing', 'fresh');
+        if (state) dot.classList.add(state);
+    }
+
+    // جلب بيانات المخزون والمبيعات والحمولة المعتمدة
     async function loadData() {
+        setSyncState('syncing');
         try {
-            const [inventorySnap, invoicesSnap] = await Promise.all([
+            const [inventorySnap, invoicesSnap, supplierSnap, transSnap] = await Promise.all([
                 getDocs(collection(db, "inventory")),
-                getDocs(collection(db, "invoices"))
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
             ]);
 
             const factorsMap = new Map();
             const namesMap = new Map();
+            const purchasesMap = new Map();
+            const openingMap = new Map();
+
+            transSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.productId) {
+                    openingMap.set(data.productId, (openingMap.get(data.productId) || 0) + (Number(data.quantityPcs) || 0));
+                }
+            });
 
             inventorySnap.forEach(docSnap => {
                 const data = docSnap.data();
@@ -289,17 +340,10 @@
                     const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
                     factorsMap.set(docSnap.id, factor);
                     if (data.name) namesMap.set(data.name.trim(), docSnap.id);
-                    
-                    inventoryList.push({
-                        id: docSnap.id,
-                        name: data.name || 'بدون اسم',
-                        barcode: data.barcode || '',
-                        factor: factor
-                    });
                 }
             });
 
-            // تجميع المبيعات الفعلية بالقطع
+            // المبيعات
             invoicesSnap.forEach(docSnap => {
                 const items = docSnap.data().items || [];
                 items.forEach(item => {
@@ -311,15 +355,68 @@
                         const isCarton = item.isCarton === true || u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
                         const pcs = isCarton ? (rawQty * factor) : rawQty;
                         
-                        const current = salesMap.get(id) || 0;
-                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
+                        salesMap.set(id, (salesMap.get(id) || 0) + (item.isReturn ? -pcs : pcs));
                     }
                 });
             });
 
-            renderAuditCards();
+            // المشتريات
+            supplierSnap.forEach(docSnap => {
+                const items = docSnap.data().items || [];
+                items.forEach(item => {
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        const u = String(item.unitName || item.unit || '').trim().toLowerCase();
+                        const isCarton = item.isCarton !== false || u === 'كرتونة' || u === 'box' || u === 'carton';
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+
+                        purchasesMap.set(id, (purchasesMap.get(id) || 0) + (isReturn ? -pcs : pcs));
+                    }
+                });
+            });
+
+            // إعداد أرقام رصيد المخزن الحالي
+            inventoryList = [];
+            inventorySnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (!data.isDeleted) {
+                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                    let openingPcs = 0;
+                    if (data.openingTotalPcs != null) openingPcs = Number(data.openingTotalPcs);
+                    else if (data.openingQty != null) openingPcs = Math.round(Number(data.openingQty) * factor);
+                    else if (openingMap.has(docSnap.id)) openingPcs = openingMap.get(docSnap.id);
+
+                    const sPcs = salesMap.get(docSnap.id) || 0;
+                    const pPcs = purchasesMap.get(docSnap.id) || 0;
+                    const totalWhPcs = openingPcs + pPcs - sPcs;
+
+                    inventoryList.push({
+                        id: docSnap.id,
+                        name: data.name || 'بدون اسم',
+                        factor: factor,
+                        totalWarehousePcs: totalWhPcs
+                    });
+                }
+            });
+
+            // استماع لحظي لتزامن الحمولة عبر باقي الأجهزة
+            onSnapshot(doc(db, "car_loadings", todayDocId), (docSnap) => {
+                if (docSnap.exists()) {
+                    const items = docSnap.data().items || {};
+                    Object.keys(items).forEach(id => {
+                        loadStateMap.set(id, items[id]);
+                    });
+                }
+                renderAuditCards();
+                setSyncState('fresh');
+            });
+
         } catch (e) {
-            console.error("خطأ في تحميل بيانات الجرد:", e);
+            console.error("خطأ في جلب بيانات الصفحة:", e);
+            setSyncState(null);
         }
     }
 
@@ -330,76 +427,98 @@
         const filtered = inventoryList.filter(item => item.name.toLowerCase().includes(term));
 
         if (filtered.length === 0) {
-            container.innerHTML = `<div class="text-center text-muted mt-5 fw-bold">لا توجد أصناف مطابقة</div>`;
+            container.innerHTML = `<div class="text-center text-muted mt-5 fw-bold">لا توجد أصناف مطابقة للبحث</div>`;
             return;
         }
 
         let html = '';
         filtered.forEach(item => {
-            const state = inputState[item.id] || { startCarton: '', startPcs: '', endCarton: '', endPcs: '' };
             const factor = item.factor;
+            const state = loadStateMap.get(item.id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '' };
 
-            // حساب المبيعات المسجلة كرتونة وجركن
+            // تحويل رصيد المخزن إلى (كرتونة + جركن)
+            const whAbs = Math.abs(item.totalWarehousePcs);
+            const whSign = item.totalWarehousePcs < 0 ? '-' : '';
+            const whCartons = Math.floor(whAbs / factor);
+            const whPcs = whAbs % factor;
+            const whText = `${whSign}${whCartons} كرتونة و ${whPcs} جركن`;
+
+            // المبيعات المسجلة بالفواتير
             const soldTotalPcs = salesMap.get(item.id) || 0;
             const soldCartons = Math.floor(soldTotalPcs / factor);
             const soldPcs = soldTotalPcs % factor;
 
-            // التحميل المبدئي والنهائي بالقطع
+            // إجمالي قطع قبل وبعد التحميل
             const startPcsTotal = (Number(state.startCarton) || 0) * factor + (Number(state.startPcs) || 0);
-            const endPcsTotal = (Number(state.endCarton) || 0) * factor + (Number(state.endPcs) || 0);
-            
-            // المباع المحسوب فعلياً من الجرد (قبل التحميل - بعد التحميل)
-            const calculatedSoldPcs = Math.max(0, startPcsTotal - endPcsTotal);
-            const calcSoldCartons = Math.floor(calculatedSoldPcs / factor);
-            const calcSoldPcsRem = calculatedSoldPcs % factor;
+            const afterPcsTotal = (Number(state.afterCarton) || 0) * factor + (Number(state.afterPcs) || 0);
 
-            // هل يوجد فرق بين مبيعات الفواتير وجرد السيارة؟
-            const hasDiscrepancy = (state.startCarton !== '' || state.endCarton !== '') && (calculatedSoldPcs !== soldTotalPcs);
+            // الفرق / المحمل الجديد بالعربية
+            const addedPcsTotal = Math.max(0, afterPcsTotal - startPcsTotal);
+            const addedCartons = Math.floor(addedPcsTotal / factor);
+            const addedPcs = addedPcsTotal % factor;
 
             html += `
                 <div class="stock-card">
-                    <div class="item-title">${item.name}</div>
-                    <div class="item-subtitle">الكرتونة تحتوي على: <b>${factor}</b> جركن/قطعة</div>
-
-                    <!-- حمولة قبل الخروج (بداية اليوم) -->
-                    <div class="section-header"><i class="fas fa-truck-loading me-1"></i> حمولة قبل الخروج (قبل التحميل)</div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <div class="unit-label">كرتونة</div>
-                            <input type="number" class="input-qty" placeholder="0" value="${state.startCarton}" 
-                                   oninput="updateInput('${item.id}', 'startCarton', this.value)">
+                    <div class="item-header">
+                        <div>
+                            <div class="item-title">${item.name}</div>
+                            <div class="text-muted" style="font-size:0.75rem;">الكرتونة: ${factor} قطعة</div>
                         </div>
-                        <div class="col-6">
-                            <div class="unit-label">جركن</div>
-                            <input type="number" class="input-qty" placeholder="0" value="${state.startPcs}" 
-                                   oninput="updateInput('${item.id}', 'startPcs', this.value)">
+                        <div class="warehouse-stock-badge">
+                            بالمخزن: ${whText}
                         </div>
                     </div>
 
-                    <!-- حمولة بعد الرجوع (نهاية اليوم) -->
-                    <div class="section-header text-dark" style="background:#f1f5f9;"><i class="fas fa-truck-pickup me-1"></i> المتبقي بالعربية (بعد التحميل/الرجوع)</div>
-                    <div class="row g-2 mb-3">
+                    <!-- خانات قبل وبعد التحميل جنباً إلى جنب -->
+                    <div class="row g-2 mb-2">
+                        <!-- قبل التحميل (متبقي اليوم السابق) -->
                         <div class="col-6">
-                            <div class="unit-label">كرتونة</div>
-                            <input type="number" class="input-qty" placeholder="0" value="${state.endCarton}" 
-                                   oninput="updateInput('${item.id}', 'endCarton', this.value)">
+                            <div class="section-box">
+                                <div class="section-title text-muted"><i class="fas fa-history"></i> قبل التحميل</div>
+                                <div class="row g-1">
+                                    <div class="col-6">
+                                        <div class="unit-label">كرتونة</div>
+                                        <input type="number" class="input-qty" placeholder="0" value="${state.startCarton}" 
+                                               oninput="updateLoadState('${item.id}', 'startCarton', this.value)">
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="unit-label">جركن</div>
+                                        <input type="number" class="input-qty" placeholder="0" value="${state.startPcs}" 
+                                               oninput="updateLoadState('${item.id}', 'startPcs', this.value)">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- بعد التحميل (الإجمالي بالعربية) -->
                         <div class="col-6">
-                            <div class="unit-label">جركن</div>
-                            <input type="number" class="input-qty" placeholder="0" value="${state.endPcs}" 
-                                   oninput="updateInput('${item.id}', 'endPcs', this.value)">
+                            <div class="section-box after-load">
+                                <div class="section-title text-success"><i class="fas fa-truck-loading"></i> بعد التحميل</div>
+                                <div class="row g-1">
+                                    <div class="col-6">
+                                        <div class="unit-label">كرتونة</div>
+                                        <input type="number" class="input-qty" placeholder="0" value="${state.afterCarton}" 
+                                               oninput="updateLoadState('${item.id}', 'afterCarton', this.value)">
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="unit-label">جركن</div>
+                                        <input type="number" class="input-qty" placeholder="0" value="${state.afterPcs}" 
+                                               oninput="updateLoadState('${item.id}', 'afterPcs', this.value)">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- النتيجة الحسابية للجرد والتطابق -->
-                    <div class="row g-2 pt-2 border-top">
+                    <!-- خلاصة الصافي والمبيعات -->
+                    <div class="row g-2 pt-1">
                         <div class="col-6">
-                            <div class="unit-label">المباع (حسب الجرد)</div>
-                            <div class="readonly-box box-sold">${calcSoldCartons} ك / ${calcSoldPcsRem} جـ</div>
+                            <div class="unit-label">صافي المحمل اليوم</div>
+                            <div class="readonly-box box-rem">+${addedCartons} ك / ${addedPcs} جـ</div>
                         </div>
                         <div class="col-6">
-                            <div class="unit-label">المباع (مسجل بالفواتير)</div>
-                            <div class="readonly-box ${hasDiscrepancy ? 'box-diff-danger' : 'box-rem'}">${soldCartons} ك / ${soldPcs} جـ</div>
+                            <div class="unit-label">مبيعات الفواتير اليوم</div>
+                            <div class="readonly-box box-sold">${soldCartons} ك / ${soldPcs} جـ</div>
                         </div>
                     </div>
                 </div>
@@ -409,52 +528,31 @@
         container.innerHTML = html;
     };
 
-    window.updateInput = function(id, field, value) {
-        if (!inputState[id]) {
-            inputState[id] = { startCarton: '', startPcs: '', endCarton: '', endPcs: '' };
-        }
-        inputState[id][field] = value;
+    window.updateLoadState = function(id, field, value) {
+        let state = loadStateMap.get(id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '' };
+        state[field] = value;
+        loadStateMap.set(id, state);
         renderAuditCards();
     };
 
-    window.saveAuditLog = async function() {
+    // حفظ واعتماد الحمولة المباشرة لكافة الأجهزة
+    window.approveLoading = async function() {
         try {
-            const auditData = [];
-            for (const item of inventoryList) {
-                const state = inputState[item.id];
-                if (state && (state.startCarton !== '' || state.endCarton !== '')) {
-                    const startPcsTotal = (Number(state.startCarton) || 0) * item.factor + (Number(state.startPcs) || 0);
-                    const endPcsTotal = (Number(state.endCarton) || 0) * item.factor + (Number(state.endPcs) || 0);
-                    const soldSystemPcs = salesMap.get(item.id) || 0;
-
-                    auditData.push({
-                        productId: item.id,
-                        productName: item.name,
-                        factor: item.factor,
-                        startTotalPcs: startPcsTotal,
-                        endTotalPcs: endPcsTotal,
-                        soldAuditPcs: Math.max(0, startPcsTotal - endPcsTotal),
-                        soldSystemPcs: soldSystemPcs,
-                        differencePcs: (startPcsTotal - endPcsTotal) - soldSystemPcs
-                    });
-                }
-            }
-
-            if (auditData.length === 0) {
-                alert("برجاء إدخال بيانات صنف واحد على الأقل قبل الحفظ.");
-                return;
-            }
-
-            await addDoc(collection(db, "car_audits"), {
-                createdAt: serverTimestamp(),
-                date: new Date().toISOString().split('T')[0],
-                items: auditData
+            const itemsObj = {};
+            loadStateMap.forEach((val, key) => {
+                itemsObj[key] = val;
             });
 
-            alert("تم حفظ جرد العربية بنجاح!");
+            await setDoc(doc(db, "car_loadings", todayDocId), {
+                date: todayDocId,
+                updatedAt: serverTimestamp(),
+                items: itemsObj
+            }, { merge: true });
+
+            alert("تم اعتماد وتأكيد الحمولة بنجاح، وستظهر فوراً على جميع الأجهزة الأخرى!");
         } catch (e) {
-            console.error("خطأ أثناء حفظ الجرد:", e);
-            alert("حدث خطأ أثناء حفظ الجرد.");
+            console.error("خطأ أثناء حفظ الاعتماد:", e);
+            alert("حدث خطأ أثناء اعتماد الحمولة.");
         }
     };
 
