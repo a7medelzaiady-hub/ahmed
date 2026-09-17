@@ -123,7 +123,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, where, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -207,8 +207,7 @@
     async function loadSuppliers() {
         const container = document.getElementById('suppliersContainer');
         try {
-            const q = query(collection(db, "suppliers"), orderBy("name"));
-            const snap = await getDocs(q);
+            const snap = await getDocs(collection(db, "suppliers"));
             
             const supplierPromises = snap.docs.map(async (d) => {
                 const data = d.data();
@@ -217,6 +216,10 @@
             });
 
             allSuppliers = await Promise.all(supplierPromises);
+            
+            // ترتيب الموردين من الأكبر للأصغر في الدين (الأعلى ديناً أولاً)
+            allSuppliers.sort((a, b) => (b.calculatedBalance || 0) - (a.calculatedBalance || 0));
+
             renderSuppliers(allSuppliers);
         } catch (e) {
             console.error(e);
@@ -290,10 +293,11 @@
 
     window.filterSuppliers = () => {
         const term = document.getElementById('searchInput').value.toLowerCase();
-        renderSuppliers(allSuppliers.filter(s => 
+        const filtered = allSuppliers.filter(s => 
             s.name.toLowerCase().includes(term) || 
             (s.phone && s.phone.includes(term))
-        ));
+        );
+        renderSuppliers(filtered);
     }
 
     loadSuppliers();
