@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>جرد وتفريغ حمولة السيارة - شركة الزيادي</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-green: #0b6641; 
+            --accent-green: #10b981;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --danger: #f43f5e;
+            --warning: #f59e0b;
+        }
+
+        body { 
+            background-color: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 110px;
+            direction: rtl;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            color: white;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-radius: 0 0 25px 25px;
+            box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
+        }
+
+        .top-nav .nav-icon { 
+            cursor: pointer; 
+            font-size: 1.2rem; 
+            transition: 0.2s; 
+            color: white;
+            text-decoration: none;
+        }
+        .top-nav .nav-icon:active { transform: scale(0.9); }
+
+        .search-section {
+            padding: 15px 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .search-wrapper {
+            position: relative;
+            flex-grow: 1;
+        }
+        .search-wrapper i {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-green);
+        }
+        .search-input {
+            width: 100%;
+            padding: 12px 40px 12px 15px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            font-size: 0.95rem;
+            outline: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+        }
+
+        .stock-card {
+            background: white;
+            border-radius: 18px;
+            margin: 0 15px 15px;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+        }
+
+        .item-title {
+            font-weight: 800;
+            font-size: 1rem;
+            color: var(--text-dark);
+            margin-bottom: 4px;
+        }
+        .item-subtitle {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .unit-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            text-align: center;
+        }
+
+        .input-qty {
+            width: 100%;
+            text-align: center;
+            font-weight: 700;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 6px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .input-qty:focus {
+            border-color: var(--accent-green);
+            background-color: #f0fdf4;
+        }
+
+        .readonly-box {
+            background: #f1f5f9;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 6px;
+            text-align: center;
+            font-weight: 800;
+            font-size: 0.9rem;
+            color: var(--text-dark);
+        }
+
+        .box-sold {
+            background: #fef3c7;
+            color: #b45309;
+            border-color: #fde68a;
+        }
+
+        .box-rem {
+            background: #dcfce7;
+            color: var(--primary-green);
+            border-color: #bbf7d0;
+        }
+
+        .box-diff-danger {
+            background: #ffe4e6;
+            color: var(--danger);
+            border-color: #fecdd3;
+        }
+
+        .section-header {
+            font-size: 0.8rem;
+            font-weight: 800;
+            color: var(--primary-green);
+            background: #f0fdf4;
+            padding: 6px 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 12px 20px;
+            border-top: 1px solid var(--border-color);
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .btn-action {
+            flex: 1;
+            padding: 12px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-save {
+            background: var(--primary-green);
+            color: white;
+        }
+        .btn-save:active { background: #0a5234; }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #d1d5db;
+        }
+        .sync-dot.fresh { background: #10b981; }
+        .sync-dot.syncing { background: #f59e0b; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <div class="d-flex align-items-center gap-3">
+        <a href="index.html" class="nav-icon" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
+        <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
+    </div>
+    <span class="fw-bold">جرد وحمولة السيارة</span>
+    <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
+</div>
+
+<div class="search-section">
+    <div class="search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" class="search-input" placeholder="ابحث باسم المنتج..." oninput="renderAuditCards()">
+    </div>
+</div>
+
+<div id="cardsContainer">
+    <div class="text-center text-muted mt-5 fw-bold">
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل أصناف التوزيع...
+    </div>
+</div>
+
+<div class="bottom-bar">
+    <button class="btn-action btn-save" onclick="saveAuditLog()">
+        <i class="fas fa-save"></i> حفظ وتأكيد الجرد
+    </button>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let inventoryList = [];
+    let salesMap = new Map(); // مبيعات اليوم بالفواتير
+    const inputState = {}; // تخزين المدخلات قبل الحفظ
+
+    // جلب بيانات الأصناف والمبيعات
+    async function loadData() {
+        try {
+            const [inventorySnap, invoicesSnap] = await Promise.all([
+                getDocs(collection(db, "inventory")),
+                getDocs(collection(db, "invoices"))
+            ]);
+
+            const factorsMap = new Map();
+            const namesMap = new Map();
+
+            inventorySnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (!data.isDeleted) {
+                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                    factorsMap.set(docSnap.id, factor);
+                    if (data.name) namesMap.set(data.name.trim(), docSnap.id);
+                    
+                    inventoryList.push({
+                        id: docSnap.id,
+                        name: data.name || 'بدون اسم',
+                        barcode: data.barcode || '',
+                        factor: factor
+                    });
+                }
+            });
+
+            // تجميع المبيعات الفعلية بالقطع
+            invoicesSnap.forEach(docSnap => {
+                const items = docSnap.data().items || [];
+                items.forEach(item => {
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const rawQty = Number(item.qty) || 0;
+                        const u = String(item.unit || '').trim().toLowerCase();
+                        const isCarton = item.isCarton === true || u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+                        
+                        const current = salesMap.get(id) || 0;
+                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
+                    }
+                });
+            });
+
+            renderAuditCards();
+        } catch (e) {
+            console.error("خطأ في تحميل بيانات الجرد:", e);
+        }
+    }
+
+    window.renderAuditCards = function() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const container = document.getElementById('cardsContainer');
+        
+        const filtered = inventoryList.filter(item => item.name.toLowerCase().includes(term));
+
+        if (filtered.length === 0) {
+            container.innerHTML = `<div class="text-center text-muted mt-5 fw-bold">لا توجد أصناف مطابقة</div>`;
+            return;
+        }
+
+        let html = '';
+        filtered.forEach(item => {
+            const state = inputState[item.id] || { startCarton: '', startPcs: '', endCarton: '', endPcs: '' };
+            const factor = item.factor;
+
+            // حساب المبيعات المسجلة كرتونة وجركن
+            const soldTotalPcs = salesMap.get(item.id) || 0;
+            const soldCartons = Math.floor(soldTotalPcs / factor);
+            const soldPcs = soldTotalPcs % factor;
+
+            // التحميل المبدئي والنهائي بالقطع
+            const startPcsTotal = (Number(state.startCarton) || 0) * factor + (Number(state.startPcs) || 0);
+            const endPcsTotal = (Number(state.endCarton) || 0) * factor + (Number(state.endPcs) || 0);
+            
+            // المباع المحسوب فعلياً من الجرد (قبل التحميل - بعد التحميل)
+            const calculatedSoldPcs = Math.max(0, startPcsTotal - endPcsTotal);
+            const calcSoldCartons = Math.floor(calculatedSoldPcs / factor);
+            const calcSoldPcsRem = calculatedSoldPcs % factor;
+
+            // هل يوجد فرق بين مبيعات الفواتير وجرد السيارة؟
+            const hasDiscrepancy = (state.startCarton !== '' || state.endCarton !== '') && (calculatedSoldPcs !== soldTotalPcs);
+
+            html += `
+                <div class="stock-card">
+                    <div class="item-title">${item.name}</div>
+                    <div class="item-subtitle">الكرتونة تحتوي على: <b>${factor}</b> جركن/قطعة</div>
+
+                    <!-- حمولة قبل الخروج (بداية اليوم) -->
+                    <div class="section-header"><i class="fas fa-truck-loading me-1"></i> حمولة قبل الخروج (قبل التحميل)</div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="unit-label">كرتونة</div>
+                            <input type="number" class="input-qty" placeholder="0" value="${state.startCarton}" 
+                                   oninput="updateInput('${item.id}', 'startCarton', this.value)">
+                        </div>
+                        <div class="col-6">
+                            <div class="unit-label">جركن</div>
+                            <input type="number" class="input-qty" placeholder="0" value="${state.startPcs}" 
+                                   oninput="updateInput('${item.id}', 'startPcs', this.value)">
+                        </div>
+                    </div>
+
+                    <!-- حمولة بعد الرجوع (نهاية اليوم) -->
+                    <div class="section-header text-dark" style="background:#f1f5f9;"><i class="fas fa-truck-pickup me-1"></i> المتبقي بالعربية (بعد التحميل/الرجوع)</div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="unit-label">كرتونة</div>
+                            <input type="number" class="input-qty" placeholder="0" value="${state.endCarton}" 
+                                   oninput="updateInput('${item.id}', 'endCarton', this.value)">
+                        </div>
+                        <div class="col-6">
+                            <div class="unit-label">جركن</div>
+                            <input type="number" class="input-qty" placeholder="0" value="${state.endPcs}" 
+                                   oninput="updateInput('${item.id}', 'endPcs', this.value)">
+                        </div>
+                    </div>
+
+                    <!-- النتيجة الحسابية للجرد والتطابق -->
+                    <div class="row g-2 pt-2 border-top">
+                        <div class="col-6">
+                            <div class="unit-label">المباع (حسب الجرد)</div>
+                            <div class="readonly-box box-sold">${calcSoldCartons} ك / ${calcSoldPcsRem} جـ</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="unit-label">المباع (مسجل بالفواتير)</div>
+                            <div class="readonly-box ${hasDiscrepancy ? 'box-diff-danger' : 'box-rem'}">${soldCartons} ك / ${soldPcs} جـ</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    };
+
+    window.updateInput = function(id, field, value) {
+        if (!inputState[id]) {
+            inputState[id] = { startCarton: '', startPcs: '', endCarton: '', endPcs: '' };
+        }
+        inputState[id][field] = value;
+        renderAuditCards();
+    };
+
+    window.saveAuditLog = async function() {
+        try {
+            const auditData = [];
+            for (const item of inventoryList) {
+                const state = inputState[item.id];
+                if (state && (state.startCarton !== '' || state.endCarton !== '')) {
+                    const startPcsTotal = (Number(state.startCarton) || 0) * item.factor + (Number(state.startPcs) || 0);
+                    const endPcsTotal = (Number(state.endCarton) || 0) * item.factor + (Number(state.endPcs) || 0);
+                    const soldSystemPcs = salesMap.get(item.id) || 0;
+
+                    auditData.push({
+                        productId: item.id,
+                        productName: item.name,
+                        factor: item.factor,
+                        startTotalPcs: startPcsTotal,
+                        endTotalPcs: endPcsTotal,
+                        soldAuditPcs: Math.max(0, startPcsTotal - endPcsTotal),
+                        soldSystemPcs: soldSystemPcs,
+                        differencePcs: (startPcsTotal - endPcsTotal) - soldSystemPcs
+                    });
+                }
+            }
+
+            if (auditData.length === 0) {
+                alert("برجاء إدخال بيانات صنف واحد على الأقل قبل الحفظ.");
+                return;
+            }
+
+            await addDoc(collection(db, "car_audits"), {
+                createdAt: serverTimestamp(),
+                date: new Date().toISOString().split('T')[0],
+                items: auditData
+            });
+
+            alert("تم حفظ جرد العربية بنجاح!");
+        } catch (e) {
+            console.error("خطأ أثناء حفظ الجرد:", e);
+            alert("حدث خطأ أثناء حفظ الجرد.");
+        }
+    };
+
+    loadData();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
+}
+</script>
+</body>
+</html>
