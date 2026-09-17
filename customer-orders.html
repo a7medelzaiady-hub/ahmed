@@ -14,6 +14,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- مكتبة تحويل HTML إلى صورة للمشاركة -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <style>
         :root {
             --accent: #0b5e3d;
@@ -344,6 +348,61 @@
             margin-top: 4px;
             display: none;
         }
+
+        /* تنسيقات قالب الفاتورة الحرارية الخفية المخفية للمشاركة */
+        #thermalReceiptTemplate {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            width: 380px;
+            background: #ffffff;
+            color: #000000;
+            padding: 15px;
+            font-family: 'Cairo', sans-serif;
+            direction: rtl;
+        }
+        .receipt-header {
+            text-align: center;
+            border-bottom: 2px dashed #000;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+        .receipt-header h4 { font-size: 18px; font-weight: 900; margin: 0; }
+        .receipt-header p { font-size: 11px; margin: 2px 0 0 0; font-weight: 700; }
+        .receipt-info {
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 6px;
+        }
+        .receipt-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .receipt-table th, .receipt-table td {
+            padding: 5px 2px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+        .receipt-total {
+            border-top: 2px dashed #000;
+            padding-top: 6px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 900;
+        }
+        .receipt-footer {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            border-top: 1px solid #000;
+            padding-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -472,7 +531,7 @@
 
 </div>
 
-<!-- Success Modal (تم تعديله لإضافة زر الشير) -->
+<!-- Success Modal -->
 <div class="modal-overlay" id="successModal" style="display: none;">
     <div class="modal-box">
         <div class="modal-icon">
@@ -483,8 +542,8 @@
             تم حفظ طلبية العميل <b id="successCustomerName"></b> بنجاح
         </p>
 
-        <!-- زر الشير الجديد -->
-        <button class="btn btn-primary w-100 fw-bold py-2 mb-3" style="border-radius: 10px; background-color: #25D366; border: none; font-size: 0.9rem;" onclick="shareOrderDetails()">
+        <!-- زر الشير كصورة حرارية للفاتورة -->
+        <button class="btn btn-primary w-100 fw-bold py-2 mb-3" id="shareBtn" style="border-radius: 10px; background-color: #25D366; border: none; font-size: 0.9rem;" onclick="shareOrderAsImage()">
             <i class="fab fa-whatsapp me-1" style="font-size: 1.1rem;"></i> مشاركة تفاصيل الطلبية
         </button>
 
@@ -501,6 +560,9 @@
         </div>
     </div>
 </div>
+
+<!-- الحاوية الخفية المجهزة لتصميم الفاتورة الحرارية -->
+<div id="thermalReceiptTemplate"></div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -536,9 +598,8 @@
     let customers = [];
     let inventory = [];
     let rowCounter = 0;
-    let lastSavedOrder = null; // متغير لحفظ بيانات أحدث طلبية للمشاركة
+    let lastSavedOrder = null;
     
-    // فحص ما إذا كانت الصفحة في وضع التعديل لعدم إظهار نافذة التاريخ الإجبارية
     const params = new URLSearchParams(window.location.search);
     let editOrderId = params.get("editOrderId");
 
@@ -546,23 +607,19 @@
     async function init() {
         const today = new Date().toISOString().split('T')[0];
         
-        // إعداد التاريخ الافتراضي في نافذة الإدخال الإجباري
         document.getElementById('promptDateInput').value = today;
 
         if (!editOrderId) {
-            // إظهار نافذة التاريخ في حالة طلبية جديدة
             document.getElementById('datePromptModal').style.display = 'flex';
         }
 
-        // load cache first
         const cCache = localStorage.getItem('cache_customers');
         const iCache = localStorage.getItem('cache_inventory');
         if (cCache) customers = JSON.parse(cCache);
         if (iCache) inventory = JSON.parse(iCache);
 
-        addItemRow(); // start with one empty row
+        addItemRow();
 
-        // fetch fresh
         const [cSnap, iSnap] = await Promise.all([
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'inventory'))
@@ -573,7 +630,6 @@
         localStorage.setItem('cache_inventory', JSON.stringify(inventory));
     }
 
-    // دالة تأكيد التاريخ من النافذة الإجبارية
     window.confirmInitialDate = () => {
         const selectedDate = document.getElementById('promptDateInput').value;
         if (!selectedDate) {
@@ -628,7 +684,6 @@
         document.getElementById('customerBadge').style.display = 'none';
     }
 
-    // close dropdown when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.autocomplete-wrap')) {
             document.querySelectorAll('.dropdown-list').forEach(d => d.style.display = 'none');
@@ -646,7 +701,6 @@
                 </button>
 
                 <div class="row g-2 mb-2">
-                    <!-- Product -->
                     <div class="col-8">
                         <label class="sub-lbl">اسم الصنف</label>
                         <div class="autocomplete-wrap">
@@ -657,7 +711,6 @@
                         </div>
                         <div class="stock-hint p-stock"><i class="fas fa-warehouse me-1"></i><span></span></div>
                     </div>
-                    <!-- Unit -->
                     <div class="col-4">
                         <label class="sub-lbl">الوحدة</label>
                         <select class="form-select p-unit" onchange="onUnitChange(this, '${id}')">
@@ -730,7 +783,6 @@
             const stockHint = row.querySelector('.p-stock');
             stockHint.querySelector('span').innerText = `رصيد المخزن: ${p.totalPcs || 0} قطعة`;
             stockHint.style.display = 'block';
-            // auto-set price by unit
             setRowPrice(row, p);
         }
         recalc();
@@ -778,14 +830,12 @@
         const customerName = document.getElementById('customerInput').value.trim();
         const orderDate = document.getElementById('orderDate').value;
 
-        // التحقق من العميل
         if (!customerId) {
             document.getElementById('customerInput').classList.add('field-error');
             document.getElementById('customerError').style.display = 'block';
             valid = false;
         }
 
-        // التحقق من التاريخ
         if (!orderDate) {
             document.getElementById('orderDate').classList.add('field-error');
             valid = false;
@@ -835,14 +885,16 @@
                 status: 'pending'
             };
 
+            let savedId = editOrderId;
             if (editOrderId) {
                 await updateDoc(doc(db, 'orders', editOrderId), orderData);
             } else {
-                await addDoc(collection(db, 'orders'), orderData);
+                const docRef = await addDoc(collection(db, 'orders'), orderData);
+                savedId = docRef.id;
             }
 
-            // حفظ الطلبية الأخيرة للمشاركة
-            lastSavedOrder = orderData;
+            // حفظ الطلبية الأخيرة بالمعرف
+            lastSavedOrder = { id: savedId, ...orderData };
 
             document.getElementById('successCustomerName').innerText = customerName;
             document.querySelector('.modal-box h5').innerText = editOrderId ? 'تم تعديل الطلبية!' : 'تم تسجيل الطلبية!';
@@ -857,35 +909,95 @@
         }
     };
 
-    // ---------- دالة مشاركة الطلبية (الجديدة) ----------
-    window.shareOrderDetails = () => {
+    // ---------- دالة مشاركة الفاتورة كصورة حرارية مثل صفحة كل الطلبات ----------
+    window.shareOrderAsImage = async () => {
         if (!lastSavedOrder) return;
 
-        let itemsText = lastSavedOrder.items.map((item, index) => {
-            const unitText = item.unit === 'box' ? 'كرتونة' : 'قطعة';
-            return `${index + 1}. ${item.name} (${item.qty} ${unitText}) - ${item.price * item.qty} ج.م`;
-        }).join('\n');
+        const btn = document.getElementById('shareBtn');
+        const oldText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري تجهيز الصورة...';
 
-        let text = `📦 *تفاصيل طلبية جديدة - شركة الزيادي*\n`;
-        text += `👤 *العميل:* ${lastSavedOrder.customerName}\n`;
-        text += `📅 *التاريخ:* ${lastSavedOrder.date}\n`;
-        text += `------------------------------------\n`;
-        text += `📝 *الأصناف:*\n${itemsText}\n`;
-        text += `------------------------------------\n`;
-        text += `💰 *الإجمالي النهائي:* ${lastSavedOrder.total.toFixed(2)} ج.م\n`;
-        if (lastSavedOrder.notes) {
-            text += `📌 *ملاحظات:* ${lastSavedOrder.notes}\n`;
-        }
+        try {
+            // 1. بناء جدول العناصر
+            let rowsHtml = lastSavedOrder.items.map((item, index) => {
+                const unitText = item.unit === 'box' ? 'كرتونة' : 'قطعة';
+                const total = (item.qty * item.price).toFixed(2);
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td style="text-align: right;">${item.name}</td>
+                        <td>${item.qty} ${unitText}</td>
+                        <td>${item.price}</td>
+                        <td>${total}</td>
+                    </tr>
+                `;
+            }).join('');
 
-        if (navigator.share) {
-            navigator.share({
-                title: 'طلبية شركة الزيادي',
-                text: text
-            }).catch(err => console.log('تعذر المشاركة:', err));
-        } else {
-            // البديل عند فتح التطبيق من متصفح لا يدعم Web Share
-            const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-            window.open(whatsappUrl, '_blank');
+            // 2. القالب الحراري
+            const receiptContainer = document.getElementById('thermalReceiptTemplate');
+            receiptContainer.innerHTML = `
+                <div class="receipt-header">
+                    <h4>الزيادي لزيوت السيارات</h4>
+                    <p>فاتورة / طلبية عميل</p>
+                </div>
+                <div class="receipt-info">
+                    <div><b>العميل:</b> ${lastSavedOrder.customerName}</div>
+                    <div><b>التاريخ:</b> ${lastSavedOrder.date}</div>
+                    ${lastSavedOrder.id ? `<div><b>رقم الطلب:</b> #${lastSavedOrder.id.slice(-6)}</div>` : ''}
+                </div>
+                <table class="receipt-table">
+                    <thead>
+                        <tr style="border-bottom: 1px solid #000;">
+                            <th style="width: 8%;">#</th>
+                            <th style="text-align: right; width: 42%;">الصنف</th>
+                            <th style="width: 20%;">الكمية</th>
+                            <th style="width: 15%;">السعر</th>
+                            <th style="width: 15%;">الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+                <div class="receipt-total">
+                    الإجمالي: ${lastSavedOrder.total.toFixed(2)} ج.م
+                </div>
+                ${lastSavedOrder.notes ? `<div style="font-size:10px; margin-top:5px; text-align:right;"><b>ملاحظات:</b> ${lastSavedOrder.notes}</div>` : ''}
+                <div class="receipt-footer">
+                    شكراً لتعاملكم معنا - الزيادي لزيوت السيارات
+                </div>
+            `;
+
+            // 3. تحويل القالب إلى صورة عبر html2canvas
+            const canvas = await html2canvas(receiptContainer, {
+                scale: 2,
+                backgroundColor: "#ffffff"
+            });
+
+            // 4. تحويل الصورة إلى Blob والمشاركة
+            canvas.toBlob(async (blob) => {
+                const file = new File([blob], `طلب_${lastSavedOrder.customerName}_${lastSavedOrder.date}.png`, { type: 'image/png' });
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'طلبية شركة الزيادي',
+                        text: `طلب العميل: ${lastSavedOrder.customerName}`
+                    });
+                } else {
+                    // فتح الصورة بتبويب جديد للتحميل عند عدم إتاحة ميزة مشاركة الملفات المباشرة
+                    const imgUrl = URL.createObjectURL(blob);
+                    window.open(imgUrl, '_blank');
+                }
+            }, 'image/png');
+
+        } catch (e) {
+            console.error("خطأ في إنشاء الصورة:", e);
+            alert("تعذر مشاركة الفاتورة كصورة.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = oldText;
         }
     };
 
@@ -900,7 +1012,6 @@
         document.getElementById('orderNotes').value = '';
         lastSavedOrder = null;
         
-        // إظهار نافذة التاريخ الإجبارية مرة أخرى عند طلب تسجيل طلبية جديدة
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('promptDateInput').value = today;
         document.getElementById('orderDate').value = ''; 
@@ -911,7 +1022,6 @@
         rowCounter = 0;
         editOrderId = null;
         
-        // إزالة معاملات التعديل من الرابط إن وجدت
         window.history.replaceState({}, document.title, window.location.pathname);
 
         addItemRow();
