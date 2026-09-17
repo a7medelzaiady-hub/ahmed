@@ -329,8 +329,8 @@ table select:focus { border-color: var(--brand); }
         <button class="btn btn-primary btn-sm" onclick="showPage('pg-summary', document.querySelectorAll('nav button')[2])" style="background:var(--blue);">
           📊 الجرد والحركة
         </button>
-        <button class="btn btn-amber btn-sm" onclick="resetLoad()">
-          🔄 تصفير التحميل
+        <button class="btn btn-amber btn-sm" onclick="startNewLoad()">
+          🔄 تحميل جديد (المتبقي بالعربة)
         </button>
         <button class="btn btn-primary btn-sm admin-only" onclick="window.archiveLoad()">
           💾 اعتماد الحمولة
@@ -344,7 +344,7 @@ table select:focus { border-color: var(--brand); }
       </div>
     </div>
 
-    <!-- Banner التنبيه الخاص بالأصناف الجديدة مع زر اعتماد القديم وتسجيل الجديدة فوراً -->
+    <!-- Banner التنبيه الخاص بالأصناف الجديدة -->
     <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row; gap:8px; flex-wrap:wrap;">
       <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px;">
         <span>أصناف جديدة أضيفت للمخزن تطلب تحميل:</span>
@@ -373,7 +373,7 @@ table select:focus { border-color: var(--brand); }
       <div style="display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap: wrap;">
         <button class="btn btn-primary" onclick="showPage('pg-summary',document.querySelectorAll('nav button')[2])">عرض ملخص وجرد العربة</button>
         <button class="btn" style="background:var(--amber-lt); color:var(--amber);" onclick="window.editAllLoad()">✏️ مراجعة وتعديل الإدخالات</button>
-        <button class="btn" style="background:var(--red-lt); color:var(--red);" onclick="resetLoad()">تصفير وتحميل جديد</button>
+        <button class="btn" style="background:var(--red-lt); color:var(--red);" onclick="startNewLoad()">تصفير وتحميل جديد</button>
       </div>
     </div>
   </div>
@@ -453,7 +453,7 @@ table select:focus { border-color: var(--brand); }
   <div class="page" id="pg-archive">
     <div class="ph">
       <h2>🗄️ أرشيف الأيام السابقة</h2>
-      <p>استعراض حمولة وجرد الأيام المسجلة، تصدير التقارير، أو المسح</p>
+      <p>استعراض حمولة وجرد الأيام المسجلة، تصدير التقارير، أو المسح والتعديل</p>
     </div>
     
     <div class="tools-row">
@@ -1077,7 +1077,6 @@ window.autoConfirmOldItems = function() {
         }
       }
       
-      // إذا كان الصنف قديماً ولديه أرشيف سابق يتم اعتماده كـ (تم) تلقائياً، ويظل الجديد فقط مطلوب
       if (previousTruckStock[it.id] !== undefined || Object.keys(loadedInSession).length > 0) {
         loadedInSession[it.id] = { prevCartons, prevLoose, cartons: 0, loose: 0 };
         if (!cartItems[it.id]) cartItems[it.id] = { name: it.name, capacity: it.capacity };
@@ -1117,7 +1116,6 @@ function renderLoadFlow() {
   if (allDone && !forceShowLoadList && !searchVal) { doneMsg.style.display = 'block'; return; }
   doneMsg.style.display = 'none';
 
-  // فرز الأصناف بحيث تظهر الأصناف الجديدة غير المسجلة في البداية فوراً
   const sortedItems = [...firebaseItems].sort((a, b) => {
     const aDone = loadedInSession[a.id] !== undefined;
     const bDone = loadedInSession[b.id] !== undefined;
@@ -1284,6 +1282,63 @@ window.editStep = function(itemId) {
   }
   
   renderLoadFlow();
+};
+
+window.startNewLoad = function() {
+  if(!confirm('هل أنت متأكد من بدء تحميل جديد؟ سيتم تصفير التحميل الجديد واستخدام المتبقي بالعربية ككمية سابقة.')) return;
+  
+  let newSession = {};
+  let newCart = {};
+  const now = new Date();
+  const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+  firebaseItems.forEach(it => {
+    let pCartons = 0;
+    let pLoose = 0;
+    
+    // جلب البضاعة المتبقية بالعربية والمحسوبة سابقة
+    if (previousTruckStock[it.id] !== undefined) {
+      const pPcs = previousTruckStock[it.id];
+      if (it.capacity > 1) {
+        pCartons = Math.floor(pPcs / it.capacity) || 0;
+        pLoose   = (pPcs % it.capacity) || 0;
+      } else {
+        pLoose   = pPcs || 0;
+      }
+    } else if (cartItems[it.id]) {
+      const cap = it.capacity || 1;
+      const totalPrevPcs = ((parseFloat(cartItems[it.id].prevCartons || 0)) * cap) + parseInt(cartItems[it.id].prevLoose || 0);
+      const totalNewPcs  = ((parseFloat(cartItems[it.id].loadedCartons || 0)) * cap) + parseInt(cartItems[it.id].loadedLoose || 0);
+      const liveSales    = (memorySalesCache || {})[it.id] || 0;
+      const remPcs       = Math.max(0, (totalPrevPcs + totalNewPcs) - liveSales);
+      
+      if (cap > 1) {
+        pCartons = Math.floor(remPcs / cap) || 0;
+        pLoose   = (remPcs % cap) || 0;
+      } else {
+        pLoose   = remPcs || 0;
+      }
+    }
+
+    newSession[it.id] = { prevCartons: pCartons, prevLoose: pLoose, cartons: 0, loose: 0 };
+    newCart[it.id]    = { 
+      name: it.name, 
+      capacity: it.capacity, 
+      prevCartons: pCartons, 
+      prevLoose: pLoose, 
+      loadedCartons: 0, 
+      loadedLoose: 0,
+      lastEditedAt: editTimeStr 
+    };
+  });
+
+  loadedInSession = newSession;
+  cartItems = newCart;
+  forceShowLoadList = true;
+  
+  saveSessionCloud();
+  renderLoadFlow();
+  window.toast('🔄 تم تجهيز الخانات بالبضاعة المتبقية وبدء تحميل جديد!');
 };
 
 window.resetLoad = function() {
@@ -1687,15 +1742,18 @@ window.fetchArchive = async function() {
             <button class="btn btn-primary btn-sm" onclick="window.toggleArchiveDetails('${d}')">
               👁️ عرض التفاصيل
             </button>
+
+            <button class="btn btn-amber btn-sm" onclick="window.loadArchiveToEdit('${d}')">
+              ✏️ تعديل الحمولة
+            </button>
+
             <button class="btn btn-success btn-sm" style="background:var(--red);" onclick="window.exportArchivePDF('${d}')">
               👁️ قراءة PDF
             </button>
             <button class="btn btn-excel btn-sm" onclick="window.exportArchiveExcel('${d}')">
               📊 تصدير Excel
             </button>
-            <button class="btn btn-primary btn-sm" style="background:#0284c7; color:#fff;" onclick="window.shareArchiveWhatsApp('${d}')">
-              📤 مشاركة ملف PDF
-            </button>
+
             <button class="btn btn-danger btn-sm admin-only" onclick="window.deleteArchiveDate('${d}')">
               🗑️ مسح
             </button>
@@ -1710,6 +1768,32 @@ window.fetchArchive = async function() {
   } catch (e) {
     console.error(e);
     container.innerHTML = '<div class="empty"><span class="em">❌</span>حدث خطأ أثناء جلب الأرشيف</div>';
+  }
+};
+
+window.loadArchiveToEdit = async function(d) {
+  try {
+    window.toast('⏳ جاري تحميل بيانات يوم ' + d + ' للتعديل...');
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+    
+    if (loadDoc.exists()) {
+      const data = loadDoc.data();
+      loadedInSession = data.loadedInSession || {};
+      cartItems = data.cartItems || {};
+      
+      document.getElementById('summaryDate').value = d;
+      saveSessionCloud();
+      
+      showPage('pg-load', document.querySelectorAll('nav button')[1]);
+      forceShowLoadList = true;
+      renderLoadFlow();
+      window.toast('✏️ يمكنك تعديل الحمولة الآن وتحديث البيانات!');
+    } else {
+      window.toast('⚠️ لا توجد سجلات حمولة لهذا اليوم للتعديل عليها');
+    }
+  } catch(e) {
+    console.error(e);
+    window.toast('❌ تعذر تحميل أرشيف هذا اليوم');
   }
 };
 
