@@ -648,17 +648,56 @@ function listenToDailyLoadChanges() {
     }
   });
 
+  // جلب حركة اليوم السابق لحساب المتبقي تلقائياً
   const prevDate = getPreviousDateStr(d);
-  getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
+  Promise.all([
+    getDoc(doc(db, 'daily_loads', prevDate)),
+    getDocs(collection(db, "invoices"))
+  ]).then(([prevSnap, invoicesSnap]) => {
     previousTruckStock = {};
     if (prevSnap.exists()) {
       const prevCart = prevSnap.data().cartItems || {};
+      let prevSalesMap = {};
+
+      invoicesSnap.forEach(docSnap => {
+        const inv = docSnap.data();
+        if (inv.isDeleted) return;
+        if (parseDate(inv.date, inv.timestamp) !== prevDate) return;
+        if (!Array.isArray(inv.items)) return;
+
+        inv.items.forEach(itm => {
+          const itemId = getProductIdForItem(itm);
+          if (itemId) {
+            const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
+            const rawQty = Number(itm.qty) || 0;
+            const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
+            const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
+            const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true;
+
+            if (!prevSalesMap[itemId]) prevSalesMap[itemId] = 0;
+            if (isReturn) {
+              prevSalesMap[itemId] -= Math.abs(totalPcsSold);
+            } else {
+              prevSalesMap[itemId] += totalPcsSold;
+            }
+          }
+        });
+      });
+
+      // حساب المتبقي التلقائي = (السابق + التحميل الجديد) - المبيعات
       Object.keys(prevCart).forEach(id => {
-        if (prevCart[id].inTruckPcs) {
-          previousTruckStock[id] = prevCart[id].inTruckPcs;
-        }
+        const item = prevCart[id];
+        const cap = item.capacity || 1;
+        const prevLoadedPcs = ((parseFloat(item.prevCartons || 0)) * cap) + parseInt(item.prevLoose || 0);
+        const newLoadedPcs  = ((parseFloat(item.loadedCartons || 0)) * cap) + parseInt(item.loadedLoose || 0);
+        const totalPrevLoadedPcs = prevLoadedPcs + newLoadedPcs;
+        const prevSoldPcs   = prevSalesMap[id] || 0;
+
+        const remainingPcs  = Math.max(0, totalPrevLoadedPcs - prevSoldPcs);
+        previousTruckStock[id] = remainingPcs;
       });
     }
+
     if (document.getElementById('pg-load').classList.contains('active')) {
       const activeEl = document.activeElement;
       if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'SELECT')) {
@@ -1057,13 +1096,14 @@ function renderLoadFlow() {
     let loadedCartonsDefault = (loadedInSession[it.id] && loadedInSession[it.id].cartons !== undefined) ? loadedInSession[it.id].cartons : '';
     let loadedLooseDefault   = (loadedInSession[it.id] && loadedInSession[it.id].loose !== undefined) ? loadedInSession[it.id].loose : '';
 
-    if (!isDone && previousTruckStock[it.id] && prevCartonsDefault === '' && prevLooseDefault === '') {
+    // تعبئة تلقائية للخانات المتبقية من اليوم السابق إذا لم تكن مدخلة بالفعل
+    if (!isDone && previousTruckStock[it.id] !== undefined && prevCartonsDefault === '' && prevLooseDefault === '') {
       const pPcs = previousTruckStock[it.id];
       if (it.capacity > 1) {
-        prevCartonsDefault = Math.floor(pPcs / it.capacity) || '';
-        prevLooseDefault   = (pPcs % it.capacity) || '';
+        prevCartonsDefault = Math.floor(pPcs / it.capacity) || 0;
+        prevLooseDefault   = (pPcs % it.capacity) || 0;
       } else {
-        prevLooseDefault   = pPcs || '';
+        prevLooseDefault   = pPcs || 0;
       }
     }
 
