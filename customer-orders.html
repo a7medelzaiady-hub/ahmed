@@ -349,7 +349,7 @@
             display: none;
         }
 
-        /* تنسيقات قالب الفاتورة الحرارية الخفية المخفية للمشاركة */
+        /* تنسيقات قالب الفاتورة الحرارية الخفية للمشاركة */
         #thermalReceiptTemplate {
             position: absolute;
             left: -9999px;
@@ -618,16 +618,22 @@
         if (cCache) customers = JSON.parse(cCache);
         if (iCache) inventory = JSON.parse(iCache);
 
-        addItemRow();
+        if (!editOrderId) {
+            addItemRow();
+        }
 
-        const [cSnap, iSnap] = await Promise.all([
-            getDocs(collection(db, 'customers')),
-            getDocs(collection(db, 'inventory'))
-        ]);
-        customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        localStorage.setItem('cache_customers', JSON.stringify(customers));
-        localStorage.setItem('cache_inventory', JSON.stringify(inventory));
+        try {
+            const [cSnap, iSnap] = await Promise.all([
+                getDocs(collection(db, 'customers')),
+                getDocs(collection(db, 'inventory'))
+            ]);
+            customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            localStorage.setItem('cache_customers', JSON.stringify(customers));
+            localStorage.setItem('cache_inventory', JSON.stringify(inventory));
+        } catch(err) {
+            console.error("فشل تحضير البيانات:", err);
+        }
     }
 
     window.confirmInitialDate = () => {
@@ -851,8 +857,8 @@
             const unit = row.querySelector('.p-unit').value;
             const qty = parseFloat(row.querySelector('.p-qty').value) || 0;
             const price = parseFloat(row.querySelector('.p-price').value) || 0;
-            if (pid && qty > 0) {
-                items.push({ stockId: pid, name, unit, qty, price });
+            if (name && qty > 0) {
+                items.push({ stockId: pid || '', name, unit, qty, price });
             }
         });
 
@@ -893,7 +899,6 @@
                 savedId = docRef.id;
             }
 
-            // حفظ الطلبية الأخيرة بالمعرف
             lastSavedOrder = { id: savedId, ...orderData };
 
             document.getElementById('successCustomerName').innerText = customerName;
@@ -905,11 +910,11 @@
             alert('حدث خطأ أثناء الحفظ، حاول مرة أخرى');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-paper-plane"></i> تسجيل الطلبية';
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> ' + (editOrderId ? 'حفظ التعديلات' : 'تسجيل الطلبية');
         }
     };
 
-    // ---------- دالة مشاركة الفاتورة كصورة حرارية مثل صفحة كل الطلبات ----------
+    // ---------- دالة مشاركة الفاتورة كصورة حرارية ----------
     window.shareOrderAsImage = async () => {
         if (!lastSavedOrder) return;
 
@@ -919,7 +924,6 @@
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري تجهيز الصورة...';
 
         try {
-            // 1. بناء جدول العناصر
             let rowsHtml = lastSavedOrder.items.map((item, index) => {
                 const unitText = item.unit === 'box' ? 'كرتونة' : 'قطعة';
                 const total = (item.qty * item.price).toFixed(2);
@@ -934,7 +938,6 @@
                 `;
             }).join('');
 
-            // 2. القالب الحراري
             const receiptContainer = document.getElementById('thermalReceiptTemplate');
             receiptContainer.innerHTML = `
                 <div class="receipt-header">
@@ -965,19 +968,16 @@
                 </div>
                 ${lastSavedOrder.notes ? `<div style="font-size:10px; margin-top:5px; text-align:right;"><b>ملاحظات:</b> ${lastSavedOrder.notes}</div>` : ''}
                 <div class="receipt-footer">
-            
-                   شكراً لتعاملكم معنا - الزيادي لزيوت السيارات
+                   شكراً لتعاملكم معنا - الزيادي لزيوت وفلاتر السيارات<br>
                    01027830834
                 </div>
-                
+            `;
 
-            // 3. تحويل القالب إلى صورة عبر html2canvas
             const canvas = await html2canvas(receiptContainer, {
                 scale: 2,
                 backgroundColor: "#ffffff"
             });
 
-            // 4. تحويل الصورة إلى Blob والمشاركة
             canvas.toBlob(async (blob) => {
                 const file = new File([blob], `طلب_${lastSavedOrder.customerName}_${lastSavedOrder.date}.png`, { type: 'image/png' });
 
@@ -985,9 +985,9 @@
                     await navigator.share({
                         files: [file],
                         title: 'طلبية شركة الزيادي',
-                        text: الزيادى لزيوت وفلاتر السيارت
+                        text: 'الزيادي لزيوت وفلاتر السيارات'
+                    });
                 } else {
-                    // فتح الصورة بتبويب جديد للتحميل عند عدم إتاحة ميزة مشاركة الملفات المباشرة
                     const imgUrl = URL.createObjectURL(blob);
                     window.open(imgUrl, '_blank');
                 }
@@ -1055,18 +1055,22 @@
             document.getElementById("itemsContainer").innerHTML = "";
             rowCounter = 0;
 
-            order.items.forEach(item => {
+            if (order.items && order.items.length) {
+                order.items.forEach(item => {
+                    addItemRow();
+
+                    const rowsNow = document.querySelectorAll(".item-row");
+                    const currentRow = rowsNow[rowsNow.length - 1];
+
+                    currentRow.querySelector(".p-name").value = item.name || "";
+                    currentRow.querySelector(".p-id").value = item.stockId || "";
+                    currentRow.querySelector(".p-unit").value = item.unit || "box";
+                    currentRow.querySelector(".p-qty").value = item.qty || 1;
+                    currentRow.querySelector(".p-price").value = item.price || 0;
+                });
+            } else {
                 addItemRow();
-
-                const rowsNow = document.querySelectorAll(".item-row");
-                const currentRow = rowsNow[rowsNow.length - 1];
-
-                currentRow.querySelector(".p-name").value = item.name;
-                currentRow.querySelector(".p-id").value = item.stockId;
-                currentRow.querySelector(".p-unit").value = item.unit;
-                currentRow.querySelector(".p-qty").value = item.qty;
-                currentRow.querySelector(".p-price").value = item.price;
-            });
+            }
 
             recalc();
 
@@ -1074,7 +1078,7 @@
                 '<i class="fas fa-save"></i> حفظ التعديلات';
 
         } catch (err) {
-            console.error(err);
+            console.error("خطأ أثناء جلب الطلبية للتعديل:", err);
         }
     }
 
