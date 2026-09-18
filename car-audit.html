@@ -93,6 +93,7 @@
             padding: 16px;
             border: 1px solid var(--border-color);
             box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            position: relative;
         }
 
         .item-header {
@@ -191,10 +192,30 @@
             border-color: #bbf7d0;
         }
 
-        .box-diff-danger {
-            background: #ffe4e6;
-            color: var(--danger);
-            border-color: #fecdd3;
+        /* زر تم لكل كارت */
+        .btn-card-done {
+            width: 100%;
+            margin-top: 12px;
+            padding: 8px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 800;
+            border: 1px solid var(--primary-green);
+            background: #f0fdf4;
+            color: var(--primary-green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+        .btn-card-done:active {
+            transform: scale(0.98);
+        }
+        .btn-card-done.saved {
+            background: var(--primary-green);
+            color: white;
+            border-color: var(--primary-green);
         }
 
         .bottom-bar {
@@ -434,7 +455,7 @@
         let html = '';
         filtered.forEach(item => {
             const factor = item.factor;
-            const state = loadStateMap.get(item.id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '' };
+            const state = loadStateMap.get(item.id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '', isSaved: false };
 
             // تحويل رصيد المخزن إلى (كرتونة + جركن)
             const whAbs = Math.abs(item.totalWarehousePcs);
@@ -456,6 +477,8 @@
             const addedPcsTotal = Math.max(0, afterPcsTotal - startPcsTotal);
             const addedCartons = Math.floor(addedPcsTotal / factor);
             const addedPcs = addedPcsTotal % factor;
+
+            const isSaved = state.isSaved === true;
 
             html += `
                 <div class="stock-card">
@@ -521,6 +544,12 @@
                             <div class="readonly-box box-sold">${soldCartons} ك / ${soldPcs} جـ</div>
                         </div>
                     </div>
+
+                    <!-- زر تم الخاص بالصنف منفصلاً -->
+                    <button class="btn-card-done ${isSaved ? 'saved' : ''}" onclick="saveSingleItem('${item.id}')">
+                        <i class="fas ${isSaved ? 'fa-check-circle' : 'fa-check'}"></i>
+                        <span>${isSaved ? 'تم تسجيل الصنف بنجاح' : 'تم (تسجيل هذا الصنف)'}</span>
+                    </button>
                 </div>
             `;
         });
@@ -529,15 +558,20 @@
     };
 
     window.updateLoadState = function(id, field, value) {
-        let state = loadStateMap.get(id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '' };
+        let state = loadStateMap.get(id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '', isSaved: false };
         state[field] = value;
+        state.isSaved = false; // عند التعديل نلغي تم الحفظ حتى يتم الضغط على تم مرة أخرى
         loadStateMap.set(id, state);
         renderAuditCards();
     };
 
-    // حفظ واعتماد الحمولة المباشرة لكافة الأجهزة
-    window.approveLoading = async function() {
+    // حفظ كارت فردي واحداً تلو الآخر
+    window.saveSingleItem = async function(id) {
         try {
+            let state = loadStateMap.get(id) || { startCarton: '', startPcs: '', afterCarton: '', afterPcs: '' };
+            state.isSaved = true;
+            loadStateMap.set(id, state);
+
             const itemsObj = {};
             loadStateMap.forEach((val, key) => {
                 itemsObj[key] = val;
@@ -549,7 +583,32 @@
                 items: itemsObj
             }, { merge: true });
 
-            alert("تم اعتماد وتأكيد الحمولة بنجاح، وستظهر فوراً على جميع الأجهزة الأخرى!");
+            renderAuditCards();
+        } catch (e) {
+            console.error("خطأ أثناء حفظ الصنف:", e);
+            alert("حدث خطأ أثناء حفظ الصنف.");
+        }
+    };
+
+    // حفظ واعتماد جميع الأصناف
+    window.approveLoading = async function() {
+        try {
+            loadStateMap.forEach((val, key) => {
+                val.isSaved = true;
+            });
+
+            const itemsObj = {};
+            loadStateMap.forEach((val, key) => {
+                itemsObj[key] = val;
+            });
+
+            await setDoc(doc(db, "car_loadings", todayDocId), {
+                date: todayDocId,
+                updatedAt: serverTimestamp(),
+                items: itemsObj
+            }, { merge: true });
+
+            alert("تم اعتماد وتأكيد جميع الأصناف بنجاح، وستظهر فوراً على جميع الأجهزة الأخرى!");
         } catch (e) {
             console.error("خطأ أثناء حفظ الاعتماد:", e);
             alert("حدث خطأ أثناء اعتماد الحمولة.");
