@@ -573,6 +573,8 @@
     updateDoc,
     getDoc,
     doc,
+    query,
+    where,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -603,6 +605,22 @@
     const params = new URLSearchParams(window.location.search);
     let editOrderId = params.get("editOrderId");
 
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
+
+    function formatStockText(totalPcs, factor) {
+        const isNegative = totalPcs < 0;
+        const absTotal = Math.abs(totalPcs);
+        const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+        const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
+
+        return `<i class="fas fa-warehouse me-1"></i> رصيد المخزن: ${cartons} كرتونة و ${jerrycans} قطعة (${totalPcs} ق)`;
+    }
+
     // ---------- init ----------
     async function init() {
         const today = new Date().toISOString().split('T')[0];
@@ -623,12 +641,98 @@
         }
 
         try {
-            const [cSnap, iSnap] = await Promise.all([
+            const [cSnap, cInvoicesSnap, cSupplierSnap, cInventorySnap, cTransSnap] = await Promise.all([
                 getDocs(collection(db, 'customers')),
-                getDocs(collection(db, 'inventory'))
+                getDocs(collection(db, 'invoices')),
+                getDocs(collection(db, 'supplier_transactions')),
+                getDocs(collection(db, 'inventory')),
+                getDocs(query(collection(db, 'inventory_transactions'), where("type", "==", "opening_balance")))
             ]);
+
             customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            const factorsMap = new Map();
+            const namesMap = new Map();
+
+            cInventorySnap.forEach(d => {
+                const data = d.data();
+                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                factorsMap.set(d.id, f);
+                if (data.name) namesMap.set(data.name.trim(), d.id);
+            });
+
+            const salesMap = new Map();
+            const purchasesMap = new Map();
+            const openingMap = new Map();
+
+            cTransSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.productId) {
+                    const current = openingMap.get(data.productId) || 0;
+                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
+                }
+            });
+
+            cInvoicesSnap.forEach(docSnap => {
+                const items = docSnap.data().items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const rawQty = Number(item.qty) || 0;
+                        const isCarton = isCartonUnit(item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+                        
+                        const current = salesMap.get(id) || 0;
+                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
+                    }
+                }
+            });
+
+            cSupplierSnap.forEach(docSnap => {
+                const items = docSnap.data().items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+
+                        const current = purchasesMap.get(id) || 0;
+                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
+                    }
+                }
+            });
+
+            inventory = cInventorySnap.docs.map(doc => {
+                const data = doc.data();
+                const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                
+                let openingTotalPcs = 0;
+                if (data.openingTotalPcs != null) {
+                    openingTotalPcs = Number(data.openingTotalPcs);
+                } else if (data.openingQty != null) {
+                    openingTotalPcs = Math.round(Number(data.openingQty) * factor);
+                } else if (openingMap.has(doc.id)) {
+                    openingTotalPcs = openingMap.get(doc.id);
+                }
+
+                const salesPcs = salesMap.get(doc.id) || 0;
+                const purchasesPcs = purchasesMap.get(doc.id) || 0;
+                const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+                return { 
+                    id: doc.id, 
+                    ...data,
+                    totalPcs: calculatedRealPcs,
+                    qty: calculatedRealPcs
+                };
+            });
+
             localStorage.setItem('cache_customers', JSON.stringify(customers));
             localStorage.setItem('cache_inventory', JSON.stringify(inventory));
         } catch(err) {
@@ -726,7 +830,7 @@
                     </div>
                 </div>
 
-                <div class="row g-2">
+                <div class="row g-1">
                     <div class="col-4">
                         <label class="sub-lbl">الكمية</label>
                         <input type="number" class="form-control p-qty" value="1" min="1" oninput="recalc()">
@@ -768,13 +872,19 @@
             return;
         }
 
-        dd.innerHTML = filtered.map(p => `
-            <div class="dropdown-item-row" onclick="selectProduct('${rowId}', '${p.id}', '${p.name}')">
+        dd.innerHTML = filtered.map(p => {
+            const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
+            const totalPcs = Number(p.totalPcs || 0);
+            const cartons = Math.floor(Math.abs(totalPcs) / factor) * (totalPcs < 0 ? -1 : 1);
+            const pcs = (Math.abs(totalPcs) % factor) * (totalPcs < 0 ? -1 : 1);
+
+            return `
+            <div class="dropdown-item-row" onclick="selectProduct('${rowId}', '${p.id}', '${p.name.replace(/'/g, "\\'")}')">
                 <i class="fas fa-box" style="color: var(--accent); font-size: 0.75rem;"></i>
                 ${p.name}
-                <span class="item-stock">${p.totalPcs || 0} ق</span>
-            </div>
-        `).join('');
+                <span class="item-stock">${cartons} ك و ${pcs} ق (${totalPcs} ق)</span>
+            </div>`;
+        }).join('');
         dd.style.display = 'block';
     };
 
@@ -786,8 +896,11 @@
 
         const p = inventory.find(i => i.id === pid);
         if (p) {
+            const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
+            const totalPcs = Number(p.totalPcs || 0);
+
             const stockHint = row.querySelector('.p-stock');
-            stockHint.querySelector('span').innerText = `رصيد المخزن: ${p.totalPcs || 0} قطعة`;
+            stockHint.innerHTML = formatStockText(totalPcs, factor);
             stockHint.style.display = 'block';
             setRowPrice(row, p);
         }
@@ -805,7 +918,7 @@
 
     function setRowPrice(row, p) {
         const unit = row.querySelector('.p-unit').value;
-        const factor = Number(p.unitFactor) || 1;
+        const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
         const price = unit === 'box' ? (p.sell || 0) : ((p.sell || 0) / factor);
         row.querySelector('.p-price').value = price.toFixed(2);
     }
@@ -1067,6 +1180,15 @@
                     currentRow.querySelector(".p-unit").value = item.unit || "box";
                     currentRow.querySelector(".p-qty").value = item.qty || 1;
                     currentRow.querySelector(".p-price").value = item.price || 0;
+
+                    const p = inventory.find(i => i.id === item.stockId);
+                    if (p) {
+                        const factor = Math.max(1, Number(p.unitFactor || p.factor || p.pcsPerCarton) || 1);
+                        const totalPcs = Number(p.totalPcs || 0);
+                        const stockHint = currentRow.querySelector('.p-stock');
+                        stockHint.innerHTML = formatStockText(totalPcs, factor);
+                        stockHint.style.display = 'block';
+                    }
                 });
             } else {
                 addItemRow();
