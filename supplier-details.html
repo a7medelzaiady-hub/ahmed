@@ -221,20 +221,18 @@
     const supId = urlParams.get('id');
 
     async function calculateRealBalance(supplierId, openingBal) {
-        const qTrans = query(collection(db, "transactions"), where("partyId", "==", supplierId));
-        const snapTrans = await getDocs(qTrans);
-        
-        const qItems = query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId));
-        const snapItems = await getDocs(qItems);
+        const [snapTrans, snapItems] = await Promise.all([
+            getDocs(query(collection(db, "transactions"), where("partyId", "==", supplierId))),
+            getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId)))
+        ]);
 
         let totalPurchases = 0; 
         let totalPayments = 0;  
 
-        // 1. حساب السندات المالية (صرف/قبض)
+        // 1. حساب السندات المالية (صرف/قبض/سداد)
         snapTrans.forEach(doc => {
             const d = doc.data();
             const amt = Number(d.amount) || 0;
-            // سندات الصرف والسداد تقلل المديونية
             if (d.type === "صرف" || d.type === "سداد") {
                 totalPayments += amt;
             } else if (d.type === "قبض") {
@@ -247,20 +245,18 @@
             const d = doc.data();
             const totalInvoice = Number(d.total) || Number(d.amount) || 0;
             
-            // قراءة المبلغ المدفوع كاش/محفظة داخل الفاتورة بكل المسميات المحتملة
             const paidInsideInvoice = Number(d.paid) || 
                 (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
                 (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
 
             if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
-                totalPurchases += totalInvoice;     // فاتورة الشراء تزيد المديونية
-                totalPayments += paidInsideInvoice; // المبلغ المدفوع نقداً مع الفاتورة يُحسب كسداد
+                totalPurchases += totalInvoice;
+                totalPayments += paidInsideInvoice;
             } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
-                totalPayments += totalInvoice;     // المرتجع يقلل المديونية
+                totalPayments += totalInvoice;
             }
         });
 
-        // المعادلة المحاسبية: (الرصيد الافتتاحي + المشتريات) - السداد والمدفوعات
         return (Number(openingBal || 0) + totalPurchases) - totalPayments;
     }
 
