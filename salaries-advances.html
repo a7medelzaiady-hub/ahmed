@@ -226,11 +226,9 @@
         .driver-nums .deficit .v { color: var(--coral); }
         .driver-nums .absence .v { color: var(--violet); }
         
-        /* لون ديناميكي لحسبة اليومية المنقضية داخل الكارت العلوي */
         .driver-nums .accrual-status .v.due-pos { color: var(--brand); }
         .driver-nums .accrual-status .v.due-neg { color: var(--coral); }
 
-        /* كارت تفاصيل الحاسبة للإدمن فقط */
         .accrual-box {
             background: #f0fdf4;
             border-top: 1px solid #bbf7d0;
@@ -389,7 +387,7 @@
         <div class="stat-chip">
             <div class="chip-icon red-bg"><i class="fa-solid fa-hand-holding-dollar"></i></div>
             <span class="chip-num" id="statAdv">٠</span>
-            <span class="chip-label">إجمالي سلف الشهر</span>
+            <span class="chip-label">إجمالي خصومات الشهر</span>
         </div>
         <div class="stat-chip">
             <div class="chip-icon black-bg"><i class="fa-solid fa-scale-balanced"></i></div>
@@ -529,7 +527,6 @@
         return calcAllowedLimit(d.baseSalary, refDateStr);
     }
 
-    // ---------- حاسبة الأيام والعمل الفعلي ----------
     function calcAccrualData(driver, ym) {
         const now = new Date();
         const [vy, vm] = ym.split('-').map(Number);
@@ -564,7 +561,6 @@
         };
     }
 
-    // ---------- Firestore listeners ----------
     onSnapshot(collection(db, DRIVERS_COL), (snap) => {
         drivers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         render();
@@ -578,7 +574,6 @@
         render();
     }, (err) => console.error("خطأ في جلب السلف/العجز/الغياب:", err));
 
-    // ---------- Render ----------
     function render(){
         document.getElementById('monthLabel').textContent = monthLabel(currentMonth);
 
@@ -607,7 +602,8 @@
                 const net = Number(d.baseSalary||0) - advSum - absenceSum - deficitSum;
 
                 totalSalary += Number(d.baseSalary||0);
-                totalAdv += advSum;
+                // تجميع السلف والعجز والغياب معاً لكارت الإجمالي في الهيدر
+                totalAdv += (advSum + deficitSum + absenceSum);
                 totalNet += net;
 
                 const maxAdv = displayLimitForDriver(d);
@@ -618,7 +614,6 @@
 
                 const initial = (d.name||'؟').trim().charAt(0);
 
-                // قائمة السلف
                 const advItemsHtml = advsMonth.length ? advsMonth.map(a => `
                     <div class="adv-item">
                         <div class="info">
@@ -631,7 +626,6 @@
                     </div>
                 `).join('') : `<div class="no-adv">لا توجد سلف مسجلة في هذا الشهر</div>`;
 
-                // قائمة العجز المميزة
                 const deficitItemsHtml = deficitsMonth.length ? deficitsMonth.map(a => `
                     <div class="adv-item is-deficit">
                         <div class="info">
@@ -644,7 +638,6 @@
                     </div>
                 `).join('') : `<div class="no-adv">لا يوجد عجز مسجل في هذا الشهر</div>`;
 
-                // قائمة الغياب المميزة
                 const absenceItemsHtml = absencesMonth.length ? absencesMonth.map(a => `
                     <div class="adv-item is-absence">
                         <div class="info">
@@ -673,7 +666,6 @@
                             <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
                             <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
                             
-                            <!-- إضافة خانة المستحق حسب الأيام المنقضية داخل الكارت العلوي للجميع -->
                             <div class="n accrual-status">
                                 <div class="k">${accrual.netBalance >= 0 ? `متبقي له (يوم ${accrual.elapsedDays})` : `مطلوب منه (يوم ${accrual.elapsedDays})`}</div>
                                 <div class="v ${accrual.netBalance >= 0 ? 'due-pos' : 'due-neg'}">${fmt(Math.abs(accrual.netBalance))}</div>
@@ -690,7 +682,6 @@
                         </div>
                     </div>
 
-                    <!-- كارت التفاصيل للحاسبة يظهر للأدمن فقط -->
                     ${isAdmin ? `
                     <div class="accrual-box">
                         <div class="accrual-head">
@@ -704,7 +695,6 @@
                     </div>
                     ` : ''}
 
-                    <!-- لوحة السلف -->
                     <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
                         <h3>تسجيل سلفة — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
                         <div class="adv-form">
@@ -716,7 +706,6 @@
                         <div class="adv-list">${advItemsHtml}</div>
                     </div>
 
-                    <!-- لوحة الغياب المميزة -->
                     <div class="advances-panel ${activePanel === 'absence' ? 'open' : ''}" style="background:#faf5ff; border-top: 1px solid #ddd6fe;">
                         <h3 style="color: var(--violet);">تسجيل أسبوع/أيام غياب — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
@@ -728,7 +717,6 @@
                         <div class="adv-list">${absenceItemsHtml}</div>
                     </div>
 
-                    <!-- لوحة العجز المميزة -->
                     <div class="advances-panel ${activePanel === 'deficit' ? 'open' : ''}" style="background:#fff3f3; border-top: 1px solid #fca5a5;">
                         <h3 style="color: var(--coral);">تسجيل عجز مالي مميز — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
@@ -783,7 +771,6 @@
         });
     }
 
-    // ---------- Actions ----------
     const addDriverBtn = document.getElementById('addDriverBtn');
     if (addDriverBtn) {
         addDriverBtn.addEventListener('click', async () => {
@@ -805,7 +792,6 @@
 
     let pendingAdvance = null;
 
-    // إضافة سلفة
     window.addAdvance = async function(driverId){
         const amountEl = document.getElementById(`advAmount-${driverId}`);
         const dateEl = document.getElementById(`advDate-${driverId}`);
@@ -838,7 +824,6 @@
         }
     };
 
-    // إضافة عجز
     window.addDeficit = async function(driverId){
         const amountEl = document.getElementById(`deficitAmount-${driverId}`);
         const dateEl = document.getElementById(`deficitDate-${driverId}`);
@@ -857,7 +842,6 @@
         }
     };
 
-    // إضافة غياب
     window.addAbsence = async function(driverId){
         const amountEl = document.getElementById(`absenceAmount-${driverId}`);
         const dateEl = document.getElementById(`absenceDate-${driverId}`);
@@ -930,7 +914,6 @@
         }
     }
 
-    // ---------- Month navigation ----------
     document.getElementById('prevMonth').addEventListener('click', () => {
         const [y,m] = currentMonth.split('-').map(Number);
         currentMonth = new Date(y, m-2, 1).toISOString().slice(0,7);
@@ -946,7 +929,6 @@
 </script>
 
 <script>
-    // Back button logic
     document.getElementById('btnBack').addEventListener('click', () => {
         if (document.referrer) { history.back(); } else { window.location.href = 'index.html'; }
     });
