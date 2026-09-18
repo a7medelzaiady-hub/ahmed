@@ -471,7 +471,6 @@
 
     const app = initializeApp(firebaseConfig);
     
-    // تفعيل التخزين المحلي التلقائي للأوفلاين بشكل كامل ومتوافق مع تعدد التبويبات
     let db;
     try {
         db = initializeFirestore(app, {
@@ -527,55 +526,68 @@
 
     function getSupplierBaseBalance(sup) {
         if (!sup) return 0;
-        if (sup.currentBalance !== undefined && sup.currentBalance !== null) {
-            return Number(sup.currentBalance) || 0;
-        }
         return Number(sup.openingBalance) || 0;
     }
 
-    // === دالة احتساب الرصيد السابق للمورد تاريخياً بشكل دقيق بدون تكرار السداد ===
+    // === دالة احتساب الرصيد الموحدة والمطابقة لشاشة مديونيات الموردين وقائمة الموردين ===
     async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null) {
         try {
-            const [snapInvoices, snapTrans] = await Promise.all([
-                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId))),
-                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId)))
+            const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
+                getDocs(query(collection(db, "transactions"), where("partyId", "==", supplierId))),
+                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId))),
+                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId)))
             ]);
 
-            let invoiceTotalEffect = 0;
+            let totalPurchases = 0; 
+            let totalPayments = 0;  
+
             const targetSec = targetTimestamp?.seconds || Infinity;
 
-            // 1. حساب إجمالي الفواتير (بدون خصم المدفوعات المباشرة لمنع التكرار)
-            snapInvoices.forEach(docSnap => {
-                if (editId && docSnap.id === editId) return;
+            // 1. حساب السندات المالية (صرف/قبض/سداد)
+            const processedTrans = new Set();
+            const processDoc = (docSnap) => {
+                if (processedTrans.has(docSnap.id)) return;
+                processedTrans.add(docSnap.id);
                 
-                const data = docSnap.data();
-                const invSec = data.timestamp?.seconds || 0;
+                const d = docSnap.data();
+                const trSec = d.timestamp?.seconds || 0;
+                if (trSec >= targetSec) return;
 
-                if (invSec < targetSec || (invSec === targetSec && docSnap.id < editId)) {
-                    const amt = Number(data.grossTotal) || Number(data.total) || 0;
-                    if (data.type === "مرتجع شراء") {
-                        invoiceTotalEffect -= amt;
-                    } else {
-                        invoiceTotalEffect += amt;
-                    }
+                const amt = Number(d.amount) || 0;
+                if (d.type === "صرف" || d.type === "سداد") {
+                    totalPayments += amt;
+                } else if (d.type === "قبض") {
+                    totalPurchases += amt;
+                }
+            };
+
+            snapTransParty.forEach(processDoc);
+            snapTransSup.forEach(processDoc);
+
+            // 2. حساب فواتير المشتريات والمدفوع داخل الفاتورة والمرتجعات
+            snapItems.forEach(docSnap => {
+                if (editId && docSnap.id === editId) return;
+
+                const d = docSnap.data();
+                const invSec = d.timestamp?.seconds || 0;
+                if (invSec >= targetSec) return;
+
+                const totalInvoice = Number(d.total) || Number(d.grossTotal) || Number(d.amount) || 0;
+                const paidInsideInvoice = Number(d.paid) || 
+                    (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
+                    (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+
+                if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                    totalPurchases += totalInvoice;
+                    totalPayments += paidInsideInvoice;
+                } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
+                    totalPayments += totalInvoice;
                 }
             });
 
-            // 2. حساب كافة المدفوعات والحركات المالية المقيدة في السندات
-            let transEffect = 0;
-            snapTrans.forEach(docSnap => {
-                const tr = docSnap.data();
-                const trSec = tr.timestamp?.seconds || 0;
-
-                if (trSec < targetSec) {
-                    const amt = Number(tr.amount) || 0;
-                    if (tr.type === 'قبض') transEffect -= amt;
-                    else if (tr.type === 'صرف') transEffect -= amt;
-                }
-            });
-
-            return Number(baseBalance) + invoiceTotalEffect + transEffect;
+            return (Number(baseBalance || 0) + totalPurchases) - totalPayments;
         } catch (e) { 
+            console.error("Balance Calc Error:", e);
             return Number(baseBalance); 
         }
     }
