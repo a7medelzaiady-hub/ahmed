@@ -521,26 +521,22 @@
         window.handleInput();
     };
 
-    // === دالة احتساب الرصيد الحقيقي الموحدة المأخوذة مباشرة من كود معلومات المورد ===
+    // === دالة احتساب الرصيد الحقيقي المعتمدة فقط على partyId لمنع الحسابات المزدوجة والتكرار ===
     async function getRealSupplierBalance(supplierId) {
         try {
             const supDoc = await getDoc(doc(db, "suppliers", supplierId));
             const openingBal = supDoc.exists() ? Number(supDoc.data().openingBalance || 0) : 0;
 
-            const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
+            const [snapTrans, snapItems] = await Promise.all([
                 getDocs(query(collection(db, "transactions"), where("partyId", "==", supplierId))),
-                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId))),
                 getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId)))
             ]);
 
             let totalPurchases = 0; 
             let totalPayments = 0;  
 
-            const processedTrans = new Set();
-            const processDoc = (docSnap) => {
-                if (processedTrans.has(docSnap.id)) return;
-                processedTrans.add(docSnap.id);
-                
+            // 1. حساب السندات المالية (صرف/قبض/سداد) المربوطة بـ partyId
+            snapTrans.forEach(docSnap => {
                 const d = docSnap.data();
                 const amt = Number(d.amount) || 0;
                 if (d.type === "صرف" || d.type === "سداد") {
@@ -548,11 +544,9 @@
                 } else if (d.type === "قبض") {
                     totalPurchases += amt;
                 }
-            };
+            });
 
-            snapTransParty.forEach(processDoc);
-            snapTransSup.forEach(processDoc);
-
+            // 2. حساب فواتير المشتريات والمدفوع الداخلي والمرتجعات
             snapItems.forEach(docSnap => {
                 if (editId && docSnap.id === editId) return;
 
@@ -1002,12 +996,13 @@
                 currentDocId = newInvRef.id;
             }
 
+            // عند إنشاء حركة شجرة السندات المالية (transactions)، نثبت استخدام partyId
             if (finalCash > 0) {
                 const newTransRef = doc(collection(db, "transactions"));
                 batch.set(newTransRef, {
                     amount: finalCash, type: "صرف", actionType: "سداد مورد",
                     details: `سداد نقدي (كاش) مقابل فاتورة شراء رقم (${currentDocId.substring(0,6)})`,
-                    date: invoiceDate, supplierId: supplierId, invoiceId: currentDocId,
+                    date: invoiceDate, partyId: supplierId, supplierId: supplierId, invoiceId: currentDocId,
                     paymentMethod: "cash", timestamp: (editId && oldInvoiceData?.timestamp) ? oldInvoiceData.timestamp : serverTimestamp()
                 });
             }
@@ -1017,7 +1012,7 @@
                 batch.set(newTransRef2, {
                     amount: finalWallet, type: "صرف", actionType: "سداد مورد",
                     details: `سداد محفظة إلكترونية مقابل فاتورة شراء رقم (${currentDocId.substring(0,6)})`,
-                    date: invoiceDate, supplierId: supplierId, invoiceId: currentDocId,
+                    date: invoiceDate, partyId: supplierId, supplierId: supplierId, invoiceId: currentDocId,
                     paymentMethod: "wallet", timestamp: (editId && oldInvoiceData?.timestamp) ? oldInvoiceData.timestamp : serverTimestamp()
                 });
             }
