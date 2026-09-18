@@ -76,18 +76,18 @@
         .spinner-custom { color: var(--accent); font-weight: 700; font-size: 0.85rem; }
 
         .btn-delete-all {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            transition: 0.2s;
-        }
-        .btn-delete-all:hover {
             background: rgba(217, 4, 41, 0.2);
-            border-color: rgba(217, 4, 41, 0.4);
+            border: 1px solid rgba(217, 4, 41, 0.4);
+            color: #ffb3be;
+            padding: 5px 12px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            transition: all 0.2s ease;
+        }
+        .btn-delete-all:hover, .btn-delete-all:active {
+            background: rgba(217, 4, 41, 0.45);
+            color: white;
         }
     </style>
 </head>
@@ -105,7 +105,7 @@
         </div>
         <h5 class="m-0 fw-bold">قائمة الموردين</h5>
         <div>
-            <button class="btn-delete-all" onclick="deleteAllSuppliersPermanently()">حذف الكل نهائياً</button>
+            <button class="btn-delete-all" onclick="deleteAllSuppliersPermanently()">حذف الكل</button>
         </div>
     </div>
     <div class="search-box">
@@ -146,62 +146,45 @@
     }
     let allSuppliers = [];
 
-    // دالة احتساب الرصيد الموحدة والمطابقة لكشف الحساب لمنع الخصم المزدوج
+    // دالة احتساب الرصيد الموحدة والمطابقة لبقية الشاشات
     async function calculateSupplierBalance(supId, openingBal) {
-        const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
+        const [snapTrans, snapItems] = await Promise.all([
             getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
-            getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
             getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
         ]);
 
-        let totalDebit = Number(openingBal || 0); // المدين (+)
-        let totalCredit = 0;                     // الدائن (-)
+        let totalPurchases = 0; 
+        let totalPayments = 0;  
 
-        const processedTransIds = new Set();
-
-        // 1. جمع السندات المالية المستقلة فقط (غير المرتبطة بفاتورة)
-        const processTransDoc = (docSnap) => {
-            if (processedTransIds.has(docSnap.id)) return;
-            
+        // 1. حساب السندات المالية (صرف/قبض/سداد)
+        snapTrans.forEach(docSnap => {
             const d = docSnap.data();
-            if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
-
-            processedTransIds.add(docSnap.id);
             const amt = Number(d.amount) || 0;
-
             if (d.type === "صرف" || d.type === "سداد") {
-                totalCredit += amt;
+                totalPayments += amt;
             } else if (d.type === "قبض") {
-                totalDebit += amt;
-            }
-        };
-
-        snapTransParty.forEach(processTransDoc);
-        snapTransSup.forEach(processTransDoc);
-
-        // 2. جمع الفواتير والمدفوع داخل الفاتورة
-        snapItems.forEach(docSnap => {
-            const d = docSnap.data();
-            const totalAmt = Number(d.total) || Number(d.amount) || 0;
-
-            if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
-                totalDebit += totalAmt; // إجمالي قيمة الفاتورة تزيد المديونية
-
-                // استخراج السداد النقدي المسجل مع الفاتورة فقط
-                const paidAmt = Number(d.paid) || 
-                    (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
-                    (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
-
-                if (paidAmt > 0) {
-                    totalCredit += paidAmt; // الخصم يتم مرة واحدة فقط
-                }
-            } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
-                totalCredit += totalAmt;
+                totalPurchases += amt;
             }
         });
 
-        // الرصيد الصافي النهائي = (الافتتاحي + الشراء) - المسدد
-        return totalDebit - totalCredit;
+        // 2. حساب فواتير المشتريات والمرتجعات والمدفوعات داخل الفاتورة
+        snapItems.forEach(docSnap => {
+            const d = docSnap.data();
+            const totalInvoice = Number(d.total) || Number(d.amount) || 0;
+            
+            const paidInsideInvoice = Number(d.paid) || 
+                (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
+                (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+
+            if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                totalPurchases += totalInvoice;
+                totalPayments += paidInsideInvoice;
+            } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
+                totalPayments += totalInvoice;
+            }
+        });
+
+        return (Number(openingBal || 0) + totalPurchases) - totalPayments;
     }
 
     async function loadSuppliers() {
@@ -217,7 +200,7 @@
 
             allSuppliers = await Promise.all(supplierPromises);
             
-            // ترتيب الموردين من الأكبر للأصغر في الدين (الأعلى ديناً أولاً)
+            // ترتيب الموردين من الأكبر للأصغر في الدين
             allSuppliers.sort((a, b) => (b.calculatedBalance || 0) - (a.calculatedBalance || 0));
 
             renderSuppliers(allSuppliers);
@@ -252,7 +235,7 @@
             return `
                 <div class="supplier-card">
                     <div>
-                        <h6 class="supplier-name">${sup.name}</h6>
+                        <h6 class="supplier-name">${sup.name || 'بدون اسم'}</h6>
                         <div class="mt-2">
                             <span class="balance-label">${label}</span>
                             <span class="balance-value ${balanceClass}">${Math.abs(balance) < 0.1 ? '' : balanceText}</span>
@@ -294,7 +277,7 @@
     window.filterSuppliers = () => {
         const term = document.getElementById('searchInput').value.toLowerCase();
         const filtered = allSuppliers.filter(s => 
-            s.name.toLowerCase().includes(term) || 
+            (s.name && s.name.toLowerCase().includes(term)) || 
             (s.phone && s.phone.includes(term))
         );
         renderSuppliers(filtered);
