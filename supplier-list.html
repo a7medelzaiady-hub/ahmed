@@ -47,6 +47,37 @@
         }
         .search-box i { color: var(--accent); opacity: 0.7; margin-left: 10px; }
 
+        /* كارت الإجمالي */
+        .summary-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            margin: 15px 15px 5px 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+        .summary-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+        .summary-main-val {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--accent);
+            line-height: 1.2;
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--bg-light);
+            padding-top: 10px;
+            margin-top: 10px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
         .supplier-card { 
             background: var(--white); border: 1px solid var(--border); 
             border-radius: 18px; padding: 15px; margin-bottom: 12px; 
@@ -111,6 +142,24 @@
     <div class="search-box">
         <i class="fas fa-search"></i>
         <input type="text" id="searchInput" placeholder="ابحث باسم المورد أو الهاتف..." oninput="filterSuppliers()">
+    </div>
+</div>
+
+<!-- كارت إجمالي الموردين والمديونيات -->
+<div class="summary-card">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <div class="summary-title" id="summaryTitle">صافي إجمالي المديونيات للموردين</div>
+            <div class="summary-main-val" id="totalSuppliersBalance">0.00 ج.م</div>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-success bg-opacity-10 text-success p-2 rounded-3" id="suppliersCount">0 مورد</span>
+        </div>
+    </div>
+    <div class="summary-stats">
+        <span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i> علينا: <b id="totalDebtVal">0</b></span>
+        <span class="text-info"><i class="fas fa-arrow-circle-down me-1"></i> لنا: <b id="totalCreditVal">0</b></span>
+        <span class="text-success"><i class="fas fa-check-circle me-1"></i> خالص: <b id="totalClearVal">0</b></span>
     </div>
 </div>
 
@@ -187,6 +236,32 @@
         return (Number(openingBal || 0) + totalPurchases) - totalPayments;
     }
 
+    // تحديث كارت الإجمالي
+    function updateSummaryCard(list) {
+        let netTotal = 0;
+        let debtCount = 0;
+        let creditCount = 0;
+        let clearCount = 0;
+
+        list.forEach(s => {
+            const bal = s.calculatedBalance || 0;
+            netTotal += bal;
+            if (bal > 0.1) debtCount++;
+            else if (bal < -0.1) creditCount++;
+            else clearCount++;
+        });
+
+        const totalEl = document.getElementById('totalSuppliersBalance');
+        totalEl.innerText = Math.abs(netTotal).toLocaleString('ar-EG') + " ج.م";
+        totalEl.className = `summary-main-val ${netTotal >= 0 ? 'text-danger' : 'text-success'}`;
+
+        document.getElementById('summaryTitle').innerText = netTotal >= 0 ? "صافي إجمالي مديونية علينا للموردين" : "صافي إجمالي رصيد فائض لنا";
+        document.getElementById('suppliersCount').innerText = `${list.length} مورد`;
+        document.getElementById('totalDebtVal').innerText = debtCount;
+        document.getElementById('totalCreditVal').innerText = creditCount;
+        document.getElementById('totalClearVal').innerText = clearCount;
+    }
+
     async function loadSuppliers() {
         const container = document.getElementById('suppliersContainer');
         try {
@@ -203,6 +278,7 @@
             // ترتيب الموردين من الأكبر للأصغر في الدين
             allSuppliers.sort((a, b) => (b.calculatedBalance || 0) - (a.calculatedBalance || 0));
 
+            updateSummaryCard(allSuppliers);
             renderSuppliers(allSuppliers);
         } catch (e) {
             console.error(e);
@@ -280,6 +356,7 @@
             (s.name && s.name.toLowerCase().includes(term)) || 
             (s.phone && s.phone.includes(term))
         );
+        updateSummaryCard(filtered);
         renderSuppliers(filtered);
     }
 
