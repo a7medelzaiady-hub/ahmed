@@ -489,9 +489,6 @@
     let currentFetchedOldBalance = 0;
     let oldInvoiceData = null;
 
-    const CACHE_KEYS = { suppliers: "cache_suppliers", inventory: "cache_inventory", ts: "cache_purchase_ts" };
-    const CACHE_TTL_MS = 10 * 60 * 1000;
-
     function formatNumClean(num) {
         const n = parseFloat(num);
         if (isNaN(n)) return "0.00";
@@ -524,14 +521,12 @@
         window.handleInput();
     };
 
-    function getSupplierBaseBalance(sup) {
-        if (!sup) return 0;
-        return Number(sup.openingBalance) || 0;
-    }
-
-    // === دالة احتساب الرصيد الموحدة والمطابقة لشاشة مديونيات الموردين وقائمة الموردين ===
-    async function getRealSupplierBalance(supplierId, baseBalance = 0, targetTimestamp = null) {
+    // === دالة احتساب الرصيد الحقيقي مباشرة وبدون استخدام الـ localCache لتفادي أخطاء المزامنة ===
+    async function getRealSupplierBalance(supplierId) {
         try {
+            const supDoc = await getDoc(doc(db, "suppliers", supplierId));
+            const openingBal = supDoc.exists() ? Number(supDoc.data().openingBalance || 0) : 0;
+
             const [snapTransParty, snapTransSup, snapItems] = await Promise.all([
                 getDocs(query(collection(db, "transactions"), where("partyId", "==", supplierId))),
                 getDocs(query(collection(db, "transactions"), where("supplierId", "==", supplierId))),
@@ -541,18 +536,12 @@
             let totalPurchases = 0; 
             let totalPayments = 0;  
 
-            const targetSec = targetTimestamp?.seconds || Infinity;
-
-            // 1. حساب السندات المالية (صرف/قبض/سداد)
             const processedTrans = new Set();
             const processDoc = (docSnap) => {
                 if (processedTrans.has(docSnap.id)) return;
                 processedTrans.add(docSnap.id);
                 
                 const d = docSnap.data();
-                const trSec = d.timestamp?.seconds || 0;
-                if (trSec >= targetSec) return;
-
                 const amt = Number(d.amount) || 0;
                 if (d.type === "صرف" || d.type === "سداد") {
                     totalPayments += amt;
@@ -564,14 +553,10 @@
             snapTransParty.forEach(processDoc);
             snapTransSup.forEach(processDoc);
 
-            // 2. حساب فواتير المشتريات والمدفوع داخل الفاتورة والمرتجعات
             snapItems.forEach(docSnap => {
                 if (editId && docSnap.id === editId) return;
 
                 const d = docSnap.data();
-                const invSec = d.timestamp?.seconds || 0;
-                if (invSec >= targetSec) return;
-
                 const totalInvoice = Number(d.total) || Number(d.grossTotal) || Number(d.amount) || 0;
                 const paidInsideInvoice = Number(d.paid) || 
                     (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
@@ -585,10 +570,10 @@
                 }
             });
 
-            return (Number(baseBalance || 0) + totalPurchases) - totalPayments;
+            return (openingBal + totalPurchases) - totalPayments;
         } catch (e) { 
             console.error("Balance Calc Error:", e);
-            return Number(baseBalance); 
+            return 0; 
         }
     }
 
@@ -613,9 +598,7 @@
             balanceDiv.style.display = 'block';
             balanceDiv.querySelector('#curBalanceVal').innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحساب...';
 
-            const startBalance = getSupplierBaseBalance(exactMatch);
-            const targetTS = (editId && oldInvoiceData) ? oldInvoiceData.timestamp : null;
-            const realDebt = await getRealSupplierBalance(exactMatch.id, startBalance, targetTS);
+            const realDebt = await getRealSupplierBalance(exactMatch.id);
             currentFetchedOldBalance = realDebt;
             showBalance(realDebt);
             calc();
@@ -626,7 +609,7 @@
 
         if (filtered.length > 0) {
             resultsDiv.innerHTML = filtered.map(s => `
-                <div class="search-item" onclick="selectSupplier('${s.id}', '${s.name.replace(/'/g, "\\'")}', ${getSupplierBaseBalance(s)})">
+                <div class="search-item" onclick="selectSupplier('${s.id}', '${s.name.replace(/'/g, "\\'")}')">
                     <b>${s.name}</b>
                 </div>
             `).join('');
@@ -640,7 +623,7 @@
         }
     };
 
-    window.selectSupplier = async (id, name, baseBalance) => {
+    window.selectSupplier = async (id, name) => {
         document.getElementById('supplierSearch').value = name;
         document.getElementById('supplierSelect').value = id;
         document.getElementById('supplierResults').style.display = 'none';
@@ -650,8 +633,7 @@
         balanceDiv.style.display = 'block';
         balanceSpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحساب...';
 
-        const targetTS = (editId && oldInvoiceData) ? oldInvoiceData.timestamp : null;
-        const realDebt = await getRealSupplierBalance(id, baseBalance, targetTS);
+        const realDebt = await getRealSupplierBalance(id);
         currentFetchedOldBalance = realDebt;
         showBalance(realDebt);
 
@@ -1054,14 +1036,6 @@
         }
     };
 
-    function persistCache() {
-        try {
-            localStorage.setItem(CACHE_KEYS.suppliers, JSON.stringify(suppliers));
-            localStorage.setItem(CACHE_KEYS.inventory, JSON.stringify(inventory));
-            localStorage.setItem(CACHE_KEYS.ts, String(Date.now()));
-        } catch (e) { }
-    }
-
     function setDataStatus(text, icon = "fa-database") {
         const el = document.getElementById('dataStatusText');
         if (el) el.innerHTML = `<i class="fas ${icon} me-1"></i> ${text}`;
@@ -1078,29 +1052,6 @@
             const realPcs = (data.totalPcs !== undefined && data.totalPcs !== null) ? Number(data.totalPcs) : Number(data.qty || 0);
             return { id: d.id, ...data, totalPcs: realPcs };
         });
-        persistCache();
-    }
-
-    async function loadSuppliersAndInventory() {
-        const cachedSuppliers = localStorage.getItem(CACHE_KEYS.suppliers);
-        const cachedInventory = localStorage.getItem(CACHE_KEYS.inventory);
-        const cachedTs = Number(localStorage.getItem(CACHE_KEYS.ts) || 0);
-        const age = Date.now() - cachedTs;
-
-        if (cachedSuppliers && cachedInventory && cachedTs && age < CACHE_TTL_MS) {
-            suppliers = JSON.parse(cachedSuppliers);
-            inventory = JSON.parse(cachedInventory);
-            setDataStatus(`بيانات محفوظة محليًا — ${suppliers.length} مورد، ${inventory.length} صنف`, "fa-check-circle");
-            return;
-        }
-
-        if (cachedSuppliers && cachedInventory) {
-            suppliers = JSON.parse(cachedSuppliers);
-            inventory = JSON.parse(cachedInventory);
-        }
-        setDataStatus("جاري تحديث قوائم الموردين والأصناف...", "fa-spinner fa-spin");
-        await fetchFreshLists();
-        setDataStatus(`تم التحديث — ${suppliers.length} مورد، ${inventory.length} صنف`, "fa-check-circle");
     }
 
     document.getElementById('btnRefreshData').onclick = async (e) => {
@@ -1113,14 +1064,9 @@
 
             const currentSupId = document.getElementById('supplierSelect').value;
             if (currentSupId) {
-                const sup = suppliers.find(s => s.id === currentSupId);
-                if (sup) {
-                    const startBalance = getSupplierBaseBalance(sup);
-                    const targetTS = (editId && oldInvoiceData) ? oldInvoiceData.timestamp : null;
-                    const realDebt = await getRealSupplierBalance(currentSupId, startBalance, targetTS);
-                    currentFetchedOldBalance = realDebt;
-                    showBalance(realDebt);
-                }
+                const realDebt = await getRealSupplierBalance(currentSupId);
+                currentFetchedOldBalance = realDebt;
+                showBalance(realDebt);
             }
             calc();
         } catch (err) {
@@ -1136,7 +1082,9 @@
                 document.getElementById('invTime').value = new Date().toISOString().split('T')[0];
             }
 
-            await loadSuppliersAndInventory();
+            setDataStatus("جاري تحفيز البيانات الحية...", "fa-spinner fa-spin");
+            await fetchFreshLists();
+            setDataStatus(`مستقر — ${suppliers.length} مورد، ${inventory.length} صنف`, "fa-check-circle");
 
             if (editId) {
                 document.getElementById('modeText').innerText = "تعديل";
@@ -1153,17 +1101,8 @@
                     document.getElementById('paidAmount').value = oldInvoiceData.totalPaid || 0;
 
                     if (oldInvoiceData.supplierId) {
-                        const sup = suppliers.find(s => s.id === oldInvoiceData.supplierId);
                         document.getElementById('supplierBalanceInfo').style.display = 'block';
-
-                        const startBalance = getSupplierBaseBalance(sup);
-                        
-                        const realB = await getRealSupplierBalance(
-                            oldInvoiceData.supplierId, 
-                            startBalance, 
-                            oldInvoiceData.timestamp
-                        );
-                        
+                        const realB = await getRealSupplierBalance(oldInvoiceData.supplierId);
                         currentFetchedOldBalance = realB;
                         showBalance(realB);
                     }
@@ -1183,8 +1122,7 @@
                         if (sup) {
                             document.getElementById('supplierSearch').value = sup.name;
                             document.getElementById('supplierSelect').value = sup.id;
-                            const startBalance = getSupplierBaseBalance(sup);
-                            const realB = await getRealSupplierBalance(sup.id, startBalance);
+                            const realB = await getRealSupplierBalance(sup.id);
                             currentFetchedOldBalance = realB;
                             showBalance(realB);
                             document.getElementById('supplierBalanceInfo').style.display = 'block';
