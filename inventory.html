@@ -189,7 +189,7 @@
             z-index: 1000; display: none; align-items: center; justify-content: center; padding: 14px;
         }
         .modal-card {
-            background: var(--card); width: 100%; max-width: 550px; border-radius: var(--r); 
+            background: var(--card); width: 100%; max-width: 580px; border-radius: var(--r); 
             box-shadow: 0 15px 30px rgba(0,0,0,0.15); overflow: hidden; 
             display: flex; flex-direction: column; max-height: 88vh;
         }
@@ -243,13 +243,22 @@
         .summary-bar .item-box .val { font-size: 11.5px; color: var(--accent); }
         .summary-bar .full-col { grid-column: 1 / -1; background: #0f172a; padding: 6px; border-radius: 6px; color: #fff; font-size: 12px; }
 
-        /* جدول سجل المبيعات */
+        /* جدول سجل الحركات المفصل */
         .sales-table-wrap { overflow-x: auto; margin-top: 6px; border: 1px solid var(--border); border-radius: 10px; }
-        .sales-table { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; text-align: center; }
-        .sales-table th { background: #0f172a; color: #fff; padding: 8px 6px; font-weight: 800; }
-        .sales-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); font-weight: 700; }
+        .sales-table { width: 100%; border-collapse: collapse; font-size: 10.5px; background: #fff; text-align: center; }
+        .sales-table th { background: #0f172a; color: #fff; padding: 8px 4px; font-weight: 800; }
+        .sales-table td { padding: 8px 4px; border-bottom: 1px solid var(--border); font-weight: 700; }
         .sales-table tr:nth-child(even) { background: #f8fafc; }
-        .sales-table .is-return-row { background: #fef2f2; color: var(--danger); }
+        
+        /* ألوان التمييز للحركات */
+        .sales-table .row-sale { background: #f0fdf4; color: #15803d; }
+        .sales-table .row-buy { background: #eff6ff; color: #1d4ed8; }
+        .sales-table .row-return { background: #fef2f2; color: #b91c1c; }
+
+        .type-badge { padding: 2px 5px; border-radius: 4px; font-size: 9px; font-weight: 800; display: inline-block; }
+        .type-badge.sale { background: #dcfce7; color: #15803d; }
+        .type-badge.buy { background: #dbeafe; color: #1d4ed8; }
+        .type-badge.return { background: #fee2e2; color: #b91c1c; }
 
         /* شريط بحث المودال السريع */
         .modal-search-wrap { padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--border); }
@@ -321,7 +330,7 @@
     </div>
 </div>
 
-<!-- مودال تفاصيل الحركات وسجل المبيعات -->
+<!-- مودال تفاصيل الحركات وسجل الحركات المدمج -->
 <div class="modal-overlay" id="historyModal">
     <div class="modal-card">
         <div class="modal-header">
@@ -378,6 +387,8 @@
     let rawInvoicesList = [];
     let rawPurchasesList = [];
 
+    const daysArabic = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
     const dom = {
         sTotal: document.getElementById('sTotal'),
         sOk: document.getElementById('sOk'),
@@ -414,6 +425,7 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
+    // دالة لاستخراج التاريخ
     function parseRecordDate(doc) {
         if (!doc) return null;
         let val = doc.createdAt || doc.created_at || doc.date || doc.dateTime || doc.timestamp || doc.time;
@@ -433,6 +445,18 @@
             if (!isNaN(d.getTime())) return d;
         }
         return null;
+    }
+
+    // صيغة لعرض التاريخ بـ (اليوم + التاريخ)
+    function formatDateWithDay(dateObj, fallbackStr = '') {
+        if (!dateObj || isNaN(dateObj.getTime())) {
+            return fallbackStr || 'غير محدد';
+        }
+        const dayName = daysArabic[dateObj.getDay()];
+        const dayNum = dateObj.getDate();
+        const monthNum = dateObj.getMonth() + 1;
+        const yearNum = dateObj.getFullYear();
+        return `${dayName} ${dayNum}/${monthNum}/${yearNum}`;
     }
 
     function parseFilterDateInput(val) {
@@ -793,7 +817,7 @@
         setTimeout(() => dom.quickSearchInput.focus(), 100);
     }
 
-    // بناء وتحديث كشف المبيعات والمشتريات والمرتجع والمتبقي حتى التاريخ المحدد
+    // بناء وتحديث كشف الحركات المدمج (مبيعات ومشتريات ومرتجعات مع الأيام والتواريخ)
     function renderSalesTable(itemId, maxDateStr = '') {
         const itemObj = allItems.find(i => i.id === itemId) || {};
         const normItemName = itemObj.name ? normalizeAr(itemObj.name) : '';
@@ -803,18 +827,18 @@
 
         const maxDate = parseFilterDateInput(maxDateStr);
 
-        let matchingSales = [];
-        let salesPcsPure = 0;      // مبيعات صريحة
-        let salesReturnPcs = 0;   // مرتجع مبيعات
-        let totalAmountPeriod = 0;
+        let combinedTransactions = [];
+        let salesPcsPure = 0;
+        let salesReturnPcs = 0;
+        let totalSalesAmount = 0;
 
-        // 1. حساب المبيعات ومرتجع المبيعات حتى التاريخ المحدد
+        let purchasesPcsPure = 0;
+        let purchasesReturnPcs = 0;
+
+        // 1. تجميع المبيعات
         rawInvoicesList.forEach(inv => {
             const invDate = parseRecordDate(inv);
-            
-            if (maxDate && invDate && invDate > maxDate) {
-                return;
-            }
+            if (maxDate && invDate && invDate > maxDate) return;
 
             const items = inv.items || [];
             items.forEach(item => {
@@ -829,43 +853,31 @@
 
                     if (isReturn) {
                         salesReturnPcs += pcs;
-                        totalAmountPeriod -= lineTotal;
+                        totalSalesAmount -= lineTotal;
                     } else {
                         salesPcsPure += pcs;
-                        totalAmountPeriod += lineTotal;
+                        totalSalesAmount += lineTotal;
                     }
 
-                    let dateDisplay = 'غير محدد';
-                    if (invDate) {
-                        dateDisplay = `${invDate.getDate()}/${invDate.getMonth() + 1}/${invDate.getFullYear()}`;
-                    } else if (inv.dateStr || inv.date) {
-                        dateDisplay = inv.dateStr || inv.date;
-                    }
-
-                    matchingSales.push({
-                        date: dateDisplay,
+                    combinedTransactions.push({
+                        type: isReturn ? 'مرتجع بيع' : 'بيع',
+                        typeClass: isReturn ? 'return' : 'sale',
+                        rowClass: isReturn ? 'row-return' : 'row-sale',
+                        dateDisplay: formatDateWithDay(invDate, inv.dateStr || inv.date),
                         rawDate: invDate ? invDate.getTime() : 0,
-                        customer: inv.customerName || inv.clientName || inv.customer || 'عميل نقدي',
+                        party: inv.customerName || inv.clientName || inv.customer || 'عميل نقدي',
                         rawQty: rawQty,
                         unitName: isCarton ? 'كرتونة' : unit,
-                        pcs: pcs,
-                        price: price,
-                        lineTotal: lineTotal,
-                        isReturn: isReturn
+                        lineTotal: lineTotal
                     });
                 }
             });
         });
 
-        // 2. حساب المشتريات ومرتجع المشتريات حتى التاريخ المحدد
-        let purchasesPcsPure = 0;
-        let purchasesReturnPcs = 0;
-
+        // 2. تجميع المشتريات
         rawPurchasesList.forEach(sup => {
             const supDate = parseRecordDate(sup);
-            if (maxDate && supDate && supDate > maxDate) {
-                return;
-            }
+            if (maxDate && supDate && supDate > maxDate) return;
 
             const items = sup.items || [];
             items.forEach(item => {
@@ -875,28 +887,39 @@
                     const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
                     const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
                     const pcs = isCarton ? (rawQty * capacity) : rawQty;
+                    const price = Number(item.price || item.buyPrice || item.cost) || 0;
+                    const lineTotal = Number(item.total) || (rawQty * price);
 
                     if (isReturn) {
                         purchasesReturnPcs += pcs;
                     } else {
                         purchasesPcsPure += pcs;
                     }
+
+                    combinedTransactions.push({
+                        type: isReturn ? 'مرتجع شراء' : 'شراء',
+                        typeClass: isReturn ? 'return' : 'buy',
+                        rowClass: isReturn ? 'row-return' : 'row-buy',
+                        dateDisplay: formatDateWithDay(supDate, sup.dateStr || sup.date),
+                        rawDate: supDate ? supDate.getTime() : 0,
+                        party: sup.supplierName || sup.supplier || sup.partyName || 'مورد',
+                        rawQty: rawQty,
+                        unitName: isCarton ? 'كرتونة' : unit,
+                        lineTotal: lineTotal
+                    });
                 }
             });
         });
 
-        // الرصيد أول المدة
+        // حسابات الصافي والمتبقي
         const openingPcs = Number(itemObj.openingTotalPcsCalc || 0);
-
-        // الصافي الحسابي
         const netSalesPcs = salesPcsPure - salesReturnPcs;
         const netPurchasesPcs = purchasesPcsPure - purchasesReturnPcs;
         const totalReturnsCombinedPcs = salesReturnPcs + purchasesReturnPcs;
-
-        // المتبقي حتى هذا التاريخ
         const remainingPcsAtDate = openingPcs + netPurchasesPcs - netSalesPcs;
 
-        matchingSales.sort((a, b) => b.rawDate - a.rawDate);
+        // ترتيب الحركات (الأحدث أولاً)
+        combinedTransactions.sort((a, b) => b.rawDate - a.rawDate);
 
         const salesContainer = document.getElementById('salesTableContainer');
         const summaryContainer = document.getElementById('salesSummaryBar');
@@ -920,7 +943,7 @@
                 </div>
                 <div class="item-box">
                     <span class="lbl"><i class="fas fa-money-bill-wave text-success"></i> قيمة المبيعات</span>
-                    <span class="val num">${totalAmountPeriod.toLocaleString()} ج.م</span>
+                    <span class="val num">${totalSalesAmount.toLocaleString()} ج.م</span>
                     <span style="font-size: 9px; color:#64748b;">بعد الخصم والارتجاع</span>
                 </div>
                 <div class="full-col">
@@ -930,8 +953,8 @@
 
         if (!salesContainer) return;
 
-        if (matchingSales.length === 0) {
-            salesContainer.innerHTML = `<div class="empty-state" style="padding:20px 10px;"><p>لا توجد حركات مبيعات لهذا الصنف ${maxDateStr ? 'حتى التاريخ المحدد' : ''}</p></div>`;
+        if (combinedTransactions.length === 0) {
+            salesContainer.innerHTML = `<div class="empty-state" style="padding:20px 10px;"><p>لا توجد حركات مبيعات أو مشتريات لهذا الصنف ${maxDateStr ? 'حتى التاريخ المحدد' : ''}</p></div>`;
             return;
         }
 
@@ -940,21 +963,23 @@
                 <table class="sales-table">
                     <thead>
                         <tr>
-                            <th style="width: 25%;">التاريخ</th>
-                            <th style="width: 35%;">العميل</th>
-                            <th style="width: 20%;">الكمية</th>
-                            <th style="width: 20%;">المبلغ</th>
+                            <th style="width: 15%;">النوع</th>
+                            <th style="width: 32%;">التاريخ واليوم</th>
+                            <th style="width: 25%;">الجهة / العميل</th>
+                            <th style="width: 14%;">الكمية</th>
+                            <th style="width: 14%;">المبلغ</th>
                         </tr>
                     </thead>
                     <tbody>`;
 
-        matchingSales.forEach(s => {
+        combinedTransactions.forEach(t => {
             tableHtml += `
-                <tr class="${s.isReturn ? 'is-return-row' : ''}">
-                    <td class="num" style="direction: ltr;">${s.date}</td>
-                    <td>${s.customer}</td>
-                    <td class="num">${s.rawQty} ${s.unitName} ${s.isReturn ? '(مرتجع)' : ''}</td>
-                    <td class="num">${s.lineTotal.toLocaleString()} ج.م</td>
+                <tr class="${t.rowClass}">
+                    <td><span class="type-badge ${t.typeClass}">${t.type}</span></td>
+                    <td class="num">${t.dateDisplay}</td>
+                    <td>${t.party}</td>
+                    <td class="num">${t.rawQty} ${t.unitName}</td>
+                    <td class="num">${t.lineTotal ? t.lineTotal.toLocaleString() + ' ج.م' : '-'}</td>
                 </tr>`;
         });
 
