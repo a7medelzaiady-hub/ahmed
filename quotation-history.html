@@ -248,9 +248,6 @@ tr:hover td { background: var(--brand-lt); }
 #toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%) translateY(60px);background:#1b2e26;color:#fff;padding:8px 18px;border-radius:24px;font-size:12px;font-weight:800;box-shadow:0 6px 16px rgba(0,0,0,.3);transition:transform .3s,opacity .3s;opacity:0;pointer-events:none;z-index:999;width:max-content;max-width:92%;text-align:center;}
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
 
-/* مؤشر حالة المزامنة/الاتصال */
-#netBadge { position: fixed; bottom: 52px; left: 8px; z-index: 60; font-size: 11px; font-weight: 800; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 3px 9px; box-shadow: 0 2px 6px rgba(0,0,0,.15); pointer-events: none; }
-
 .load-search-box { padding: 3px; margin-bottom: 10px; position: relative; box-shadow: var(--shadow-3d); border-radius: 12px; }
 .load-search-box input { width: 100%; padding: 8px 10px 8px 30px; border: 2px solid var(--border); border-radius: 10px; font-family: inherit; font-size: 14px; font-weight: 700; outline: none; transition: border-color .2s, background .2s; }
 .load-search-box input:focus { border-color: var(--brand); background: var(--brand-lt); }
@@ -272,7 +269,7 @@ table select:focus { border-color: var(--brand); }
 #print-header, #print-footer { display: none; }
 @media print {
   body { background: #fff; color: #000; padding: 0; margin: 0; font-size: 11px; }
-  nav, .btn, .tools-row, #syncStatus, #netBadge, .ph, .snum, .load-search-box, #newItemsAlertBanner, .modal-overlay, .summary-tab-nav { display: none !important; }
+  nav, .btn, .tools-row, #syncStatus, .ph, .snum, .load-search-box, #newItemsAlertBanner, .modal-overlay, .summary-tab-nav { display: none !important; }
   .card, .summary-card { border: none; box-shadow: none; padding: 0; margin: 0; }
   .card h3 { display: none !important; }
   #print-header { display: block !important; text-align: center; margin-bottom: 12px; font-family: inherit; }
@@ -489,17 +486,13 @@ table select:focus { border-color: var(--brand); }
 </div>
 
 <div id="toast"></div>
-<div id="netBadge">⏳ جاري الاتصال...</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore,
-  collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where, onSnapshot, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -513,21 +506,24 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 let db;
 try {
-  // MultipleTabManager: كاش أوفلاين يعمل حتى مع فتح الصفحة في أكثر من تبويب
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-  });
+    db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
 } catch (e) {
-  db = getFirestore(app);
+    db = getFirestore(app);
 }
 
-/* =============================================================
-   الحالة العامة
-   ============================================================= */
+function startApp() {
+  document.getElementById('app-content').style.display = 'block';
+  if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
+  listenToDailyLoadChanges();
+  listenToLiveInvoices();
+}
+
 let firebaseItems = [];
 let cartItems     = {};
 let loadedInSession = {};
-let previousTruckStock = {};
+let previousTruckStock = {}; 
 let forceShowLoadList = false;
 let suggestFocusIdx = -1;
 let currentSummaryTab = 'active';
@@ -548,42 +544,8 @@ document.getElementById('summaryDate').value = defaultDateStr;
 
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
-let listenedDate = null;
-let listenedInvDate = null;
 
-/* =============================================================
-   هوية الجهاز + أدوات مساعدة + مؤشر الاتصال
-   ============================================================= */
-const DEVICE_ID = (() => {
-  let id = localStorage.getItem('deviceId');
-  if (!id) { id = 'dev-' + Math.random().toString(36).slice(2, 8); localStorage.setItem('deviceId', id); }
-  return id;
-})();
-
-const currentDate = () => document.getElementById('summaryDate').value || defaultDateStr;
-const isActive    = (pgId) => !!document.getElementById(pgId)?.classList.contains('active');
-const editStamp   = () => {
-  const n = new Date();
-  return n.toLocaleDateString('ar-EG') + ' | ' + n.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-};
-// Firestore يرفض القيم undefined
-const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
-
-function updateSyncBadge(meta) {
-  const el = document.getElementById('netBadge'); if (!el) return;
-  if (!navigator.onLine)                    el.textContent = '🔴 أوفلاين — التعديلات محفوظة وستُرفع تلقائياً';
-  else if (meta && meta.hasPendingWrites)   el.textContent = '🟡 جاري رفع التعديلات...';
-  else if (meta && meta.fromCache)          el.textContent = '🟠 من الكاش — بانتظار السيرفر';
-  else                                      el.textContent = '🟢 متزامن لحظياً';
-}
-window.addEventListener('online',  () => { updateSyncBadge(); flushPatches(); });
-window.addEventListener('offline', () => updateSyncBadge());
-// على الموبايل: ارفع أي تعديل معلّق قبل خروج التطبيق للخلفية
-document.addEventListener('visibilitychange', () => { if (document.hidden) flushPatches(); });
-
-/* =============================================================
-   دوال التنسيق والمطابقة
-   ============================================================= */
+// توحيد تنظيف اسم الصنف بنفس الطريقة الدقيقة للملف الآخر
 function cleanItemName(str) {
   if (!str) return "";
   return String(str).trim()
@@ -605,11 +567,134 @@ function getProductIdForItem(item) {
   if (item.stockId && factorsMap[item.stockId]) return item.stockId;
   if (item.productId && factorsMap[item.productId]) return item.productId;
   if (item.id && factorsMap[item.id]) return item.id;
+  
   if (item.name) {
     const cleanName = cleanItemName(item.name);
     if (namesMap[cleanName]) return namesMap[cleanName];
   }
   return item.stockId || item.productId || item.id || null;
+}
+
+// -------------------------------------------------------------
+// تعديل محوري: ضبط دالة المبيعات المباشرة لتفادي انعكاس الإشارة بالسالب
+// -------------------------------------------------------------
+function listenToLiveInvoices() {
+  const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
+  if (unsubscribeInvoices) unsubscribeInvoices();
+
+  const syncStatus = document.getElementById('syncStatus');
+  if (syncStatus) syncStatus.innerHTML = '⚡ مزامنة المبيعات لحظياً...';
+
+  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snapshot) => {
+    memorySalesCache = {};
+    snapshot.forEach(docSnap => {
+      const inv = docSnap.data();
+      if (inv.isDeleted) return;
+      if (parseDate(inv.date, inv.timestamp) !== selectedDate) return;
+      if (!Array.isArray(inv.items)) return;
+
+      inv.items.forEach(itm => {
+        const itemId = getProductIdForItem(itm);
+        if (itemId) {
+          const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
+          const rawQty = Number(itm.qty) || 0; // إزالة Math.abs لتفادي حساب الإشارة مرتين
+          const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
+          const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
+
+          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true;
+
+          if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
+          
+          // الاعتماد على إشارة العدد المباشرة أو معالجة المرتجع بخصمه
+          if (isReturn) {
+            memorySalesCache[itemId] -= Math.abs(totalPcsSold);
+          } else {
+            memorySalesCache[itemId] += totalPcsSold;
+          }
+        }
+      });
+    });
+    lastFetchedDate = selectedDate;
+    if (syncStatus) syncStatus.innerHTML = '🟢 متزامن لحظياً عبر كافة الأجهزة';
+    
+    buildCalculatedRows();
+    if (document.getElementById('pg-summary').classList.contains('active')) {
+      window.filterSummaryUI();
+    }
+  }, (err) => {
+    console.error("خطأ في استماع المبيعات:", err);
+    if (syncStatus) syncStatus.innerHTML = '⚠️ خطأ بالاتصال المباشر';
+  });
+}
+
+function listenToDailyLoadChanges() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  if (unsubscribeDailyLoad) unsubscribeDailyLoad();
+
+  const docRef = doc(db, 'daily_loads', d);
+  unsubscribeDailyLoad = onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      loadedInSession = data.loadedInSession || {};
+      cartItems       = data.cartItems || {};
+    } else {
+      loadedInSession = {};
+      cartItems       = {};
+    }
+    
+    saveLocalFallback();
+
+    if (document.getElementById('pg-load').classList.contains('active')) {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
+        updateDOMValuesOnly();
+      } else {
+        renderLoadFlow();
+      }
+    }
+    if (document.getElementById('pg-summary').classList.contains('active')) {
+      buildCalculatedRows();
+      window.filterSummaryUI();
+    }
+  });
+
+  const prevDate = getPreviousDateStr(d);
+  getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
+    previousTruckStock = {};
+    if (prevSnap.exists()) {
+      const prevCart = prevSnap.data().cartItems || {};
+      Object.keys(prevCart).forEach(id => {
+        if (prevCart[id].inTruckPcs) {
+          previousTruckStock[id] = prevCart[id].inTruckPcs;
+        }
+      });
+    }
+    if (document.getElementById('pg-load').classList.contains('active')) {
+      const activeEl = document.activeElement;
+      if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'SELECT')) {
+        renderLoadFlow();
+      }
+    }
+  });
+}
+
+function updateDOMValuesOnly() {
+  firebaseItems.forEach(it => {
+    const isDone = loadedInSession[it.id] !== undefined;
+    const stepEl = document.getElementById('step-' + it.id);
+    if (stepEl && !isDone) {
+      const plc = document.getElementById(`plc-${it.id}`);
+      const pll = document.getElementById(`pll-${it.id}`);
+      const lc  = document.getElementById(`lc-${it.id}`);
+      const ll  = document.getElementById(`ll-${it.id}`);
+      const sess = loadedInSession[it.id] || {};
+
+      if (plc && document.activeElement !== plc) plc.value = sess.prevCartons ?? plc.value;
+      if (pll && document.activeElement !== pll) pll.value = sess.prevLoose ?? pll.value;
+      if (lc && document.activeElement !== lc)   lc.value = sess.cartons ?? lc.value;
+      if (ll && document.activeElement !== ll)   ll.value = sess.loose ?? ll.value;
+    }
+  });
 }
 
 function getPreviousDateStr(dateStr) {
@@ -618,10 +703,55 @@ function getPreviousDateStr(dateStr) {
   return d.toISOString().split('T')[0];
 }
 
+async function saveSessionCloud() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  saveLocalFallback();
+  try {
+    await setDoc(doc(db, 'daily_loads', d), {
+      date: d,
+      updatedAt: new Date().toISOString(),
+      loadedInSession: loadedInSession,
+      cartItems: cartItems
+    }, { merge: true });
+  } catch(e) {
+    console.error("خطأ المزامنة السحابية:", e);
+  }
+}
+
+function saveLocalFallback() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  localStorage.setItem('cartItems_' + d, JSON.stringify(cartItems));
+  localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
+}
+
+window.handleLiveInputChange = function(itemId) {
+  const it = firebaseItems.find(i => i.id === itemId);
+  if (!it) return;
+
+  const prevCartons = parseFloat(document.getElementById(`plc-${itemId}`)?.value) || 0;
+  const prevLoose   = parseInt(document.getElementById(`pll-${itemId}`)?.value) || 0;
+  const cartons     = parseFloat(document.getElementById(`lc-${itemId}`)?.value) || 0;
+  const loose       = parseInt(document.getElementById(`ll-${itemId}`)?.value) || 0;
+
+  const now = new Date();
+  const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+  loadedInSession[itemId] = { prevCartons, prevLoose, cartons, loose };
+  if (!cartItems[itemId]) cartItems[itemId] = { name: it.name, capacity: it.capacity };
+  
+  cartItems[itemId].prevCartons   = prevCartons;
+  cartItems[itemId].prevLoose     = prevLoose;
+  cartItems[itemId].loadedCartons = cartons;
+  cartItems[itemId].loadedLoose   = loose;
+  cartItems[itemId].lastEditedAt  = editTimeStr;
+
+  saveSessionCloud();
+};
+
 function getUnitName(name) {
   const n = (name || '').toLowerCase();
   if (n.includes('قطعة') || n.includes('قطعه')) return 'قطعة';
-  if (n.includes('كرتونة') || n.includes('كرتونه')) return 'كرتونة';
+  if (n.includes('كرتونة') || n.includes('كرtونه')) return 'كرتونة';
   return 'جركن';
 }
 
@@ -675,269 +805,16 @@ function parseDate(df,ts){
   return"";
 }
 
-/* =============================================================
-   ★ محرك المزامنة — الكتابة (تعديل على مستوى الصنف فقط)
-   بدلاً من رفع الوثيقة كلها في كل ضغطة (كانت تمسح شغل الأجهزة الأخرى)،
-   نرسل الأصناف المتغيرة فقط بدمج عميق (merge) مع تأخير 350ms.
-   ============================================================= */
-const pendingPatch = {};   // itemId -> { session, cart }
-let pendingDate = null;
-let flushTimer = null;
-
-function queueItemPatch(itemId, patch, immediate = false) {
-  if (!pendingDate) pendingDate = currentDate();
-  const p = pendingPatch[itemId] || {};
-  pendingPatch[itemId] = {
-    session: patch.session ? { ...(p.session || {}), ...patch.session } : p.session,
-    cart:    patch.cart    ? { ...(p.cart || {}),    ...patch.cart }    : p.cart
-  };
-  clearTimeout(flushTimer);
-  if (immediate) flushPatches(); else flushTimer = setTimeout(flushPatches, 350);
-}
-
-async function flushPatches() {
-  clearTimeout(flushTimer);
-  const ids = Object.keys(pendingPatch);
-  if (!ids.length) return;
-  const date = pendingDate || currentDate();
-  pendingDate = null;
-
-  const data = { date, updatedAt: serverTimestamp(), updatedBy: DEVICE_ID, loadedInSession: {}, cartItems: {} };
-  ids.forEach(id => {
-    const p = pendingPatch[id];
-    if (p.session) data.loadedInSession[id] = clean(p.session);
-    if (p.cart)    data.cartItems[id]       = clean(p.cart);
-    delete pendingPatch[id];
-  });
-
-  try {
-    // أوفلاين: الوعد لا يُحسم حتى يعود النت، لكن الكتابة محفوظة في الكاش وتُرفع تلقائياً
-    await setDoc(doc(db, 'daily_loads', date), data, { merge: true });
-  } catch (e) {
-    console.error('خطأ المزامنة السحابية:', e);
-    window.toast('⚠️ تعذر رفع التعديل — تحقق من الصلاحيات/الاتصال');
-  }
-}
-
-// نسخة محلية احتياطية (اختيارية — Firestore persistence يغني عنها)
-function saveLocalFallback() {
-  const d = currentDate();
-  localStorage.setItem('cartItems_' + d, JSON.stringify(cartItems));
-  localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
-}
-
-/* "تم" = confirmed:true ، الكتابة فقط = confirmed:false (مسودة).
-   البيانات القديمة بدون الحقل تُعتبر مؤكدة. */
-const isConfirmed = (id) => !!loadedInSession[id] && loadedInSession[id].confirmed !== false;
-
-function saveItemLoad(itemId, qty, confirmed, immediate = false) {
-  const it = firebaseItems.find(i => i.id === itemId); if (!it) return;
-  const stamp = editStamp();
-  loadedInSession[itemId] = { ...qty, confirmed };
-  cartItems[itemId] = {
-    ...(cartItems[itemId] || {}),
-    name: it.name, capacity: it.capacity,
-    prevCartons: qty.prevCartons, prevLoose: qty.prevLoose,
-    loadedCartons: qty.cartons,   loadedLoose: qty.loose,
-    lastEditedAt: stamp, editedBy: DEVICE_ID
-  };
-  queueItemPatch(itemId, {
-    session: { ...qty, confirmed },
-    cart: {
-      name: it.name, capacity: it.capacity,
-      prevCartons: qty.prevCartons, prevLoose: qty.prevLoose,
-      loadedCartons: qty.cartons,   loadedLoose: qty.loose,
-      lastEditedAt: stamp, editedBy: DEVICE_ID
-    }
-  }, immediate);
-  saveLocalFallback();
-}
-
-function readInputs(itemId) {
-  const v = (p) => document.getElementById(`${p}-${itemId}`)?.value;
-  return {
-    prevCartons: parseFloat(v('plc')) || 0,
-    prevLoose:   parseInt(v('pll'))   || 0,
-    cartons:     parseFloat(v('lc'))  || 0,
-    loose:       parseInt(v('ll'))    || 0
-  };
-}
-
-/* =============================================================
-   ★ محرك المزامنة — الاستماع اللحظي
-   ============================================================= */
-function listenToDailyLoadChanges() {
-  const d = currentDate();
-  if (unsubscribeDailyLoad && listenedDate === d) return;   // لا نعيد الاشتراك بلا داعي
-  flushPatches();
-  if (unsubscribeDailyLoad) unsubscribeDailyLoad();
-  if (listenedDate && listenedDate !== d) { loadedInSession = {}; cartItems = {}; }   // تبديل اليوم
-  listenedDate = d;
-  let firstSnapshot = true;
-
-  unsubscribeDailyLoad = onSnapshot(
-    doc(db, 'daily_loads', d),
-    { includeMetadataChanges: true },
-    (snap) => {
-      updateSyncBadge(snap.metadata);
-      const data = snap.exists() ? snap.data() : {};
-      const changed = applyRemoteState(data.loadedInSession || {}, data.cartItems || {});
-      const fromOtherDevice = !firstSnapshot && !snap.metadata.hasPendingWrites && !snap.metadata.fromCache
-                              && data.updatedBy && data.updatedBy !== DEVICE_ID;
-      firstSnapshot = false;
-      if (changed.size) {
-        saveLocalFallback();
-        refreshUIForItems(changed, fromOtherDevice);
-      }
-    },
-    (err) => { console.error(err); updateSyncBadge({ fromCache: true }); }
-  );
-
-  // رصيد العربة من اليوم السابق (من الكاش لو أوفلاين)
-  getDoc(doc(db, 'daily_loads', getPreviousDateStr(d))).then(prevSnap => {
-    previousTruckStock = {};
-    if (prevSnap.exists()) {
-      const prevCart = prevSnap.data().cartItems || {};
-      Object.keys(prevCart).forEach(id => {
-        if (prevCart[id].inTruckPcs) previousTruckStock[id] = prevCart[id].inTruckPcs;
-      });
-    }
-    if (isActive('pg-load') && firebaseItems.length && !document.activeElement?.closest?.('#loadFlow')) renderLoadFlow();
-  }).catch(() => {});
-}
-
-// يقارن الجديد بالمحلي صنفاً صنفاً ويرجع الأصناف التي تغيّرت فقط.
-// الأصناف التي عليها تعديل محلي لم يُرسل بعد لا تُكتب فوقها.
-// inTruckPcs يُحسب محلياً باستمرار فلا يدخل في المقارنة.
-function sigOf(s, c) {
-  if (!c) return JSON.stringify([s, null]);
-  const { inTruckPcs, ...rest } = c;
-  return JSON.stringify([s, rest]);
-}
-function applyRemoteState(newSession, newCart) {
-  const changed = new Set();
-  const ids = new Set([
-    ...Object.keys(loadedInSession), ...Object.keys(newSession),
-    ...Object.keys(cartItems),       ...Object.keys(newCart)
-  ]);
-  ids.forEach(id => {
-    if (pendingPatch[id]) return;
-    if (sigOf(loadedInSession[id], cartItems[id]) === sigOf(newSession[id], newCart[id])) return;
-    changed.add(id);
-    if (newSession[id] === undefined) delete loadedInSession[id]; else loadedInSession[id] = newSession[id];
-    if (newCart[id]    === undefined) delete cartItems[id];       else cartItems[id]       = newCart[id];
-  });
-  return changed;
-}
-
-/* =============================================================
-   ★ ربط الواجهة — تحديث الصنف المتغيّر فقط دون قطع المستخدم
-   ============================================================= */
-let lastRemoteToast = 0;
-function refreshUIForItems(changed, notify) {
-  buildCalculatedRows();
-
-  if (isActive('pg-load') && firebaseItems.length) {
-    const typing = document.activeElement?.closest?.('#loadFlow');
-    if (typing) changed.forEach(renderStep);   // المستخدم يكتب: لا نقطع تركيزه
-    else renderLoadFlow();
-  }
-  if (isActive('pg-summary')) safeRenderSummary();
-
-  if (notify && Date.now() - lastRemoteToast > 4000) {
-    lastRemoteToast = Date.now();
-    window.toast('🔄 تحديث من جهاز آخر');
-  }
-}
-
-function patchInputs(id) {
-  const s = loadedInSession[id] || {};
-  const set = (p, v) => {
-    const el = document.getElementById(`${p}-${id}`);
-    if (el && document.activeElement !== el) el.value = v ?? '';
-  };
-  set('plc', s.prevCartons); set('pll', s.prevLoose); set('lc', s.cartons); set('ll', s.loose);
-}
-
-function renderStep(id) {
-  const el = document.getElementById('step-' + id);
-  const it = firebaseItems.find(i => i.id === id);
-  if (!el || !it) return;
-  const hasFocus = el.contains(document.activeElement);
-  if (hasFocus && !isConfirmed(id)) { patchInputs(id); return; }   // حدّث القيم دون لمس الحقل النشط
-  el.replaceWith(createStepEl(it, firebaseItems.indexOf(it)));
-}
-
-// صفحة الجرد: لا نعيد رسم الكروت أثناء الكتابة في حقل الراجع
-let summaryDirty = false;
-function safeRenderSummary() {
-  if (document.activeElement?.closest?.('#summaryCards, #summaryTable')) { summaryDirty = true; return; }
-  window.filterSummaryUI();
-}
-document.addEventListener('focusout', () => {
-  if (!summaryDirty) return;
-  setTimeout(() => {
-    if (!document.activeElement?.closest?.('#summaryCards, #summaryTable')) { summaryDirty = false; window.filterSummaryUI(); }
-  }, 150);
-});
-
-/* =============================================================
-   مستمع المبيعات اللحظي
-   ============================================================= */
-function listenToLiveInvoices(force = false) {
-  const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
-  if (!force && unsubscribeInvoices && listenedInvDate === selectedDate) return;
-  if (unsubscribeInvoices) unsubscribeInvoices();
-  listenedInvDate = selectedDate;
-
-  const syncStatus = document.getElementById('syncStatus');
-  if (syncStatus) syncStatus.innerHTML = '⚡ مزامنة المبيعات لحظياً...';
-
-  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snapshot) => {
-    memorySalesCache = {};
-    snapshot.forEach(docSnap => {
-      const inv = docSnap.data();
-      if (inv.isDeleted) return;
-      if (parseDate(inv.date, inv.timestamp) !== selectedDate) return;
-      if (!Array.isArray(inv.items)) return;
-
-      inv.items.forEach(itm => {
-        const itemId = getProductIdForItem(itm);
-        if (itemId) {
-          const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-          const rawQty = Number(itm.qty) || 0;
-          const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
-          const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
-          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true;
-
-          if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
-          if (isReturn) memorySalesCache[itemId] -= Math.abs(totalPcsSold);
-          else          memorySalesCache[itemId] += totalPcsSold;
-        }
-      });
-    });
-    lastFetchedDate = selectedDate;
-    if (syncStatus) syncStatus.innerHTML = '🟢 متزامن لحظياً عبر كافة الأجهزة';
-
-    buildCalculatedRows();
-    if (isActive('pg-summary')) safeRenderSummary();
-  }, (err) => {
-    console.error("خطأ في استماع المبيعات:", err);
-    if (syncStatus) syncStatus.innerHTML = '⚠️ خطأ بالاتصال المباشر';
-  });
-}
-
-/* =============================================================
-   التنقل والبحث
-   ============================================================= */
 window.showPage = function(id, btn) {
+  listenToDailyLoadChanges();
+  listenToLiveInvoices();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('active');
 
   if (id === 'pg-load')    initLoadFlow();
-  if (id === 'pg-summary') { buildCalculatedRows(); window.filterSummaryUI(); }
+  if (id === 'pg-summary') buildCalculatedRows(), window.filterSummaryUI();
   if (id === 'pg-archive') window.fetchArchive();
 };
 
@@ -950,7 +827,7 @@ window.openSuggestList = function() {
   const matches = query ? firebaseItems.filter(it => cleanItemName(it.name).includes(query)) : firebaseItems.slice(0, 8);
   if (!matches.length) { list.classList.remove('open'); return; }
   list.innerHTML = matches.map((it, i) => {
-    const done    = isConfirmed(it.id);
+    const done    = loadedInSession[it.id] !== undefined;
     const label   = done ? '<span class="s-status done">✓ تم</span>' : '<span class="s-status pending">لم يُحمَّل</span>';
     return `<div class="suggest-item" data-id="${it.id}" onmousedown="selectSuggestItem('${it.id}')">${highlightMatch(it.name, document.getElementById('searchLoad').value)}${label}</div>`;
   }).join('');
@@ -999,9 +876,9 @@ function filterLoadFlow() {
   });
 }
 
-/* =============================================================
-   جلب المخزون (مع توحيد حساب المشتريات والمبيعات)
-   ============================================================= */
+// -------------------------------------------------------------
+// توحيد تجميع المشتريات والمبيعات مع الصفحة الكبرى بنفس المنطق الدقيق
+// -------------------------------------------------------------
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -1044,10 +921,14 @@ window.fetchInventoryFresh = async function() {
           const rawQty = Number(item.qty) || 0;
           const isCartonItem = isCartonUnit(item.unit || item.unitName, item.isCarton);
           const pcs = isCartonItem ? (rawQty * factor) : rawQty;
-          const isReturn = data.type === 'return' || data.isReturn === true || item.isReturn === true;
+          
+          const isReturn = docSnap.data().type === 'return' || docSnap.data().isReturn === true || item.isReturn === true;
 
-          if (isReturn) salesMap[id] -= Math.abs(pcs);
-          else          salesMap[id] += pcs;
+          if (isReturn) {
+            salesMap[id] -= Math.abs(pcs);
+          } else {
+            salesMap[id] += pcs;
+          }
         }
       });
     });
@@ -1064,15 +945,18 @@ window.fetchInventoryFresh = async function() {
           const isCartonItem = isCartonUnit(item.unitName || item.unit, item.isCarton);
           const pcs = isCartonItem ? (rawQty * factor) : rawQty;
 
-          if (isReturn) purchasesMap[id] -= Math.abs(pcs);
-          else          purchasesMap[id] += pcs;
+          if (isReturn) {
+            purchasesMap[id] -= Math.abs(pcs);
+          } else {
+            purchasesMap[id] += pcs;
+          }
         }
       });
     });
 
     firebaseItems = [];
-    inventorySnap.forEach(d => {
-      const data = d.data();
+    inventorySnap.forEach(doc => {
+      const data = doc.data();
       if (!data.isDeleted) {
         const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
         
@@ -1081,17 +965,17 @@ window.fetchInventoryFresh = async function() {
           openingTotalPcs = Number(data.openingTotalPcs);
         } else if (data.openingQty !== undefined && data.openingQty !== null) {
           openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-        } else if (openingMap[d.id]) {
-          openingTotalPcs = openingMap[d.id];
+        } else if (openingMap[doc.id]) {
+          openingTotalPcs = openingMap[doc.id];
         }
 
-        const salesPcs = salesMap[d.id] || 0;
-        const purchasesPcs = purchasesMap[d.id] || 0;
+        const salesPcs = salesMap[doc.id] || 0;
+        const purchasesPcs = purchasesMap[doc.id] || 0;
         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
         if (calculatedRealPcs !== 0) {
           firebaseItems.push({
-            id: d.id,
+            id: doc.id,
             name: data.name,
             capacity: factor,
             totalPcs: calculatedRealPcs,
@@ -1102,19 +986,13 @@ window.fetchInventoryFresh = async function() {
     });
 
     renderItemsPage();
-    // تحديث الأسماء محلياً فقط (بدون كتابة للسحابة حتى لا نمسح بيانات أجهزة أخرى)
+    listenToDailyLoadChanges();
+    listenToLiveInvoices();
     firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
+    saveSessionCloud();
     isInventoryLoadedOnce = true;
-
-    buildCalculatedRows();
-    if (isActive('pg-load'))    initLoadFlow();
-    if (isActive('pg-summary')) window.filterSummaryUI();
     window.toast('✅ تم تحديث الأرصدة التراكمية بنجاح');
   } catch(e) { console.error(e); window.toast('❌ تعذر جلب الأصناف من السيرفر'); }
-
-  // مستمع المبيعات يبدأ (أو يُعاد) بعد تحميل factorsMap/namesMap حتى تُحسب الكراتين صح
-  listenToDailyLoadChanges();
-  listenToLiveInvoices(true);
 };
 
 function renderItemsPage() {
@@ -1141,9 +1019,6 @@ function renderItemsPage() {
     </div>`;
 }
 
-/* =============================================================
-   صفحة التحميل
-   ============================================================= */
 function initLoadFlow() {
   const noMsg = document.getElementById('noItemsMsg');
   if (!firebaseItems.length) { document.getElementById('loadFlow').innerHTML = ''; noMsg.style.display = 'block'; document.getElementById('loadDoneMsg').style.display = 'none'; return; }
@@ -1151,243 +1026,221 @@ function initLoadFlow() {
   renderLoadFlow();
 }
 
-function getLoadFlowContext() {
-  return {
-    searchVal:    cleanItemName(document.getElementById('searchLoad').value),
-    pendingItems: firebaseItems.filter(it => !isConfirmed(it.id)),
-    loadedCount:  Object.keys(loadedInSession).length
-  };
-}
-
 function renderLoadFlow() {
   const flow    = document.getElementById('loadFlow');
   const doneMsg = document.getElementById('loadDoneMsg');
   if (!flow) return;
   flow.innerHTML = '';
-  const { searchVal, pendingItems, loadedCount } = getLoadFlowContext();
-  const alertBanner = document.getElementById('newItemsAlertBanner');
+  const searchVal = cleanItemName(document.getElementById('searchLoad').value);
+  const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
+  const loadedCount   = Object.keys(loadedInSession).length;
+  const alertBanner   = document.getElementById('newItemsAlertBanner');
   if (alertBanner) {
     if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
     else { alertBanner.style.display = 'none'; }
   }
-  const allDone = firebaseItems.every(it => isConfirmed(it.id));
+  const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined);
   if (allDone && !forceShowLoadList && !searchVal) { doneMsg.style.display = 'block'; return; }
   doneMsg.style.display = 'none';
 
-  firebaseItems.forEach((it, idx) => flow.appendChild(createStepEl(it, idx)));
-  if (searchVal) filterLoadFlow();
-}
+  const sortedItems = [...firebaseItems];
+  sortedItems.forEach((it, idx) => {
+    const isDone    = loadedInSession[it.id] !== undefined;
+    const origIdx   = firebaseItems.findIndex(f => f.id === it.id); 
+    const isCurrent = !isDone && (searchVal ? true : sortedItems.slice(0, idx).every(prev => loadedInSession[prev.id] !== undefined));
+    const unit = getUnitName(it.name);
+    const isNegative = it.totalPcs < 0;
+    const stockText = formatQuantityDetailed(it.totalPcs, it.capacity, unit);
+    const stockBadge = `<span class="item-stock-badge ${isNegative ? 'negative' : ''}">🏭 المخزون: ${stockText}</span>`;
 
-// يبني كرت صنف واحد (يُستخدم في الرسم الكامل وفي تحديث صنف واحد لحظياً)
-function createStepEl(it, idx) {
-  const { searchVal, pendingItems, loadedCount } = getLoadFlowContext();
-  const isDone    = isConfirmed(it.id);
-  const isCurrent = !isDone && (searchVal ? true : firebaseItems.slice(0, idx).every(prev => isConfirmed(prev.id)));
-  const unit = getUnitName(it.name);
-  const isNegative = it.totalPcs < 0;
-  const stockText = formatQuantityDetailed(it.totalPcs, it.capacity, unit);
-  const stockBadge = `<span class="item-stock-badge ${isNegative ? 'negative' : ''}">🏭 المخزون: ${stockText}</span>`;
+    const div = document.createElement('div');
+    div.className = `lstep ${isDone ? 'done' : 'pending-step'} ${isCurrent ? 'active' : ''}`;
+    div.id = 'step-' + it.id;
+    div.dataset.itemid = it.id;
 
-  const div = document.createElement('div');
-  div.className = `lstep ${isDone ? 'done' : 'pending-step'} ${isCurrent ? 'active' : ''}`;
-  div.id = 'step-' + it.id;
-  div.dataset.itemid = it.id;
+    let prevCartonsDefault = (loadedInSession[it.id] && loadedInSession[it.id].prevCartons !== undefined) ? loadedInSession[it.id].prevCartons : '';
+    let prevLooseDefault   = (loadedInSession[it.id] && loadedInSession[it.id].prevLoose !== undefined) ? loadedInSession[it.id].prevLoose : '';
+    let loadedCartonsDefault = (loadedInSession[it.id] && loadedInSession[it.id].cartons !== undefined) ? loadedInSession[it.id].cartons : '';
+    let loadedLooseDefault   = (loadedInSession[it.id] && loadedInSession[it.id].loose !== undefined) ? loadedInSession[it.id].loose : '';
 
-  let prevCartonsDefault = (loadedInSession[it.id] && loadedInSession[it.id].prevCartons !== undefined) ? loadedInSession[it.id].prevCartons : '';
-  let prevLooseDefault   = (loadedInSession[it.id] && loadedInSession[it.id].prevLoose !== undefined) ? loadedInSession[it.id].prevLoose : '';
-  let loadedCartonsDefault = (loadedInSession[it.id] && loadedInSession[it.id].cartons !== undefined) ? loadedInSession[it.id].cartons : '';
-  let loadedLooseDefault   = (loadedInSession[it.id] && loadedInSession[it.id].loose !== undefined) ? loadedInSession[it.id].loose : '';
-
-  if (!isDone && previousTruckStock[it.id] && prevCartonsDefault === '' && prevLooseDefault === '') {
-    const pPcs = previousTruckStock[it.id];
-    if (it.capacity > 1) {
-      prevCartonsDefault = Math.floor(pPcs / it.capacity) || '';
-      prevLooseDefault   = (pPcs % it.capacity) || '';
-    } else {
-      prevLooseDefault   = pPcs || '';
+    if (!isDone && previousTruckStock[it.id] && prevCartonsDefault === '' && prevLooseDefault === '') {
+      const pPcs = previousTruckStock[it.id];
+      if (it.capacity > 1) {
+        prevCartonsDefault = Math.floor(pPcs / it.capacity) || '';
+        prevLooseDefault   = (pPcs % it.capacity) || '';
+      } else {
+        prevLooseDefault   = pPcs || '';
+      }
     }
-  }
 
-  if (isDone) {
-    const sess = loadedInSession[it.id];
-    const prevPcs = (parseFloat(sess.prevCartons || 0) * it.capacity) + parseInt(sess.prevLoose || 0);
-    const loadPcs = (parseFloat(sess.cartons || 0) * it.capacity) + parseInt(sess.loose || 0);
-    const totalLoadedPcs = prevPcs + loadPcs;
+    if (isDone) {
+      const sess = loadedInSession[it.id];
+      const prevPcs = (parseFloat(sess.prevCartons || 0) * it.capacity) + parseInt(sess.prevLoose || 0);
+      const loadPcs = (parseFloat(sess.cartons || 0) * it.capacity) + parseInt(sess.loose || 0);
+      const totalLoadedPcs = prevPcs + loadPcs;
 
-    const doneText = formatQuantityDetailed(totalLoadedPcs, it.capacity, unit);
-    const detailPrev = `(قبل التحميل: ${formatQuantityDetailed(prevPcs, it.capacity, unit)} | تم تحميله: ${formatQuantityDetailed(loadPcs, it.capacity, unit)})`;
+      const doneText = formatQuantityDetailed(totalLoadedPcs, it.capacity, unit);
+      const detailPrev = `(قبل التحميل: ${formatQuantityDetailed(prevPcs, it.capacity, unit)} | تم تحميله: ${formatQuantityDetailed(loadPcs, it.capacity, unit)})`;
 
-    div.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <div>
-          <div style="margin-bottom:4px; font-weight:800; color:var(--brand-d); font-size:15px;">${it.name} ${stockBadge}</div>
-          <div class="dsummary">✅ الإجمالي بالعربية: ${doneText}</div>
-          <div style="font-size:11px; color:var(--gray); margin-top:3px; font-weight:700;">${detailPrev}</div>
-        </div>
-        <button class="btn btn-sm" style="background:var(--amber-lt);color:var(--amber);font-weight:800" onclick="window.editStep('${it.id}')">✏️ تعديل الكمية</button>
-      </div>`;
-  } else {
-    let inputFieldsHtml = '';
-    if (it.capacity > 1) {
-      inputFieldsHtml = `
-        <div class="load-boxes-row">
-          <div class="load-section-box">
-            <div class="load-section-title">🛑 قبل التحميل (سابق)</div>
-            <div class="load-inputs-flex">
-              <div class="field-inline">
-                <label>📦 كرتونة</label>
-                <input type="number" inputmode="decimal" id="plc-${it.id}" placeholder="0" min="0" step="any" value="${prevCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')">
+      div.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <div>
+            <div style="margin-bottom:4px; font-weight:800; color:var(--brand-d); font-size:15px;">${it.name} ${stockBadge}</div>
+            <div class="dsummary">✅ الإجمالي بالعربية: ${doneText}</div>
+            <div style="font-size:11px; color:var(--gray); margin-top:3px; font-weight:700;">${detailPrev}</div>
+          </div>
+          <button class="btn btn-sm" style="background:var(--amber-lt);color:var(--amber);font-weight:800" onclick="window.editStep('${it.id}')">✏️ تعديل الكمية</button>
+        </div>`;
+    } else {
+      let inputFieldsHtml = '';
+      if (it.capacity > 1) {
+        inputFieldsHtml = `
+          <div class="load-boxes-row">
+            <div class="load-section-box">
+              <div class="load-section-title">🛑 قبل التحميل (سابق)</div>
+              <div class="load-inputs-flex">
+                <div class="field-inline">
+                  <label>📦 كرتونة</label>
+                  <input type="number" inputmode="decimal" id="plc-${it.id}" placeholder="0" min="0" step="any" value="${prevCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')">
+                </div>
+                <div class="field-inline">
+                  <label>📦 ${unit}</label>
+                  <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
+                </div>
               </div>
+            </div>
+
+            <div class="load-section-box" style="background:#eefaf1; border-color:#b7dfc7;">
+              <div class="load-section-title" style="color:var(--brand);">⬆️ التحميل الجديد</div>
+              <div class="load-inputs-flex">
+                <div class="field-inline priority-field">
+                  <label>📦 كرتونة</label>
+                  <input type="number" inputmode="decimal" id="lc-${it.id}" placeholder="0" min="0" step="any" value="${loadedCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')">
+                </div>
+                <div class="field-inline">
+                  <label>📦 ${unit}</label>
+                  <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="0" min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
+                </div>
+              </div>
+            </div>
+          </div>`;
+      } else {
+        inputFieldsHtml = `
+          <input type="hidden" id="plc-${it.id}" value="0">
+          <input type="hidden" id="lc-${it.id}" value="0">
+          
+          <div class="load-boxes-row">
+            <div class="load-section-box">
+              <div class="load-section-title">🛑 قبل التحميل (سابق)</div>
               <div class="field-inline">
-                <label>📦 ${unit}</label>
+                <label>الكمية السابقة (${unit})</label>
                 <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
               </div>
             </div>
-          </div>
 
-          <div class="load-section-box" style="background:#eefaf1; border-color:#b7dfc7;">
-            <div class="load-section-title" style="color:var(--brand);">⬆️ التحميل الجديد</div>
-            <div class="load-inputs-flex">
-              <div class="field-inline priority-field">
-                <label>📦 كرتونة</label>
-                <input type="number" inputmode="decimal" id="lc-${it.id}" placeholder="0" min="0" step="any" value="${loadedCartonsDefault}" oninput="window.handleLiveInputChange('${it.id}')">
-              </div>
+            <div class="load-section-box" style="background:#eefaf1; border-color:#b7dfc7;">
+              <div class="load-section-title" style="color:var(--brand);">⬆️ التحميل الجديد</div>
               <div class="field-inline">
-                <label>📦 ${unit}</label>
-                <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="0" min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
+                <label>الكمية المحملة (${unit})</label>
+                <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="أدخل عدد الـ ${unit}..." min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
               </div>
             </div>
+          </div>`;
+      }
+      const isNewBadge = (pendingItems.length > 0 && loadedCount > 0 && idx === sortedItems.findIndex(x => loadedInSession[x.id] === undefined)) ? `<span class="tag tag-blue" style="background:var(--blue-lt); color:var(--blue); font-size:10px;">🆕 صنف مضاف حديثاً</span>` : '';
+      div.innerHTML = `
+        <div class="stitle">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="snum ${isCurrent ? '' : 'style="background:var(--gray)"'}">${origIdx + 1}</span>
+            <span style="font-size:15px;">${it.name}</span>
           </div>
-        </div>`;
-    } else {
-      inputFieldsHtml = `
-        <input type="hidden" id="plc-${it.id}" value="0">
-        <input type="hidden" id="lc-${it.id}" value="0">
-        
-        <div class="load-boxes-row">
-          <div class="load-section-box">
-            <div class="load-section-title">🛑 قبل التحميل (سابق)</div>
-            <div class="field-inline">
-              <label>الكمية السابقة (${unit})</label>
-              <input type="number" inputmode="numeric" id="pll-${it.id}" placeholder="0" min="0" value="${prevLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
-            </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            ${stockBadge}
+            ${isNewBadge}
           </div>
-
-          <div class="load-section-box" style="background:#eefaf1; border-color:#b7dfc7;">
-            <div class="load-section-title" style="color:var(--brand);">⬆️ التحميل الجديد</div>
-            <div class="field-inline">
-              <label>الكمية المحملة (${unit})</label>
-              <input type="number" inputmode="numeric" id="ll-${it.id}" placeholder="أدخل عدد الـ ${unit}..." min="0" value="${loadedLooseDefault}" oninput="window.handleLiveInputChange('${it.id}')">
-            </div>
-          </div>
+        </div>
+        <div class="frow-inline">
+          ${inputFieldsHtml}
+          <button id="btn-${it.id}" class="btn btn-success btn-confirm-load" onclick="window.confirmStep('${it.id}')">تـم ✔</button>
         </div>`;
     }
-    const firstPendingIdx = firebaseItems.findIndex(x => !isConfirmed(x.id));
-    const isNewBadge = (pendingItems.length > 0 && loadedCount > 0 && idx === firstPendingIdx) ? `<span class="tag tag-blue" style="background:var(--blue-lt); color:var(--blue); font-size:10px;">🆕 صنف مضاف حديثاً</span>` : '';
-    div.innerHTML = `
-      <div class="stitle">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="snum" style="${isCurrent ? '' : 'background:var(--gray)'}">${idx + 1}</span>
-          <span style="font-size:15px;">${it.name}</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          ${stockBadge}
-          ${isNewBadge}
-        </div>
-      </div>
-      <div class="frow-inline">
-        ${inputFieldsHtml}
-        <button id="btn-${it.id}" class="btn btn-success btn-confirm-load" onclick="window.confirmStep('${it.id}')">تـم ✔</button>
-      </div>`;
-  }
-  return div;
+    flow.appendChild(div);
+  });
 }
 
-// أثناء الكتابة: مسودة (confirmed:false) حتى لا يُقفل الصنف على الجهاز الآخر مع أول رقم
-window.handleLiveInputChange = function(itemId) {
-  saveItemLoad(itemId, readInputs(itemId), false);
-};
-
-// زر "تم": تأكيد وإرسال فوري
 window.confirmStep = function(itemId) {
-  saveItemLoad(itemId, readInputs(itemId), true, true);
-  if (firebaseItems.every(i => isConfirmed(i.id))) forceShowLoadList = false;
+  const it = firebaseItems.find(i => i.id === itemId);
+  
+  const prevCartons = parseFloat(document.getElementById(`plc-${itemId}`)?.value) || 0;
+  const prevLoose   = parseInt(document.getElementById(`pll-${itemId}`)?.value) || 0;
+  const cartons     = parseFloat(document.getElementById(`lc-${itemId}`)?.value) || 0;
+  const loose       = parseInt(document.getElementById(`ll-${itemId}`)?.value) || 0;
+  
+  const now = new Date();
+  const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+  loadedInSession[itemId] = { prevCartons, prevLoose, cartons, loose };
+  if (!cartItems[itemId]) cartItems[itemId] = { name: it.name, capacity: it.capacity };
+  
+  cartItems[itemId].prevCartons   = prevCartons;
+  cartItems[itemId].prevLoose     = prevLoose;
+  cartItems[itemId].loadedCartons = cartons;
+  cartItems[itemId].loadedLoose   = loose;
+  cartItems[itemId].lastEditedAt  = editTimeStr;
+  
+  saveSessionCloud();
+  const allDone = firebaseItems.every(i => loadedInSession[i.id] !== undefined);
+  if (allDone) forceShowLoadList = false;
+  
   renderLoadFlow();
 };
 
-// تعديل: يرجّع الصنف مسودة مع الاحتفاظ بالكميات (ويتزامن مع باقي الأجهزة)
 window.editStep = function(itemId) {
-  const s = loadedInSession[itemId]; if (!s) return;
-  saveItemLoad(itemId, {
-    prevCartons: s.prevCartons || 0, prevLoose: s.prevLoose || 0,
-    cartons: s.cartons || 0, loose: s.loose || 0
-  }, false, true);
+  delete loadedInSession[itemId]; 
+  if (cartItems[itemId]) {
+    delete cartItems[itemId];
+  }
+  
   renderLoadFlow();
 };
 
-// التصفير: بدون merge (لأن merge مع {} لا يمسح شيئاً في Firestore)
 window.resetLoad = function() {
   if(!confirm('هل أنت متأكد من تصفير جميع الكميات وبدء تحميل جديد؟')) return;
-  Object.keys(pendingPatch).forEach(k => delete pendingPatch[k]);
-  loadedInSession = {}; cartItems = {}; forceShowLoadList = false;
-  document.getElementById('searchLoad').value = '';
-  document.getElementById('searchSuggestList').classList.remove('open');
-  saveLocalFallback();
-  setDoc(doc(db, 'daily_loads', currentDate()), {
-    date: currentDate(), updatedAt: serverTimestamp(), updatedBy: DEVICE_ID,
-    loadedInSession: {}, cartItems: {}
-  }).catch(console.error);
-  buildCalculatedRows();
-  renderLoadFlow();
+  loadedInSession = {}; cartItems = {}; forceShowLoadList = false; document.getElementById('searchLoad').value = ''; document.getElementById('searchSuggestList').classList.remove('open'); saveSessionCloud(); renderLoadFlow();
 };
 
 window.editAllLoad = function() {
   forceShowLoadList = true; document.getElementById('loadDoneMsg').style.display = 'none'; renderLoadFlow();
 };
 
-/* =============================================================
-   صفحة الجرد
-   ============================================================= */
 window.updateManualSummaryField = function(itemId, field, val) {
-  if (!cartItems[itemId]) {
-    const fb = firebaseItems.find(i => i.id === itemId);
-    cartItems[itemId] = { name: fb?.name, capacity: fb?.capacity };
-  }
-  const c = cartItems[itemId];
-  if (field === 'manualCartons') c.manualCartons = parseFloat(val) || 0;
-  if (field === 'manualLoose')   c.manualLoose   = parseInt(val) || 0;
-  if (field === 'diffStatus')    c.diffStatus    = val;
+  if (!cartItems[itemId]) cartItems[itemId] = {};
+  if (field === 'manualCartons') cartItems[itemId].manualCartons = parseFloat(val) || 0;
+  if (field === 'manualLoose')   cartItems[itemId].manualLoose   = parseInt(val) || 0;
+  if (field === 'diffStatus')    cartItems[itemId].diffStatus    = val;
 
   const r = cachedCalculatedRows.find(item => item.id === itemId);
   if (r) {
-    if (field === 'manualCartons') r.currentManualCartons = c.manualCartons;
-    if (field === 'manualLoose')   r.currentManualLoose   = c.manualLoose;
-    if (field === 'diffStatus')    r.calculatedStatus     = val;
+    if (field === 'manualCartons') r.currentManualCartons = parseFloat(val) || 0;
+    if (field === 'manualLoose') r.currentManualLoose = parseInt(val) || 0;
+    if (field === 'diffStatus') r.calculatedStatus = val;
 
     const totalManualPcs = ((parseFloat(r.currentManualCartons)||0) * r.cap) + (parseInt(r.currentManualLoose)||0);
     r.manualText = (r.currentManualCartons !== '' || r.currentManualLoose !== '') ? formatQuantityDetailed(totalManualPcs, r.cap, r.unit) : '—';
     
-    r.inTruckPcs  = Math.max(0, r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs);
+    const inTruckPcs = r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs;
+    r.inTruckPcs = Math.max(0, inTruckPcs);
     r.inTruckText = formatQuantityDetailed(r.inTruckPcs, r.cap, r.unit);
-    c.inTruckPcs  = r.inTruckPcs;
+    
+    cartItems[itemId].inTruckPcs = r.inTruckPcs;
   }
-  // نرسل حقول هذا الصنف فقط
-  queueItemPatch(itemId, { cart: {
-    name: c.name, capacity: c.capacity,
-    manualCartons: c.manualCartons, manualLoose: c.manualLoose,
-    diffStatus: c.diffStatus, inTruckPcs: c.inTruckPcs, editedBy: DEVICE_ID
-  } });
-  saveLocalFallback();
+  saveSessionCloud();
 };
 
 window.toggleItemInventoryComplete = function(itemId, isComplete) {
-  if (!cartItems[itemId]) {
-    const fb = firebaseItems.find(i => i.id === itemId);
-    cartItems[itemId] = { name: fb?.name, capacity: fb?.capacity };
-  }
+  if (!cartItems[itemId]) cartItems[itemId] = {}; 
   cartItems[itemId].isInventoryDone = isComplete; 
-  queueItemPatch(itemId, { cart: { name: cartItems[itemId].name, capacity: cartItems[itemId].capacity, isInventoryDone: isComplete, editedBy: DEVICE_ID } }, true);
-  saveLocalFallback();
+  saveSessionCloud();
   
   const r = cachedCalculatedRows.find(item => item.id === itemId); 
   if (r) r.isInventoryDone = isComplete;
@@ -1412,18 +1265,10 @@ window.switchSummaryTab = function(tab) {
   currentSummaryTab = tab; document.getElementById('btnTabActive').classList.toggle('active', tab === 'active'); document.getElementById('btnTabCompleted').classList.toggle('active', tab === 'completed'); window.filterSummaryUI();
 };
 
-// تبديل اليوم: ارفع المعلّق، بدّل المستمعين، وأعد الرسم
-window.onSummaryDateChange = function() {
-  flushPatches();
-  listenToDailyLoadChanges();
-  listenToLiveInvoices();
-  buildCalculatedRows();
-  if (isActive('pg-load') && firebaseItems.length) renderLoadFlow();
-  if (isActive('pg-summary')) window.filterSummaryUI();
-};
+window.onSummaryDateChange = function() { listenToDailyLoadChanges(); listenToLiveInvoices(); };
 
 window.refreshSummaryData = function(forceFetch = false) {
-  listenToLiveInvoices(true);
+  listenToLiveInvoices();
 };
 
 function buildCalculatedRows() {
@@ -1450,9 +1295,6 @@ function buildCalculatedRows() {
         isInventoryDone: false 
       }; 
     } else {
-      // أصناف لها بيانات جرد فقط قد تنقصها الاسم/التعبئة
-      if (!cartData.name) cartData.name = fbItem.name;
-      if (!cartData.capacity) cartData.capacity = fbItem.capacity;
       if (loadedInSession[fbItem.id]) {
         cartData.prevCartons   = loadedInSession[fbItem.id].prevCartons || 0;
         cartData.prevLoose     = loadedInSession[fbItem.id].prevLoose || 0;
@@ -1626,32 +1468,47 @@ window.closeEditLoadModal = function() { document.getElementById('editLoadModal'
 
 window.saveQuickLoadEdit = function() {
   const itemId = document.getElementById('modalItemId').value; 
-  if (!firebaseItems.find(i => i.id === itemId)) return;
+  const fbItem = firebaseItems.find(i => i.id === itemId); 
+  if (!fbItem) return;
 
-  const g = (id, fn) => fn(document.getElementById(id)?.value) || 0;
-  saveItemLoad(itemId, {
-    prevCartons: g('m-plc', parseFloat), prevLoose: g('m-pll', parseInt),
-    cartons:     g('m-lc',  parseFloat), loose:     g('m-ll',  parseInt)
-  }, true, true);
+  const plcInp = document.getElementById('m-plc');
+  const pllInp = document.getElementById('m-pll');
+  const lcInp  = document.getElementById('m-lc'); 
+  const llInp  = document.getElementById('m-ll');
 
+  const prevCartons = parseFloat(plcInp ? plcInp.value : 0) || 0;
+  const prevLoose   = parseInt(pllInp ? pllInp.value : 0) || 0;
+  const cartons     = parseFloat(lcInp ? lcInp.value : 0) || 0; 
+  const loose       = parseInt(llInp ? llInp.value : 0) || 0;
+
+  const now = new Date(); 
+  const editTimeStr = now.toLocaleDateString('ar-EG') + ' | ' + now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+  loadedInSession[itemId] = { prevCartons, prevLoose, cartons, loose }; 
+
+  if (!cartItems[itemId]) cartItems[itemId] = { name: fbItem.name, capacity: fbItem.capacity };
+  cartItems[itemId].prevCartons   = prevCartons;
+  cartItems[itemId].prevLoose     = prevLoose;
+  cartItems[itemId].loadedCartons = cartons; 
+  cartItems[itemId].loadedLoose   = loose; 
+  cartItems[itemId].lastEditedAt  = editTimeStr;
+
+  saveSessionCloud(); 
   closeEditLoadModal(); 
+  
   buildCalculatedRows(); 
   window.filterSummaryUI();
+
   window.toast('✅ تم تحديث كمية التحميل بنجاح');
 };
 
-/* =============================================================
-   الأرشيف والإغلاق
-   ============================================================= */
 window.archiveLoad = async function() {
-  const d = currentDate();
-  if (!navigator.onLine) { window.toast('⚠️ الاعتماد يحتاج اتصالاً بالإنترنت'); return; }
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
   if(!confirm(`هل أنت متأكد من ترحيل واعتماد حمولة يوم ${d}؟`)) return;
   
   try {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري ترحيل الحمولة وتحديث الأرشيف...');
-    await flushPatches();
     
     await setDoc(doc(db, 'archived_loads', d), {
       date: d,
@@ -1659,7 +1516,7 @@ window.archiveLoad = async function() {
       user: loggedUser.username || 'أحمد محمود الزيادي',
       isClosed: false,
       loadedInSession: loadedInSession,
-      cartItems: JSON.parse(JSON.stringify(cartItems))
+      cartItems: cartItems
     });
     
     window.toast('✅ تم حفظ الحمولة في الأرشيف بنجاح!');
@@ -1670,8 +1527,7 @@ window.archiveLoad = async function() {
 };
 
 window.archiveInventory = async function() {
-  const d = currentDate();
-  if (!navigator.onLine) { window.toast('⚠️ إغلاق اليوم يحتاج اتصالاً بالإنترنت'); return; }
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
   if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
   const exportData = cachedCalculatedRows.map(r => ({
@@ -1681,11 +1537,6 @@ window.archiveInventory = async function() {
   try {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري إغلاق اليوم...');
-
-    // حفظ رصيد العربة النهائي لكل صنف ليُستخدم كـ "قبل التحميل" في اليوم التالي
-    cachedCalculatedRows.forEach(r => queueItemPatch(r.id, { cart: { name: r.it.name, capacity: r.cap, inTruckPcs: r.inTruckPcs } }));
-    await flushPatches();
-
     await setDoc(doc(db, 'archived_inventory', d), {
       date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
     });
@@ -1711,7 +1562,7 @@ window.fetchArchive = async function() {
     if (selectedDate) {
       const [loadSnap, invSnap] = await Promise.all([
         getDoc(doc(db, 'archived_loads', selectedDate)),
-        getDoc(doc(db, 'archived_inventory', selectedDate))
+        getDoc(doc(doc(db, 'archived_inventory', selectedDate)))
       ]);
       if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
       if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
@@ -1958,7 +1809,7 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(db, 'archived_inventory', d));
+    await deleteDoc(doc(doc(db, 'archived_inventory', d)));
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
@@ -1998,4 +1849,417 @@ window.exportArchivePDF = async function(d) {
         tbody += `
           <tr style="page-break-inside: avoid;">
             <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:right; font-weight:bold; font-size:12px;">${r.name}</td>
-            <td style="padding:6px 4px; border:1px
+            <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:12px;">${r.prevCartons || 0} ك / ${r.prevLoose || 0} ق</td>
+            <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:12px;">${r.loadedCartons || 0} ك / ${r.loadedLoose || 0} ق</td>
+            <td style="padding:6px 4px; border:1px solid #0b5e3d; text-align:center; font-size:10px;" colspan="4">${r.lastEditedAt || '—'}</td>
+          </tr>`;
+      });
+    }
+
+    const html = `
+      <div id="arch-pdf-area" style="padding:12px; direction:rtl; font-family:'Cairo', Tahoma, sans-serif; background:#fff; width:100%; box-sizing:border-box;">
+        <h2 style="text-align:center; color:#0b5e3d; margin-bottom:2px; font-size:20px; font-weight:800;">الزيادي لزيوت السيارات</h2>
+        <h3 style="text-align:center; color:#475569; margin-bottom:6px; font-size:14px; font-weight:700;">${titleText}</h3>
+        <p style="text-align:center; margin:0 0 10px 0; font-size:12px; font-weight:bold; color:#475569; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 6px;">تاريخ الحركة: ${d} | تاريخ الطباعة: ${printDateStr}</p>
+        <table style="width:100%; border-collapse:collapse; border:1.5px solid #0b5e3d;">
+          <thead>
+            <tr style="background:#0b5e3d; color:#fff;">
+              <th style="padding:8px 4px; text-align:right; font-size:13px; font-weight:800; width:22%;">اسم الصنف</th>
+              <th style="padding:8px 3px; text-align:center; font-size:13px; font-weight:800; width:13%;">قبل التحميل</th>
+              <th style="padding:8px 3px; text-align:center; font-size:13px; font-weight:800; width:13%;">تم تحميله</th>
+              <th style="padding:8px 3px; text-align:center; font-size:13px; font-weight:800; width:13%;">المباع</th>
+              <th style="padding:8px 3px; text-align:center; font-size:13px; font-weight:800; background:#08462d; width:15%;">المتبقي بالعربية</th>
+              <th style="padding:8px 3px; text-align:center; font-size:13px; font-weight:800; width:14%;">الراجع</th>
+              <th style="padding:8px 3px; text-align:center; font-size:13px; font-weight:800; width:10%;">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>`;
+
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    container.style.position = 'absolute'; container.style.left = '-9999px';
+    document.body.appendChild(container);
+
+    const opt = { 
+      margin: 0.1, 
+      filename: `تقرير_أرشيف_${d}.pdf`, 
+      image: { type:'jpeg', quality:0.98 }, 
+      html2canvas: { scale:2, useCORS:true }, 
+      jsPDF: { unit:'in', format:'a4', orientation:'landscape' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+    
+    html2pdf().set(opt).from(container.querySelector('#arch-pdf-area')).output('bloburl').then((pdfUrl) => { 
+      document.body.removeChild(container); 
+      window.open(pdfUrl, '_blank');
+      window.toast('✅ تم فتح الملف بنجاح'); 
+    });
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء عرض التقرير');
+  }
+};
+
+window.exportPDF = async function(mode = 'all') {
+  if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات لتصديرها'); return; }
+  const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
+  if (!exportRows.length) { window.toast('⚠️ لا توجد أصناف مكتملة لتصديرها'); return; }
+  window.toast('⏳ جاري تجهيز تقرير الجرد للعرض...');
+  
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr; 
+  const nowStr = new Date().toLocaleDateString('ar-EG');
+  let tbody = '';
+  
+  const uniqueRows = [];
+  const seenIds = new Set();
+  exportRows.forEach(r => {
+    if (!seenIds.has(r.id)) {
+      seenIds.add(r.id);
+      uniqueRows.push(r);
+    }
+  });
+
+  uniqueRows.forEach(r => {
+    let statusColor = r.calculatedStatus === 'عجز' ? '#d90429' : (r.calculatedStatus === 'زيادة' ? '#2d6a4f' : '#1b2e26');
+    tbody += `
+      <tr style="page-break-inside: avoid;">
+        <td style="padding: 6px 4px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #0a4a31; font-size:12px;">${r.it.name}${r.lastEditedAt ? `<br><span style="font-size:9px; color:#8a5b00;">(تعديل: ${r.lastEditedAt})</span>` : ''}</td>
+        <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; color: #6b7a73; font-size:12px;">${cleanTextForPdf(r.prevLoadedText)}</td>
+        <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; color: #0b5e3d; font-weight: bold; font-size:12px;">${cleanTextForPdf(r.newLoadedText)}</td>
+        <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; color: #d90429; font-weight: bold; font-size:12px;">${cleanTextForPdf(r.soldText)}</td>
+        <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; color: #0284c7; font-weight: bold; background: #e0f2fe; font-size:12px;">${cleanTextForPdf(r.inTruckText)}</td>
+        <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; font-size:12px;">${cleanTextForPdf(r.manualText)}</td>
+        <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; color: ${statusColor}; font-size:12px;">${r.calculatedStatus || '—'}</td>
+      </tr>`;
+  });
+  
+  const titleText = mode === 'completed' ? 'تقرير الأصناف المكتملة الجرد' : 'تقرير جرد وتتبع حركة حمولة السيارة الفعلي';
+  const html = `
+    <div id="summary-print-area" style="padding: 12px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 100%; box-sizing: border-box;">
+       <div style="text-align: center; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 6px; margin-bottom: 10px;">
+         <h1 style="margin:0 0 3px 0; font-size: 20px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
+         <h2 style="margin:0 0 4px 0; font-size: 14px; color: #475569; font-weight:700;">${titleText}</h2>
+         <p style="margin:0; font-size: 12px; font-weight: bold; color:#475569;">تاريخ الحركة: ${reportDate} | تاريخ الطباعة: ${nowStr}</p>
+       </div>
+       <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 1.5px solid #0b5e3d;">
+         <thead>
+           <tr style="background-color: #0b5e3d; color: #ffffff !important;">
+             <th style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: right; color: #ffffff; font-size:13px; font-weight:800; width:22%;">اسم الصنف</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">قبل التحميل</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">تم تحميله</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">المباع</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; background:#08462d; width:15%;">المتبقي بالعربية</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:14%;">الراجع</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:10%;">الحالة</th>
+           </tr>
+         </thead>
+         <tbody>${tbody}</tbody>
+       </table>
+    </div>`;
+  
+  const container = document.createElement('div'); 
+  container.innerHTML = html; 
+  container.style.position = 'absolute'; 
+  container.style.left = '-9999px'; 
+  container.style.top = '-9999px'; 
+  document.body.appendChild(container);
+  
+  const opt = { 
+    margin: 0.1, 
+    filename: `تقرير_جرد_العربة_${mode}_${reportDate}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  
+  html2pdf().set(opt).from(container.querySelector('#summary-print-area')).output('bloburl').then((pdfUrl) => { 
+    document.body.removeChild(container); 
+    window.open(pdfUrl, '_blank');
+    window.toast('✅ تم فتح ملف PDF'); 
+  });
+};
+
+window.exportLoadPDF = async function() {
+  const loadedKeys = Object.keys(loadedInSession);
+  if (loadedKeys.length === 0) { window.toast('⚠️ لم يتم تسجيل تحميل أي أصناف بعد لتصديرها'); return; }
+  window.toast('⏳ جاري تجهيز إذن التحميل...');
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr; let tbody = ''; let index = 1;
+  firebaseItems.forEach(fbItem => {
+    if (loadedInSession[fbItem.id]) {
+      const sess = loadedInSession[fbItem.id]; const cap = fbItem.capacity || 1; const unit = getUnitName(fbItem.name);
+      
+      const prevPcs = (parseFloat(sess.prevCartons || 0) * cap) + parseInt(sess.prevLoose || 0);
+      const newPcs  = (parseFloat(sess.cartons || 0) * cap) + parseInt(sess.loose || 0);
+      const totalLoadedPcs = prevPcs + newPcs;
+      
+      const loadedText = formatQuantityDetailed(totalLoadedPcs, cap, unit);
+      tbody += `<tr style="page-break-inside: avoid;"><td style="padding: 10px; border: 1px solid #0b5e3d; text-align: center; font-size: 15px; font-weight: bold; width: 10%;">${index++}</td><td style="padding: 10px 12px 10px 6px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #1b2e26; font-size: 15px; width: 60%;">${fbItem.name}</td><td style="padding: 10px 6px 10px 12px; border: 1px solid #0b5e3d; text-align: left; font-weight: bold; color: #0b5e3d; font-size: 15px; width: 30%; direction: ltr;">${loadedText}</td></tr>`;
+    }
+  });
+  const invoiceHTML = `
+    <div id="invoice-print-area" style="padding: 18px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 100%; box-sizing: border-box;">
+       <div style="text-align: center; border-bottom: 2px dashed #0b5e3d; padding-bottom: 10px; margin-bottom: 14px;"><h1 style="margin:0 0 4px 0; font-size: 22px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1><h2 style="margin:0 0 5px 0; font-size: 17px; color: #475569; font-weight:700;">إذن تحميل بضاعة</h2><p style="margin:0; font-size: 14px; font-weight: bold; color: #1b2e26;">التاريخ: ${reportDate}</p></div>
+       <table style="width: 100%; border-collapse: collapse; margin-bottom: 18px; border: 2px solid #0b5e3d;"><thead><tr style="background-color: #0b5e3d; color: #ffffff !important;"><th style="padding: 10px; border: 1px solid #0b5e3d; text-align: center; font-size: 16px; color: #ffffff;">م</th><th style="padding: 10px 12px; border: 1px solid #0b5e3d; text-align: right; font-size: 16px; color: #ffffff;">اسم الصنف</th><th style="padding: 10px 12px; border: 1px solid #0b5e3d; text-align: left; font-size: 16px; color: #ffffff;">إجمالي الحمولة (سابق + جديد)</th></tr></thead><tbody>${tbody}</tbody></table>
+       <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; color: #1b2e26; margin-top: 24px; padding: 0 10px;"><div>توقيع أمين المخزن: .......................</div><div>توقيع السائق: .......................</div></div>
+    </div>`;
+  const container = document.createElement('div'); container.innerHTML = invoiceHTML; container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '-9999px'; document.body.appendChild(container);
+  const opt = { 
+    margin: 0.1, 
+    filename: `إذن_تحميل_${reportDate}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  
+  html2pdf().set(opt).from(container.querySelector('#invoice-print-area')).output('bloburl').then((pdfUrl) => { 
+    document.body.removeChild(container); 
+    window.open(pdfUrl, '_blank');
+    window.toast('✅ تم فتح الإذن للقراءة'); 
+  }).catch(err => { console.error(err); window.toast('❌ حدث خطأ أثناء المعاينة'); document.body.removeChild(container); });
+};
+
+window.exportLoadExcel = function() {
+  const loadedKeys = Object.keys(loadedInSession);
+  if (loadedKeys.length === 0) { window.toast('⚠️ لا توجد أصناف محملة لتصديرها'); return; }
+  
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr;
+  const excelData = [];
+  let index = 1;
+
+  firebaseItems.forEach(fbItem => {
+    if (loadedInSession[fbItem.id]) {
+      const sess = loadedInSession[fbItem.id];
+      const cap = fbItem.capacity || 1;
+      const unit = getUnitName(fbItem.name);
+      
+      const prevPcs = (parseFloat(sess.prevCartons || 0) * cap) + parseInt(sess.prevLoose || 0);
+      const newPcs  = (parseFloat(sess.cartons || 0) * cap) + parseInt(sess.loose || 0);
+      const totalPcs = prevPcs + newPcs;
+
+      excelData.push({
+        "م": index++,
+        "اسم الصنف": fbItem.name,
+        "قبل التحميل": formatQuantityDetailed(prevPcs, cap, unit),
+        "التحميل الجديد": formatQuantityDetailed(newPcs, cap, unit),
+        "إجمالي الحمولة بالعربة": formatQuantityDetailed(totalPcs, cap, unit)
+      });
+    }
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  
+  if (!worksheet['!views']) worksheet['!views'] = [];
+  worksheet['!views'].push({ RTL: true });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "إذن التحميل");
+  
+  XLSX.writeFile(workbook, `إذن_تحميل_${reportDate}.xlsx`);
+  window.toast('📊 تم تصدير ملف Excel للتحميل بنجاح!');
+};
+
+window.exportSummaryExcel = function() {
+  if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات جرد لتصديرها'); return; }
+  
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr;
+  const excelData = cachedCalculatedRows.map((r, i) => ({
+    "م": i + 1,
+    "اسم الصنف": r.it.name,
+    "قبل التحميل": cleanTextForPdf(r.prevLoadedText),
+    "تم تحميله جديد": cleanTextForPdf(r.newLoadedText),
+    "إجمالي المحمل": cleanTextForPdf(r.loadedText),
+    "المباع لايف": cleanTextForPdf(r.soldText),
+    "المتبقي بالعربية": cleanTextForPdf(r.inTruckText),
+    "الراجع الفعلي": cleanTextForPdf(r.manualText),
+    "حالة الفرق": r.calculatedStatus || 'مضبوط',
+    "حالة الجرد": r.isInventoryDone ? 'مكتمل' : 'قيد الجرد',
+    "تاريخ التعديل": r.lastEditedAt || '—'
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+  if (!worksheet['!views']) worksheet['!views'] = [];
+  worksheet['!views'].push({ RTL: true });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "جرد حمولة السيارة");
+  
+  XLSX.writeFile(workbook, `تقرير_جرد_العربة_${reportDate}.xlsx`);
+  window.toast('📊 تم تصدير ملف Excel لتقرير الجرد بنجاح!');
+};
+
+window.exportArchiveExcel = async function(d) {
+  window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
+  try {
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+
+    let excelData = [];
+
+    const parseCartonAndLoose = (str) => {
+      if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
+      const cleaned = cleanTextForPdf(str);
+      
+      let cartons = 0;
+      let loose = 0;
+
+      const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
+      if (cMatch) cartons = parseFloat(cMatch[1]);
+
+      const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
+      if (lMatch) loose = parseInt(lMatch[1]);
+
+      if (!cMatch && !lMatch) {
+        const numMatch = cleaned.match(/(-?\d+)/);
+        if (numMatch) loose = parseInt(numMatch[1]);
+      }
+
+      return { cartons, loose };
+    };
+
+    const valOrEmpty = (v) => (v && v !== 0 ? v : "");
+
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
+      excelData = data.map((r) => {
+        const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
+        let mainStockCartons = 0;
+        let mainStockLoose = 0;
+
+        if (fbItem) {
+          const cap = fbItem.capacity || 1;
+          const totalPcs = fbItem.totalPcs || 0;
+          if (cap > 1) {
+            mainStockCartons = Math.floor(Math.abs(totalPcs) / cap) * (totalPcs < 0 ? -1 : 1);
+            mainStockLoose = (Math.abs(totalPcs) % cap) * (totalPcs < 0 ? -1 : 1);
+          } else {
+            mainStockLoose = totalPcs;
+          }
+        }
+
+        const prev     = parseCartonAndLoose(r.prevLoaded);
+        const loaded   = parseCartonAndLoose(r.newLoaded || r.loaded);
+        const sold     = parseCartonAndLoose(r.sold);
+        const inTruck  = parseCartonAndLoose(r.inTruck);
+
+        const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
+        const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
+
+        return {
+          "مخزن ك": valOrEmpty(mainStockCartons),
+          "مخزن ق": valOrEmpty(mainStockLoose),
+          "اسم الصنف": r.name,
+          "سابق ك": valOrEmpty(prev.cartons),
+          "سابق ق": valOrEmpty(prev.loose),
+          "جديد ك": valOrEmpty(loaded.cartons),
+          "جديد ق": valOrEmpty(loaded.loose),
+          "اجمالي ك": valOrEmpty(totalCartons),
+          "اجمالي ق": valOrEmpty(totalLoose),
+          "مباع ك": valOrEmpty(sold.cartons),
+          "مباع ق": valOrEmpty(sold.loose),
+          "متبقى ك": valOrEmpty(inTruck.cartons),
+          "متبقى ق": valOrEmpty(inTruck.loose)
+        };
+      });
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
+      excelData = Object.values(loadData).map((r) => {
+        const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
+        let mainStockCartons = 0;
+        let mainStockLoose = 0;
+
+        if (fbItem) {
+          const cap = fbItem.capacity || 1;
+          const totalPcs = fbItem.totalPcs || 0;
+          if (cap > 1) {
+            mainStockCartons = Math.floor(Math.abs(totalPcs) / cap) * (totalPcs < 0 ? -1 : 1);
+            mainStockLoose = (Math.abs(totalPcs) % cap) * (totalPcs < 0 ? -1 : 1);
+          } else {
+            mainStockLoose = totalPcs;
+          }
+        }
+
+        const prevCartons   = Number(r.prevCartons) || 0;
+        const prevLoose     = Number(r.prevLoose) || 0;
+        const loadedCartons = Number(r.loadedCartons) || 0;
+        const loadedLoose   = Number(r.loadedLoose) || 0;
+
+        return {
+          "مخزن ك": valOrEmpty(mainStockCartons),
+          "مخزن ق": valOrEmpty(mainStockLoose),
+          "اسم الصنف": r.name,
+          "سابق ك": valOrEmpty(prevCartons),
+          "سابق ق": valOrEmpty(prevLoose),
+          "جديد ك": valOrEmpty(loadedCartons),
+          "جديد ق": valOrEmpty(loadedLoose),
+          "اجمالي ك": valOrEmpty(prevCartons + loadedCartons),
+          "اجمالي ق": valOrEmpty(prevLoose + loadedLoose),
+          "مباع ك": "",
+          "مباع ق": "",
+          "متبقى ك": "",
+          "متبقى ق": ""
+        };
+      });
+    }
+
+    if (!excelData.length) {
+      window.toast('⚠️ لا توجد بيانات أرشيف لتصديرها لهذا اليوم');
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    if (!worksheet['!views']) worksheet['!views'] = [];
+    worksheet['!views'].push({ RTL: true });
+
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const borderStyle = {
+      top:    { style: 'thin', color: { rgb: "000000" } },
+      bottom: { style: 'thin', color: { rgb: "000000" } },
+      left:   { style: 'thin', color: { rgb: "000000" } },
+      right:  { style: 'thin', color: { rgb: "000000" } }
+    };
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cell_address]) continue;
+        
+        worksheet[cell_address].s = {
+          font: { bold: true, name: "Cairo" },
+          border: borderStyle,
+          alignment: { horizontal: C === 2 ? "right" : "center", vertical: "center" }
+        };
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
+    
+    XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
+    window.toast('📊 تم تصدير ملف Excel وتحديث الترتيب بنجاح!');
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
+  }
+};
+
+let toastTimer;
+window.toast = function(msg) {
+  const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+};
+
+startApp();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").then(() => console.log("SW Registered")).catch(err => console.log("SW Failed", err));
+}
+</script>
+</body>
+</html>
