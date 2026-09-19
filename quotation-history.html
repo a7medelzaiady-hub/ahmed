@@ -443,20 +443,16 @@ table select:focus { border-color: var(--brand); }
 
   <div class="page" id="pg-archive">
     <div class="ph">
-      <h2>🗄️ أرشيف الأيام السابقة وتتبع الأصناف</h2>
-      <p>استعراض حمولة وجرد الأيام المسجلة، أو الفلترة باسم صنف لمعرفة حركته التراكمية</p>
+      <h2>🗄️ أرشيف الأيام السابقة</h2>
+      <p>استعراض حمولة وجرد الأيام المسجلة، تصدير التقارير، أو المسح</p>
     </div>
     
-    <div class="tools-row" style="gap: 8px;">
+    <div class="tools-row">
       <div class="date-filter-wrap">
-        <label>📅 التاريخ:</label>
+        <label>📅 اختر يوماً للفلترة:</label>
         <input type="date" id="archiveDate" onchange="window.fetchArchive()">
       </div>
-      <div class="date-filter-wrap" style="flex:1.5;">
-        <label>🔍 الصنف:</label>
-        <input type="text" id="archiveItemSearch" placeholder="ابحث باسم الصنف..." oninput="window.fetchArchive()">
-      </div>
-      <button class="btn btn-primary" onclick="window.fetchArchive()" style="flex: 0 0 auto;">🔍 بحث واستعرض</button>
+      <button class="btn btn-primary" onclick="window.fetchArchive()">🔍 بحث واستعرض</button>
     </div>
 
     <div id="archiveContent">
@@ -549,6 +545,7 @@ document.getElementById('summaryDate').value = defaultDateStr;
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
 
+// توحيد تنظيف اسم الصنف بنفس الطريقة الدقيقة للملف الآخر
 function cleanItemName(str) {
   if (!str) return "";
   return String(str).trim()
@@ -578,6 +575,9 @@ function getProductIdForItem(item) {
   return item.stockId || item.productId || item.id || null;
 }
 
+// -------------------------------------------------------------
+// تعديل محوري: ضبط دالة المبيعات المباشرة لتفادي انعكاس الإشارة بالسالب
+// -------------------------------------------------------------
 function listenToLiveInvoices() {
   const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
   if (unsubscribeInvoices) unsubscribeInvoices();
@@ -597,7 +597,7 @@ function listenToLiveInvoices() {
         const itemId = getProductIdForItem(itm);
         if (itemId) {
           const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-          const rawQty = Number(itm.qty) || 0;
+          const rawQty = Number(itm.qty) || 0; // إزالة Math.abs لتفادي حساب الإشارة مرتين
           const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
           const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
 
@@ -605,6 +605,7 @@ function listenToLiveInvoices() {
 
           if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
           
+          // الاعتماد على إشارة العدد المباشرة أو معالجة المرتجع بخصمه
           if (isReturn) {
             memorySalesCache[itemId] -= Math.abs(totalPcsSold);
           } else {
@@ -875,6 +876,9 @@ function filterLoadFlow() {
   });
 }
 
+// -------------------------------------------------------------
+// توحيد تجميع المشتريات والمبيعات مع الصفحة الكبرى بنفس المنطق الدقيق
+// -------------------------------------------------------------
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -1548,7 +1552,6 @@ window.archiveInventory = async function() {
 
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
-  const itemSearchQuery = cleanItemName(document.getElementById('archiveItemSearch').value);
   const container = document.getElementById('archiveContent');
   container.innerHTML = '<div class="spin"></div>';
 
@@ -1559,7 +1562,7 @@ window.fetchArchive = async function() {
     if (selectedDate) {
       const [loadSnap, invSnap] = await Promise.all([
         getDoc(doc(db, 'archived_loads', selectedDate)),
-        getDoc(doc(db, 'archived_inventory', selectedDate))
+        getDoc(doc(doc(db, 'archived_inventory', selectedDate)))
       ]);
       if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
       if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
@@ -1576,92 +1579,6 @@ window.fetchArchive = async function() {
 
     if (!allDates.length) {
       container.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أي بيانات مؤرشفة حتى الآن</div>';
-      return;
-    }
-
-    if (itemSearchQuery) {
-      let itemHistoryRows = [];
-
-      allDates.forEach(d => {
-        const invData = archivedInventoryMap[d];
-        const loadData = archivedLoadsMap[d];
-
-        if (invData && Array.isArray(invData.inventoryData)) {
-          invData.inventoryData.forEach(r => {
-            if (cleanItemName(r.name).includes(itemSearchQuery)) {
-              itemHistoryRows.push({
-                date: d,
-                name: r.name,
-                prev: cleanTextForPdf(r.prevLoaded) || '—',
-                newLoaded: cleanTextForPdf(r.newLoaded || r.loaded) || '0',
-                sold: cleanTextForPdf(r.sold) || '0',
-                inTruck: cleanTextForPdf(r.inTruck) || '—',
-                returned: cleanTextForPdf(r.returnedManual) || '—',
-                status: r.status || 'مضبوط',
-                isClosed: true
-              });
-            }
-          });
-        } else if (loadData && loadData.cartItems) {
-          Object.values(loadData.cartItems).forEach(r => {
-            if (cleanItemName(r.name).includes(itemSearchQuery)) {
-              const prevStr = `${r.prevCartons || 0} ك / ${r.prevLoose || 0} ق`;
-              const loadedStr = `${r.loadedCartons || 0} ك / ${r.loadedLoose || 0} ق`;
-              itemHistoryRows.push({
-                date: d,
-                name: r.name,
-                prev: prevStr,
-                newLoaded: loadedStr,
-                sold: '—',
-                inTruck: '—',
-                returned: '—',
-                status: 'قيد الجرد',
-                isClosed: false
-              });
-            }
-          });
-        }
-      });
-
-      if (!itemHistoryRows.length) {
-        container.innerHTML = `<div class="empty"><span class="em">🔍</span>لم يتم العثور على حركات سابقة للصنف: <b>"${document.getElementById('archiveItemSearch').value}"</b></div>`;
-        return;
-      }
-
-      let historyHtml = `
-        <div class="card" style="margin-bottom:12px; background:var(--brand-lt); border-color:var(--brand);">
-          <h3 style="margin-bottom:4px; font-size:15px; color:var(--brand-d);">🔍 سجل تتبع حركة الصنف: (${itemHistoryRows.length} تسجيلات)</h3>
-          <p style="font-size:12px; color:var(--gray); font-weight:bold;">نتائج البحث للصنف المفلتر عبر تاريخ الأرشيف</p>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:15%;">التاريخ</th>
-                <th style="text-align:right; padding-right:8px; width:25%;">اسم الصنف</th>
-                <th style="width:12%;">قبل التحميل</th>
-                <th style="width:12%;">تم تحميله</th>
-                <th style="width:12%;">المباع</th>
-                <th style="width:12%;">المتبقي بالعربية</th>
-                <th style="width:12%;">الراجع والفرق</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemHistoryRows.map(r => `
-                <tr>
-                  <td style="font-weight:bold; color:var(--brand);">${r.date}</td>
-                  <td style="text-align:right; padding-right:8px; font-weight:bold; color:var(--brand-d);">${r.name}</td>
-                  <td style="color:var(--gray);">${r.prev}</td>
-                  <td style="color:var(--brand); font-weight:bold;">${r.newLoaded}</td>
-                  <td style="color:var(--red); font-weight:bold;">${r.sold}</td>
-                  <td style="color:var(--blue); font-weight:bold; background:#e0f2fe;">${r.inTruck}</td>
-                  <td style="font-weight:bold;">${r.returned} <br><small style="font-size:10px; color:${r.status==='عجز'?'var(--red)':r.status==='زيادة'?'var(--green)':'var(--gray)'};">${r.status}</small></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>`;
-      container.innerHTML = historyHtml;
       return;
     }
 
@@ -1871,8 +1788,8 @@ window.toggleArchiveDetails = async function(d) {
               ${itemsList.map(item => `
                 <tr>
                   <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
-                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons \vert{}\vert{} 0} ك / ${item.prevLoose || 0} ق</td>
-                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons \vert{}\vert{} 0} ك / ${item.loadedLoose || 0} ق</td>
+                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons || 0} ك / ${item.prevLoose || 0} ق</td>
+                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0} ك / ${item.loadedLoose || 0} ق</td>
                   <td style="font-size:10px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
                 </tr>
               `).join('')}
@@ -1892,7 +1809,7 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(db, 'archived_inventory', d));
+    await deleteDoc(doc(doc(db, 'archived_inventory', d)));
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
