@@ -61,7 +61,7 @@
 
         .main-container {
             padding: 16px 10px;
-            max-width: 900px;
+            max-width: 950px;
             margin: 0 auto;
             width: 100%;
         }
@@ -94,7 +94,7 @@
             height: 100%;
         }
         .stat-card .lbl { font-size: 0.72rem; font-weight: 700; color: #64748b; margin-bottom: 4px; }
-        .stat-card .val { font-size: 0.95rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
+        .stat-card .val { font-size: 0.9rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
 
         .stat-card.highlight { background: #0b5e3d; color: white; border-color: #07472e; }
         .stat-card.highlight .lbl { color: rgba(255,255,255,0.8); }
@@ -110,16 +110,16 @@
         .table-custom th {
             background: #0b5e3d;
             color: #ffffff;
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             font-weight: 800;
-            padding: 12px 8px;
+            padding: 12px 6px;
             text-align: center;
             white-space: nowrap;
         }
         .table-custom td {
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             font-weight: 700;
-            padding: 10px 8px;
+            padding: 10px 6px;
             text-align: center;
             vertical-align: middle;
             border-bottom: 1px solid #f1f5f9;
@@ -170,7 +170,7 @@
                     <input type="text" id="searchInput" class="form-control search-input" placeholder="اكتب اسم الصنف للبحث الفوري..." autocomplete="off">
                 </div>
                 <div class="col-12 col-md-6">
-                    <label class="form-label fw-bold small text-secondary mb-1"><i class="fas fa-calendar-alt me-1"></i>التاريخ (اتركه فارغاً للسجل الكلي)</label>
+                    <label class="form-label fw-bold small text-secondary mb-1"><i class="fas fa-calendar-alt me-1"></i>التاريخ (فارغ = تراكمي من أول المدة حتى اليوم)</label>
                     <div class="input-group">
                         <input type="date" id="dateInput" class="form-control search-input">
                         <button class="btn btn-outline-secondary border-secondary-subtle" type="button" id="clearDateBtn" title="مسح التاريخ">
@@ -191,11 +191,11 @@
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>التاريخ</th>
+                        <th>التاريخ / الفترة</th>
                         <th style="text-align: right; padding-right: 12px;">اسم الصنف</th>
                         <th>المشتريات</th>
                         <th>قبل التحميل</th>
-                        <th>تم تحميله</th>
+                        <th>تم تحميله بالسيارة</th>
                         <th>المبيعات</th>
                         <th>المرتجعات</th>
                         <th style="background: #07472e;">المتبقي بالسيارة</th>
@@ -239,17 +239,17 @@
     let purchasesData = [];
     let loadDataMap = {};
 
-    // دالة توحيد التاريخ YYYY-MM-DD
+    // دالة توحيد صيغة التاريخ YYYY-MM-DD
     function parseDate(df, ts) {
         if (df) {
-            let m = df.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+            let m = String(df).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
             if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
         }
         if (ts?.seconds) return new Date(ts.seconds * 1000).toISOString().slice(0, 10);
         return "";
     }
 
-    // دالة تحويل وتحسين صيغة العرض (كرتونة و جركن)
+    // دالة تحويل وتنسيق الكمية التفصيلية (كرتونة وجركن)
     function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
         totalPcs = parseInt(totalPcs) || 0;
         capacity = parseInt(capacity) || 1;
@@ -263,17 +263,17 @@
         } else {
             const cartons = Math.floor(absPcs / capacity);
             const loose = absPcs % capacity;
-            if (cartons > 0 && loose > 0) result = `${cartons} كرتونة و ${loose} ${unit}`;
+            if (cartons > 0 && loose > 0) result = `${cartons} ك و ${loose} ${unit}`;
             else if (cartons > 0) result = `${cartons} كرتونة`;
             else result = `${loose} ${unit}`;
         }
         return isNegative ? `-${result}` : result;
     }
 
-    // جلب البيانات من المجموعات
+    // جلب البيانات الأساسية من المجموعات
     async function loadDataAndRender() {
         const tableBody = document.getElementById('tableBody');
-        tableBody.innerHTML = `<tr><td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري جلب البيانات والتراكمي...</div></td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري جلب البيانات وتحليل التواريخ...</div></td></tr>`;
 
         try {
             const [inventorySnap, invoicesSnap, supplierSnap, archiveSnap] = await Promise.all([
@@ -298,7 +298,7 @@
                 }
             });
 
-            // تجميع المبيعات والمرتجعات
+            // جلب المبيعات والمرتجعات
             salesData = [];
             invoicesSnap.forEach(doc => {
                 const inv = doc.data();
@@ -316,7 +316,7 @@
                 });
             });
 
-            // تجميع المشتريات
+            // جلب المشتريات
             purchasesData = [];
             supplierSnap.forEach(doc => {
                 const sup = doc.data();
@@ -334,7 +334,7 @@
                 });
             });
 
-            // جلب بيانات التحميل المسجلة للسيارة
+            // جلب سجلات تحميل السيارة المفصلة بالتواريخ
             loadDataMap = {};
             archiveSnap.forEach(doc => {
                 const dStr = doc.id;
@@ -358,13 +358,12 @@
         }
     }
 
-    // بناء فلترة البيانات وعرض النتائج
+    // معالجة وحساب البيانات بناءً على حالة التاريخ
     function renderReport() {
         const searchVal = document.getElementById('searchInput').value.trim().toLowerCase();
         const selectedDate = document.getElementById('dateInput').value;
 
         const tableBody = document.getElementById('tableBody');
-        const statsContainer = document.getElementById('statsContainer');
 
         let rowsHTML = "";
         let totalPurchasesAll = 0;
@@ -387,49 +386,89 @@
         filteredItems.forEach(item => {
             const cap = item.unitFactor;
             
-            // حساب المشتريات
-            let itemPurchases = purchasesData
-                .filter(p => (p.stockId === item.id || p.name === item.name) && (!selectedDate || p.date === selectedDate))
-                .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
-
-            // حساب المبيعات والمرتجعات
+            let itemPurchases = 0;
             let itemSales = 0;
             let itemReturns = 0;
-
-            salesData
-                .filter(s => (s.stockId === item.id || s.name === item.name) && (!selectedDate || s.date === selectedDate))
-                .forEach(s => {
-                    const pcs = s.qty * (s.isCarton ? cap : 1);
-                    if (s.isReturn) itemReturns += pcs;
-                    else itemSales += pcs;
-                });
-
-            // حساب ما تم تحميله بالسيارة
+            let itemPreLoading = 0;
             let itemLoaded = 0;
-            if (selectedDate) {
-                itemLoaded = loadDataMap[item.id]?.[selectedDate] || 0;
-            } else {
+
+            if (!selectedDate) {
+                // === الحالة الأولى: التاريخ فارغ (تراكمي من أول المدة حتى تاريخ اليوم) ===
+                
+                // المشتريات التراكمية
+                itemPurchases = purchasesData
+                    .filter(p => p.stockId === item.id || p.name === item.name)
+                    .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
+
+                // المبيعات والمرتجعات التراكمية
+                salesData
+                    .filter(s => s.stockId === item.id || s.name === item.name)
+                    .forEach(s => {
+                        const pcs = s.qty * (s.isCarton ? cap : 1);
+                        if (s.isReturn) itemReturns += pcs;
+                        else itemSales += pcs;
+                    });
+
+                // القبل تحميل = الرصيد الافتتاحي فقط
+                itemPreLoading = item.openingPcs;
+
+                // ما تم تحميله بالسيارة تراكمياً
                 if (loadDataMap[item.id]) {
                     Object.values(loadDataMap[item.id]).forEach(v => itemLoaded += v);
                 }
-            }
 
-            // قبل التحميل (الرصيد الافتتاحي)
-            let itemPreLoading = item.openingPcs;
+            } else {
+                // === الحالة الثانية: تم اختيار تاريخ معين ===
+                
+                // 1. حساب حركات هذا اليوم المحدد فقط
+                itemPurchases = purchasesData
+                    .filter(p => (p.stockId === item.id || p.name === item.name) && p.date === selectedDate)
+                    .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
+
+                salesData
+                    .filter(s => (s.stockId === item.id || s.name === item.name) && s.date === selectedDate)
+                    .forEach(s => {
+                        const pcs = s.qty * (s.isCarton ? cap : 1);
+                        if (s.isReturn) itemReturns += pcs;
+                        else itemSales += pcs;
+                    });
+
+                // 2. القبل تحميل = الرصيد الافتتاحي + صافي حركات السابقة قبل هذا التاريخ المحدد
+                const pastPurchases = purchasesData
+                    .filter(p => (p.stockId === item.id || p.name === item.name) && p.date && p.date < selectedDate)
+                    .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
+
+                let pastSales = 0;
+                let pastReturns = 0;
+                salesData
+                    .filter(s => (s.stockId === item.id || s.name === item.name) && s.date && s.date < selectedDate)
+                    .forEach(s => {
+                        const pcs = s.qty * (s.isCarton ? cap : 1);
+                        if (s.isReturn) pastReturns += pcs;
+                        else pastSales += pcs;
+                    });
+
+                itemPreLoading = item.openingPcs + pastPurchases - pastSales + pastReturns;
+
+                // 3. ما تم تحميله من صفحة تحميل السيارة لهذا اليوم المحدد
+                itemLoaded = loadDataMap[item.id]?.[selectedDate] || 0;
+            }
 
             // المتبقي بالسيارة = ما تم تحميله - المبيعات + مرتجع المبيعات
             let itemRemainingInCar = itemLoaded - itemSales + itemReturns;
 
-            // تجميع الكروت
+            // إجمالي الكروت
             totalPurchasesAll += itemPurchases;
             totalPreLoadingAll += itemPreLoading;
             totalLoadedAll += itemLoaded;
             totalSalesAll += itemSales;
             totalReturnsAll += itemReturns;
 
+            const dateBadgeLabel = selectedDate ? selectedDate : 'تراكمي (أول المدة حتى اليوم)';
+
             rowsHTML += `
                 <tr>
-                    <td><span class="badge bg-light text-dark border">${selectedDate || 'كل السجلات'}</span></td>
+                    <td><span class="badge bg-light text-dark border">${dateBadgeLabel}</span></td>
                     <td style="text-align: right; padding-right: 12px; font-weight: 800; color: #0a4a31;">${item.name}</td>
                     <td class="text-primary">${formatQuantityDetailed(itemPurchases, cap, item.unitName)}</td>
                     <td class="text-secondary">${formatQuantityDetailed(itemPreLoading, cap, item.unitName)}</td>
@@ -447,7 +486,7 @@
         tableBody.innerHTML = rowsHTML;
     }
 
-    // عرض الكروت العليا
+    // عرض الكروت الإحصائية العليا
     function renderCards(pur, pre, load, sale, ret, rem) {
         const statsContainer = document.getElementById('statsContainer');
         statsContainer.innerHTML = `
@@ -465,7 +504,7 @@
             </div>
             <div class="col-4 col-md-2">
                 <div class="stat-card">
-                    <div class="lbl">تم تحميله</div>
+                    <div class="lbl">تم تحميله بالسيارة</div>
                     <div class="val text-info">${load}</div>
                 </div>
             </div>
@@ -490,7 +529,7 @@
         `;
     }
 
-    // الأحداث والاستماع الفوري
+    // الأحداث للفلترة المباشرة
     document.getElementById('searchInput').addEventListener('input', renderReport);
     document.getElementById('dateInput').addEventListener('change', renderReport);
     document.getElementById('clearDateBtn').addEventListener('click', () => {
@@ -500,7 +539,7 @@
 
     window.loadDataAndRender = loadDataAndRender;
 
-    // تشغيل الجلب عند بداية الفتح
+    // تشغيل الجلب التلقائي عند التحميل
     loadDataAndRender();
 </script>
 
