@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تقرير حركة الأصناف والتحميل</title>
+    <!-- Bootstrap 5 RTL -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card-stat {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        .card-stat:hover {
+            transform: translateY(-3px);
+        }
+        .icon-box {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+        .table-custom {
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body class="p-3 p-md-4">
+
+<div class="container-fluid max-w-1200">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h3 class="fw-bold mb-1"><i class="fa-solid fa-boxes-stacked text-primary me-2"></i>تقرير حركة الصناف والسيارة</h3>
+            <p class="text-muted small mb-0">استعلام فوري وتفصيلي لحركة المبيعات والتحميل المتبقي</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card card-stat mb-4">
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-3">
+                <!-- اسم الصنف -->
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold small text-secondary">اسم الصنف</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                        <input type="text" id="itemNameInput" class="form-control" placeholder="اكتب اسم الصنف للبحث الفوري..." autocomplete="off">
+                    </div>
+                </div>
+                <!-- التاريخ -->
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold small text-secondary">التاريخ (اتركه فارغاً لجلب كل السجلات)</label>
+                    <div class="input-group">
+                        <input type="date" id="dateInput" class="form-control">
+                        <button class="btn btn-outline-secondary" type="button" id="clearDateBtn" title="مسح التاريخ">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4" id="statsContainer">
+        <!-- الكروت الإحصائية سيتم إنشاؤها ديناميكياً بواسطة JavaScript -->
+    </div>
+
+    <!-- Table Details -->
+    <div class="table-responsive table-custom mb-4">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>التاريخ</th>
+                    <th>اسم الصنف</th>
+                    <th class="text-center">المشتريات</th>
+                    <th class="text-center">القبل تحميل</th>
+                    <th class="text-center">تم تحميله</th>
+                    <th class="text-center">المبيعات</th>
+                    <th class="text-center">المرتجعات</th>
+                    <th class="text-center bg-light fw-bold">المتبقي بالسيارة</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- البيانات تظهر هنا -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// --- بيانات توضيحية تجريبية (Mock Data) ---
+// يمكن استبدال هذه المصفوفة باستعلامات الحسابات المباشرة من Firestore أو Firebase Realtime Database
+const mockDatabase = [
+    { id: 1, date: "2026-09-18", itemName: "زيت شل 5W30", purchases: 50, preLoading: 10, loaded: 30, sales: 20, returns: 2 },
+    { id: 2, date: "2026-09-19", itemName: "زيت شل 5W30", purchases: 0,  preLoading: 12, loaded: 25, sales: 18, returns: 1 },
+    { id: 3, date: "2026-09-19", itemName: "زيت موبيل 10W40", purchases: 100, preLoading: 5, loaded: 40, sales: 35, returns: 0 },
+    { id: 4, date: "2026-09-19", itemName: "زيت توتال 20W50", purchases: 20, preLoading: 0, loaded: 15, sales: 10, returns: 3 },
+    { id: 5, date: "2026-09-20", itemName: "زيت شل 5W30", purchases: 40, preLoading: 8, loaded: 35, sales: 30, returns: 0 }
+];
+
+// العناصر في الواجهة
+const itemNameInput = document.getElementById('itemNameInput');
+const dateInput = document.getElementById('dateInput');
+const clearDateBtn = document.getElementById('clearDateBtn');
+const tableBody = document.getElementById('tableBody');
+const statsContainer = document.getElementById('statsContainer');
+
+// الأحداث (Event Listeners) للبحث الفوري
+itemNameInput.addEventListener('input', renderReport);
+dateInput.addEventListener('change', renderReport);
+clearDateBtn.addEventListener('click', () => {
+    dateInput.value = '';
+    renderReport();
+});
+
+// الدالة الرئيسية للتصفية والحساب
+function renderReport() {
+    const searchName = itemNameInput.value.trim().toLowerCase();
+    const selectedDate = dateInput.value;
+
+    // تصفية البيانات بناءً على الاسم والتاريخ
+    const filteredData = mockDatabase.filter(item => {
+        const matchesName = searchName === '' || item.itemName.toLowerCase().includes(searchName);
+        const matchesDate = selectedDate === '' || item.date === selectedDate;
+        return matchesName && matchesDate;
+    });
+
+    // حساب الإجماليات
+    let totalPurchases = 0;
+    let totalPreLoading = 0;
+    let totalLoaded = 0;
+    let totalSales = 0;
+    let totalReturns = 0;
+
+    filteredData.forEach(row => {
+        totalPurchases += row.purchases;
+        totalPreLoading += row.preLoading;
+        totalLoaded += row.loaded;
+        totalSales += row.sales;
+        totalReturns += row.returns;
+    });
+
+    // معادلة المتبقي في السيارة = (ما تم تحميله - المبيعات + مرتجع المبيعات)
+    const totalRemainingInCar = totalLoaded - totalSales + totalReturns;
+
+    // 1. عرض الكروت الإحصائية
+    renderCards({
+        totalPurchases,
+        totalPreLoading,
+        totalLoaded,
+        totalSales,
+        totalReturns,
+        totalRemainingInCar
+    });
+
+    // 2. عرض البيانات في الجدول
+    renderTable(filteredData);
+}
+
+// عرض الكروت الإحصائية
+function renderCards(stats) {
+    statsContainer.innerHTML = `
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card card-stat bg-white p-3">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box bg-primary-subtle text-primary me-2"><i class="fa-solid fa-truck-ramp-box"></i></div>
+                    <div>
+                        <div class="text-muted extra-small">المشتريات</div>
+                        <h5 class="fw-bold mb-0">${stats.totalPurchases}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card card-stat bg-white p-3">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box bg-secondary-subtle text-secondary me-2"><i class="fa-solid fa-boxes-packing"></i></div>
+                    <div>
+                        <div class="text-muted extra-small">قبل التحميل</div>
+                        <h5 class="fw-bold mb-0">${stats.totalPreLoading}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card card-stat bg-white p-3">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box bg-info-subtle text-info me-2"><i class="fa-solid fa-truck-load"></i></div>
+                    <div>
+                        <div class="text-muted extra-small">تم تحميله</div>
+                        <h5 class="fw-bold mb-0">${stats.totalLoaded}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card card-stat bg-white p-3">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box bg-success-subtle text-success me-2"><i class="fa-solid fa-cart-shopping"></i></div>
+                    <div>
+                        <div class="text-muted extra-small">المبيعات</div>
+                        <h5 class="fw-bold mb-0">${stats.totalSales}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card card-stat bg-white p-3">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box bg-warning-subtle text-warning me-2"><i class="fa-solid fa-rotate-left"></i></div>
+                    <div>
+                        <div class="text-muted extra-small">المرتجعات</div>
+                        <h5 class="fw-bold mb-0">${stats.totalReturns}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card card-stat bg-dark text-white p-3">
+                <div class="d-flex align-items-center">
+                    <div class="icon-box bg-white text-dark me-2"><i class="fa-solid fa-van-shuttle"></i></div>
+                    <div>
+                        <div class="text-white-50 extra-small">المتبقي بالسيارة</div>
+                        <h5 class="fw-bold mb-0 text-warning">${stats.totalRemainingInCar}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// عرض صفوف الجدول
+function renderTable(data) {
+    if (data.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center py-4 text-muted">
+                    <i class="fa-regular fa-folder-open fs-3 d-block mb-2"></i>
+                    لا توجد سجلات تطابق معايير البحث
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tableBody.innerHTML = data.map(row => {
+        const remainingInCar = row.loaded - row.sales + row.returns;
+        return `
+            <tr>
+                <td><span class="badge bg-light text-dark border">${row.date}</span></td>
+                <td class="fw-bold">${row.itemName}</td>
+                <td class="text-center text-primary">${row.purchases}</td>
+                <td class="text-center text-muted">${row.preLoading}</td>
+                <td class="text-center text-info font-monospace fw-bold">${row.loaded}</td>
+                <td class="text-center text-success font-monospace">${row.sales}</td>
+                <td class="text-center text-warning font-monospace">${row.returns}</td>
+                <td class="text-center fw-bold bg-light text-danger font-monospace">${remainingInCar}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// تشغيل التقرير لأول مرة عند تحميل الصفحة
+renderReport();
+</script>
+
+</body>
+</html>
