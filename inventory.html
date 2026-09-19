@@ -189,9 +189,9 @@
             z-index: 1000; display: none; align-items: center; justify-content: center; padding: 14px;
         }
         .modal-card {
-            background: var(--card); width: 100%; max-width: 500px; border-radius: var(--r); 
+            background: var(--card); width: 100%; max-width: 550px; border-radius: var(--r); 
             box-shadow: 0 15px 30px rgba(0,0,0,0.15); overflow: hidden; 
-            display: flex; flex-direction: column; max-height: 85vh;
+            display: flex; flex-direction: column; max-height: 88vh;
         }
         .modal-header { background: var(--accent); color: #fff; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; }
         .modal-header h4 { font-size: 14px; font-weight: 800; width: 100%; }
@@ -219,25 +219,44 @@
         }
         .mc-current .mini-val { color: var(--accent); font-size: 13.5px; font-weight: 900; }
 
-        /* شريط بحث المودال */
-        .modal-search-wrap {
-            padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--border);
+        /* ترويسة سجل المبيعات والفلترة */
+        .sales-filter-card {
+            background: #fff; border: 1px solid var(--border); border-radius: 12px;
+            padding: 10px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;
         }
-        .modal-search-inner {
-            background: #f1f5f9; border: 1px solid var(--border);
-            border-radius: 10px; padding: 6px 10px; display: flex; align-items: center; gap: 6px;
+        .sales-filter-title { font-size: 12px; font-weight: 800; color: var(--accent); display: flex; align-items: center; justify-content: space-between; }
+        .sales-date-input-wrap { display: flex; align-items: center; gap: 8px; }
+        .sales-date-input-wrap label { font-size: 11px; font-weight: 700; color: var(--sub); white-space: nowrap; }
+        .sales-date-input-wrap input {
+            flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+            font-family: 'Cairo', sans-serif; font-size: 12px; font-weight: 700; outline: none; background: #f8fafc;
         }
-        .modal-search-inner input {
-            border: none; background: transparent; width: 100%;
-            font-family: 'Cairo', sans-serif; font-size: 12px; font-weight: 700;
-            color: var(--text); outline: none; text-align: right;
+        .sales-date-input-wrap input:focus { border-color: var(--accent); background: #fff; }
+
+        .btn-sales-toggle {
+            width: 100%; background: #16a34a; color: #fff; border: none;
+            border-radius: 10px; padding: 10px; font-family: 'Cairo', sans-serif;
+            font-size: 12px; font-weight: 800; cursor: pointer; display: flex;
+            align-items: center; justify-content: center; gap: 6px; margin-top: 8px;
+            box-shadow: 0 2px 6px rgba(22, 163, 74, 0.2); transition: all 0.2s;
         }
+        .btn-sales-toggle:active { transform: scale(0.98); }
+
+        /* جدول سجل المبيعات */
+        .sales-table-wrap { overflow-x: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; }
+        .sales-table { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; text-align: center; }
+        .sales-table th { background: #0f172a; color: #fff; padding: 8px 6px; font-weight: 800; }
+        .sales-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); font-weight: 700; }
+        .sales-table tr:nth-child(even) { background: #f8fafc; }
+        .sales-table .is-return-row { background: #fef2f2; color: var(--danger); }
+
+        /* شريط بحث المودال السريع */
+        .modal-search-wrap { padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--border); }
+        .modal-search-inner { background: #f1f5f9; border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; display: flex; align-items: center; gap: 6px; }
+        .modal-search-inner input { border: none; background: transparent; width: 100%; font-family: 'Cairo', sans-serif; font-size: 12px; font-weight: 700; color: var(--text); outline: none; text-align: right; }
 
         .quick-list { display: flex; flex-direction: column; gap: 6px; }
-        .quick-row-item {
-            background: #ffffff; border: 1px solid var(--border); border-radius: 10px;
-            padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;
-        }
+        .quick-row-item { background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
         .quick-item-name { font-size: 12px; font-weight: 800; color: #0f172a; }
         .quick-item-qty { font-size: 12px; font-weight: 900; color: var(--accent); background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 6px; }
         .quick-item-qty.zero { color: var(--danger); background: #fef2f2; border-color: #fecdd3; }
@@ -301,7 +320,7 @@
     </div>
 </div>
 
-<!-- مودال تفاصيل الحركات -->
+<!-- مودال تفاصيل الحركات وسجل المبيعات -->
 <div class="modal-overlay" id="historyModal">
     <div class="modal-card">
         <div class="modal-header">
@@ -347,7 +366,6 @@
 
     const app = initializeApp(firebaseConfig);
     
-    // تفعيل الكاش المحلي المتقدم لمنع التعليق وعرض الأصناف بشكل فوري
     const db = initializeFirestore(app, {
         localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
     });
@@ -356,6 +374,7 @@
     let salesMapGlobal = new Map();
     let purchasesMapGlobal = new Map();
     let openingMapGlobal = new Map();
+    let rawInvoicesList = []; // تخزين كل الفواتير لتوليد جدول المبيعات حسب التاريخ
 
     const dom = {
         sTotal: document.getElementById('sTotal'),
@@ -395,7 +414,6 @@
 
     async function loadLiveInventory() {
         try {
-            // الاستماع المباشر مع استغلال الكاش الفوري
             onSnapshot(collection(db, "inventory"), async (snap) => {
                 const factorsMap = new Map();
                 const namesMap = new Map();
@@ -408,7 +426,6 @@
                 });
 
                 try {
-                    // استخدام getDocs لتجميع المبيعات والمشتريات محلياً أو من السيرفر
                     const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
                         getDocs(collection(db, "invoices")).catch(() => ({ forEach: () => {} })),
                         getDocs(collection(db, "supplier_transactions")).catch(() => ({ forEach: () => {} })),
@@ -418,6 +435,7 @@
                     salesMapGlobal.clear();
                     purchasesMapGlobal.clear();
                     openingMapGlobal.clear();
+                    rawInvoicesList = [];
 
                     if (transSnap.forEach) {
                         transSnap.forEach(docSnap => {
@@ -431,7 +449,10 @@
 
                     if (invoicesSnap.forEach) {
                         invoicesSnap.forEach(docSnap => {
-                            const items = docSnap.data()?.items || [];
+                            const invData = docSnap.data() || {};
+                            rawInvoicesList.push({ id: docSnap.id, ...invData });
+
+                            const items = invData.items || [];
                             items.forEach(item => {
                                 const normName = item.name ? normalizeAr(item.name) : '';
                                 const id = item.stockId || namesMap.get(normName);
@@ -702,6 +723,143 @@
         setTimeout(() => dom.quickSearchInput.focus(), 100);
     }
 
+    // دالة استخراج وتحليل تاريخ الفاتورة بأي صيغة
+    function parseInvoiceDate(inv) {
+        if (!inv) return null;
+        let d = null;
+        if (inv.createdAt && typeof inv.createdAt.toDate === 'function') {
+            d = inv.createdAt.toDate();
+        } else if (inv.date) {
+            d = new Date(inv.date);
+        } else if (inv.timestamp) {
+            d = new Date(inv.timestamp);
+        }
+        if (d && !isNaN(d.getTime())) return d;
+        return null;
+    }
+
+    // دالة تحويل مدخل تاريخ المستخدم (مثل 15/8/2026 أو 2026-08-15) إلى كائن تاريخ
+    function parseFilterDateInput(val) {
+        if (!val) return null;
+        val = val.trim();
+        const now = new Date();
+        const currentYear = now.getFullYear();
+
+        // تجربة صيغة ISO yyyy-mm-dd
+        if (val.includes('-')) {
+            const parts = val.split('-');
+            if (parts.length === 3) {
+                return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 23, 59, 59, 999);
+            }
+        }
+
+        // تجربة صيغة dd/mm أو dd/mm/yyyy
+        if (val.includes('/')) {
+            const parts = val.split('/');
+            const day = Number(parts[0]);
+            const month = Number(parts[1]) - 1;
+            const year = parts[2] ? Number(parts[2]) : currentYear;
+            return new Date(year, month, day, 23, 59, 59, 999);
+        }
+
+        return null;
+    }
+
+    // عرض وتوليد جدول المبيعات حسب الصنف وتااريخ النهاية
+    function renderSalesTable(itemId, maxDateStr = '') {
+        const itemObj = allItems.find(i => i.id === itemId) || {};
+        const normItemName = itemObj.name ? normalizeAr(itemObj.name) : '';
+        const capacity = Math.max(1, Number(itemObj.unitFactor || itemObj.factor || itemObj.pcsPerCarton) || 1);
+        const rawUnit = (itemObj.unitName || itemObj.unit || '').trim();
+        const unit = (rawUnit && normalizeAr(rawUnit) !== normalizeAr('كرتونة')) ? rawUnit : 'جركن';
+
+        const maxDate = parseFilterDateInput(maxDateStr);
+
+        let matchingSales = [];
+        let totalPcsPeriod = 0;
+        let totalAmountPeriod = 0;
+
+        rawInvoicesList.forEach(inv => {
+            const invDate = parseInvoiceDate(inv);
+            
+            // الفلترة: من أول المدة وحتى التاريخ المحدد (إن وجد)
+            if (maxDate && invDate && invDate > maxDate) {
+                return;
+            }
+
+            const items = inv.items || [];
+            items.forEach(item => {
+                const normName = item.name ? normalizeAr(item.name) : '';
+                if (item.stockId === itemId || (normName && normName === normItemName)) {
+                    const rawQty = Number(item.qty) || 0;
+                    const isCarton = isCartonUnit(item.unit, item.isCarton);
+                    const pcs = isCarton ? (rawQty * capacity) : rawQty;
+                    const price = Number(item.price) || 0;
+                    const lineTotal = Number(item.total) || (rawQty * price);
+                    const isReturn = !!item.isReturn;
+
+                    if (isReturn) {
+                        totalPcsPeriod -= pcs;
+                        totalAmountPeriod -= lineTotal;
+                    } else {
+                        totalPcsPeriod += pcs;
+                        totalAmountPeriod += lineTotal;
+                    }
+
+                    matchingSales.push({
+                        date: invDate ? invDate.toLocaleDateString('ar-EG') : 'بدون تاريخ',
+                        customer: inv.customerName || inv.clientName || 'عميل نقدي',
+                        rawQty: rawQty,
+                        unitName: isCarton ? 'كرتونة' : unit,
+                        pcs: pcs,
+                        price: price,
+                        lineTotal: lineTotal,
+                        isReturn: isReturn,
+                        invNo: inv.invoiceNo || inv.id.slice(0, 6)
+                    });
+                }
+            });
+        });
+
+        const salesContainer = document.getElementById('salesTableContainer');
+        if (!salesContainer) return;
+
+        if (matchingSales.length === 0) {
+            salesContainer.innerHTML = `<div class="empty-state" style="padding:15px;"><p>لا توجد مبيعات لهذا الصنف ${maxDateStr ? 'حتى التاريخ المحدد' : ''}</p></div>`;
+            return;
+        }
+
+        let tableHtml = `
+            <div style="font-size:11px; font-weight:800; color:var(--accent); margin-top:8px; display:flex; justify-content:space-between; background:#e0f2fe; padding:6px 10px; border-radius:6px;">
+                <span>إجمالي المباع بالفترة: <strong class="num">${formatQuantityDetailed(totalPcsPeriod, capacity, unit)}</strong></span>
+                <span>المبلغ: <strong class="num">${totalAmountPeriod.toLocaleString()} ج.م</strong></span>
+            </div>
+            <div class="sales-table-wrap">
+                <table class="sales-table">
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>العميل</th>
+                            <th>الكمية</th>
+                            <th>المبلغ</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        matchingSales.forEach(s => {
+            tableHtml += `
+                <tr class="${s.isReturn ? 'is-return-row' : ''}">
+                    <td class="num">${s.date}</td>
+                    <td>${s.customer}</td>
+                    <td class="num">${s.rawQty} ${s.unitName} ${s.isReturn ? '(مرتجع)' : ''}</td>
+                    <td class="num">${s.lineTotal.toLocaleString()} ج.م</td>
+                </tr>`;
+        });
+
+        tableHtml += `</tbody></table></div>`;
+        salesContainer.innerHTML = tableHtml;
+    }
+
     async function showItemHistory(itemId, itemName) {
         dom.modalItemName.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
@@ -729,9 +887,47 @@
                 <div class="mini-card mc-sell"><i class="fas fa-circle-arrow-up"></i><div class="mini-info"><span class="mini-val num">-${formatQuantityDetailed(sellPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المبيعات</span></div></div>
                 <div class="mini-card mc-ret"><i class="fas fa-rotate-left"></i><div class="mini-info"><span class="mini-val num">0 كرتونة</span><span class="mini-lbl">المرتجعات والتالف</span></div></div>
                 <div class="mini-card mc-current"><div class="mini-info" style="text-align: center;"><span class="mini-val num">${formatQuantityDetailed(totalPcs, capacity, unit)}</span><span class="mini-lbl">الرصيد الحالي بالمخزن</span></div></div>
+            </div>
+
+            <!-- قسم كشف المبيعات المخصص -->
+            <button class="btn-sales-toggle" id="btnToggleSales">
+                <i class="fas fa-list-check"></i> عرض سجل المبيعات التفصيلي للصنف
+            </button>
+
+            <div id="salesSection" style="display: none; margin-top: 12px;">
+                <div class="sales-filter-card">
+                    <div class="sales-filter-title">
+                        <span><i class="fas fa-filter me-1"></i> فلترة مبيعات الصنف حتى تاريخ</span>
+                    </div>
+                    <div class="sales-date-input-wrap">
+                        <label>إلى تاريخ:</label>
+                        <input type="text" id="salesDateInput" placeholder="مثال: 15/8 أو 2026-08-15">
+                    </div>
+                </div>
+                <div id="salesTableContainer"></div>
             </div>`;
 
             dom.modalBody.innerHTML = html;
+
+            // ربط أحداث زر سجل المبيعات والفلترة
+            const btnToggleSales = document.getElementById('btnToggleSales');
+            const salesSection = document.getElementById('salesSection');
+            const salesDateInput = document.getElementById('salesDateInput');
+
+            btnToggleSales.addEventListener('click', () => {
+                if (salesSection.style.display === 'none') {
+                    salesSection.style.display = 'block';
+                    btnToggleSales.innerHTML = `<i class="fas fa-chevron-up"></i> إخفاء سجل المبيعات`;
+                    renderSalesTable(itemId, salesDateInput.value);
+                } else {
+                    salesSection.style.display = 'none';
+                    btnToggleSales.innerHTML = `<i class="fas fa-list-check"></i> عرض سجل المبيعات التفصيلي للصنف`;
+                }
+            });
+
+            salesDateInput.addEventListener('input', () => {
+                renderSalesTable(itemId, salesDateInput.value);
+            });
 
         } catch (err) {
             dom.modalBody.innerHTML = `<div class="err-box"><i class="fas fa-exclamation-triangle"></i>فشل العرض<br><small>${err.message}</small></div>`;
