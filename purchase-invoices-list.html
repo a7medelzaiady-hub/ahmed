@@ -607,23 +607,27 @@
 
         let debt = 0;
         let credit = 0;
-        const targetSeconds = invoiceTimestamp?.seconds || 0;
+        const targetSeconds = invoiceTimestamp?.seconds || Number.MAX_SAFE_INTEGER;
 
+        // 1. حساب السندات العامة الخالية من invoiceId لمنع الخصم المزدوج للمبالغ
         globalVouchers.forEach(v => {
             if (v.partyId === supId && v.timestamp && v.timestamp.seconds < targetSeconds) {
                 const amt = Number(v.amount) || 0;
-                if (v.type === "صرف") credit += amt;
-                else if (v.type === "قبض") debt += amt;
+                if (!v.invoiceId) {
+                    if (v.type === "صرف" || v.actionType === "سداد مورد") credit += amt;
+                    else if (v.type === "قبض") debt += amt;
+                }
             }
         });
 
+        // 2. حساب المبالغ المتراكمة من الفواتير والمدفوع المباشر منها
         allInvoices.forEach(inv => {
             if (inv.supplierId === supId && inv.timestamp && inv.timestamp.seconds < targetSeconds) {
                 const amt = inv.displayGross;
                 const paid = inv.computedTotalPaid || 0;
                 if (inv.type === "شراء" || inv.type === "فاتورة شراء") {
                     debt += amt;
-                    credit += paid; // خصم المدفوع المباشر للفواتير السابقة
+                    credit += paid; 
                 } else if (inv.type === "مرتجع شراء") {
                     credit += amt;
                 }
@@ -669,7 +673,6 @@
             const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -totalInvoiceVal : inv.displayNetPending);
             const targetPriceColor = inv.isReturn ? 'var(--danger)' : (inv.displayNetPending > 0 ? 'var(--danger)' : 'var(--success)');
             
-            // تحديد طبيعة الحساب بدقة: إذا كان أكبر من الصفر فهو دائن (مستحق للمورد)، وإذا كان بالسالب فهو مدين (له فلوس عند المورد)
             const totalStatusLabel = finalSupplierTotal > 0 ? 'دائن للمورد' : (finalSupplierTotal < 0 ? 'مدين للمحل' : 'متزن');
             const totalStatusClass = finalSupplierTotal > 0 ? 'text-danger' : (finalSupplierTotal < 0 ? 'text-success' : 'text-dark');
 
