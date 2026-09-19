@@ -1,543 +1,672 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <script src="auth-guard.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>حركة الصنف والسيارة — شركة الزيادي</title>
-    
-    <!-- PWA settings -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0b5e3d">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
+<meta charset="UTF-8">
+<script src="auth-guard.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>حركة الصنف والسيارة — شركة الزيادي</title>
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b5e3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 
-    <style>
-        :root { 
-            --header-bg: linear-gradient(135deg, #07472e 0%, #0b5e3d 100%);
-            --bg-light: #eef3f0;
-            --text-primary: #0f172a;
-            --brand-d: #0a4a31;
-            --border-color: #cbd5e1;
-            --shadow-3d: 0 10px 20px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.03);
-        }
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-        body { 
-            background: var(--bg-light); 
-            font-family: 'Cairo', sans-serif; 
-            color: var(--text-primary); 
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding-bottom: 30px;
-        }
-        
-        .header-section { 
-            padding: 0 16px; 
-            height: 65px;
-            background: var(--header-bg); 
-            color: white;
-            box-shadow: 0 6px 18px rgba(7, 71, 46, 0.25);
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            border-radius: 0 0 20px 20px;
-        }
-        .header-container { height: 100%; display: flex; justify-content: space-between; align-items: center; }
+<style>
+:root {
+  --brand: #0b5e3d;
+  --brand-d: #07472e;
+  --brand-lt: #eefaf1;
+  --bg: #eef3f0;
+  --card: #ffffff;
+  --text: #0f172a;
+  --sub: #64748b;
+  --border: #cbd5e1;
+  --blue: #1d4ed8;
+  --cyan: #0891b2;
+  --green: #15803d;
+  --amber: #d97706;
+  --red: #d90429;
+  --shadow: 0 10px 20px rgba(0,0,0,.05), 0 4px 6px rgba(0,0,0,.03);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Cairo', sans-serif; background: var(--bg); color: var(--text);
+  min-height: 100vh; padding-bottom: 40px;
+}
 
-        .btn-action { 
-            width: 40px; height: 40px; border-radius: 12px;
-            background: rgba(255, 255, 255, 0.15); 
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            color: #fff; transition: all 0.2s; 
-            display: flex; align-items: center; justify-content: center;
-            text-decoration: none;
-        }
-        .btn-action:active { transform: scale(0.92); }
+/* ---------- Header ---------- */
+.app-header {
+  height: 65px; padding: 0 16px; background: linear-gradient(135deg, #07472e 0%, #0b5e3d 100%);
+  color: #fff; position: sticky; top: 0; z-index: 1000;
+  border-radius: 0 0 20px 20px; box-shadow: 0 6px 18px rgba(7,71,46,.25);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.app-header h1 { flex: 1; text-align: center; font-size: 1.1rem; font-weight: 800; }
+.btn-action {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  text-decoration: none; cursor: pointer; font-size: 1rem;
+}
+.btn-action:active { transform: scale(.92); }
+.btn-action.spinning i { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-        .main-container {
-            padding: 16px 10px;
-            max-width: 950px;
-            margin: 0 auto;
-            width: 100%;
-        }
+.wrap { max-width: 950px; margin: 0 auto; padding: 14px 10px; }
 
-        .filter-card {
-            background: #ffffff;
-            border-radius: 18px;
-            padding: 16px;
-            box-shadow: var(--shadow-3d);
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            margin-bottom: 16px;
-        }
+/* ---------- Search ---------- */
+.filter-card {
+  background: var(--card); border-radius: 18px; padding: 14px;
+  box-shadow: var(--shadow); margin-bottom: 14px;
+}
+.lbl { display: block; font-size: .8rem; font-weight: 700; color: var(--sub); margin-bottom: 5px; }
+.lbl i { margin-left: 4px; }
+.search-box { position: relative; }
+.input-wrap { position: relative; }
+.input-wrap input {
+  width: 100%; border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 11px 42px 11px 14px; font: 700 1rem 'Cairo', sans-serif; color: var(--text);
+  background: #fff; outline: none; transition: .2s;
+}
+.input-wrap input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(11,94,61,.12); }
+.input-wrap .clear-x {
+  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  width: 28px; height: 28px; border-radius: 50%; border: none; background: #e2e8f0;
+  color: #475569; display: none; align-items: center; justify-content: center; cursor: pointer;
+}
+.input-wrap.has-text .clear-x { display: flex; }
+.input-wrap input { padding-right: 42px; }
 
-        .search-input {
-            border-radius: 12px;
-            border: 1.5px solid var(--border-color);
-            padding: 10px 14px;
-            font-size: 0.95rem;
-            font-weight: 700;
-        }
-        .search-input:focus { border-color: #0b5e3d; box-shadow: 0 0 0 3px rgba(11,94,61,0.1); }
+.suggest {
+  position: absolute; top: calc(100% + 4px); right: 0; left: 0; z-index: 200;
+  background: #fff; border: 2px solid var(--brand); border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(0,0,0,.14); max-height: 280px; overflow-y: auto; display: none;
+}
+.suggest.open { display: block; }
+.sg-item {
+  padding: 10px 12px; font-size: .92rem; font-weight: 700; cursor: pointer;
+  border-bottom: 1px solid #eef2f1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.sg-item:last-child { border-bottom: none; }
+.sg-item:hover, .sg-item.focused { background: var(--brand-lt); color: var(--brand); }
+.sg-item mark { background: #d1fae5; color: var(--brand-d); border-radius: 3px; padding: 0 2px; }
+.sg-item .sg-meta { font-size: .7rem; font-weight: 700; color: var(--sub); white-space: nowrap; }
+.sg-msg { padding: 14px; text-align: center; color: var(--sub); font-weight: 700; font-size: .85rem; }
 
-        .stat-card {
-            background: #ffffff;
-            border-radius: 16px;
-            padding: 12px 10px;
-            text-align: center;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-3d);
-            height: 100%;
-        }
-        .stat-card .lbl { font-size: 0.72rem; font-weight: 700; color: #64748b; margin-bottom: 4px; }
-        .stat-card .val { font-size: 0.9rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
+.date-row { display: flex; gap: 6px; margin-top: 12px; }
+.date-row input[type=date] {
+  flex: 1; min-width: 0; border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 9px 12px; font: 700 .9rem 'Cairo', sans-serif; outline: none; background: #fff;
+}
+.date-row input[type=date]:focus { border-color: var(--brand); }
+.date-row button {
+  width: 44px; border: 1.5px solid var(--border); border-radius: 12px; background: #f8fafc;
+  color: #475569; cursor: pointer;
+}
+.status { margin-top: 10px; font-size: .72rem; font-weight: 700; color: var(--sub); }
+.status.ok { color: var(--green); }
+.status.err { color: var(--red); }
 
-        .stat-card.highlight { background: #0b5e3d; color: white; border-color: #07472e; }
-        .stat-card.highlight .lbl { color: rgba(255,255,255,0.8); }
-        .stat-card.highlight .val { color: #facc15; }
+/* ---------- Item title ---------- */
+.item-title {
+  background: var(--brand); color: #fff; border-radius: 16px; padding: 12px 14px;
+  margin-bottom: 10px; box-shadow: var(--shadow);
+}
+.item-title .nm { font-size: 1.05rem; font-weight: 800; line-height: 1.4; }
+.item-title .sub { font-size: .75rem; font-weight: 600; opacity: .85; margin-top: 2px; }
 
-        .table-custom {
-            background: #ffffff;
-            border-radius: 18px;
-            overflow: hidden;
-            box-shadow: var(--shadow-3d);
-            border: 1px solid var(--border-color);
-        }
-        .table-custom th {
-            background: #0b5e3d;
-            color: #ffffff;
-            font-size: 0.8rem;
-            font-weight: 800;
-            padding: 12px 6px;
-            text-align: center;
-            white-space: nowrap;
-        }
-        .table-custom td {
-            font-size: 0.8rem;
-            font-weight: 700;
-            padding: 10px 6px;
-            text-align: center;
-            vertical-align: middle;
-            border-bottom: 1px solid #f1f5f9;
-        }
+/* ---------- Summary cards ---------- */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.stat {
+  background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 10px 6px;
+  text-align: center; box-shadow: var(--shadow); min-width: 0;
+}
+.stat .l { font-size: .7rem; font-weight: 700; color: var(--sub); margin-bottom: 4px; }
+.stat .v { font-size: .82rem; font-weight: 800; line-height: 1.35; word-break: break-word; }
+.stat .n { font-size: .62rem; font-weight: 700; color: var(--sub); margin-top: 2px; }
+.stat.dark { background: var(--brand); border-color: var(--brand-d); }
+.stat.dark .l, .stat.dark .n { color: rgba(255,255,255,.8); }
+.stat.dark .v { color: #facc15; }
+.c-blue { color: var(--blue); } .c-cyan { color: var(--cyan); } .c-green { color: var(--green); }
+.c-amber { color: var(--amber); } .c-gray { color: #475569; }
+.neg { color: var(--red) !important; }
 
-        .empty-box {
-            text-align: center;
-            padding: 30px 15px;
-            color: #64748b;
-            font-weight: 700;
-        }
+/* ---------- Day cards ---------- */
+.sec-title { font-size: .95rem; font-weight: 800; color: var(--brand-d); margin: 4px 2px 8px; display: flex; align-items: center; gap: 6px; }
+.day {
+  background: #fff; border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden;
+}
+.day-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: #f4f8f6; padding: 9px 12px; border-bottom: 1px solid #e2e8f0;
+}
+.day-head .dn { font-weight: 800; font-size: .95rem; color: var(--brand-d); }
+.day-head .iso { font-size: .68rem; font-weight: 700; color: var(--sub); }
+.badge { font-size: .68rem; font-weight: 800; padding: 2px 9px; border-radius: 12px; background: #dcfce7; color: var(--green); }
+.cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; padding: 10px; }
+.cell { background: #f8fafc; border-radius: 10px; padding: 7px 6px; text-align: center; min-width: 0; }
+.cell .l { font-size: .68rem; font-weight: 700; color: var(--sub); }
+.cell .v { font-size: .84rem; font-weight: 800; margin-top: 2px; word-break: break-word; }
+.cell.rem { background: #f0fdf4; border: 1.5px solid #86efac; }
+.cell.rem .v { color: var(--brand); }
+.warn {
+  margin: 0 10px 10px; padding: 6px 10px; border-radius: 8px; background: #fef3c7; color: #8a5b00;
+  font-size: .72rem; font-weight: 800;
+}
+.note { margin: 0 10px 10px; font-size: .72rem; font-weight: 700; color: var(--sub); }
 
-        .spin-loader {
-            width: 32px; height: 32px;
-            border: 3px solid #e2e8f0;
-            border-top-color: #0b5e3d;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 20px auto;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
+details.tx { border-top: 1px dashed var(--border); }
+details.tx summary {
+  padding: 8px 12px; font-size: .75rem; font-weight: 800; color: var(--brand); cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 6px;
+}
+details.tx summary::-webkit-details-marker { display: none; }
+details.tx summary i { transition: transform .2s; }
+details.tx[open] summary i { transform: rotate(90deg); }
+.tx-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid #f1f5f9;
+  font-size: .78rem; font-weight: 700;
+}
+.tx-row .party { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-row .q { white-space: nowrap; font-weight: 800; }
+.chip { font-size: .66rem; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.chip.sale { background: #dcfce7; color: #15803d; }
+.chip.buy { background: #dbeafe; color: #1d4ed8; }
+.chip.ret { background: #fee2e2; color: #b91c1c; }
+
+.empty { text-align: center; padding: 42px 16px; color: var(--sub); font-weight: 700; }
+.empty i { font-size: 2rem; display: block; margin-bottom: 10px; color: #94a3b8; }
+.spin-loader {
+  width: 30px; height: 30px; border: 3px solid #e2e8f0; border-top-color: var(--brand);
+  border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 10px;
+}
+@media (min-width: 560px) { .stats { grid-template-columns: repeat(6, 1fr); } }
+</style>
 </head>
 <body>
 
-    <!-- Header Section -->
-    <div class="header-section">
-        <div class="header-container container">
-            <a href="reports.html" class="btn-action" title="رجوع">
-                <i class="fas fa-arrow-right fs-5"></i>
-            </a>
-            <div class="title-area text-center flex-grow-1">
-                <h5 class="fw-bold m-0" style="font-size: 1.15rem; font-weight: 800;">حركة الصنف والسيارة</h5>
-            </div>
-            <button class="btn-action" onclick="loadDataAndRender()" title="تحديث">
-                <i class="fas fa-sync-alt fs-5"></i>
-            </button>
-        </div>
+<header class="app-header">
+  <a href="reports.html" class="btn-action" title="رجوع"><i class="fas fa-arrow-right"></i></a>
+  <h1>حركة الصنف والسيارة</h1>
+  <button class="btn-action" id="btnRefresh" title="تحديث"><i class="fas fa-sync-alt"></i></button>
+</header>
+
+<main class="wrap">
+
+  <section class="filter-card">
+    <label class="lbl" for="searchInput"><i class="fas fa-search"></i>اسم الصنف / الباركود</label>
+    <div class="search-box" id="searchBox">
+      <div class="input-wrap" id="inputWrap">
+        <input type="text" id="searchInput" placeholder="اكتب أول حرف من اسم الصنف..." autocomplete="off" role="combobox" aria-expanded="false" aria-controls="suggestList">
+        <button type="button" class="clear-x" id="btnClear" aria-label="مسح"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="suggest" id="suggestList" role="listbox"></div>
     </div>
 
-    <div class="main-container container">
-        
-        <!-- Filter Controls -->
-        <div class="filter-card">
-            <div class="row g-2">
-                <div class="col-12 col-md-6">
-                    <label class="form-label fw-bold small text-secondary mb-1"><i class="fas fa-search me-1"></i>اسم الصنف / الباركود</label>
-                    <input type="text" id="searchInput" class="form-control search-input" placeholder="اكتب اسم الصنف للبحث الفوري..." autocomplete="off">
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label fw-bold small text-secondary mb-1"><i class="fas fa-calendar-alt me-1"></i>التاريخ (فارغ = تراكمي من أول المدة حتى اليوم)</label>
-                    <div class="input-group">
-                        <input type="date" id="dateInput" class="form-control search-input">
-                        <button class="btn btn-outline-secondary border-secondary-subtle" type="button" id="clearDateBtn" title="مسح التاريخ">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Summary Cards -->
-        <div class="row g-2 mb-3" id="statsContainer">
-            <!-- الكروت الإحصائية تُبنى ديناميكياً بواسطة JavaScript -->
-        </div>
-
-        <!-- Details Table -->
-        <div class="table-responsive table-custom">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>التاريخ / الفترة</th>
-                        <th style="text-align: right; padding-right: 12px;">اسم الصنف</th>
-                        <th>المشتريات</th>
-                        <th>قبل التحميل</th>
-                        <th>تم تحميله بالسيارة</th>
-                        <th>المبيعات</th>
-                        <th>المرتجعات</th>
-                        <th style="background: #07472e;">المتبقي بالسيارة</th>
-                    </tr>
-                </thead>
-                <tbody id="tableBody">
-                    <tr>
-                        <td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري تجميع حركات المخزن وشاشة تحميل السيارة...</div></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
+    <label class="lbl" for="dateInput" style="margin-top:12px;"><i class="fas fa-calendar-alt"></i>يوم محدد (اختياري — فارغ = كل الأيام)</label>
+    <div class="date-row" style="margin-top:0;">
+      <input type="date" id="dateInput">
+      <button type="button" id="btnClearDate" title="مسح التاريخ"><i class="fas fa-times"></i></button>
     </div>
+    <div class="status" id="status">جاري تحميل البيانات...</div>
+  </section>
+
+  <div id="report">
+    <div class="empty"><i class="fas fa-magnifying-glass"></i>اكتب اسم الصنف واختره من القائمة لعرض حركته</div>
+  </div>
+
+</main>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-        authDomain: "ahmedelzaiady.firebaseapp.com",
-        projectId: "ahmedelzaiady",
-        storageBucket: "ahmedelzaiady.firebasestorage.app",
-        messagingSenderId: "300306825071",
-        appId: "1:300306825071:web:0426ddde56280fa090329a"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain: "ahmedelzaiady.firebaseapp.com",
+  projectId: "ahmedelzaiady",
+  storageBucket: "ahmedelzaiady.firebasestorage.app",
+  messagingSenderId: "300306825071",
+  appId: "1:300306825071:web:0426ddde56280fa090329a"
+};
 
-    const app = initializeApp(firebaseConfig);
-    let db;
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+const app = initializeApp(firebaseConfig);
+let db;
+try {
+  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) });
+} catch (e) {
+  db = getFirestore(app);
+}
+
+const $ = id => document.getElementById(id);
+const DAYS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+/* ================= State ================= */
+let items = [];            // أصناف المخزن (غير المحذوفة)
+let factorsMap = {};       // id -> عدد القطع في الكرتونة
+let namesMap = {};         // اسم منظف -> id
+let openingMap = {};       // رصيد أول المدة من inventory_transactions
+let salesIdx = {};         // id -> [حركات بيع]
+let purchIdx = {};         // id -> [حركات شراء]
+let loadsByDate = {};      // date -> { loadedInSession, cartItems }
+let dataReady = false;
+let selectedId = null;
+
+/* ================= Helpers ================= */
+function toEn(s) {
+  return String(s ?? '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+}
+function norm(str) {
+  return String(str || '').trim()
+    .replace(/[\u064B-\u0652]/g, '')
+    .replace(/[أإآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+    .toLowerCase();
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function isCartonUnit(unitValue, flag) {
+  if (flag === true) return true;
+  if (!unitValue) return false;
+  const u = String(unitValue).trim().toLowerCase();
+  return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+}
+
+// يحوّل أي قيمة تاريخ (نص / Timestamp / رقم) إلى YYYY-MM-DD
+function dateFromAny(v) {
+  if (!v) return '';
+  if (typeof v === 'string') {
+    const s = toEn(v);
+    let m = s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    m = s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    return '';
+  }
+  let d = null;
+  if (typeof v.toDate === 'function') d = v.toDate();
+  else if (v.seconds) d = new Date(v.seconds * 1000);
+  else if (typeof v === 'number') d = new Date(v);
+  return (d && !isNaN(d)) ? d.toISOString().slice(0, 10) : '';
+}
+function recordDate(rec) {
+  return dateFromAny(rec.date) || dateFromAny(rec.timestamp) || dateFromAny(rec.createdAt) ||
+         dateFromAny(rec.created_at) || dateFromAny(rec.dateTime) || '';
+}
+function todayStr() {
+  const t = new Date();
+  return new Date(t.getTime() - t.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function dayLabel(iso) {
+  if (!iso) return { name: 'تاريخ غير محدد', sub: '' };
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return { name: `${DAYS_AR[dt.getDay()]} ${d}/${m}/${y}`, sub: iso };
+}
+
+function resolveId(it) {
+  if (it.stockId && factorsMap[it.stockId]) return it.stockId;
+  if (it.productId && factorsMap[it.productId]) return it.productId;
+  if (it.id && factorsMap[it.id]) return it.id;
+  if (it.name) { const id = namesMap[norm(it.name)]; if (id) return id; }
+  return null;
+}
+function unitOf(item) {
+  const raw = String(item.unitName || item.unit || '').trim();
+  return (raw && norm(raw) !== norm('كرتونة')) ? raw : 'جركن';
+}
+
+// عرض كمية بالقطع كـ (كراتين + فرط)
+function fmtQty(totalPcs, cap, unit) {
+  totalPcs = Math.round(Number(totalPcs) || 0);
+  cap = parseInt(cap) || 1;
+  if (totalPcs === 0) return '0';
+  const neg = totalPcs < 0, abs = Math.abs(totalPcs);
+  let r;
+  if (cap <= 1) r = `${abs} ${unit}`;
+  else {
+    const c = Math.floor(abs / cap), l = abs % cap;
+    if (c > 0 && l > 0) r = `${c} كرتونة و ${l} ${unit}`;
+    else if (c > 0) r = `${c} كرتونة`;
+    else r = `${l} ${unit}`;
+  }
+  return neg ? `−${r}` : r;
+}
+
+/* ================= Data loading ================= */
+function setStatus(text, cls = '') {
+  const el = $('status'); el.textContent = text; el.className = 'status ' + cls;
+}
+
+async function loadAll() {
+  dataReady = false;
+  $('btnRefresh').classList.add('spinning');
+  setStatus('جاري تحميل البيانات...');
+  try {
+    const [invSnap, salesSnap, supSnap, dailySnap, archSnap, openSnap] = await Promise.all([
+      getDocs(collection(db, 'inventory')),
+      getDocs(collection(db, 'invoices')),
+      getDocs(collection(db, 'supplier_transactions')),
+      getDocs(collection(db, 'daily_loads')).catch(() => null),
+      getDocs(collection(db, 'archived_loads')).catch(() => null),
+      getDocs(query(collection(db, 'inventory_transactions'), where('type', '==', 'opening_balance'))).catch(() => null)
+    ]);
+
+    // --- الأصناف ---
+    factorsMap = {}; namesMap = {}; items = [];
+    invSnap.forEach(d => {
+      const data = d.data();
+      const factor = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+      factorsMap[d.id] = factor;
+      if (data.name) namesMap[norm(data.name)] = d.id;
+      if (!data.isDeleted) {
+        items.push({
+          id: d.id, name: data.name || 'بدون اسم', barcode: String(data.barcode || ''),
+          factor, unitName: data.unitName, unit: data.unit,
+          openingTotalPcs: data.openingTotalPcs, openingQty: data.openingQty,
+          _n: norm(data.name), _bc: String(data.barcode || '').toLowerCase()
         });
-    } catch (e) {
-        db = getFirestore(app);
-    }
+      }
+    });
+    items.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
-    let allInventory = [];
-    let salesData = [];
-    let purchasesData = [];
-    let loadDataMap = {}; // خريطة جلب حمولات السيارة المسجلة من شاشة التحميل
-
-    function parseDate(df, ts) {
-        if (df) {
-            let m = String(df).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-            if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-        }
-        if (ts?.seconds) return new Date(ts.seconds * 1000).toISOString().slice(0, 10);
-        return "";
-    }
-
-    function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
-        totalPcs = parseInt(totalPcs) || 0;
-        capacity = parseInt(capacity) || 1;
-        if (totalPcs === 0) return `0 ${unit}`;
-        const isNegative = totalPcs < 0;
-        const absPcs = Math.abs(totalPcs);
-        
-        let result = '';
-        if (capacity <= 1) {
-            result = `${absPcs} ${unit}`;
-        } else {
-            const cartons = Math.floor(absPcs / capacity);
-            const loose = absPcs % capacity;
-            if (cartons > 0 && loose > 0) result = `${cartons} ك و ${loose} ${unit}`;
-            else if (cartons > 0) result = `${cartons} كرتونة`;
-            else result = `${loose} ${unit}`;
-        }
-        return isNegative ? `-${result}` : result;
-    }
-
-    async function loadDataAndRender() {
-        const tableBody = document.getElementById('tableBody');
-        tableBody.innerHTML = `<tr><td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري ربط بيانات شاشة التحميل والحركات...</div></td></tr>`;
-
-        try {
-            const [inventorySnap, invoicesSnap, supplierSnap, archiveSnap] = await Promise.all([
-                getDocs(collection(db, "inventory")),
-                getDocs(collection(db, "invoices")),
-                getDocs(collection(db, "supplier_transactions")),
-                getDocs(collection(db, "archived_loads"))
-            ]);
-
-            allInventory = [];
-            inventorySnap.forEach(d => {
-                const data = d.data();
-                if (!data.isDeleted) {
-                    allInventory.push({
-                        id: d.id,
-                        name: data.name || 'بدون اسم',
-                        barcode: data.barcode || '',
-                        unitFactor: Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1),
-                        unitName: data.unitName || data.unit || 'جركن',
-                        openingPcs: Number(data.openingTotalPcs || data.openingQty || 0)
-                    });
-                }
-            });
-
-            // جلب مبيعات اليوم ومرتجعاتها
-            salesData = [];
-            invoicesSnap.forEach(doc => {
-                const inv = doc.data();
-                if (inv.isDeleted) return;
-                const dStr = parseDate(inv.date, inv.timestamp);
-                inv.items?.forEach(item => {
-                    salesData.push({
-                        date: dStr,
-                        stockId: item.stockId,
-                        name: item.name?.trim(),
-                        qty: Number(item.qty) || 0,
-                        isCarton: (item.unit === 'box' || item.isCarton === true),
-                        isReturn: !!item.isReturn
-                    });
-                });
-            });
-
-            // جلب المشتريات
-            purchasesData = [];
-            supplierSnap.forEach(doc => {
-                const sup = doc.data();
-                const dStr = parseDate(sup.date, sup.timestamp);
-                sup.items?.forEach(item => {
-                    const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                    purchasesData.push({
-                        date: dStr,
-                        stockId: item.stockId,
-                        name: item.name?.trim(),
-                        qty: isReturn ? Number(item.returnQty || item.qty) : Number(item.qty),
-                        isCarton: (item.unitName === 'كرتونة' || item.isCarton !== false),
-                        isReturn: isReturn
-                    });
-                });
-            });
-
-            // قراءة حركات شاشة تحميل السيارة المسجلة والمؤرشفة بنفس هيكلية (cartItems / loadedInSession)
-            loadDataMap = {};
-            archiveSnap.forEach(doc => {
-                const dStr = doc.id;
-                const data = doc.data();
-                const cart = data.cartItems || {};
-                const sess = data.loadedInSession || {};
-                
-                Object.keys(cart).forEach(itemId => {
-                    if (!loadDataMap[itemId]) loadDataMap[itemId] = {};
-                    const cap = Number(cart[itemId].capacity) || 1;
-                    
-                    const c = sess[itemId] ? Number(sess[itemId].cartons || 0) : Number(cart[itemId].loadedCartons || 0);
-                    const l = sess[itemId] ? Number(sess[itemId].loose || 0) : Number(cart[itemId].loadedLoose || 0);
-                    
-                    loadDataMap[itemId][dStr] = (c * cap) + l;
-                });
-            });
-
-            renderReport();
-
-        } catch (e) {
-            console.error(e);
-            tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4 fw-bold">❌ حدث خطأ أثناء الاتصال بسجلات التحميل والقواعد</td></tr>`;
-        }
-    }
-
-    function renderReport() {
-        const searchVal = document.getElementById('searchInput').value.trim().toLowerCase();
-        const selectedDate = document.getElementById('dateInput').value;
-        const tableBody = document.getElementById('tableBody');
-
-        let rowsHTML = "";
-        let totalPurchasesAll = 0;
-        let totalPreLoadingAll = 0;
-        let totalLoadedAll = 0;
-        let totalSalesAll = 0;
-        let totalReturnsAll = 0;
-
-        const filteredItems = allInventory.filter(item => 
-            (item.name && item.name.toLowerCase().includes(searchVal)) ||
-            (item.barcode && String(item.barcode).includes(searchVal))
-        );
-
-        if (filteredItems.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="8" class="empty-box"><i class="fas fa-folder-open fs-3 d-block mb-2"></i>لا توجد أصناف مطابقة للبحث</td></tr>`;
-            renderCards(0, 0, 0, 0, 0, 0);
-            return;
-        }
-
-        filteredItems.forEach(item => {
-            const cap = item.unitFactor;
-            
-            let itemPurchases = 0;
-            let itemSales = 0;
-            let itemReturns = 0;
-            let itemPreLoading = 0;
-            let itemLoaded = 0;
-
-            if (!selectedDate) {
-                // === الحالة 1: عدم تحديد تاريخ (السجل التراكمي الشامل) ===
-                itemPurchases = purchasesData
-                    .filter(p => p.stockId === item.id || p.name === item.name)
-                    .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
-
-                salesData
-                    .filter(s => s.stockId === item.id || s.name === item.name)
-                    .forEach(s => {
-                        const pcs = s.qty * (s.isCarton ? cap : 1);
-                        if (s.isReturn) itemReturns += pcs;
-                        else itemSales += pcs;
-                    });
-
-                itemPreLoading = item.openingPcs;
-
-                // إجمالي ما تم تحميله في ملف/شاشة تحميل السيارة عبر كل التواريخ
-                if (loadDataMap[item.id]) {
-                    Object.values(loadDataMap[item.id]).forEach(v => itemLoaded += v);
-                }
-
-            } else {
-                // === الحالة 2: تاريخ محدد (يعتمد كلياً على سجلات شاشة تحميل العربية لهذا اليوم) ===
-                
-                // مشتريات ومبيعات اليوم المحدد فقط
-                itemPurchases = purchasesData
-                    .filter(p => (p.stockId === item.id || p.name === item.name) && p.date === selectedDate)
-                    .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
-
-                salesData
-                    .filter(s => (s.stockId === item.id || s.name === item.name) && s.date === selectedDate)
-                    .forEach(s => {
-                        const pcs = s.qty * (s.isCarton ? cap : 1);
-                        if (s.isReturn) itemReturns += pcs;
-                        else itemSales += pcs;
-                    });
-
-                // كمية التحميل المسجلة في شاشة تحميل العربية الخاصة بهذا اليوم المحدد
-                itemLoaded = loadDataMap[item.id]?.[selectedDate] || 0;
-
-                // "قبل التحميل": الرصيد التراكمي للسيارة المتبقي من الأيام السابقة قبل هذا التاريخ
-                let pastLoaded = 0;
-                let pastSales = 0;
-                let pastReturns = 0;
-
-                if (loadDataMap[item.id]) {
-                    Object.keys(loadDataMap[item.id]).forEach(d => {
-                        if (d < selectedDate) pastLoaded += loadDataMap[item.id][d];
-                    });
-                }
-
-                salesData
-                    .filter(s => (s.stockId === item.id || s.name === item.name) && s.date && s.date < selectedDate)
-                    .forEach(s => {
-                        const pcs = s.qty * (s.isCarton ? cap : 1);
-                        if (s.isReturn) pastReturns += pcs;
-                        else pastSales += pcs;
-                    });
-
-                itemPreLoading = pastLoaded - pastSales + pastReturns;
-            }
-
-            // المتبقي في السيارة
-            let itemRemainingInCar = selectedDate ? (itemPreLoading + itemLoaded - itemSales + itemReturns) : (itemLoaded - itemSales + itemReturns);
-
-            totalPurchasesAll += itemPurchases;
-            totalPreLoadingAll += itemPreLoading;
-            totalLoadedAll += itemLoaded;
-            totalSalesAll += itemSales;
-            totalReturnsAll += itemReturns;
-
-            const dateBadgeLabel = selectedDate ? selectedDate : 'تراكمي (أول المدة حتى اليوم)';
-
-            rowsHTML += `
-                <tr>
-                    <td><span class="badge bg-light text-dark border">${dateBadgeLabel}</span></td>
-                    <td style="text-align: right; padding-right: 12px; font-weight: 800; color: #0a4a31;">${item.name}</td>
-                    <td class="text-primary">${formatQuantityDetailed(itemPurchases, cap, item.unitName)}</td>
-                    <td class="text-secondary">${formatQuantityDetailed(itemPreLoading, cap, item.unitName)}</td>
-                    <td class="text-info fw-bold">${formatQuantityDetailed(itemLoaded, cap, item.unitName)}</td>
-                    <td class="text-success">${formatQuantityDetailed(itemSales, cap, item.unitName)}</td>
-                    <td class="text-warning">${formatQuantityDetailed(itemReturns, cap, item.unitName)}</td>
-                    <td style="background: #f0fdf4; color: #0b5e3d; font-weight: 800;">${formatQuantityDetailed(itemRemainingInCar, cap, item.unitName)}</td>
-                </tr>
-            `;
-        });
-
-        const totalRemainingAll = selectedDate ? (totalPreLoadingAll + totalLoadedAll - totalSalesAll + totalReturnsAll) : (totalLoadedAll - totalSalesAll + totalReturnsAll);
-
-        renderCards(totalPurchasesAll, totalPreLoadingAll, totalLoadedAll, totalSalesAll, totalReturnsAll, totalRemainingAll);
-        tableBody.innerHTML = rowsHTML;
-    }
-
-    function renderCards(pur, pre, load, sale, ret, rem) {
-        const statsContainer = document.getElementById('statsContainer');
-        statsContainer.innerHTML = `
-            <div class="col-4 col-md-2">
-                <div class="stat-card">
-                    <div class="lbl">المشتريات</div>
-                    <div class="val text-primary">${pur}</div>
-                </div>
-            </div>
-            <div class="col-4 col-md-2">
-                <div class="stat-card">
-                    <div class="lbl">قبل التحميل</div>
-                    <div class="val text-secondary">${pre}</div>
-                </div>
-            </div>
-            <div class="col-4 col-md-2">
-                <div class="stat-card">
-                    <div class="lbl">تم تحميله بالسيارة</div>
-                    <div class="val text-info">${load}</div>
-                </div>
-            </div>
-            <div class="col-4 col-md-2">
-                <div class="stat-card">
-                    <div class="lbl">المبيعات</div>
-                    <div class="val text-success">${sale}</div>
-                </div>
-            </div>
-            <div class="col-4 col-md-2">
-                <div class="stat-card">
-                    <div class="lbl">المرتجعات</div>
-                    <div class="val text-warning">${ret}</div>
-                </div>
-            </div>
-            <div class="col-4 col-md-2">
-                <div class="stat-card highlight">
-                    <div class="lbl">المتبقي بالسيارة</div>
-                    <div class="val">${rem}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    document.getElementById('searchInput').addEventListener('input', renderReport);
-    document.getElementById('dateInput').addEventListener('change', renderReport);
-    document.getElementById('clearDateBtn').addEventListener('click', () => {
-        document.getElementById('dateInput').value = '';
-        renderReport();
+    openingMap = {};
+    openSnap?.forEach(d => {
+      const x = d.data();
+      if (x.productId) openingMap[x.productId] = (openingMap[x.productId] || 0) + (Number(x.quantityPcs) || 0);
     });
 
-    window.loadDataAndRender = loadDataAndRender;
+    // --- المبيعات والمرتجعات ---
+    salesIdx = {};
+    salesSnap.forEach(d => {
+      const inv = d.data();
+      if (inv.isDeleted || !Array.isArray(inv.items)) return;
+      const date = recordDate(inv);
+      const party = inv.customerName || inv.clientName || inv.customer || 'عميل نقدي';
+      inv.items.forEach(it => {
+        const id = resolveId(it); if (!id) return;
+        const factor = Number(it.unitFactor || it.factor) || factorsMap[id] || 1;
+        const raw = Number(it.qty) || 0;
+        const carton = isCartonUnit(it.unit || it.unitName, it.isCarton);
+        const pcs = carton ? raw * factor : raw;
+        const isReturn = inv.type === 'return' || inv.isReturn === true || it.isReturn === true;
+        (salesIdx[id] ||= []).push({ date, pcs, isReturn, party, raw, carton });
+      });
+    });
 
-    loadDataAndRender();
+    // --- المشتريات ومرتجعات الشراء ---
+    purchIdx = {};
+    supSnap.forEach(d => {
+      const sup = d.data();
+      if (!Array.isArray(sup.items)) return;
+      const date = recordDate(sup);
+      const party = sup.supplierName || sup.supplier || sup.partyName || 'مورد';
+      sup.items.forEach(it => {
+        const id = resolveId(it); if (!id) return;
+        const factor = Number(it.unitFactor || it.factor) || factorsMap[id] || 1;
+        const isReturn = Number(it.returnQty) > 0 || it.isReturn === true;
+        const raw = isReturn ? Number(it.returnQty || it.qty) : Number(it.qty || 0);
+        const carton = isCartonUnit(it.unitName || it.unit, it.isCarton);
+        const pcs = Math.abs(carton ? raw * factor : raw);
+        (purchIdx[id] ||= []).push({ date, pcs, signed: isReturn ? -pcs : pcs, isReturn, party, raw, carton });
+      });
+    });
+
+    // --- حمولات السيارة: daily_loads (الحي) له الأولوية، ثم archived_loads ---
+    loadsByDate = {};
+    const hasEntries = x => x && (Object.keys(x.loadedInSession || {}).length || Object.keys(x.cartItems || {}).length);
+    archSnap?.forEach(d => { const x = d.data(); if (hasEntries(x)) loadsByDate[d.id] = x; });
+    dailySnap?.forEach(d => { const x = d.data(); if (hasEntries(x)) loadsByDate[d.id] = x; });
+
+    dataReady = true;
+    setStatus(`✓ تم تحميل ${items.length} صنف وسجلات التحميل`, 'ok');
+    if (document.activeElement === $('searchInput')) openList();
+    if (selectedId) renderReport();
+  } catch (e) {
+    console.error(e);
+    setStatus('❌ تعذر تحميل البيانات — تحقق من الاتصال ثم اضغط تحديث', 'err');
+  } finally {
+    $('btnRefresh').classList.remove('spinning');
+  }
+}
+
+/* ================= Autocomplete ================= */
+const input = $('searchInput'), list = $('suggestList');
+let matches = [], focusIdx = -1;
+
+function findMatches(q) {
+  const toks = norm(q).split(/\s+/).filter(Boolean);
+  if (!toks.length) return items.slice(0, 30);
+  return items.filter(it => toks.every(t => it._n.includes(t) || it._bc.includes(t))).slice(0, 50);
+}
+function highlight(name, q) {
+  const nq = norm(q), nn = norm(name);
+  if (!nq || nn.length !== name.length) return esc(name);
+  const i = nn.indexOf(nq);
+  if (i === -1) return esc(name);
+  return esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + nq.length)) + '</mark>' + esc(name.slice(i + nq.length));
+}
+function openList() {
+  if (!dataReady) {
+    list.innerHTML = '<div class="sg-msg">جاري تحميل الأصناف...</div>';
+    list.classList.add('open'); return;
+  }
+  matches = findMatches(input.value);
+  focusIdx = -1;
+  if (!matches.length) {
+    list.innerHTML = '<div class="sg-msg">لا توجد أصناف مطابقة</div>';
+  } else {
+    list.innerHTML = matches.map(it =>
+      `<div class="sg-item" role="option" data-id="${esc(it.id)}"><span>${highlight(it.name, input.value)}</span>` +
+      (it.factor > 1 ? `<span class="sg-meta">${it.factor} بالكرتونة</span>` : '') + `</div>`
+    ).join('');
+  }
+  list.classList.add('open');
+  input.setAttribute('aria-expanded', 'true');
+}
+function closeList() {
+  list.classList.remove('open');
+  input.setAttribute('aria-expanded', 'false');
+  focusIdx = -1;
+}
+function selectItem(id) {
+  const it = items.find(x => x.id === id);
+  if (!it) return;
+  selectedId = id;
+  input.value = it.name;
+  $('inputWrap').classList.add('has-text');
+  closeList();
+  input.blur();
+  renderReport();
+}
+function setFocus(i) {
+  const els = list.querySelectorAll('.sg-item');
+  if (!els.length) return;
+  focusIdx = Math.max(0, Math.min(i, els.length - 1));
+  els.forEach((el, k) => el.classList.toggle('focused', k === focusIdx));
+  els[focusIdx].scrollIntoView({ block: 'nearest' });
+}
+
+input.addEventListener('focus', openList);
+input.addEventListener('input', () => {
+  $('inputWrap').classList.toggle('has-text', !!input.value);
+  if (!input.value.trim()) { selectedId = null; showEmpty(); }
+  openList();
+});
+input.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); setFocus(focusIdx + 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); setFocus(focusIdx - 1); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const pick = focusIdx >= 0 ? matches[focusIdx] : matches[0];
+    if (pick) selectItem(pick.id);
+  } else if (e.key === 'Escape') closeList();
+});
+list.addEventListener('click', e => {
+  const el = e.target.closest('.sg-item');
+  if (el) selectItem(el.dataset.id);
+});
+document.addEventListener('pointerdown', e => {
+  if (!$('searchBox').contains(e.target)) closeList();
+});
+$('btnClear').addEventListener('click', () => {
+  input.value = ''; selectedId = null;
+  $('inputWrap').classList.remove('has-text');
+  showEmpty(); input.focus();
+});
+$('dateInput').addEventListener('change', () => { if (selectedId) renderReport(); });
+$('btnClearDate').addEventListener('click', () => { $('dateInput').value = ''; if (selectedId) renderReport(); });
+$('btnRefresh').addEventListener('click', loadAll);
+
+/* ================= Report ================= */
+function showEmpty() {
+  $('report').innerHTML = '<div class="empty"><i class="fas fa-magnifying-glass"></i>اكتب اسم الصنف واختره من القائمة لعرض حركته</div>';
+}
+
+// بيانات التحميل لصنف في يوم معين (نفس هيكلية صفحة تحميل العربية)
+function getLoad(date, item) {
+  const doc = loadsByDate[date]; if (!doc) return null;
+  const sess = doc.loadedInSession?.[item.id];
+  const cart = doc.cartItems?.[item.id];
+  if (!sess && !cart) return null;
+  const cap = Number(cart?.capacity) || item.factor || 1;
+  const prevC = Number(sess?.prevCartons ?? cart?.prevCartons ?? 0) || 0;
+  const prevL = Number(sess?.prevLoose ?? cart?.prevLoose ?? 0) || 0;
+  const newC = Number(sess?.cartons ?? cart?.loadedCartons ?? 0) || 0;
+  const newL = Number(sess?.loose ?? cart?.loadedLoose ?? 0) || 0;
+  const manC = Number(cart?.manualCartons ?? 0) || 0;
+  const manL = Number(cart?.manualLoose ?? 0) || 0;
+  return {
+    prev: Math.round(prevC * cap + prevL),
+    loaded: Math.round(newC * cap + newL),
+    manual: Math.round(manC * cap + manL)
+  };
+}
+
+function buildDays(item) {
+  const map = {};
+  const get = d => map[d] ||= { date: d, buy: 0, sold: 0, sRet: 0, hasLoad: false, prev: 0, loaded: 0, manual: 0, remaining: 0, tx: [] };
+
+  (purchIdx[item.id] || []).forEach(p => {
+    const o = get(p.date);
+    o.buy += p.signed;
+    o.tx.push({ kind: p.isReturn ? 'pret' : 'buy', party: p.party, raw: p.raw, carton: p.carton });
+  });
+  (salesIdx[item.id] || []).forEach(s => {
+    const o = get(s.date);
+    if (s.isReturn) o.sRet += Math.abs(s.pcs); else o.sold += s.pcs;
+    o.tx.push({ kind: s.isReturn ? 'sret' : 'sale', party: s.party, raw: s.raw, carton: s.carton });
+  });
+  Object.keys(loadsByDate).forEach(date => {
+    const L = getLoad(date, item);
+    if (L && (L.prev + L.loaded) > 0) {
+      const o = get(date);
+      o.hasLoad = true; o.prev = L.prev; o.loaded = L.loaded; o.manual = L.manual;
+    }
+  });
+  Object.values(map).forEach(o => { o.remaining = o.prev + o.loaded - o.sold + o.sRet - o.manual; });
+  return Object.values(map).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+const TX_META = {
+  sale: { cls: 'sale', label: 'بيع' },
+  sret: { cls: 'ret', label: 'مرتجع بيع' },
+  buy:  { cls: 'buy', label: 'شراء' },
+  pret: { cls: 'ret', label: 'مرتجع شراء' }
+};
+
+function renderReport() {
+  const item = items.find(x => x.id === selectedId);
+  if (!item) { showEmpty(); return; }
+
+  const cap = item.factor, unit = unitOf(item);
+  const q = p => fmtQty(p, cap, unit);
+  const allDays = buildDays(item);
+
+  // رصيد المخزن الحالي (نفس منطق صفحة الأصناف)
+  let opening = 0;
+  if (item.openingTotalPcs != null) opening = Number(item.openingTotalPcs) || 0;
+  else if (item.openingQty != null) opening = Math.round((Number(item.openingQty) || 0) * cap);
+  else if (openingMap[item.id]) opening = openingMap[item.id];
+  const allBuy = (purchIdx[item.id] || []).reduce((s, p) => s + p.signed, 0);
+  const allNetSales = (salesIdx[item.id] || []).reduce((s, x) => s + (x.isReturn ? -Math.abs(x.pcs) : x.pcs), 0);
+  const stockNow = opening + allBuy - allNetSales;
+
+  const dateFilter = $('dateInput').value;
+  const days = dateFilter ? allDays.filter(d => d.date === dateFilter) : allDays;
+
+  // ملخص الفترة المعروضة
+  const tBuy = days.reduce((s, d) => s + d.buy, 0);
+  const tSold = days.reduce((s, d) => s + d.sold, 0);
+  const tRet = days.reduce((s, d) => s + d.sRet, 0);
+  const tLoaded = days.reduce((s, d) => s + d.loaded, 0);
+  const lastLoadDay = days.find(d => d.hasLoad);
+
+  let html = `
+    <div class="item-title">
+      <div class="nm">${esc(item.name)}</div>
+      <div class="sub">${cap > 1 ? `التعبئة: ${cap} ${esc(unit)} في الكرتونة` : `الوحدة: ${esc(unit)}`}${dateFilter ? ' — يوم ' + esc(dateFilter) : ' — كل الأيام'}</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">المشتريات</div><div class="v c-blue">${q(tBuy)}</div></div>
+      <div class="stat"><div class="l">المبيعات</div><div class="v c-green">${q(tSold)}</div></div>
+      <div class="stat"><div class="l">المرتجعات</div><div class="v c-amber">${q(tRet)}</div></div>
+      <div class="stat"><div class="l">إجمالي التحميل</div><div class="v c-cyan">${q(tLoaded)}</div></div>
+      <div class="stat dark"><div class="l">المتبقي بالسيارة</div>
+        <div class="v ${lastLoadDay && lastLoadDay.remaining < 0 ? 'neg' : ''}">${lastLoadDay ? q(lastLoadDay.remaining) : '—'}</div>
+        <div class="n">${lastLoadDay ? esc(lastLoadDay.date) : 'لا يوجد تحميل'}</div></div>
+      <div class="stat"><div class="l">رصيد المخزن</div><div class="v c-gray ${stockNow < 0 ? 'neg' : ''}">${q(stockNow)}</div><div class="n">حتى اليوم</div></div>
+    </div>`;
+
+  if (!days.length) {
+    html += `<div class="empty"><i class="fas fa-folder-open"></i>لا توجد حركات لهذا الصنف${dateFilter ? ' في هذا اليوم' : ''}</div>`;
+    $('report').innerHTML = html;
+    return;
+  }
+
+  const today = todayStr();
+  html += `<div class="sec-title"><i class="fas fa-clock-rotate-left"></i>سجل الأيام (${days.length})</div>`;
+
+  days.forEach(d => {
+    const lb = dayLabel(d.date);
+    const remCls = d.remaining < 0 ? 'neg' : '';
+    const txRows = d.tx.map(t => {
+      const m = TX_META[t.kind];
+      const u = t.carton ? 'كرتونة' : unit;
+      return `<div class="tx-row"><span class="chip ${m.cls}">${m.label}</span><span class="party">${esc(t.party)}</span><span class="q">${t.raw} ${esc(u)}</span></div>`;
+    }).join('');
+
+    html += `
+    <article class="day">
+      <div class="day-head">
+        <div><div class="dn">${esc(lb.name)}</div>${lb.sub ? `<div class="iso">${esc(lb.sub)}</div>` : ''}</div>
+        ${d.date === today ? '<span class="badge">اليوم</span>' : ''}
+      </div>
+      <div class="cells">
+        <div class="cell"><div class="l">المشتريات</div><div class="v c-blue">${q(d.buy)}</div></div>
+        <div class="cell"><div class="l">قبل التحميل</div><div class="v c-gray">${d.hasLoad ? q(d.prev) : '—'}</div></div>
+        <div class="cell"><div class="l">تم تحميله</div><div class="v c-cyan">${d.hasLoad ? q(d.loaded) : '—'}</div></div>
+        <div class="cell"><div class="l">المبيعات</div><div class="v c-green">${q(d.sold)}</div></div>
+        <div class="cell"><div class="l">المرتجعات</div><div class="v c-amber">${q(d.sRet)}</div></div>
+        <div class="cell rem"><div class="l">المتبقي بالسيارة</div><div class="v ${remCls}">${d.hasLoad ? q(d.remaining) : '—'}</div></div>
+      </div>
+      ${(!d.hasLoad && d.sold > 0) ? '<div class="warn"><i class="fas fa-triangle-exclamation"></i> يوجد مبيعات ولا يوجد تحميل مسجل لهذا اليوم</div>' : ''}
+      ${(d.hasLoad && d.remaining < 0) ? '<div class="warn"><i class="fas fa-triangle-exclamation"></i> المباع أكبر من المحمّل — راجع كميات التحميل أو المبيعات</div>' : ''}
+      ${d.manual > 0 ? `<div class="note">الراجع الفعلي من الجرد: ${q(d.manual)} (تم خصمه من المتبقي)</div>` : ''}
+      ${d.tx.length ? `<details class="tx"><summary><i class="fas fa-chevron-left"></i>تفاصيل الحركات (${d.tx.length})</summary>${txRows}</details>` : ''}
+    </article>`;
+  });
+
+  $('report').innerHTML = html;
+}
+
+loadAll();
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(err => console.log(err));
