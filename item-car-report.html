@@ -203,7 +203,7 @@
                 </thead>
                 <tbody id="tableBody">
                     <tr>
-                        <td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري تجميع حركات المخزن والسيارة...</div></td>
+                        <td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري تجميع حركات المخزن وشاشة تحميل السيارة...</div></td>
                     </tr>
                 </tbody>
             </table>
@@ -237,9 +237,8 @@
     let allInventory = [];
     let salesData = [];
     let purchasesData = [];
-    let loadDataMap = {};
+    let loadDataMap = {}; // خريطة جلب حمولات السيارة المسجلة من شاشة التحميل
 
-    // دالة توحيد صيغة التاريخ YYYY-MM-DD
     function parseDate(df, ts) {
         if (df) {
             let m = String(df).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
@@ -249,7 +248,6 @@
         return "";
     }
 
-    // دالة تحويل وتنسيق الكمية التفصيلية (كرتونة وجركن)
     function formatQuantityDetailed(totalPcs, capacity, unit = 'جركن') {
         totalPcs = parseInt(totalPcs) || 0;
         capacity = parseInt(capacity) || 1;
@@ -270,10 +268,9 @@
         return isNegative ? `-${result}` : result;
     }
 
-    // جلب البيانات الأساسية من المجموعات
     async function loadDataAndRender() {
         const tableBody = document.getElementById('tableBody');
-        tableBody.innerHTML = `<tr><td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري جلب البيانات وتحليل التواريخ...</div></td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="8"><div class="spin-loader"></div><div class="text-center text-muted fw-bold small">جاري ربط بيانات شاشة التحميل والحركات...</div></td></tr>`;
 
         try {
             const [inventorySnap, invoicesSnap, supplierSnap, archiveSnap] = await Promise.all([
@@ -298,7 +295,7 @@
                 }
             });
 
-            // جلب المبيعات والمرتجعات
+            // جلب مبيعات اليوم ومرتجعاتها
             salesData = [];
             invoicesSnap.forEach(doc => {
                 const inv = doc.data();
@@ -334,18 +331,21 @@
                 });
             });
 
-            // جلب سجلات تحميل السيارة المفصلة بالتواريخ
+            // قراءة حركات شاشة تحميل السيارة المسجلة والمؤرشفة بنفس هيكلية (cartItems / loadedInSession)
             loadDataMap = {};
             archiveSnap.forEach(doc => {
                 const dStr = doc.id;
                 const data = doc.data();
                 const cart = data.cartItems || {};
+                const sess = data.loadedInSession || {};
                 
                 Object.keys(cart).forEach(itemId => {
                     if (!loadDataMap[itemId]) loadDataMap[itemId] = {};
-                    const c = Number(cart[itemId].loadedCartons) || 0;
-                    const l = Number(cart[itemId].loadedLoose) || 0;
                     const cap = Number(cart[itemId].capacity) || 1;
+                    
+                    const c = sess[itemId] ? Number(sess[itemId].cartons || 0) : Number(cart[itemId].loadedCartons || 0);
+                    const l = sess[itemId] ? Number(sess[itemId].loose || 0) : Number(cart[itemId].loadedLoose || 0);
+                    
                     loadDataMap[itemId][dStr] = (c * cap) + l;
                 });
             });
@@ -354,15 +354,13 @@
 
         } catch (e) {
             console.error(e);
-            tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4 fw-bold">❌ حدث خطأ أثناء تحميل البيانات من السيرفر</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4 fw-bold">❌ حدث خطأ أثناء الاتصال بسجلات التحميل والقواعد</td></tr>`;
         }
     }
 
-    // معالجة وحساب البيانات بناءً على حالة التاريخ
     function renderReport() {
         const searchVal = document.getElementById('searchInput').value.trim().toLowerCase();
         const selectedDate = document.getElementById('dateInput').value;
-
         const tableBody = document.getElementById('tableBody');
 
         let rowsHTML = "";
@@ -393,14 +391,11 @@
             let itemLoaded = 0;
 
             if (!selectedDate) {
-                // === الحالة الأولى: التاريخ فارغ (تراكمي من أول المدة حتى تاريخ اليوم) ===
-                
-                // المشتريات التراكمية
+                // === الحالة 1: عدم تحديد تاريخ (السجل التراكمي الشامل) ===
                 itemPurchases = purchasesData
                     .filter(p => p.stockId === item.id || p.name === item.name)
                     .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
 
-                // المبيعات والمرتجعات التراكمية
                 salesData
                     .filter(s => s.stockId === item.id || s.name === item.name)
                     .forEach(s => {
@@ -409,18 +404,17 @@
                         else itemSales += pcs;
                     });
 
-                // القبل تحميل = الرصيد الافتتاحي فقط
                 itemPreLoading = item.openingPcs;
 
-                // ما تم تحميله بالسيارة تراكمياً
+                // إجمالي ما تم تحميله في ملف/شاشة تحميل السيارة عبر كل التواريخ
                 if (loadDataMap[item.id]) {
                     Object.values(loadDataMap[item.id]).forEach(v => itemLoaded += v);
                 }
 
             } else {
-                // === الحالة الثانية: تم اختيار تاريخ معين ===
+                // === الحالة 2: تاريخ محدد (يعتمد كلياً على سجلات شاشة تحميل العربية لهذا اليوم) ===
                 
-                // 1. حساب حركات هذا اليوم المحدد فقط
+                // مشتريات ومبيعات اليوم المحدد فقط
                 itemPurchases = purchasesData
                     .filter(p => (p.stockId === item.id || p.name === item.name) && p.date === selectedDate)
                     .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
@@ -433,13 +427,20 @@
                         else itemSales += pcs;
                     });
 
-                // 2. القبل تحميل = الرصيد الافتتاحي + صافي حركات السابقة قبل هذا التاريخ المحدد
-                const pastPurchases = purchasesData
-                    .filter(p => (p.stockId === item.id || p.name === item.name) && p.date && p.date < selectedDate)
-                    .reduce((sum, p) => sum + (p.isReturn ? -(p.qty * (p.isCarton ? cap : 1)) : (p.qty * (p.isCarton ? cap : 1))), 0);
+                // كمية التحميل المسجلة في شاشة تحميل العربية الخاصة بهذا اليوم المحدد
+                itemLoaded = loadDataMap[item.id]?.[selectedDate] || 0;
 
+                // "قبل التحميل": الرصيد التراكمي للسيارة المتبقي من الأيام السابقة قبل هذا التاريخ
+                let pastLoaded = 0;
                 let pastSales = 0;
                 let pastReturns = 0;
+
+                if (loadDataMap[item.id]) {
+                    Object.keys(loadDataMap[item.id]).forEach(d => {
+                        if (d < selectedDate) pastLoaded += loadDataMap[item.id][d];
+                    });
+                }
+
                 salesData
                     .filter(s => (s.stockId === item.id || s.name === item.name) && s.date && s.date < selectedDate)
                     .forEach(s => {
@@ -448,16 +449,12 @@
                         else pastSales += pcs;
                     });
 
-                itemPreLoading = item.openingPcs + pastPurchases - pastSales + pastReturns;
-
-                // 3. ما تم تحميله من صفحة تحميل السيارة لهذا اليوم المحدد
-                itemLoaded = loadDataMap[item.id]?.[selectedDate] || 0;
+                itemPreLoading = pastLoaded - pastSales + pastReturns;
             }
 
-            // المتبقي بالسيارة = ما تم تحميله - المبيعات + مرتجع المبيعات
-            let itemRemainingInCar = itemLoaded - itemSales + itemReturns;
+            // المتبقي في السيارة
+            let itemRemainingInCar = selectedDate ? (itemPreLoading + itemLoaded - itemSales + itemReturns) : (itemLoaded - itemSales + itemReturns);
 
-            // إجمالي الكروت
             totalPurchasesAll += itemPurchases;
             totalPreLoadingAll += itemPreLoading;
             totalLoadedAll += itemLoaded;
@@ -480,13 +477,12 @@
             `;
         });
 
-        const totalRemainingAll = totalLoadedAll - totalSalesAll + totalReturnsAll;
+        const totalRemainingAll = selectedDate ? (totalPreLoadingAll + totalLoadedAll - totalSalesAll + totalReturnsAll) : (totalLoadedAll - totalSalesAll + totalReturnsAll);
 
         renderCards(totalPurchasesAll, totalPreLoadingAll, totalLoadedAll, totalSalesAll, totalReturnsAll, totalRemainingAll);
         tableBody.innerHTML = rowsHTML;
     }
 
-    // عرض الكروت الإحصائية العليا
     function renderCards(pur, pre, load, sale, ret, rem) {
         const statsContainer = document.getElementById('statsContainer');
         statsContainer.innerHTML = `
@@ -529,7 +525,6 @@
         `;
     }
 
-    // الأحداث للفلترة المباشرة
     document.getElementById('searchInput').addEventListener('input', renderReport);
     document.getElementById('dateInput').addEventListener('change', renderReport);
     document.getElementById('clearDateBtn').addEventListener('click', () => {
@@ -539,7 +534,6 @@
 
     window.loadDataAndRender = loadDataAndRender;
 
-    // تشغيل الجلب التلقائي عند التحميل
     loadDataAndRender();
 </script>
 
