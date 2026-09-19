@@ -207,7 +207,7 @@ details.tx[open] summary i { transform: rotate(90deg); }
       <div class="suggest" id="suggestList" role="listbox"></div>
     </div>
 
-    <label class="lbl" for="dateInput" style="margin-top:12px;"><i class="fas fa-calendar-alt"></i>يوم محدد (اختياري — فارغ = كل الأيام)</label>
+    <label class="lbl" for="dateInput" style="margin-top:12px;"><i class="fas fa-calendar-alt"></i>عرض السجل حتى تاريخ (اختياري — فارغ = كل الأيام)</label>
     <div class="date-row" style="margin-top:0;">
       <input type="date" id="dateInput">
       <button type="button" id="btnClearDate" title="مسح التاريخ"><i class="fas fa-times"></i></button>
@@ -587,17 +587,20 @@ function renderReport() {
   const q = p => fmtQty(p, cap, unit);
   const allDays = buildDays(item);
 
-  // رصيد المخزن الحالي (نفس منطق صفحة الأصناف)
+  // التاريخ المحدد = عرض السجل من أول يوم حتى هذا التاريخ (شامل)
+  const dateFilter = $('dateInput').value;
+  const inRange = date => !dateFilter || (date && date <= dateFilter);
+
+  // رصيد المخزن حتى التاريخ المحدد (أو حتى اليوم لو مفيش تاريخ)
   let opening = 0;
   if (item.openingTotalPcs != null) opening = Number(item.openingTotalPcs) || 0;
   else if (item.openingQty != null) opening = Math.round((Number(item.openingQty) || 0) * cap);
   else if (openingMap[item.id]) opening = openingMap[item.id];
-  const allBuy = (purchIdx[item.id] || []).reduce((s, p) => s + p.signed, 0);
-  const allNetSales = (salesIdx[item.id] || []).reduce((s, x) => s + (x.isReturn ? -Math.abs(x.pcs) : x.pcs), 0);
+  const allBuy = (purchIdx[item.id] || []).filter(p => inRange(p.date)).reduce((s, p) => s + p.signed, 0);
+  const allNetSales = (salesIdx[item.id] || []).filter(x => inRange(x.date)).reduce((s, x) => s + (x.isReturn ? -Math.abs(x.pcs) : x.pcs), 0);
   const stockNow = opening + allBuy - allNetSales;
 
-  const dateFilter = $('dateInput').value;
-  const days = dateFilter ? allDays.filter(d => d.date === dateFilter) : allDays;
+  const days = allDays.filter(d => inRange(d.date));
 
   // ملخص الفترة المعروضة
   const tBuy = days.reduce((s, d) => s + d.buy, 0);
@@ -609,7 +612,7 @@ function renderReport() {
   let html = `
     <div class="item-title">
       <div class="nm">${esc(item.name)}</div>
-      <div class="sub">${cap > 1 ? `التعبئة: ${cap} ${esc(unit)} في الكرتونة` : `الوحدة: ${esc(unit)}`}${dateFilter ? ' — يوم ' + esc(dateFilter) : ' — كل الأيام'}</div>
+      <div class="sub">${cap > 1 ? `التعبئة: ${cap} ${esc(unit)} في الكرتونة` : `الوحدة: ${esc(unit)}`}${dateFilter ? ' — من أول يوم حتى ' + esc(dateFilter) : ' — كل الأيام'}</div>
     </div>
     <div class="stats">
       <div class="stat"><div class="l">المشتريات</div><div class="v c-blue">${q(tBuy)}</div></div>
@@ -619,11 +622,11 @@ function renderReport() {
       <div class="stat dark"><div class="l">المتبقي بالسيارة</div>
         <div class="v ${lastLoadDay && lastLoadDay.remaining < 0 ? 'neg' : ''}">${lastLoadDay ? q(lastLoadDay.remaining) : '—'}</div>
         <div class="n">${lastLoadDay ? esc(lastLoadDay.date) : 'لا يوجد تحميل'}</div></div>
-      <div class="stat"><div class="l">رصيد المخزن</div><div class="v c-gray ${stockNow < 0 ? 'neg' : ''}">${q(stockNow)}</div><div class="n">حتى اليوم</div></div>
+      <div class="stat"><div class="l">رصيد المخزن</div><div class="v c-gray ${stockNow < 0 ? 'neg' : ''}">${q(stockNow)}</div><div class="n">${dateFilter ? 'حتى ' + esc(dateFilter) : 'حتى اليوم'}</div></div>
     </div>`;
 
   if (!days.length) {
-    html += `<div class="empty"><i class="fas fa-folder-open"></i>لا توجد حركات لهذا الصنف${dateFilter ? ' في هذا اليوم' : ''}</div>`;
+    html += `<div class="empty"><i class="fas fa-folder-open"></i>لا توجد حركات لهذا الصنف${dateFilter ? ' حتى هذا التاريخ' : ''}</div>`;
     $('report').innerHTML = html;
     return;
   }
