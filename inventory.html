@@ -222,7 +222,7 @@
         /* فلترة المبيعات */
         .sales-filter-card {
             background: #fff; border: 1px solid var(--border); border-radius: 12px;
-            padding: 10px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;
+            padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;
         }
         .sales-filter-title { font-size: 12px; font-weight: 800; color: var(--accent); display: flex; align-items: center; justify-content: space-between; }
         .sales-date-input-wrap { display: flex; align-items: center; gap: 8px; }
@@ -233,8 +233,18 @@
         }
         .sales-date-input-wrap input:focus { border-color: var(--accent); background: #fff; }
 
+        /* الشريط الإحصائي للفلترة */
+        .summary-bar {
+            font-size: 11px; font-weight: 800; color: var(--accent); margin-bottom: 6px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #e0f2fe; padding: 8px 10px; border-radius: 8px; text-align: center;
+        }
+        .summary-bar .item-box { background: #fff; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1; display: flex; flex-direction: column; gap: 2px; }
+        .summary-bar .item-box .lbl { font-size: 9.5px; color: var(--sub); }
+        .summary-bar .item-box .val { font-size: 11.5px; color: var(--accent); }
+        .summary-bar .full-col { grid-column: 1 / -1; background: #0f172a; padding: 6px; border-radius: 6px; color: #fff; font-size: 12px; }
+
         /* جدول سجل المبيعات */
-        .sales-table-wrap { overflow-x: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; }
+        .sales-table-wrap { overflow-x: auto; margin-top: 6px; border: 1px solid var(--border); border-radius: 10px; }
         .sales-table { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; text-align: center; }
         .sales-table th { background: #0f172a; color: #fff; padding: 8px 6px; font-weight: 800; }
         .sales-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); font-weight: 700; }
@@ -366,6 +376,7 @@
     let purchasesMapGlobal = new Map();
     let openingMapGlobal = new Map();
     let rawInvoicesList = [];
+    let rawPurchasesList = [];
 
     const dom = {
         sTotal: document.getElementById('sTotal'),
@@ -403,10 +414,9 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
-    // دالة شاملة لاستخراج التاريخ من أي فاتورة بغض النظر عن اسم المسمى المستعمل
-    function parseInvoiceDate(inv) {
-        if (!inv) return null;
-        let val = inv.createdAt || inv.created_at || inv.date || inv.dateTime || inv.timestamp || inv.time;
+    function parseRecordDate(doc) {
+        if (!doc) return null;
+        let val = doc.createdAt || doc.created_at || doc.date || doc.dateTime || doc.timestamp || doc.time;
         if (!val) return null;
 
         if (typeof val.toDate === 'function') {
@@ -425,7 +435,6 @@
         return null;
     }
 
-    // تحويل النص المدخل في الفلترة إلى تاريخ دقيق
     function parseFilterDateInput(val) {
         if (!val) return null;
         val = String(val).trim();
@@ -443,7 +452,7 @@
                 let p2 = Number(parts[1]);
                 if (p1 > 12) { day = p1; month = p2; }
                 else if (p2 > 12) { day = p2; month = p1; }
-                else { day = p1; month = p2; } // بالعادة اليوم ثم الشهر
+                else { day = p1; month = p2; }
             } else if (parts.length === 3) {
                 if (parts[0].length === 4) {
                     year = Number(parts[0]); month = Number(parts[1]); day = Number(parts[2]);
@@ -452,7 +461,7 @@
                     if (year < 100) year += 2000;
                 }
             }
-        } else if (/^\d{3,4}$/.test(val)) { // مثل 1508 أو 158
+        } else if (/^\d{3,4}$/.test(val)) {
             if (val.length === 3) {
                 day = Number(val.slice(0, 1));
                 month = Number(val.slice(1));
@@ -493,6 +502,7 @@
                     purchasesMapGlobal.clear();
                     openingMapGlobal.clear();
                     rawInvoicesList = [];
+                    rawPurchasesList = [];
 
                     if (transSnap.forEach) {
                         transSnap.forEach(docSnap => {
@@ -527,7 +537,10 @@
 
                     if (supplierSnap.forEach) {
                         supplierSnap.forEach(docSnap => {
-                            const items = docSnap.data()?.items || [];
+                            const supData = docSnap.data() || {};
+                            rawPurchasesList.push({ id: docSnap.id, ...supData });
+
+                            const items = supData.items || [];
                             items.forEach(item => {
                                 const normName = item.name ? normalizeAr(item.name) : '';
                                 const id = item.stockId || namesMap.get(normName);
@@ -780,7 +793,7 @@
         setTimeout(() => dom.quickSearchInput.focus(), 100);
     }
 
-    // بناء وتحديث جدول المبيعات فورياً
+    // بناء وتحديث كشف المبيعات والمشتريات والمرتجع والمتبقي حتى التاريخ المحدد
     function renderSalesTable(itemId, maxDateStr = '') {
         const itemObj = allItems.find(i => i.id === itemId) || {};
         const normItemName = itemObj.name ? normalizeAr(itemObj.name) : '';
@@ -791,13 +804,14 @@
         const maxDate = parseFilterDateInput(maxDateStr);
 
         let matchingSales = [];
-        let totalPcsPeriod = 0;
+        let salesPcsPure = 0;      // مبيعات صريحة
+        let salesReturnPcs = 0;   // مرتجع مبيعات
         let totalAmountPeriod = 0;
 
+        // 1. حساب المبيعات ومرتجع المبيعات حتى التاريخ المحدد
         rawInvoicesList.forEach(inv => {
-            const invDate = parseInvoiceDate(inv);
+            const invDate = parseRecordDate(inv);
             
-            // الفلترة إذا أُدخل تاريخ صحيح وكان تاريخ الفاتورة أحدث منه
             if (maxDate && invDate && invDate > maxDate) {
                 return;
             }
@@ -814,14 +828,13 @@
                     const isReturn = !!item.isReturn;
 
                     if (isReturn) {
-                        totalPcsPeriod -= pcs;
+                        salesReturnPcs += pcs;
                         totalAmountPeriod -= lineTotal;
                     } else {
-                        totalPcsPeriod += pcs;
+                        salesPcsPure += pcs;
                         totalAmountPeriod += lineTotal;
                     }
 
-                    // تنسيق التاريخ للعرض
                     let dateDisplay = 'غير محدد';
                     if (invDate) {
                         dateDisplay = `${invDate.getDate()}/${invDate.getMonth() + 1}/${invDate.getFullYear()}`;
@@ -844,7 +857,45 @@
             });
         });
 
-        // ترتيب المبيعات حسب التاريخ (الأحدث أولاً)
+        // 2. حساب المشتريات ومرتجع المشتريات حتى التاريخ المحدد
+        let purchasesPcsPure = 0;
+        let purchasesReturnPcs = 0;
+
+        rawPurchasesList.forEach(sup => {
+            const supDate = parseRecordDate(sup);
+            if (maxDate && supDate && supDate > maxDate) {
+                return;
+            }
+
+            const items = sup.items || [];
+            items.forEach(item => {
+                const normName = item.name ? normalizeAr(item.name) : '';
+                if (item.stockId === itemId || (normName && normName === normItemName)) {
+                    const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                    const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                    const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                    const pcs = isCarton ? (rawQty * capacity) : rawQty;
+
+                    if (isReturn) {
+                        purchasesReturnPcs += pcs;
+                    } else {
+                        purchasesPcsPure += pcs;
+                    }
+                }
+            });
+        });
+
+        // الرصيد أول المدة
+        const openingPcs = Number(itemObj.openingTotalPcsCalc || 0);
+
+        // الصافي الحسابي
+        const netSalesPcs = salesPcsPure - salesReturnPcs;
+        const netPurchasesPcs = purchasesPcsPure - purchasesReturnPcs;
+        const totalReturnsCombinedPcs = salesReturnPcs + purchasesReturnPcs;
+
+        // المتبقي حتى هذا التاريخ
+        const remainingPcsAtDate = openingPcs + netPurchasesPcs - netSalesPcs;
+
         matchingSales.sort((a, b) => b.rawDate - a.rawDate);
 
         const salesContainer = document.getElementById('salesTableContainer');
@@ -852,14 +903,35 @@
 
         if (summaryContainer) {
             summaryContainer.innerHTML = `
-                <span>إجمالي المباع بالفترة: <strong class="num">${formatQuantityDetailed(totalPcsPeriod, capacity, unit)}</strong></span>
-                <span>المبلغ: <strong class="num">${totalAmountPeriod.toLocaleString()} ج.م</strong></span>`;
+                <div class="item-box">
+                    <span class="lbl"><i class="fas fa-circle-arrow-up text-success"></i> المباع بالفترة</span>
+                    <span class="val num">${formatQuantityDetailed(salesPcsPure, capacity, unit)}</span>
+                    <span style="font-size: 9px; color:#64748b;">(صافي: ${formatQuantityDetailed(netSalesPcs, capacity, unit)})</span>
+                </div>
+                <div class="item-box">
+                    <span class="lbl"><i class="fas fa-circle-arrow-down text-primary"></i> المشترى بالفترة</span>
+                    <span class="val num">${formatQuantityDetailed(purchasesPcsPure, capacity, unit)}</span>
+                    <span style="font-size: 9px; color:#64748b;">(صافي: ${formatQuantityDetailed(netPurchasesPcs, capacity, unit)})</span>
+                </div>
+                <div class="item-box">
+                    <span class="lbl"><i class="fas fa-rotate-left text-warning"></i> المرتجع بالفترة</span>
+                    <span class="val num">${formatQuantityDetailed(totalReturnsCombinedPcs, capacity, unit)}</span>
+                    <span style="font-size: 9px; color:#64748b;">مبيعات + توريد</span>
+                </div>
+                <div class="item-box">
+                    <span class="lbl"><i class="fas fa-money-bill-wave text-success"></i> قيمة المبيعات</span>
+                    <span class="val num">${totalAmountPeriod.toLocaleString()} ج.م</span>
+                    <span style="font-size: 9px; color:#64748b;">بعد الخصم والارتجاع</span>
+                </div>
+                <div class="full-col">
+                    <i class="fas fa-boxes-stacked me-1"></i> المتبقي بالمخزن حتى هذا التاريخ: <strong class="num">${formatQuantityDetailed(remainingPcsAtDate, capacity, unit)}</strong>
+                </div>`;
         }
 
         if (!salesContainer) return;
 
         if (matchingSales.length === 0) {
-            salesContainer.innerHTML = `<div class="empty-state" style="padding:20px 10px;"><p>لا توجد مبيعات لهذا الصنف ${maxDateStr ? 'حتى التاريخ المحدد' : ''}</p></div>`;
+            salesContainer.innerHTML = `<div class="empty-state" style="padding:20px 10px;"><p>لا توجد حركات مبيعات لهذا الصنف ${maxDateStr ? 'حتى التاريخ المحدد' : ''}</p></div>`;
             return;
         }
 
@@ -921,7 +993,7 @@
 
             <div class="sales-filter-card">
                 <div class="sales-filter-title">
-                    <span><i class="fas fa-filter me-1"></i> فلترة مبيعات الصنف حتى تاريخ</span>
+                    <span><i class="fas fa-filter me-1"></i> فلترة الحركات والمبيعات حتى تاريخ</span>
                 </div>
                 <div class="sales-date-input-wrap">
                     <label>إلى تاريخ:</label>
@@ -929,7 +1001,7 @@
                 </div>
             </div>
 
-            <div id="salesSummaryBar" style="font-size:11px; font-weight:800; color:var(--accent); margin-bottom:6px; display:flex; justify-content:space-between; background:#e0f2fe; padding:8px 12px; border-radius:8px;"></div>
+            <div id="salesSummaryBar" class="summary-bar"></div>
             
             <div id="salesTableContainer"></div>`;
 
@@ -937,10 +1009,8 @@
 
             const salesDateInput = document.getElementById('salesDateInput');
 
-            // عرض المبيعات فور فتح المودال
             renderSalesTable(itemId, '');
 
-            // التصفية الفورية بمجرد الكتابة في خانة التاريخ
             salesDateInput.addEventListener('input', () => {
                 renderSalesTable(itemId, salesDateInput.value);
             });
