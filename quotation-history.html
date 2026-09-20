@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-    <script src="auth-guard.js"></script>
+<script src="auth-guard.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>حمولة العربية - الزيادي</title>
 <link rel="manifest" href="manifest.json">
@@ -64,6 +64,32 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .ph {margin-bottom:12px;}
 .ph h2{font-size:19px;color:var(--text);font-weight:800;}
 .ph p{font-size:13px;color:var(--gray);margin-top:2px;font-weight:600;}
+
+.sync-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-3d);
+}
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 800;
+  font-size: 12px;
+}
+.sync-badge.online { background: var(--green-lt); color: var(--green); }
+.sync-badge.syncing { background: var(--amber-lt); color: var(--amber); }
+.sync-badge.offline { background: var(--red-lt); color: var(--red); }
 
 .card{
   background:var(--card); border-radius:var(--radius); box-shadow: var(--shadow-3d); padding:12px; margin-bottom:12px;
@@ -150,13 +176,18 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
   gap: 6px;
   flex: 1 1 auto;
 }
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
 .btn-primary{background:var(--brand);color:#fff; box-shadow: 0 3px 6px rgba(11,94,61,0.2);}
 .btn-success{background:var(--green);color:#fff; box-shadow: 0 3px 6px rgba(45,106,79,0.2);}
 .btn-danger{background:var(--red);color:#fff; box-shadow: 0 3px 6px rgba(217,4,41,0.2);}
 .btn-amber{background:var(--amber);color:#fff; box-shadow: 0 3px 6px rgba(230,149,0,0.2);}
 .btn-excel{background:#16a34a;color:#fff; box-shadow: 0 3px 6px rgba(22,163,74,0.2);}
 .btn-sm{padding:6px 10px;font-size:12px;}
-.btn:active { transform: scale(0.96); }
+.btn:active:not(:disabled) { transform: scale(0.96); }
 
 .btn-confirm-load {
   width: 100%;
@@ -269,7 +300,7 @@ table select:focus { border-color: var(--brand); }
 #print-header, #print-footer { display: none; }
 @media print {
   body { background: #fff; color: #000; padding: 0; margin: 0; font-size: 11px; }
-  nav, .btn, .tools-row, #syncStatus, .ph, .snum, .load-search-box, #newItemsAlertBanner, .modal-overlay, .summary-tab-nav { display: none !important; }
+  nav, .btn, .tools-row, .sync-bar, .ph, .snum, .load-search-box, #newItemsAlertBanner, .modal-overlay, .summary-tab-nav { display: none !important; }
   .card, .summary-card { border: none; box-shadow: none; padding: 0; margin: 0; }
   .card h3 { display: none !important; }
   #print-header { display: block !important; text-align: center; margin-bottom: 12px; font-family: inherit; }
@@ -295,14 +326,12 @@ table select:focus { border-color: var(--brand); }
     <button class="admin-only" onclick="showPage('pg-archive',this)">🗄️ الأرشيف</button>
   </nav>
 
-  <div id="print-header">
-    <h1 style="font-size: 20px; color: #0a4a31; margin-bottom: 2px;">الزيادي لزيوت السيارات</h1>
-    <h2 style="font-size: 15px; font-weight: 700; color: #475569;">تقرير جرد وتتبع حركة حمولة السيارة الفعلي</h2>
-    <p id="print-date-lbl" style="font-size: 12px; margin-top: 3px; font-weight: bold;"></p>
-    <div style="border-bottom: 2px dashed #000; margin-top: 8px;"></div>
-  </div>
-
   <div class="page active" id="pg-items">
+    <div class="sync-bar">
+      <span>حالة الاتصال والخدمة:</span>
+      <span id="globalSyncStatus" class="sync-badge syncing">🟡 جاري الاتصال بـ Firestore...</span>
+    </div>
+    
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
       <div class="ph" style="margin-bottom:0;">
         <h2>أصناف المخزن الحالية</h2>
@@ -316,10 +345,15 @@ table select:focus { border-color: var(--brand); }
   </div>
 
   <div class="page" id="pg-load">
+    <div class="sync-bar">
+      <span>حمولة العربية الحالية:</span>
+      <span id="loadSyncStatus" class="sync-badge syncing">🟡 جاري المزامنة اللحظية...</span>
+    </div>
+
     <div style="margin-bottom:12px;">
       <div class="ph" style="margin-bottom:6px;">
         <h2>تسجيل تحميل حمولة السيارة</h2>
-        <p>سجّل ما كان بداخل العربية + الحمولة الجديدة لربطها بالمبيعات (تحديث لحظي فور الكتابة)</p>
+        <p>مزامنة حية ومباشرة بين كافة الأجهزة دون حاجة لإعادة التحميل</p>
       </div>
       
       <div class="action-buttons-group">
@@ -470,19 +504,10 @@ table select:focus { border-color: var(--brand); }
       <div id="modalFieldsArea" class="frow-inline" style="margin-bottom:12px;"></div>
       <div style="display:flex; gap:6px; justify-content:flex-end;">
         <button class="btn btn-sm" style="background:var(--surface); color:var(--text);" onclick="window.closeEditLoadModal()">إلغاء</button>
-        <button class="btn btn-primary btn-sm" onclick="window.saveQuickLoadEdit()">حفظ التعديل 💾</button>
+        <button id="modalSaveBtn" class="btn btn-primary btn-sm" onclick="window.saveQuickLoadEdit()">حفظ التعديل 💾</button>
       </div>
     </div>
   </div>
-
-  <div id="print-footer">
-    <div style="border-top: 2px dashed #000; margin-bottom: 10px;"></div>
-    <div style="display: flex; justify-content: space-between; font-weight: bold; padding: 0 6px;">
-      <span>المحاسب المسؤول: أحمد محمود الزيادي</span>
-      <span>توقيع أمين المخزن/السائق: ..................................</span>
-    </div>
-  </div>
-
 </div>
 
 <div id="toast"></div>
@@ -492,7 +517,7 @@ table select:focus { border-color: var(--brand); }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -513,13 +538,9 @@ try {
     db = getFirestore(app);
 }
 
-function startApp() {
-  document.getElementById('app-content').style.display = 'block';
-  if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
-  listenToDailyLoadChanges();
-  listenToLiveInvoices();
-}
-
+// ==========================================
+// STATE MANAGEMENT & LISTENERS SINGLETON
+// ==========================================
 let firebaseItems = [];
 let cartItems     = {};
 let loadedInSession = {};
@@ -532,6 +553,7 @@ let memorySalesCache = null;
 let lastFetchedDate = null;
 let cachedCalculatedRows = [];
 let isInventoryLoadedOnce = false;
+let isSavingToFirestore = false;
 
 let factorsMap = {};
 let namesMap = {};
@@ -545,7 +567,212 @@ document.getElementById('summaryDate').value = defaultDateStr;
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
 
-// توحيد تنظيف اسم الصنف بنفس الطريقة الدقيقة للملف الآخر
+// ==========================================
+// CACHE HELPERS (FALLBACK & SPEED-UP ONLY)
+// ==========================================
+function loadFromLocalCache(dateStr) {
+  try {
+    const cachedCart = localStorage.getItem('cartItems_' + dateStr);
+    const cachedSess = localStorage.getItem('loadedInSession_' + dateStr);
+    if (cachedCart) cartItems = JSON.parse(cachedCart);
+    if (cachedSess) loadedInSession = JSON.parse(cachedSess);
+  } catch(e) {
+    console.warn("تعذر قراءة الكاش المحلي:", e);
+  }
+}
+
+function updateLocalCache(dateStr, dataCart, dataSess) {
+  try {
+    if (dataCart) localStorage.setItem('cartItems_' + dateStr, JSON.stringify(dataCart));
+    if (dataSess) localStorage.setItem('loadedInSession_' + dateStr, JSON.stringify(dataSess));
+  } catch(e) {
+    console.warn("تعذر تحديث الكاش المحلي:", e);
+  }
+}
+
+function updateSyncUIStatus(status, text) {
+  const globalEl = document.getElementById('globalSyncStatus');
+  const loadEl   = document.getElementById('loadSyncStatus');
+  const syncEl   = document.getElementById('syncStatus');
+
+  const formattedBadge = `<span class="sync-badge ${status}">${text}</span>`;
+  if (globalEl) globalEl.outerHTML = `<span id="globalSyncStatus" class="sync-badge ${status}">${text}</span>`;
+  if (loadEl)   loadEl.outerHTML   = `<span id="loadSyncStatus" class="sync-badge ${status}">${text}</span>`;
+  if (syncEl)   syncEl.innerHTML   = text;
+}
+
+// ==========================================
+// FIRESTORE REALTIME LISTENERS (SINGLETONS)
+// ==========================================
+function listenToDailyLoadChanges() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  
+  // إلغاء الـ Listener القديم لمنع تكرار المراقبة والـ Race Conditions
+  if (unsubscribeDailyLoad) {
+    unsubscribeDailyLoad();
+    unsubscribeDailyLoad = null;
+  }
+
+  // 1. عرض الكاش المحلي مؤقتاً للتسريع فقط
+  loadFromLocalCache(d);
+  if (document.getElementById('pg-load').classList.contains('active')) {
+    renderLoadFlow();
+  }
+
+  updateSyncUIStatus('syncing', '🟡 جاري الاتصال بـ Firestore...');
+
+  const docRef = doc(db, 'daily_loads', d);
+  
+  // 2. تفعيل Listener الوحيد للمصدر الأساسي للحقيقة
+  unsubscribeDailyLoad = onSnapshot(docRef, (docSnap) => {
+    const isFromCache = docSnap.metadata.hasPendingWrites || docSnap.metadata.fromCache;
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // Firestore Snapshot ↓ State Overwrite
+      loadedInSession = data.loadedInSession || {};
+      cartItems       = data.cartItems || {};
+    } else {
+      loadedInSession = {};
+      cartItems       = {};
+    }
+
+    // Update Local Cache بعد الاعتماد النهائي من Snapshot
+    updateLocalCache(d, cartItems, loadedInSession);
+
+    if (isFromCache) {
+      updateSyncUIStatus('syncing', '🟡 جاري المزامنة مع الخادم...');
+    } else {
+      const nowStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      updateSyncUIStatus('online', `🟢 متصل ومزامنة مباشرة (آخر تحديث: ${nowStr})`);
+    }
+
+    // Update UI
+    if (document.getElementById('pg-load').classList.contains('active')) {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
+        updateDOMValuesOnly();
+      } else {
+        renderLoadFlow();
+      }
+    }
+    if (document.getElementById('pg-summary').classList.contains('active')) {
+      buildCalculatedRows();
+      window.filterSummaryUI();
+    }
+  }, (err) => {
+    console.error("خطأ في listener الحمولة:", err);
+    updateSyncUIStatus('offline', '🔴 غير متصل - تعذر المزامنة');
+  });
+
+  // جلب اليوم السابق للحسابات السابقة دون تكرار Listeners
+  const prevDate = getPreviousDateStr(d);
+  getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
+    previousTruckStock = {};
+    if (prevSnap.exists()) {
+      const prevCart = prevSnap.data().cartItems || {};
+      Object.keys(prevCart).forEach(id => {
+        if (prevCart[id].inTruckPcs) {
+          previousTruckStock[id] = prevCart[id].inTruckPcs;
+        }
+      });
+    }
+    if (document.getElementById('pg-load').classList.contains('active')) {
+      const activeEl = document.activeElement;
+      if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'SELECT')) {
+        renderLoadFlow();
+      }
+    }
+  }).catch(e => console.warn("تعذر جلب حمولة اليوم السابق:", e));
+}
+
+function listenToLiveInvoices() {
+  const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
+  
+  if (unsubscribeInvoices) {
+    unsubscribeInvoices();
+    unsubscribeInvoices = null;
+  }
+
+  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snapshot) => {
+    memorySalesCache = {};
+    snapshot.forEach(docSnap => {
+      const inv = docSnap.data();
+      if (inv.isDeleted) return;
+      if (parseDate(inv.date, inv.timestamp) !== selectedDate) return;
+      if (!Array.isArray(inv.items)) return;
+
+      inv.items.forEach(itm => {
+        const itemId = getProductIdForItem(itm);
+        if (itemId) {
+          const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
+          const rawQty = Number(itm.qty) || 0;
+          const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
+          const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
+
+          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true;
+
+          if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
+          
+          if (isReturn) {
+            memorySalesCache[itemId] -= Math.abs(totalPcsSold);
+          } else {
+            memorySalesCache[itemId] += totalPcsSold;
+          }
+        }
+      });
+    });
+    lastFetchedDate = selectedDate;
+    
+    buildCalculatedRows();
+    if (document.getElementById('pg-summary').classList.contains('active')) {
+      window.filterSummaryUI();
+    }
+  }, (err) => {
+    console.error("خطأ في استماع المبيعات:", err);
+  });
+}
+
+// ==========================================
+// CORE PERSISTENCE & TRANSACTION LOGIC
+// ==========================================
+async function saveSessionToFirestore() {
+  if (isSavingToFirestore) return;
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  
+  try {
+    isSavingToFirestore = true;
+    updateSyncUIStatus('syncing', '🟡 جاري حفظ البيانات في Firestore...');
+
+    await setDoc(doc(db, 'daily_loads', d), {
+      date: d,
+      updatedAt: serverTimestamp(),
+      loadedInSession: loadedInSession,
+      cartItems: cartItems
+    }, { merge: true });
+
+    updateLocalCache(d, cartItems, loadedInSession);
+    const nowStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    updateSyncUIStatus('online', `🟢 تم الحفظ والمزامنة (آخر تحديث: ${nowStr})`);
+  } catch(e) {
+    console.error("خطأ المزامنة السحابية:", e);
+    updateSyncUIStatus('offline', '🔴 فشل الحفظ - يرجى فحص الشبكة');
+    window.toast('❌ تعذر الحفظ في Firebase');
+  } finally {
+    isSavingToFirestore = false;
+  }
+}
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
+function startApp() {
+  document.getElementById('app-content').style.display = 'block';
+  if (!isInventoryLoadedOnce) window.fetchInventoryFresh();
+  listenToDailyLoadChanges();
+  listenToLiveInvoices();
+}
+
 function cleanItemName(str) {
   if (!str) return "";
   return String(str).trim()
@@ -575,109 +802,6 @@ function getProductIdForItem(item) {
   return item.stockId || item.productId || item.id || null;
 }
 
-// -------------------------------------------------------------
-// تعديل محوري: ضبط دالة المبيعات المباشرة لتفادي انعكاس الإشارة بالسالب
-// -------------------------------------------------------------
-function listenToLiveInvoices() {
-  const selectedDate = document.getElementById('summaryDate').value || defaultDateStr;
-  if (unsubscribeInvoices) unsubscribeInvoices();
-
-  const syncStatus = document.getElementById('syncStatus');
-  if (syncStatus) syncStatus.innerHTML = '⚡ مزامنة المبيعات لحظياً...';
-
-  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snapshot) => {
-    memorySalesCache = {};
-    snapshot.forEach(docSnap => {
-      const inv = docSnap.data();
-      if (inv.isDeleted) return;
-      if (parseDate(inv.date, inv.timestamp) !== selectedDate) return;
-      if (!Array.isArray(inv.items)) return;
-
-      inv.items.forEach(itm => {
-        const itemId = getProductIdForItem(itm);
-        if (itemId) {
-          const cap = Number(itm.unitFactor || itm.factor) || factorsMap[itemId] || 1; 
-          const rawQty = Number(itm.qty) || 0; // إزالة Math.abs لتفادي حساب الإشارة مرتين
-          const isCartonItem = isCartonUnit(itm.unit || itm.unitName, itm.isCarton);
-          const totalPcsSold = isCartonItem ? (rawQty * cap) : rawQty;
-
-          const isReturn = inv.type === 'return' || inv.isReturn === true || itm.isReturn === true;
-
-          if (!memorySalesCache[itemId]) memorySalesCache[itemId] = 0;
-          
-          // الاعتماد على إشارة العدد المباشرة أو معالجة المرتجع بخصمه
-          if (isReturn) {
-            memorySalesCache[itemId] -= Math.abs(totalPcsSold);
-          } else {
-            memorySalesCache[itemId] += totalPcsSold;
-          }
-        }
-      });
-    });
-    lastFetchedDate = selectedDate;
-    if (syncStatus) syncStatus.innerHTML = '🟢 متزامن لحظياً عبر كافة الأجهزة';
-    
-    buildCalculatedRows();
-    if (document.getElementById('pg-summary').classList.contains('active')) {
-      window.filterSummaryUI();
-    }
-  }, (err) => {
-    console.error("خطأ في استماع المبيعات:", err);
-    if (syncStatus) syncStatus.innerHTML = '⚠️ خطأ بالاتصال المباشر';
-  });
-}
-
-function listenToDailyLoadChanges() {
-  const d = document.getElementById('summaryDate').value || defaultDateStr;
-  if (unsubscribeDailyLoad) unsubscribeDailyLoad();
-
-  const docRef = doc(db, 'daily_loads', d);
-  unsubscribeDailyLoad = onSnapshot(docRef, (docSnap) => {
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      loadedInSession = data.loadedInSession || {};
-      cartItems       = data.cartItems || {};
-    } else {
-      loadedInSession = {};
-      cartItems       = {};
-    }
-    
-    saveLocalFallback();
-
-    if (document.getElementById('pg-load').classList.contains('active')) {
-      const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
-        updateDOMValuesOnly();
-      } else {
-        renderLoadFlow();
-      }
-    }
-    if (document.getElementById('pg-summary').classList.contains('active')) {
-      buildCalculatedRows();
-      window.filterSummaryUI();
-    }
-  });
-
-  const prevDate = getPreviousDateStr(d);
-  getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
-    previousTruckStock = {};
-    if (prevSnap.exists()) {
-      const prevCart = prevSnap.data().cartItems || {};
-      Object.keys(prevCart).forEach(id => {
-        if (prevCart[id].inTruckPcs) {
-          previousTruckStock[id] = prevCart[id].inTruckPcs;
-        }
-      });
-    }
-    if (document.getElementById('pg-load').classList.contains('active')) {
-      const activeEl = document.activeElement;
-      if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'SELECT')) {
-        renderLoadFlow();
-      }
-    }
-  });
-}
-
 function updateDOMValuesOnly() {
   firebaseItems.forEach(it => {
     const isDone = loadedInSession[it.id] !== undefined;
@@ -703,27 +827,6 @@ function getPreviousDateStr(dateStr) {
   return d.toISOString().split('T')[0];
 }
 
-async function saveSessionCloud() {
-  const d = document.getElementById('summaryDate').value || defaultDateStr;
-  saveLocalFallback();
-  try {
-    await setDoc(doc(db, 'daily_loads', d), {
-      date: d,
-      updatedAt: new Date().toISOString(),
-      loadedInSession: loadedInSession,
-      cartItems: cartItems
-    }, { merge: true });
-  } catch(e) {
-    console.error("خطأ المزامنة السحابية:", e);
-  }
-}
-
-function saveLocalFallback() {
-  const d = document.getElementById('summaryDate').value || defaultDateStr;
-  localStorage.setItem('cartItems_' + d, JSON.stringify(cartItems));
-  localStorage.setItem('loadedInSession_' + d, JSON.stringify(loadedInSession));
-}
-
 window.handleLiveInputChange = function(itemId) {
   const it = firebaseItems.find(i => i.id === itemId);
   if (!it) return;
@@ -744,8 +847,6 @@ window.handleLiveInputChange = function(itemId) {
   cartItems[itemId].loadedCartons = cartons;
   cartItems[itemId].loadedLoose   = loose;
   cartItems[itemId].lastEditedAt  = editTimeStr;
-
-  saveSessionCloud();
 };
 
 function getUnitName(name) {
@@ -806,12 +907,13 @@ function parseDate(df,ts){
 }
 
 window.showPage = function(id, btn) {
-  listenToDailyLoadChanges();
-  listenToLiveInvoices();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('active');
+
+  listenToDailyLoadChanges();
+  listenToLiveInvoices();
 
   if (id === 'pg-load')    initLoadFlow();
   if (id === 'pg-summary') buildCalculatedRows(), window.filterSummaryUI();
@@ -876,9 +978,6 @@ function filterLoadFlow() {
   });
 }
 
-// -------------------------------------------------------------
-// توحيد تجميع المشتريات والمبيعات مع الصفحة الكبرى بنفس المنطق الدقيق
-// -------------------------------------------------------------
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -989,7 +1088,6 @@ window.fetchInventoryFresh = async function() {
     listenToDailyLoadChanges();
     listenToLiveInvoices();
     firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
-    saveSessionCloud();
     isInventoryLoadedOnce = true;
     window.toast('✅ تم تحديث الأرصدة التراكمية بنجاح');
   } catch(e) { console.error(e); window.toast('❌ تعذر جلب الأصناف من السيرفر'); }
@@ -1168,7 +1266,13 @@ function renderLoadFlow() {
   });
 }
 
-window.confirmStep = function(itemId) {
+window.confirmStep = async function(itemId) {
+  const btn = document.getElementById(`btn-${itemId}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'جاري الحفظ... ⏳';
+  }
+
   const it = firebaseItems.find(i => i.id === itemId);
   
   const prevCartons = parseFloat(document.getElementById(`plc-${itemId}`)?.value) || 0;
@@ -1188,32 +1292,43 @@ window.confirmStep = function(itemId) {
   cartItems[itemId].loadedLoose   = loose;
   cartItems[itemId].lastEditedAt  = editTimeStr;
   
-  saveSessionCloud();
+  await saveSessionToFirestore();
+  
   const allDone = firebaseItems.every(i => loadedInSession[i.id] !== undefined);
   if (allDone) forceShowLoadList = false;
   
   renderLoadFlow();
 };
 
-window.editStep = function(itemId) {
+window.editStep = async function(itemId) {
   delete loadedInSession[itemId]; 
   if (cartItems[itemId]) {
     delete cartItems[itemId];
   }
   
+  await saveSessionToFirestore();
   renderLoadFlow();
 };
 
-window.resetLoad = function() {
+window.resetLoad = async function() {
   if(!confirm('هل أنت متأكد من تصفير جميع الكميات وبدء تحميل جديد؟')) return;
-  loadedInSession = {}; cartItems = {}; forceShowLoadList = false; document.getElementById('searchLoad').value = ''; document.getElementById('searchSuggestList').classList.remove('open'); saveSessionCloud(); renderLoadFlow();
+  loadedInSession = {}; 
+  cartItems = {}; 
+  forceShowLoadList = false; 
+  document.getElementById('searchLoad').value = ''; 
+  document.getElementById('searchSuggestList').classList.remove('open'); 
+  
+  await saveSessionToFirestore(); 
+  renderLoadFlow();
 };
 
 window.editAllLoad = function() {
-  forceShowLoadList = true; document.getElementById('loadDoneMsg').style.display = 'none'; renderLoadFlow();
+  forceShowLoadList = true; 
+  document.getElementById('loadDoneMsg').style.display = 'none'; 
+  renderLoadFlow();
 };
 
-window.updateManualSummaryField = function(itemId, field, val) {
+window.updateManualSummaryField = async function(itemId, field, val) {
   if (!cartItems[itemId]) cartItems[itemId] = {};
   if (field === 'manualCartons') cartItems[itemId].manualCartons = parseFloat(val) || 0;
   if (field === 'manualLoose')   cartItems[itemId].manualLoose   = parseInt(val) || 0;
@@ -1234,13 +1349,13 @@ window.updateManualSummaryField = function(itemId, field, val) {
     
     cartItems[itemId].inTruckPcs = r.inTruckPcs;
   }
-  saveSessionCloud();
+  await saveSessionToFirestore();
 };
 
-window.toggleItemInventoryComplete = function(itemId, isComplete) {
+window.toggleItemInventoryComplete = async function(itemId, isComplete) {
   if (!cartItems[itemId]) cartItems[itemId] = {}; 
   cartItems[itemId].isInventoryDone = isComplete; 
-  saveSessionCloud();
+  await saveSessionToFirestore();
   
   const r = cachedCalculatedRows.find(item => item.id === itemId); 
   if (r) r.isInventoryDone = isComplete;
@@ -1257,12 +1372,17 @@ window.toggleItemInventoryComplete = function(itemId, isComplete) {
 };
 
 function updateTabCounters() {
-  const activeCount = cachedCalculatedRows.filter(r => !r.isInventoryDone).length; const completedCount = cachedCalculatedRows.filter(r => r.isInventoryDone).length;
-  document.getElementById('countActive').textContent = activeCount; document.getElementById('countCompleted').textContent = completedCount;
+  const activeCount = cachedCalculatedRows.filter(r => !r.isInventoryDone).length; 
+  const completedCount = cachedCalculatedRows.filter(r => r.isInventoryDone).length;
+  document.getElementById('countActive').textContent = activeCount; 
+  document.getElementById('countCompleted').textContent = completedCount;
 }
 
 window.switchSummaryTab = function(tab) {
-  currentSummaryTab = tab; document.getElementById('btnTabActive').classList.toggle('active', tab === 'active'); document.getElementById('btnTabCompleted').classList.toggle('active', tab === 'completed'); window.filterSummaryUI();
+  currentSummaryTab = tab; 
+  document.getElementById('btnTabActive').classList.toggle('active', tab === 'active'); 
+  document.getElementById('btnTabCompleted').classList.toggle('active', tab === 'completed'); 
+  window.filterSummaryUI();
 };
 
 window.onSummaryDateChange = function() { listenToDailyLoadChanges(); listenToLiveInvoices(); };
@@ -1466,7 +1586,13 @@ window.openEditLoadModal = function(itemId) {
 
 window.closeEditLoadModal = function() { document.getElementById('editLoadModal').classList.remove('open'); };
 
-window.saveQuickLoadEdit = function() {
+window.saveQuickLoadEdit = async function() {
+  const saveBtn = document.getElementById('modalSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'جاري الحفظ... ⏳';
+  }
+
   const itemId = document.getElementById('modalItemId').value; 
   const fbItem = firebaseItems.find(i => i.id === itemId); 
   if (!fbItem) return;
@@ -1493,9 +1619,14 @@ window.saveQuickLoadEdit = function() {
   cartItems[itemId].loadedLoose   = loose; 
   cartItems[itemId].lastEditedAt  = editTimeStr;
 
-  saveSessionCloud(); 
+  await saveSessionToFirestore(); 
   closeEditLoadModal(); 
   
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'حفظ التعديل 💾';
+  }
+
   buildCalculatedRows(); 
   window.filterSummaryUI();
 
@@ -1512,7 +1643,7 @@ window.archiveLoad = async function() {
     
     await setDoc(doc(db, 'archived_loads', d), {
       date: d,
-      timestamp: new Date().toISOString(),
+      timestamp: serverTimestamp(),
       user: loggedUser.username || 'أحمد محمود الزيادي',
       isClosed: false,
       loadedInSession: loadedInSession,
@@ -1538,7 +1669,7 @@ window.archiveInventory = async function() {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري إغلاق اليوم...');
     await setDoc(doc(db, 'archived_inventory', d), {
-      date: d, timestamp: new Date().toISOString(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
+      date: d, timestamp: serverTimestamp(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
     });
     
     localStorage.removeItem('cartItems_' + d);
