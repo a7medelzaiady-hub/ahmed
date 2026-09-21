@@ -217,45 +217,71 @@
     }
     let allSuppliers = [];
 
-    // دالة احتساب الرصيد الموحدة والمطابقة لبقية الشاشات
+    // دالة احتساب الرصيد الموحدة والمطابقة لكشف الحساب
     async function calculateSupplierBalance(supId, openingBal) {
-        const [snapTrans, snapItems] = await Promise.all([
+        let combinedData = [];
+        const initial = Number(openingBal) || 0;
+
+        const [transSnapParty, transSnapSup, invSnap] = await Promise.all([
             getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
+            getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
             getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
         ]);
 
-        let totalPurchases = 0; 
-        let totalPayments = 0;  
+        const processedTransIds = new Set();
 
-        // 1. حساب السندات المالية (صرف/قبض/سداد)
-        snapTrans.forEach(docSnap => {
-            const d = docSnap.data();
-            const amt = Number(d.amount) || 0;
-            if (d.type === "صرف" || d.type === "سداد") {
-                totalPayments += amt;
-            } else if (d.type === "قبض") {
-                totalPurchases += amt;
-            }
-        });
+        const processTransDoc = (documentDoc) => {
+            if (processedTransIds.has(documentDoc.id)) return;
+            const d = documentDoc.data();
 
-        // 2. حساب فواتير المشتريات والمرتجعات والمدفوعات داخل الفاتورة
-        snapItems.forEach(docSnap => {
-            const d = docSnap.data();
-            const totalInvoice = Number(d.total) || Number(d.amount) || 0;
+            // منع تكرار سند الصرف إذا كان مسجلاً بالفعل مع فاتورة
+            if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+
+            processedTransIds.add(documentDoc.id);
+
+            combinedData.push({ 
+                type: d.type || 'سداد نقدية', 
+                amount: Number(d.amount || 0)
+            });
+        };
+
+        transSnapParty.forEach(processTransDoc);
+        transSnapSup.forEach(processTransDoc);
+
+        invSnap.forEach(documentDoc => {
+            const d = documentDoc.data();
+            const totalAmt = Number(d.total || d.amount || 0);
             
-            const paidInsideInvoice = Number(d.paid) || 
+            combinedData.push({ 
+                type: d.type || 'شراء', 
+                amount: totalAmt
+            });
+
+            const paidAmt = Number(d.paid) || 
                 (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
                 (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
 
-            if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
-                totalPurchases += totalInvoice;
-                totalPayments += paidInsideInvoice;
-            } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
-                totalPayments += totalInvoice;
+            if (paidAmt > 0 && (d.type === 'شراء' || d.type === 'فاتورة شراء' || !d.type)) {
+                combinedData.push({
+                    type: 'سداد مع الفاتورة',
+                    amount: paidAmt,
+                    isCustomPayment: true
+                });
             }
         });
 
-        return (Number(openingBal || 0) + totalPurchases) - totalPayments;
+        let totalDebit = initial > 0 ? initial : 0;
+        let totalCredit = initial < 0 ? Math.abs(initial) : 0;
+
+        combinedData.forEach(t => {
+            let isDebit = (t.type.includes('شراء') && !t.type.includes('مرتجع')) || t.type === 'قبض';
+            let isCredit = t.type.includes('مرتجع') || t.type.includes('صرف') || t.type.includes('سداد') || t.isCustomPayment;
+            
+            if (isDebit) totalDebit += t.amount;
+            if (isCredit) totalCredit += t.amount;
+        });
+
+        return totalDebit - totalCredit;
     }
 
     // تحديث كارت الإجمالي
