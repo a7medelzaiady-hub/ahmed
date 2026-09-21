@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -297,7 +296,6 @@
         const cartons = Math.floor(absPcs / factor);
         const loosePcs = absPcs % factor;
 
-        let cartonText = (isNeg ? '-' : '') + cartons + ' كرتونة';
         let detailText = '';
 
         if (cartons > 0 && loosePcs > 0) {
@@ -366,17 +364,22 @@
 
             let movements = [];
 
-            // 2. المبيعات ومرتجعات البيع
+            // 2. المبيعات ومرتجعات البيع (مع استبعاد الفواتير المحذوفة)
             const salesSnap = await getDocs(collection(db, "invoices"));
             salesSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                const matchedItem = data.items?.find(item => item.stockId === productId || item.name === productName);
+                
+                // تخطي الفواتير المحذوفة نهائياً
+                if (data.isDeleted) return;
+
+                const matchedItem = data.items?.find(item => (item.stockId && item.stockId === productId) || item.id === productId || item.name === productName);
                 if (matchedItem) {
                     const isReturn = matchedItem.isReturn === true;
                     const dateObj = data.timestamp?.toDate ? data.timestamp.toDate() : (data.time ? new Date(data.time) : new Date());
                     
                     let pcs = Number(matchedItem.qty) || 0;
-                    if (matchedItem.unit === 'box' || matchedItem.isCarton) pcs = pcs * factor;
+                    const isCarton = (matchedItem.unit === 'box' || matchedItem.unit === 'carton' || matchedItem.unit === 'كرتونة' || matchedItem.unitName === 'كرتونة' || matchedItem.isCarton === true);
+                    if (isCarton) pcs = pcs * factor;
 
                     if (isReturn) {
                         totalSalesReturnsPcs += pcs;
@@ -393,24 +396,29 @@
                         qtyPcs: pcs,
                         unit: 'كرتونة',
                         price: matchedItem.price,
-                        total: matchedItem.qty * matchedItem.price,
+                        total: (Number(matchedItem.qty) || 0) * (Number(matchedItem.price) || 0),
                         docLink: `sales-invoice.html?edit=${docSnap.id}`
                     });
                 }
             });
 
-            // 3. المشتريات ومرتجعات الشراء
+            // 3. المشتريات ومرتجعات الشراء (مع استبعاد الحركات المحذوفة)
             const purchasesSnap = await getDocs(collection(db, "supplier_transactions"));
             purchasesSnap.forEach(docSnap => {
                 const data = docSnap.data();
-                const matchedItem = data.items?.find(item => item.name === productName || item.stockId === productId);
+                
+                // تخطي الحركات المحذوفة
+                if (data.isDeleted) return;
+
+                const matchedItem = data.items?.find(item => item.name === productName || item.stockId === productId || item.id === productId);
                 if (matchedItem) {
                     const isReturn = Number(matchedItem.returnQty) > 0 || matchedItem.isReturn === true;
                     const qty = isReturn ? Number(matchedItem.returnQty || matchedItem.qty) : Number(matchedItem.qty);
                     const dateObj = data.timestamp?.toDate ? data.timestamp.toDate() : (data.date ? new Date(data.date) : new Date());
 
                     let pcs = qty;
-                    if (matchedItem.unitName === 'كرتونة' || matchedItem.isCarton !== false) pcs = qty * factor;
+                    const isCarton = (matchedItem.unitName === 'كرتونة' || matchedItem.unit === 'كرتونة' || matchedItem.isCarton !== false);
+                    if (isCarton) pcs = qty * factor;
 
                     if (isReturn) {
                         totalPurchaseReturnsPcs += pcs;
@@ -426,8 +434,8 @@
                         party: suppliersBase[data.supplierId] || "مورد",
                         qtyPcs: pcs,
                         unit: 'كرتونة',
-                        price: matchedItem.buy,
-                        total: qty * matchedItem.buy,
+                        price: matchedItem.buy || matchedItem.price,
+                        total: qty * (Number(matchedItem.buy || matchedItem.price) || 0),
                         docLink: `new-purchase-invoice.html?edit=${docSnap.id}`
                     });
                 }
