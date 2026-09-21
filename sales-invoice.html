@@ -765,6 +765,13 @@
         return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
     }
 
+    // دالة تقريب السعر لأقرب 5 أو 10 مضاعفات أعلى
+    function roundUpToNextFiveOrTen(val) {
+        const num = parseFloat(val);
+        if (isNaN(num) || num <= 0) return 0;
+        return Math.ceil(num / 5) * 5;
+    }
+
     // دالة تحويل العدد الكلي إلى كرتونة وقطعة
     function formatStockQuantity(totalPcs, unitFactor) {
         const factor = Math.max(1, Number(unitFactor) || 1);
@@ -1332,7 +1339,10 @@
 
             row.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText}`;
             
-            const defaultPriceVal = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
+            let defaultPriceVal = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
+            if (selectedUnit === 'pcs' && factor === 12) {
+                defaultPriceVal = roundUpToNextFiveOrTen(defaultPriceVal);
+            }
             priceInput.dataset.defaultPrice = defaultPriceVal.toString();
 
             if (priceInput.dataset.isEdited !== "true") {
@@ -1461,12 +1471,18 @@
 
         if (priceInput.dataset.isEdited === "true" && !isNaN(currentPrice) && currentPrice > 0) {
             let convertedPrice = selectedUnit === 'box' ? (currentPrice * factor) : (currentPrice / factor);
+            if (selectedUnit === 'pcs' && factor === 12) {
+                convertedPrice = roundUpToNextFiveOrTen(convertedPrice);
+            }
             priceInput.value = formatNumClean(convertedPrice);
             calc();
             return;
         }
 
-        const storePrice = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
+        let storePrice = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
+        if (selectedUnit === 'pcs' && factor === 12) {
+            storePrice = roundUpToNextFiveOrTen(storePrice);
+        }
         const finalPrice = storePrice;
 
         const formattedPriceClean = formatNumClean(finalPrice);
@@ -1608,6 +1624,9 @@
                     if (p) {
                         const factor = Number(p.unitFactor) || 1;
                         defaultPrice = (unit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
+                        if (unit === 'pcs' && factor === 12) {
+                            defaultPrice = roundUpToNextFiveOrTen(defaultPrice);
+                        }
                     }
                 }
                 const unitText = window.handleSpreadsheetUnitText(unit);
