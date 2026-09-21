@@ -282,8 +282,6 @@
     const app = initializeApp(firebaseConfig);
     let db;
     try {
-        // تفعيل الكاش الأوفلاين الحقيقي (IndexedDB) عشان الصفحة تقدر تشتغل
-        // حتى لو النت قطع، وتتزامن تلقائيًا لما النت يرجع - زي صفحة الداشبورد بالظبط
         db = initializeFirestore(app, {
             localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
         });
@@ -292,11 +290,6 @@
     }
     let allData = [];
 
-    // ---- ذاكرة تخزين محلية لعرض فوري (stale-while-revalidate) ----
-    // بدل ما المستخدم يستنى تحميل كل الفواتير وسندات الموردين من الصفر
-    // في كل مرة يفتح فيها الصفحة، بنعرض آخر نسخة محفوظة عنده فورًا،
-    // وفي نفس الوقت بنجيب البيانات الحقيقية في الخلفية ونحدث القائمة
-    // لما تجهز. ده بيخلي الصفحة تحس إنها سريعة من أول لحظة.
     const CACHE_KEY = 'inventoryPageCache_v1';
 
     function setSyncState(state) {
@@ -331,7 +324,6 @@
         }
     }
 
-    // التحقق الفعلي مما إذا كانت الوحدة مباعة/مشتراة ككرتونة
     function isCartonUnit(unitValue, isCartonFlag) {
         if (isCartonFlag === true) return true;
         if (!unitValue) return false;
@@ -341,7 +333,6 @@
 
     async function loadLiveInventory() {
         try {
-            // جلب المجموعات دفعة واحدة لسرعة الأداء
             const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
@@ -372,9 +363,16 @@
                 }
             });
 
-            // حساب المبيعات بسرعة أداء عالية
+            // حساب المبيعات بسرعة أداء عالية (مع استبعاد الفواتير المحذوفة والملغاة)
             invoicesSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
+                const invData = docSnap.data();
+
+                // 🛑 استبعاد الفاتورة إذا كانت محذوفة أو ملغاة لكي يعود رصيدها للمخزن تلقائياً
+                if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') {
+                    return;
+                }
+
+                const items = invData.items || [];
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     const id = item.stockId || namesMap.get(item.name?.trim());
@@ -490,7 +488,6 @@
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
 
-            // تحويل قطع الكلي إلى (كرتونة + جركن/قطعة)
             const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
             const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
 
@@ -536,7 +533,6 @@
         window.location.href = `product-details.html?id=${id}`;
     };
 
-    // اعرض النسخة المحفوظة فورًا (لو موجودة) قبل ما نبدأ نجيب البيانات الحقيقية
     const hadCache = loadCachedRender();
     if (!hadCache) setSyncState('syncing');
     loadLiveInventory();
