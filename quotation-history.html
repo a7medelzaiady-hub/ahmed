@@ -531,8 +531,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 let db;
 try {
+    // 1. إضافة ignoreUndefinedProperties لتفادي خطأ undefined من Firebase
     db = initializeFirestore(app, {
-        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
+        ignoreUndefinedProperties: true
     });
 } catch (e) {
     db = getFirestore(app);
@@ -607,13 +609,11 @@ function updateSyncUIStatus(status, text) {
 function listenToDailyLoadChanges() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   
-  // إلغاء الـ Listener القديم لمنع تكرار المراقبة والـ Race Conditions
   if (unsubscribeDailyLoad) {
     unsubscribeDailyLoad();
     unsubscribeDailyLoad = null;
   }
 
-  // 1. عرض الكاش المحلي مؤقتاً للتسريع فقط
   loadFromLocalCache(d);
   if (document.getElementById('pg-load').classList.contains('active')) {
     renderLoadFlow();
@@ -623,13 +623,11 @@ function listenToDailyLoadChanges() {
 
   const docRef = doc(db, 'daily_loads', d);
   
-  // 2. تفعيل Listener الوحيد للمصدر الأساسي للحقيقة
   unsubscribeDailyLoad = onSnapshot(docRef, (docSnap) => {
     const isFromCache = docSnap.metadata.hasPendingWrites || docSnap.metadata.fromCache;
     
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // Firestore Snapshot ↓ State Overwrite
       loadedInSession = data.loadedInSession || {};
       cartItems       = data.cartItems || {};
     } else {
@@ -637,7 +635,6 @@ function listenToDailyLoadChanges() {
       cartItems       = {};
     }
 
-    // Update Local Cache بعد الاعتماد النهائي من Snapshot
     updateLocalCache(d, cartItems, loadedInSession);
 
     if (isFromCache) {
@@ -647,7 +644,6 @@ function listenToDailyLoadChanges() {
       updateSyncUIStatus('online', `🟢 متصل ومزامنة مباشرة (آخر تحديث: ${nowStr})`);
     }
 
-    // Update UI
     if (document.getElementById('pg-load').classList.contains('active')) {
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
@@ -665,7 +661,6 @@ function listenToDailyLoadChanges() {
     updateSyncUIStatus('offline', '🔴 غير متصل - تعذر المزامنة');
   });
 
-  // جلب اليوم السابق للحسابات السابقة دون تكرار Listeners
   const prevDate = getPreviousDateStr(d);
   getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
     previousTruckStock = {};
@@ -1391,6 +1386,7 @@ window.refreshSummaryData = function(forceFetch = false) {
   listenToLiveInvoices();
 };
 
+// 2. تأمين الحقول داخل دالة buildCalculatedRows
 function buildCalculatedRows() {
   const processedIds = new Set();
   const rows = [];
@@ -1402,8 +1398,8 @@ function buildCalculatedRows() {
     let cartData = cartItems[fbItem.id];
     if (!cartData) { 
       cartData = { 
-        name: fbItem.name, 
-        capacity: fbItem.capacity, 
+        name: fbItem.name || 'بدون اسم', // تأمين الاسم
+        capacity: Number(fbItem.capacity) || 1, // تأمين السعة
         prevCartons: loadedInSession[fbItem.id]?.prevCartons || 0,
         prevLoose: loadedInSession[fbItem.id]?.prevLoose || 0,
         loadedCartons: loadedInSession[fbItem.id]?.cartons || 0, 
@@ -1415,6 +1411,10 @@ function buildCalculatedRows() {
         isInventoryDone: false 
       }; 
     } else {
+      // تحديث الاسم والسعة بشكل دائم من الداتا بيز إذا كانت مفقودة في السجل
+      cartData.name = fbItem.name || 'بدون اسم';
+      cartData.capacity = Number(fbItem.capacity) || 1;
+      
       if (loadedInSession[fbItem.id]) {
         cartData.prevCartons   = loadedInSession[fbItem.id].prevCartons || 0;
         cartData.prevLoose     = loadedInSession[fbItem.id].prevLoose || 0;
@@ -1425,7 +1425,7 @@ function buildCalculatedRows() {
 
     const liveSales = memorySalesCache || {};
     const unit = getUnitName(cartData.name); 
-    const cap  = cartData.capacity || 1; 
+    const cap  = Number(cartData.capacity) || 1; 
     const totalSoldPcs = liveSales[fbItem.id] || 0;
     
     const totalPrevPcs   = ((parseFloat(cartData.prevCartons || 0)) * cap) + parseInt(cartData.prevLoose || 0);
@@ -1513,7 +1513,7 @@ window.filterSummaryUI = function() {
         <div class="inv-return-group"><label>الراجع:</label>${returnFieldsHtml}</div>
         <select class="inv-status-select ${statusClass}" onchange="this.className='inv-status-select '+(this.value==='عجز'?'status-ajz':this.value==='زيادة'?'status-zyada':''); window.updateManualSummaryField('${id}','diffStatus',this.value)">
           <option value=""         ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
-          <option value="عجز"    ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
+          <option value="عجز"     ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
           <option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option>
         </select>
       </div>`;
@@ -1657,20 +1657,37 @@ window.archiveLoad = async function() {
   }
 };
 
+// 3. تعديل دالة الإغلاق للتعامل مع مسح الحمولة وإظهار كود الخطأ
 window.archiveInventory = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
   const exportData = cachedCalculatedRows.map(r => ({
-    id: r.id, name: r.it.name, prevLoaded: cleanTextForPdf(r.prevLoadedText), newLoaded: cleanTextForPdf(r.newLoadedText), loaded: cleanTextForPdf(r.loadedText), sold: cleanTextForPdf(r.soldText), inTruck: cleanTextForPdf(r.inTruckText), returnedManual: cleanTextForPdf(r.manualText), status: r.calculatedStatus || 'مضبوط'
+    id: r.id, 
+    name: r.it?.name || r.name || 'بدون اسم', // تأمين إضافي للاسم
+    prevLoaded: cleanTextForPdf(r.prevLoadedText), 
+    newLoaded: cleanTextForPdf(r.newLoadedText), 
+    loaded: cleanTextForPdf(r.loadedText), 
+    sold: cleanTextForPdf(r.soldText), 
+    inTruck: cleanTextForPdf(r.inTruckText), 
+    returnedManual: cleanTextForPdf(r.manualText), 
+    status: r.calculatedStatus || 'مضبوط'
   }));
 
   try {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري إغلاق اليوم...');
+    
     await setDoc(doc(db, 'archived_inventory', d), {
       date: d, timestamp: serverTimestamp(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
     });
+    
+    // مسح التحميل اليومي (daily_loads) لليوم المؤرشف[cite: 4]
+    try {
+        await deleteDoc(doc(db, 'daily_loads', d));[cite: 4]
+    } catch (delErr) {
+        console.warn("تنبيه: تعذر مسح daily_loads بعد الترحيل", delErr);
+    }
     
     localStorage.removeItem('cartItems_' + d);
     localStorage.removeItem('loadedInSession_' + d);
@@ -1678,9 +1695,14 @@ window.archiveInventory = async function() {
     
     window.toast('✅ تم ترحيل الجرد وإغلاق اليوم بنجاح!');
     setTimeout(() => location.reload(), 2000); 
-  } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
+  } catch(e) { 
+    console.error("تفاصيل الخطأ:", e); 
+    const errorMsg = e.code || e.message || 'حدث خطأ أثناء ترحيل الجرد!';
+    window.toast('❌ ' + errorMsg); 
+  }
 };
 
+// 4. تصحيح استدعاءات الأقواس في الأرشيف والحذف
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
@@ -1691,9 +1713,10 @@ window.fetchArchive = async function() {
     let archivedInventoryMap = {};
 
     if (selectedDate) {
+      // تصحيح الأقواس المزدوجة هنا
       const [loadSnap, invSnap] = await Promise.all([
         getDoc(doc(db, 'archived_loads', selectedDate)),
-        getDoc(doc(doc(db, 'archived_inventory', selectedDate)))
+        getDoc(doc(db, 'archived_inventory', selectedDate))
       ]);
       if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
       if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
@@ -1919,8 +1942,8 @@ window.toggleArchiveDetails = async function(d) {
               ${itemsList.map(item => `
                 <tr>
                   <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
-                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons || 0} ك / ${item.prevLoose || 0} ق</td>
-                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0} ك / ${item.loadedLoose || 0} ق</td>
+                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons \vert{}\vert{} 0} ك / ${item.prevLoose || 0} ق</td>
+                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons \vert{}\vert{} 0} ك / ${item.loadedLoose || 0} ق</td>
                   <td style="font-size:10px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
                 </tr>
               `).join('')}
@@ -1940,7 +1963,10 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(doc(db, 'archived_inventory', d)));
+    
+    // تصحيح الأقواس المزدوجة هنا
+    await deleteDoc(doc(db, 'archived_inventory', d));
+    
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
