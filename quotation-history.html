@@ -1659,28 +1659,108 @@ window.archiveLoad = async function() {
 
 window.archiveInventory = async function() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
-  if(!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
 
-  const exportData = cachedCalculatedRows.map(r => ({
-    id: r.id, name: r.it.name, prevLoaded: cleanTextForPdf(r.prevLoadedText), newLoaded: cleanTextForPdf(r.newLoadedText), loaded: cleanTextForPdf(r.loadedText), sold: cleanTextForPdf(r.soldText), inTruck: cleanTextForPdf(r.inTruckText), returnedManual: cleanTextForPdf(r.manualText), status: r.calculatedStatus || 'مضبوط'
-  }));
+  if (!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) {
+    return;
+  }
+
+  // التأكد من وجود بيانات
+  if (!Array.isArray(cachedCalculatedRows)) {
+    window.toast('❌ لا توجد بيانات جرد لترحيلها');
+    console.error('cachedCalculatedRows ليست Array:', cachedCalculatedRows);
+    return;
+  }
+
+  if (!cachedCalculatedRows.length) {
+    window.toast('⚠️ لا توجد أصناف في الجرد لترحيلها');
+    return;
+  }
 
   try {
-    const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
-    window.toast('⏳ جاري إغلاق اليوم...');
-    await setDoc(doc(db, 'archived_inventory', d), {
-      date: d, timestamp: serverTimestamp(), user: loggedUser.username || 'أحمد محمود الزيادي', inventoryData: exportData
-    });
-    
+    const loggedUser = JSON.parse(
+      localStorage.getItem('loggedUser') || '{}'
+    );
+
+    window.toast('⏳ جاري إغلاق اليوم وترحيل الجرد...');
+
+    // تجهيز بيانات آمنة للحفظ في Firestore
+    const exportData = cachedCalculatedRows.map(r => ({
+      id: String(r.id || ''),
+      name: String(r.it?.name || ''),
+      prevLoaded: cleanTextForPdf(r.prevLoadedText || '0'),
+      newLoaded: cleanTextForPdf(r.newLoadedText || '0'),
+      loaded: cleanTextForPdf(r.loadedText || '0'),
+      sold: cleanTextForPdf(r.soldText || '0'),
+      inTruck: cleanTextForPdf(r.inTruckText || '0'),
+      returnedManual: cleanTextForPdf(r.manualText || '0'),
+      status: String(r.calculatedStatus || 'مضبوط'),
+      isInventoryDone: Boolean(r.isInventoryDone),
+      lastEditedAt: String(r.lastEditedAt || '')
+    }));
+
+    console.log('بيانات الجرد التي سيتم ترحيلها:', exportData);
+
+    const archiveRef = doc(db, 'archived_inventory', d);
+
+    await setDoc(
+      archiveRef,
+      {
+        date: d,
+        timestamp: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        user: loggedUser.username || 'أحمد محمود الزيادي',
+        inventoryData: exportData,
+        itemsCount: exportData.length,
+        isClosed: true
+      },
+      { merge: true }
+    );
+
+    // التأكد أن عملية الحفظ تمت بالفعل
+    const verifySnap = await getDoc(archiveRef);
+
+    if (!verifySnap.exists()) {
+      throw new Error('تم تنفيذ الحفظ ولكن لم يتم العثور على مستند الأرشيف');
+    }
+
+    // بعد نجاح Firebase فقط نمسح الكاش
     localStorage.removeItem('cartItems_' + d);
     localStorage.removeItem('loadedInSession_' + d);
-    loadedInSession = {}; cartItems = {};
-    
-    window.toast('✅ تم ترحيل الجرد وإغلاق اليوم بنجاح!');
-    setTimeout(() => location.reload(), 2000); 
-  } catch(e) { console.error(e); window.toast('❌ حدث خطأ أثناء ترحيل الجرد!'); }
-};
 
+    loadedInSession = {};
+    cartItems = {};
+
+    window.toast('✅ تم ترحيل الجرد وإغلاق اليوم بنجاح!');
+
+    setTimeout(() => {
+      location.reload();
+    }, 1500);
+
+  } catch (e) {
+
+    console.error('❌ خطأ كامل أثناء ترحيل الجرد:', e);
+    console.error('اسم الخطأ:', e?.name);
+    console.error('رسالة الخطأ:', e?.message);
+    console.error('الكود:', e?.code);
+
+    let errorMessage = '❌ حدث خطأ أثناء ترحيل الجرد';
+
+    if (e?.code === 'permission-denied') {
+      errorMessage = '❌ ليس لديك صلاحية الكتابة في أرشيف الجرد';
+    } 
+    else if (e?.code === 'failed-precondition') {
+      errorMessage = '❌ مشكلة في اتصال Firebase أو قاعدة البيانات';
+    } 
+    else if (e?.code === 'unavailable') {
+      errorMessage = '❌ Firebase غير متاح حاليًا، تحقق من الإنترنت';
+    } 
+    else if (e?.message) {
+      errorMessage = '❌ ' + e.message;
+    }
+
+    window.toast(errorMessage);
+  }
+};
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
