@@ -749,12 +749,26 @@ function renderSalesTable(itemId, maxDateStr = '') {
         });
     });
 
-    // حسابات الصافي والمتبقي
+    // حسابات الصافي والمتبقي حتى التاريخ المفلتر
     const openingPcs = Number(itemObj.openingTotalPcsCalc || 0);
     const netSalesPcs = salesPcsPure - salesReturnPcs;
     const netPurchasesPcs = purchasesPcsPure - purchasesReturnPcs;
     const totalReturnsCombinedPcs = salesReturnPcs + purchasesReturnPcs;
     const remainingPcsAtDate = openingPcs + netPurchasesPcs - netSalesPcs;
+
+    // تحديث بطاقة الرصيد الإجمالي العلوية والبطاقات الثانوية داخل المودال لتتأثر بالفلترة فوراً
+    const currentStockCardVal = document.getElementById('modalCurrentStockVal');
+    if (currentStockCardVal) {
+        currentStockCardVal.innerText = formatQuantityDetailed(remainingPcsAtDate, capacity, unit);
+    }
+    const buyCardVal = document.getElementById('modalBuyVal');
+    if (buyCardVal) {
+        buyCardVal.innerText = '+' + formatQuantityDetailed(purchasesPcsPure, capacity, unit);
+    }
+    const sellCardVal = document.getElementById('modalSellVal');
+    if (sellCardVal) {
+        sellCardVal.innerText = '-' + formatQuantityDetailed(salesPcsPure, capacity, unit);
+    }
 
     // ترتيب الحركات (الأحدث أولاً)
     combinedTransactions.sort((a, b) => b.rawDate - a.rawDate);
@@ -849,10 +863,10 @@ async function showItemHistory(itemId, itemName) {
         let html = `
         <div class="modal-dashboard">
             <div class="mini-card mc-init"><i class="fas fa-hourglass-start"></i><div class="mini-info"><span class="mini-val num">${formatQuantityDetailed(initPcs, capacity, unit)}</span><span class="mini-lbl">رصيد أول المدة</span></div></div>
-            <div class="mini-card mc-buy"><i class="fas fa-circle-arrow-down"></i><div class="mini-info"><span class="mini-val num">+${formatQuantityDetailed(buyPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المشتريات</span></div></div>
-            <div class="mini-card mc-sell"><i class="fas fa-circle-arrow-up"></i><div class="mini-info"><span class="mini-val num">-${formatQuantityDetailed(sellPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المبيعات</span></div></div>
+            <div class="mini-card mc-buy"><i class="fas fa-circle-arrow-down"></i><div class="mini-info"><span class="mini-val num" id="modalBuyVal">+${formatQuantityDetailed(buyPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المشتريات</span></div></div>
+            <div class="mini-card mc-sell"><i class="fas fa-circle-arrow-up"></i><div class="mini-info"><span class="mini-val num" id="modalSellVal">-${formatQuantityDetailed(sellPcs, capacity, unit)}</span><span class="mini-lbl">إجمالي المبيعات</span></div></div>
             <div class="mini-card mc-ret"><i class="fas fa-rotate-left"></i><div class="mini-info"><span class="mini-val num">0 كرتونة</span><span class="mini-lbl">المرتجعات والتالف</span></div></div>
-            <div class="mini-card mc-current"><div class="mini-info" style="text-align: center;"><span class="mini-val num">${formatQuantityDetailed(totalPcs, capacity, unit)}</span><span class="mini-lbl">الرصيد الحالي بالمخزن</span></div></div>
+            <div class="mini-card mc-current"><div class="mini-info" style="text-align: center;"><span class="mini-val num" id="modalCurrentStockVal">${formatQuantityDetailed(totalPcs, capacity, unit)}</span><span class="mini-lbl">الرصيد الحالي بالمخزن</span></div></div>
         </div>
 
         <div class="sales-filter-card">
