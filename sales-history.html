@@ -1786,41 +1786,74 @@
     window.toggleDetails = (id) => { const el = document.getElementById(`details_box_${id}`); el.style.display = el.style.display === "none" ? "block" : "none"; };
     window.editInvoice = (id) => { window.location.href = `sales-invoice.html?edit=${id}&allowDateEdit=true`; };
 
+    // === دالة حذف الفاتورة المُعدّلة مع إرجاع الكميات المباشر للمخزن ===
     window.deleteInvoice = (id) => {
         const inv = allInvoices.find(i => i.id === id);
         if (!inv) return;
 
         window.showCustomUi({
             title: "حذف الفاتورة",
-            message: `هل أنت تأكد من نقل فاتورة العميل (${inv.customerName || 'عميل نقدي'}) إلى سلة المحذوفات؟`,
+            message: `هل أنت تأكد من نقل فاتورة العميل (${inv.customerName || 'عميل نقدي'}) إلى سلة المحذوفات وإعادة كميات الأصناف للمخزن؟`,
             type: "confirm",
             icon: "danger",
             confirmText: "نعم، نقل للسلة",
             onConfirm: async () => {
                 try {
-                    await db.collection("invoices").doc(id).update({
+                    const batch = db.batch();
+
+                    // 1. إعادة كميات أصناف الفاتورة إلى المخزن
+                    if (Array.isArray(inv.items) && inv.items.length > 0) {
+                        for (const item of inv.items) {
+                            const stockId = item.stockId || item.id;
+                            if (stockId) {
+                                const itemRef = db.collection("inventory").doc(stockId);
+                                const factor = Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1;
+                                const isCarton = (item.unit === 'box' || item.unit === 'carton' || item.unit === 'كرتونة' || item.unitName === 'كرتونة' || item.isCarton === true);
+                                const qtyPcs = Number(item.qty || 0);
+                                
+                                // إذا كانت مرتجع بيع، نعكس الخصم/الإضافة كمرتجع
+                                const totalPcsToReturn = item.isReturn 
+                                    ? -(isCarton ? qtyPcs * factor : qtyPcs)
+                                    : (isCarton ? qtyPcs * factor : qtyPcs);
+
+                                batch.update(itemRef, {
+                                    totalPcs: firebase.firestore.FieldValue.increment(totalPcsToReturn),
+                                    qty: firebase.firestore.FieldValue.increment(totalPcsToReturn)
+                                });
+                            }
+                        }
+                    }
+
+                    // 2. تحديث حالة الفاتورة لتصبح محذوفة
+                    const invRef = db.collection("invoices").doc(id);
+                    batch.update(invRef, {
                         isDeleted: true,
                         deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
 
+                    // 3. تحديث أي معالم وسندات مالية مرتبطة بالفاتورة
                     const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
                     for (const tr of relatedTrans) {
-                        await db.collection("transactions").doc(tr.id).update({
+                        const trRef = db.collection("transactions").doc(tr.id);
+                        batch.update(trRef, {
                             isDeleted: true,
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
 
+                    // تنفيذ الـ Batch دفعة واحدة لضمان جودة الأداء والاتساق
+                    await batch.commit();
+
                     window.showCustomUi({
-                        title: "تم الحذف",
-                        message: "✅ تم نقل الفاتورة بنجاح إلى سلة المحذوفات.",
+                        title: "تم الحذف والإرجاع",
+                        message: "✅ تم نقل الفاتورة بنجاح إلى سلة المحذوفات وتحديث رصيد المخزن.",
                         icon: "success",
                         onConfirm: () => {
                             loadData(true, loadedScope === 'ARCHIVE');
                         }
                     });
                 } catch (err) {
-                    console.error("خطأ أثناء الحذف:", err);
+                    console.error("خطأ أثناء الحذف والإرجاع:", err);
                     window.showCustomUi({
                         title: "خطأ",
                         message: "تعذر نقل الفاتورة للسلة: " + err.message,
