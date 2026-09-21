@@ -772,6 +772,22 @@
         return Math.ceil(num / 5) * 5;
     }
 
+    // دالة حساب السعر الذكي بناءً على معامل الكرتونة
+    function calculateSmartUnitPrice(rawUnitPrice, factor) {
+        const price = parseFloat(rawUnitPrice);
+        if (isNaN(price) || price <= 0) return 0;
+
+        const f = Number(factor) || 1;
+
+        if (f === 4 || f === 12) {
+            return roundUpToNextFiveOrTen(price);
+        } else if (f === 24 || f === 30) {
+            return Math.ceil(price);
+        }
+
+        return price;
+    }
+
     // دالة تحويل العدد الكلي إلى كرتونة وقطعة
     function formatStockQuantity(totalPcs, unitFactor) {
         const factor = Math.max(1, Number(unitFactor) || 1);
@@ -1340,8 +1356,8 @@
             row.querySelector('.unit-info-area').innerHTML = `<i class="fas fa-warehouse me-1"></i> رصيد المخزن المتوفر: ${qtyText}`;
             
             let defaultPriceVal = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
-            if (selectedUnit === 'pcs' && factor === 12) {
-                defaultPriceVal = roundUpToNextFiveOrTen(defaultPriceVal);
+            if (selectedUnit === 'pcs') {
+                defaultPriceVal = calculateSmartUnitPrice(defaultPriceVal, factor);
             }
             priceInput.dataset.defaultPrice = defaultPriceVal.toString();
 
@@ -1471,8 +1487,8 @@
 
         if (priceInput.dataset.isEdited === "true" && !isNaN(currentPrice) && currentPrice > 0) {
             let convertedPrice = selectedUnit === 'box' ? (currentPrice * factor) : (currentPrice / factor);
-            if (selectedUnit === 'pcs' && factor === 12) {
-                convertedPrice = roundUpToNextFiveOrTen(convertedPrice);
+            if (selectedUnit === 'pcs') {
+                convertedPrice = calculateSmartUnitPrice(convertedPrice, factor);
             }
             priceInput.value = formatNumClean(convertedPrice);
             calc();
@@ -1480,8 +1496,8 @@
         }
 
         let storePrice = (selectedUnit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
-        if (selectedUnit === 'pcs' && factor === 12) {
-            storePrice = roundUpToNextFiveOrTen(storePrice);
+        if (selectedUnit === 'pcs') {
+            storePrice = calculateSmartUnitPrice(storePrice, factor);
         }
         const finalPrice = storePrice;
 
@@ -1624,8 +1640,8 @@
                     if (p) {
                         const factor = Number(p.unitFactor) || 1;
                         defaultPrice = (unit === 'box') ? (Number(p.sell) || 0) : ((Number(p.sell) || 0) / factor);
-                        if (unit === 'pcs' && factor === 12) {
-                            defaultPrice = roundUpToNextFiveOrTen(defaultPrice);
+                        if (unit === 'pcs') {
+                            defaultPrice = calculateSmartUnitPrice(defaultPrice, factor);
                         }
                     }
                 }
