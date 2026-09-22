@@ -378,8 +378,12 @@ table select:focus { border-color: var(--brand); }
       </div>
     </div>
 
+    <!-- تم تعديل وسم التنبيه ليصبح زراً للانتقال الفوري لأول صنف متبقٍ -->
     <div id="newItemsAlertBanner" class="card" style="display:none; background:#dcfce7; border:1.5px solid #2d6a4f; align-items:center; justify-content:space-between; padding:8px 10px; margin-bottom:10px; flex-direction:row;">
-      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px; width:100%; justify-content:center;">
+      <button class="btn btn-sm" onclick="window.scrollToNextPendingItem()" style="background:#0b5e3d; color:#fff; font-weight:800; border:none; padding:6px 12px; border-radius:8px;">
+        🚀 الانتقال إلى الأصناف المتبقية
+      </button>
+      <div style="font-weight:800; color:#1b2e26; font-size:12px; display:flex; align-items:center; gap:6px;">
         <span>أصناف جديدة أضيفت للمخزن تحتاج تسجيل تحميل:</span>
         <span class="snum" style="background:#0a4a31; margin:0;">1</span>
       </div>
@@ -607,13 +611,11 @@ function updateSyncUIStatus(status, text) {
 function listenToDailyLoadChanges() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   
-  // إلغاء الـ Listener القديم لمنع تكرار المراقبة والـ Race Conditions
   if (unsubscribeDailyLoad) {
     unsubscribeDailyLoad();
     unsubscribeDailyLoad = null;
   }
 
-  // 1. عرض الكاش المحلي مؤقتاً للتسريع فقط
   loadFromLocalCache(d);
   if (document.getElementById('pg-load').classList.contains('active')) {
     renderLoadFlow();
@@ -623,21 +625,34 @@ function listenToDailyLoadChanges() {
 
   const docRef = doc(db, 'daily_loads', d);
   
-  // 2. تفعيل Listener الوحيد للمصدر الأساسي للحقيقة
   unsubscribeDailyLoad = onSnapshot(docRef, (docSnap) => {
     const isFromCache = docSnap.metadata.hasPendingWrites || docSnap.metadata.fromCache;
     
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // Firestore Snapshot ↓ State Overwrite
       loadedInSession = data.loadedInSession || {};
       cartItems       = data.cartItems || {};
+
+      // مطابقة الأصناف حسب الـ ID وكذلك حسب اسم الصنف النظيف لضمان التعرف بين الأجهزة المختلفة
+      if (data.cartItems && firebaseItems.length > 0) {
+        Object.keys(data.cartItems).forEach(cKey => {
+          const cName = cleanItemName(data.cartItems[cKey].name);
+          const matchedItem = firebaseItems.find(f => f.id === cKey || cleanItemName(f.name) === cName);
+          if (matchedItem) {
+            if (!loadedInSession[matchedItem.id] && data.loadedInSession && data.loadedInSession[cKey]) {
+              loadedInSession[matchedItem.id] = data.loadedInSession[cKey];
+            }
+            if (!cartItems[matchedItem.id]) {
+              cartItems[matchedItem.id] = data.cartItems[cKey];
+            }
+          }
+        });
+      }
     } else {
       loadedInSession = {};
       cartItems       = {};
     }
 
-    // Update Local Cache بعد الاعتماد النهائي من Snapshot
     updateLocalCache(d, cartItems, loadedInSession);
 
     if (isFromCache) {
@@ -647,7 +662,6 @@ function listenToDailyLoadChanges() {
       updateSyncUIStatus('online', `🟢 متصل ومزامنة مباشرة (آخر تحديث: ${nowStr})`);
     }
 
-    // Update UI
     if (document.getElementById('pg-load').classList.contains('active')) {
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT')) {
@@ -665,7 +679,6 @@ function listenToDailyLoadChanges() {
     updateSyncUIStatus('offline', '🔴 غير متصل - تعذر المزامنة');
   });
 
-  // جلب اليوم السابق للحسابات السابقة دون تكرار Listeners
   const prevDate = getPreviousDateStr(d);
   getDoc(doc(db, 'daily_loads', prevDate)).then(prevSnap => {
     previousTruckStock = {};
@@ -978,6 +991,18 @@ function filterLoadFlow() {
   });
 }
 
+// دالة الانتقال السريع لأول صنف متبقٍ
+window.scrollToNextPendingItem = function() {
+  const firstPending = document.querySelector('#loadFlow .pending-step');
+  if (firstPending) {
+    firstPending.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    firstPending.classList.add('active');
+    setTimeout(() => firstPending.classList.remove('active'), 1500);
+  } else {
+    window.toast('✅ لا توجد أصناف متبقية');
+  }
+};
+
 window.fetchInventoryFresh = async function() {
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
@@ -1134,8 +1159,12 @@ function renderLoadFlow() {
   const loadedCount   = Object.keys(loadedInSession).length;
   const alertBanner   = document.getElementById('newItemsAlertBanner');
   if (alertBanner) {
-    if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
-    else { alertBanner.style.display = 'none'; }
+    if (pendingItems.length > 0 && loadedCount > 0) { 
+      alertBanner.style.display = 'flex'; 
+      alertBanner.querySelector('.snum').textContent = pendingItems.length; 
+    } else { 
+      alertBanner.style.display = 'none'; 
+    }
   }
   const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined);
   if (allDone && !forceShowLoadList && !searchVal) { doneMsg.style.display = 'block'; return; }
@@ -1664,7 +1693,6 @@ window.archiveInventory = async function() {
     return;
   }
 
-  // التأكد من وجود بيانات
   if (!Array.isArray(cachedCalculatedRows)) {
     window.toast('❌ لا توجد بيانات جرد لترحيلها');
     console.error('cachedCalculatedRows ليست Array:', cachedCalculatedRows);
@@ -1683,7 +1711,6 @@ window.archiveInventory = async function() {
 
     window.toast('⏳ جاري إغلاق اليوم وترحيل الجرد...');
 
-    // تجهيز بيانات آمنة للحفظ في Firestore
     const exportData = cachedCalculatedRows.map(r => ({
       id: String(r.id || ''),
       name: String(r.it?.name || ''),
@@ -1697,8 +1724,6 @@ window.archiveInventory = async function() {
       isInventoryDone: Boolean(r.isInventoryDone),
       lastEditedAt: String(r.lastEditedAt || '')
     }));
-
-    console.log('بيانات الجرد التي سيتم ترحيلها:', exportData);
 
     const archiveRef = doc(db, 'archived_inventory', d);
 
@@ -1716,14 +1741,12 @@ window.archiveInventory = async function() {
       { merge: true }
     );
 
-    // التأكد أن عملية الحفظ تمت بالفعل
     const verifySnap = await getDoc(archiveRef);
 
     if (!verifySnap.exists()) {
       throw new Error('تم تنفيذ الحفظ ولكن لم يتم العثور على مستند الأرشيف');
     }
 
-    // بعد نجاح Firebase فقط نمسح الكاش
     localStorage.removeItem('cartItems_' + d);
     localStorage.removeItem('loadedInSession_' + d);
 
@@ -1737,11 +1760,7 @@ window.archiveInventory = async function() {
     }, 1500);
 
   } catch (e) {
-
     console.error('❌ خطأ كامل أثناء ترحيل الجرد:', e);
-    console.error('اسم الخطأ:', e?.name);
-    console.error('رسالة الخطأ:', e?.message);
-    console.error('الكود:', e?.code);
 
     let errorMessage = '❌ حدث خطأ أثناء ترحيل الجرد';
 
@@ -1761,6 +1780,7 @@ window.archiveInventory = async function() {
     window.toast(errorMessage);
   }
 };
+
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
@@ -1773,7 +1793,7 @@ window.fetchArchive = async function() {
     if (selectedDate) {
       const [loadSnap, invSnap] = await Promise.all([
         getDoc(doc(db, 'archived_loads', selectedDate)),
-      getDoc(doc(db, 'archived_inventory', selectedDate))
+        getDoc(doc(db, 'archived_inventory', selectedDate))
       ]);
       if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
       if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
@@ -1999,8 +2019,8 @@ window.toggleArchiveDetails = async function(d) {
               ${itemsList.map(item => `
                 <tr>
                   <td style="text-align:right; font-weight:bold;">${item.name || '—'}</td>
-                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons || 0} ك / ${item.prevLoose || 0} ق</td>
-                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons || 0} ك / ${item.loadedLoose || 0} ق</td>
+                  <td style="color:var(--gray); font-weight:bold;">${item.prevCartons \vert{}\vert{} 0} ك / ${item.prevLoose || 0} ق</td>
+                  <td style="color:var(--brand); font-weight:bold;">${item.loadedCartons \vert{}\vert{} 0} ك / ${item.loadedLoose || 0} ق</td>
                   <td style="font-size:10px; color:var(--gray);">${item.lastEditedAt || '—'}</td>
                 </tr>
               `).join('')}
