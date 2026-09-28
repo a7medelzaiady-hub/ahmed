@@ -1093,6 +1093,7 @@
         }
     };
 
+    // === دالة التراكمي المحدثة بالكامل لضمان التطابق التام مع صفحة العملاء وكشف الحساب ===
     async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
@@ -1131,6 +1132,7 @@
 
         const customerGroupMap = {};
 
+        // 1. تجميع فواتير العملاء
         fullInvoicesList.forEach(inv => {
             let groupKey = inv.customerId;
             if (!groupKey && inv.customerName) groupKey = customersNameMap[normalizeName(inv.customerName)];
@@ -1142,6 +1144,7 @@
             customerGroupMap[groupKey].push({ type: 'invoice', data: inv, timeMs });
         });
 
+        // 2. تجميع سندات القبض والصرف
         fullTransactionsList.forEach(tr => {
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (isInvoicePayment) return;
@@ -1157,6 +1160,7 @@
             customerGroupMap[groupKey].push({ type: 'transaction', data: tr, timeMs });
         });
 
+        // 3. ترتيب الأحداث زمنياً واحتساب الحساب السابق ورصيد كل حركة
         Object.keys(customerGroupMap).forEach(groupKey => {
             const events = customerGroupMap[groupKey];
             events.sort((a, b) => a.timeMs - b.timeMs);
@@ -1176,11 +1180,7 @@
                     const inv = event.data;
                     const targetInvoice = allInvoices.find(i => i.id === inv.id);
 
-                    if (targetInvoice) {
-                        targetInvoice.previousBalance = runningBalance;
-                        targetInvoice.lastPendingInvoiceDate = lastInvoiceDate;
-                        targetInvoice.lastPendingInvoiceId = lastInvoiceId;
-                    }
+                    const prevBal = runningBalance;
 
                     const total = Number(inv.total) || 0;
                     const paid = Number(inv.calculatedCash + inv.calculatedWallet) || Number(inv.paid) || 0;
@@ -1189,11 +1189,14 @@
                     runningBalance += remaining;
 
                     if (targetInvoice) {
+                        targetInvoice.previousBalance = prevBal;
                         targetInvoice.netAccountTotal = runningBalance;
+                        targetInvoice.lastPendingInvoiceDate = lastInvoiceDate;
+                        targetInvoice.lastPendingInvoiceId = lastInvoiceId;
                     }
 
                     window.invoiceBalanceCache[inv.id] = {
-                        previousBalance: targetInvoice ? targetInvoice.previousBalance : runningBalance - remaining,
+                        previousBalance: prevBal,
                         netAccountTotal: runningBalance,
                         lastPendingInvoiceDate: lastInvoiceDate,
                         lastPendingInvoiceId: lastInvoiceId
