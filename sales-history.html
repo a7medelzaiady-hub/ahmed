@@ -1093,46 +1093,45 @@
         }
     };
 
-    // === دالة التراكمي المحدثة بالكامل لضمان التطابق التام مع صفحة العملاء وكشف الحساب ===
+    // === الدالة المحدثة التي تعالج التوقيتات وتطابق طريقة كشف العملاء بدقة 100% ===
     async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
         let fullInvoicesList = [...allInvoices];
         let fullTransactionsList = [...rawTransactionsList];
 
-        if (loadedScope !== 'ARCHIVE') {
-            try {
-                const [allInvSnap, allTransSnap] = await Promise.all([
-                    db.collection("invoices").get({ source: 'cache' }).catch(() => db.collection("invoices").get()),
-                    db.collection("transactions").get({ source: 'cache' }).catch(() => db.collection("transactions").get())
-                ]);
+        // في كل الحالات، سنجلب كافة الفواتير والسندات لبناء التراكمي الدقيق كلياً
+        try {
+            const [allInvSnap, allTransSnap] = await Promise.all([
+                db.collection("invoices").get(),
+                db.collection("transactions").get()
+            ]);
 
-                fullInvoicesList = [];
-                allInvSnap.forEach(d => {
-                    const data = d.data();
-                    if (!data.isDeleted) {
-                        fullInvoicesList.push({
-                            id: d.id,
-                            ...data,
-                            calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0,
-                            calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0
-                        });
-                    }
-                });
+            fullInvoicesList = [];
+            allInvSnap.forEach(d => {
+                const data = d.data();
+                if (!data.isDeleted) {
+                    fullInvoicesList.push({
+                        id: d.id,
+                        ...data,
+                        calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0,
+                        calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0
+                    });
+                }
+            });
 
-                fullTransactionsList = [];
-                allTransSnap.forEach(d => {
-                    const tr = d.data();
-                    if (!tr.isDeleted) fullTransactionsList.push({ id: d.id, ...tr });
-                });
-            } catch (e) {
-                console.error("خطأ في جلب الأرشيف التراكمي للرصيد:", e);
-            }
+            fullTransactionsList = [];
+            allTransSnap.forEach(d => {
+                const tr = d.data();
+                if (!tr.isDeleted) fullTransactionsList.push({ id: d.id, ...tr });
+            });
+        } catch (e) {
+            console.error("خطأ في جلب الأرشيف التراكمي للرصيد:", e);
         }
 
         const customerGroupMap = {};
 
-        // 1. تجميع فواتير العملاء
+        // 1. تجميع فواتير العملاء مع دقة استخدام ID والاسم المطابق للعملاء
         fullInvoicesList.forEach(inv => {
             let groupKey = inv.customerId;
             if (!groupKey && inv.customerName) groupKey = customersNameMap[normalizeName(inv.customerName)];
@@ -1160,7 +1159,7 @@
             customerGroupMap[groupKey].push({ type: 'transaction', data: tr, timeMs });
         });
 
-        // 3. ترتيب الأحداث زمنياً واحتساب الحساب السابق ورصيد كل حركة
+        // 3. الترتيب الزمني الصارم حسب timeMs الدقيق واحتساب الحساب السابق
         Object.keys(customerGroupMap).forEach(groupKey => {
             const events = customerGroupMap[groupKey];
             events.sort((a, b) => a.timeMs - b.timeMs);
@@ -1180,6 +1179,7 @@
                     const inv = event.data;
                     const targetInvoice = allInvoices.find(i => i.id === inv.id);
 
+                    // الحساب السابق للفاتورة هو نفس قيمة RunningBalance تماماً قبل تطبيق تأثير هذه الفاتورة
                     const prevBal = runningBalance;
 
                     const total = Number(inv.total) || 0;
