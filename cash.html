@@ -117,7 +117,6 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
         <a href="index1.html" class="back-btn"><i class="fas fa-home"></i></a>
     </div>
 
-    <!-- أزرار التبويب بين الخزينة والمحفظة -->
     <div class="nav-tabs-custom">
         <button class="tab-btn active cash-tab" id="tabCash" onclick="switchTab('cash')">
             <i class="fas fa-money-bill-wave"></i> الخزينة النقود
@@ -156,11 +155,10 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
         <button class="tbtn tbtn-excel" onclick="exportToExcel()"><i class="fas fa-file-excel"></i> تصدير</button>
     </div>
 
-    <!-- نموذج إضافة حركة يدوي -->
     <div class="entry-card" id="entryCard">
         <h6 class="fw-bold mb-3" id="entryCardTitle">إضافة حركة يدوية</h6>
         <input type="hidden" id="entryType" value="in">
-        
+
         <div class="input-group-custom d-none" id="providerGroup">
             <label class="label-custom">وسيلة المحفظة</label>
             <select id="entryProvider" class="input-field">
@@ -221,7 +219,7 @@ let db;
 try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) }); }
 catch (e) { db = getFirestore(app); }
 
-let currentTab = 'cash'; 
+let currentTab = 'cash';
 let openingBalance = 0;
 let allMovements = [];
 
@@ -260,10 +258,43 @@ function isWalletPayment(methodStr) {
     return m.includes('فودافون') || m.includes('vodafone') || m.includes('انستا') || m.includes('instapay') || m.includes('redot') || m.includes('محفظة') || m.includes('wallet');
 }
 
+/* ===== أسماء الموردين والعملاء بدل كلمة "جهة" ===== */
+async function loadCustomersMap() {
+    const map = {};
+    try {
+        const snap = await getDocs(collection(db, "customers"));
+        snap.forEach(d => { const x = d.data(); map[d.id] = x.name || x.customerName || ''; });
+    } catch (e) { console.warn("customers collection:", e); }
+    return map;
+}
+
+function resolveName(tr, suppliersMap, customersMap) {
+    const direct = tr.partyName || tr.customerName || tr.supplierName || tr.name;
+    if (direct && direct !== 'جهة') return direct;
+    return suppliersMap[tr.partyId] || customersMap[tr.partyId]
+        || suppliersMap[tr.supplierId] || customersMap[tr.customerId]
+        || suppliersMap[tr.customerId] || customersMap[tr.supplierId]
+        || 'جهة';
+}
+
+/* ===== منع التكرار ===== */
+const amtKey = (amt, date) => `${Math.round(Number(amt) * 100)}|${date}`;
+
+// سندات متطابقة (نفس النوع والجهة والمبلغ والتاريخ) خلال دقيقة = نسخة مكررة
+function makeMirrorChecker() {
+    const seen = {};
+    return function (sig, ms) {
+        const arr = seen[sig] || (seen[sig] = []);
+        const dup = arr.some(t => Math.abs(t - ms) <= 60000);
+        arr.push(ms);
+        return dup;
+    };
+}
+
 window.switchTab = function(tab) {
     currentTab = tab;
     document.getElementById('entryCard').classList.remove('show');
-    
+
     const nav = document.getElementById('headerNav');
     const title = document.getElementById('pageTitle');
     const opCard = document.getElementById('openingCard');
@@ -301,11 +332,8 @@ window.init = async function () {
     listEl.innerHTML = `<div class="loading-wrapper"><div class="spinner-border ${spinColor}" role="status" style="width:2rem;height:2rem;"></div><p>جاري تجميع الحركات...</p></div>`;
 
     try {
-        if (currentTab === 'cash') {
-            await loadCashData();
-        } else {
-            await loadWalletData();
-        }
+        if (currentTab === 'cash') await loadCashData();
+        else await loadWalletData();
     } catch (e) {
         console.error(e);
         listEl.innerHTML = `<div class="alert alert-danger text-center m-3">حدث خطأ أثناء تحميل البيانات!</div>`;
@@ -313,14 +341,15 @@ window.init = async function () {
 };
 
 async function loadCashData() {
-    const [openingSnap, invSnap, transSnap, supTransSnap, expSnap, manualSnap, suppliersSnap] = await Promise.all([
+    const [openingSnap, invSnap, transSnap, supTransSnap, expSnap, manualSnap, suppliersSnap, customersMap] = await Promise.all([
         getDoc(doc(db, "cash_settings", "opening")),
         getDocs(collection(db, "invoices")),
         getDocs(collection(db, "transactions")),
         getDocs(collection(db, "supplier_transactions")),
         getDocs(collection(db, "expenses")),
         getDocs(collection(db, "cash_manual_entries")),
-        getDocs(collection(db, "suppliers"))
+        getDocs(collection(db, "suppliers")),
+        loadCustomersMap()
     ]);
 
     openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
@@ -330,14 +359,41 @@ async function loadCashData() {
     suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
 
     const movements = [];
+    const purchaseKeys = new Set();
 
-    // مبيعات نقدية (التي ليست عبر المحفظة)
+    // مشتريات نقدية (تُحسب أولاً لاستخدامها في منع تكرار السندات)
+    supTransSnap.forEach(d => {
+        const data = d.data();
+        const method = data.paymentMethod || data.method || '';
+        if (isWalletPayment(method)) return;
+
+        const cashPaid = Number(data.cashPaid || 0);
+        if (cashPaid <= 0) return;
+        const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
+        const dateStr = getDateStr(data);
+        purchaseKeys.add(amtKey(cashPaid, dateStr));
+        if (data.type === 'مرتجع شراء') {
+            movements.push({
+                id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
+                note: `مرتجع مشتريات نقدي - ${supName}`,
+                date: dateStr, timeMs: toMillis(data), source: 'purchase'
+            });
+        } else {
+            movements.push({
+                id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
+                note: `مشتريات نقدية - ${supName}`,
+                date: dateStr, timeMs: toMillis(data), source: 'purchase'
+            });
+        }
+    });
+
+    // مبيعات نقدية (غير المحفظة)
     invSnap.forEach(d => {
         const data = d.data();
         if (data.isDeleted) return;
         const method = data.paymentMethod || data.method || 'نقدي';
-        if (isWalletPayment(method)) return; // يتم معالجتها في المحفظة
-        
+        if (isWalletPayment(method)) return;
+
         const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
         if (cash > 0) {
             movements.push({
@@ -349,51 +405,37 @@ async function loadCashData() {
     });
 
     // سندات قبض/صرف كاش
+    const isMirror = makeMirrorChecker();
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
         if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
         const method = tr.method || tr.paymentMethod || 'نقدى';
-        if (isWalletPayment(method)) return; // للمحفظة
+        if (isWalletPayment(method)) return;
 
         const isCash = (method === 'نقدى' || method === 'نقدي' || method === 'كاش');
         const cashAmt = tr.cashPaid !== undefined ? Number(tr.cashPaid) : (isCash ? Number(tr.amount || tr.total || 0) : 0);
         if (cashAmt <= 0) return;
+
+        const dateStr = getDateStr(tr);
+        const name = resolveName(tr, suppliersMap, customersMap);
+
+        // سند صرف لمورد مطابق لدفعة مسجلة في فاتورة المشتريات = تكرار
+        if (tr.type === 'صرف' && purchaseKeys.has(amtKey(cashAmt, dateStr)) && (!tr.partyId || suppliersMap[tr.partyId])) return;
+        // سند منسوخ مرتين
+        if (isMirror(`${tr.type}|${tr.partyId || name}|${cashAmt}|${dateStr}`, toMillis(tr))) return;
+
         if (tr.type === 'قبض') {
             movements.push({
                 id: 'trin_' + d.id, direction: 'in', amount: cashAmt,
-                note: `سند قبض - ${tr.customerName || tr.partyName || 'عميل'}`,
-                date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
+                note: `سند قبض - ${name}`,
+                date: dateStr, timeMs: toMillis(tr), source: 'voucher'
             });
         } else if (tr.type === 'صرف') {
             movements.push({
                 id: 'trout_' + d.id, direction: 'out', amount: cashAmt,
-                note: `سند صرف - ${tr.partyName || tr.customerName || 'جهة'}`,
-                date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
-            });
-        }
-    });
-
-    // مشتريات نقدية (غير المحفظة)
-    supTransSnap.forEach(d => {
-        const data = d.data();
-        const method = data.paymentMethod || data.method || '';
-        if (isWalletPayment(method)) return;
-
-        const cashPaid = Number(data.cashPaid || 0);
-        if (cashPaid <= 0) return;
-        const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
-        if (data.type === 'مرتجع شراء') {
-            movements.push({
-                id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
-                note: `مرتجع مشتريات نقدي - ${supName}`,
-                date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
-            });
-        } else {
-            movements.push({
-                id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
-                note: `مشتريات نقدية - ${supName}`,
-                date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
+                note: `سند صرف - ${name}`,
+                date: dateStr, timeMs: toMillis(tr), source: 'voucher'
             });
         }
     });
@@ -427,14 +469,15 @@ async function loadCashData() {
 }
 
 async function loadWalletData() {
-    const [openingSnap, manualSnap, expSnap, transSnap, invSnap, supTransSnap, suppliersSnap] = await Promise.all([
+    const [openingSnap, manualSnap, expSnap, transSnap, invSnap, supTransSnap, suppliersSnap, customersMap] = await Promise.all([
         getDoc(doc(db, "wallet_settings", "opening")),
         getDocs(collection(db, "wallet_entries")),
         getDocs(collection(db, "expenses")),
         getDocs(collection(db, "transactions")),
         getDocs(collection(db, "invoices")),
         getDocs(collection(db, "supplier_transactions")),
-        getDocs(collection(db, "suppliers"))
+        getDocs(collection(db, "suppliers")),
+        loadCustomersMap()
     ]);
 
     openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
@@ -444,6 +487,7 @@ async function loadWalletData() {
     suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
 
     const movements = [];
+    const purchaseKeys = new Set();
 
     // 1. فواتير المبيعات المسددة عبر المحفظة
     invSnap.forEach(d => {
@@ -451,7 +495,7 @@ async function loadWalletData() {
         if (data.isDeleted) return;
         const method = data.paymentMethod || data.method || '';
         const walletPaid = Number(data.walletAmount ?? (isWalletPayment(method) ? (data.cashAmount ?? data.cashPaid ?? data.paid) : 0)) || 0;
-        
+
         if (walletPaid > 0 || isWalletPayment(method)) {
             const amt = walletPaid > 0 ? walletPaid : (Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0);
             if (amt > 0) {
@@ -465,23 +509,26 @@ async function loadWalletData() {
         }
     });
 
-    // 2. فواتير المشتريات المسددة عبر المحفظة
+    // 2. فواتير المشتريات المسددة عبر المحفظة (تشمل الفواتير المختلطة)
     supTransSnap.forEach(d => {
         const data = d.data();
         const method = data.paymentMethod || data.method || '';
-        if (isWalletPayment(method)) {
-            const paidAmt = Number(data.walletPaid || data.cashPaid || data.paid || 0);
-            if (paidAmt > 0) {
-                const supName = suppliersMap[data.supplierId] || 'مورد';
-                const isReturn = data.type === 'مرتجع شراء';
-                movements.push({
-                    id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
-                    provider: method || 'محفظة إلكترونية',
-                    note: isReturn ? `مرتجع مشتريات محفظة - ${supName}` : `مشتريات محفظة - ${supName}`,
-                    date: getDateStr(data), timeMs: toMillis(data)
-                });
-            }
-        }
+        const walletPart = Number(data.walletPaid || 0);
+        const paidAmt = walletPart > 0
+            ? walletPart
+            : (isWalletPayment(method) ? Number(data.cashPaid || data.paid || 0) : 0);
+        if (paidAmt <= 0) return;
+
+        const supName = suppliersMap[data.supplierId] || 'مورد';
+        const isReturn = data.type === 'مرتجع شراء';
+        const dateStr = getDateStr(data);
+        purchaseKeys.add(amtKey(paidAmt, dateStr));
+        movements.push({
+            id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
+            provider: method || 'محفظة إلكترونية',
+            note: isReturn ? `مرتجع مشتريات محفظة - ${supName}` : `مشتريات محفظة - ${supName}`,
+            date: dateStr, timeMs: toMillis(data)
+        });
     });
 
     // 3. حركات محفظة يدوية
@@ -511,20 +558,30 @@ async function loadWalletData() {
         });
     });
 
-    // 5. سندات عبر المحفظة
+    // 5. سندات عبر المحفظة (بدون المرتبطة بفواتير + بدون المكررة)
+    const isMirror = makeMirrorChecker();
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
+        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
         const method = tr.method || tr.paymentMethod || '';
         if (!isWalletPayment(method)) return;
         const amt = Number(tr.amount || tr.total || 0);
         if (amt <= 0) return;
 
+        const dateStr = getDateStr(tr);
+        const name = resolveName(tr, suppliersMap, customersMap);
+
+        // سند صرف لمورد مطابق لدفعة محفظة مسجلة في فاتورة المشتريات = تكرار
+        if (tr.type === 'صرف' && purchaseKeys.has(amtKey(amt, dateStr)) && (!tr.partyId || suppliersMap[tr.partyId])) return;
+        // سند منسوخ مرتين
+        if (isMirror(`${tr.type}|${tr.partyId || name}|${amt}|${dateStr}`, toMillis(tr))) return;
+
         movements.push({
             id: 'tr_' + d.id, direction: tr.type === 'قبض' ? 'in' : 'out', amount: amt,
             provider: method,
-            note: `سند ${tr.type} - ${tr.customerName || tr.partyName || 'جهة'}`,
-            date: getDateStr(tr), timeMs: toMillis(tr)
+            note: `سند ${tr.type} - ${name}`,
+            date: dateStr, timeMs: toMillis(tr)
         });
     });
 
@@ -661,7 +718,7 @@ window.deleteManualEntry = async function (id) {
 window.exportToExcel = function () {
     if (allMovements.length === 0) return alert("لا توجد حركات لتصديرها");
     const isWallet = currentTab === 'wallet';
-    const rows = isWallet 
+    const rows = isWallet
         ? [["التاريخ", "الوسيلة", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]]
         : [["التاريخ", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]];
 
