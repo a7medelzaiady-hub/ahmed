@@ -176,6 +176,7 @@
 
         .btn-submit { background: var(--accent); color: white; font-weight: 700; border-radius: 8px; padding: 8px 15px; border: none; font-size: 0.85rem; }
         .btn-submit:hover { background: #08472e; color: white; }
+        .btn-submit:disabled { opacity: 0.6; }
         .btn-submit.edit-mode { background: var(--warning); color: #1b2e26; }
         .btn-submit.edit-mode:hover { background: #d6850d; }
 
@@ -483,7 +484,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
-        collection, addDoc, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp
+        collection, addDoc, setDoc, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -510,6 +511,11 @@
     let partiesMap = {}; 
     let receiptModalObj = null;
 
+    // === منع تكرار السند: قفل الإرسال + رقم ثابت للسند الجديد (إعادة المحاولة تكتب فوق نفس المستند) ===
+    let pendingVoucherId = null;
+    let isSubmitting = false;
+    const newVoucherId = () => 'v_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
     function normalizeName(str) {
         return String(str || '')
             .trim()
@@ -521,13 +527,10 @@
             .toLowerCase();
     }
 
-    document.addEventListener("DOMContentLoaded", async () => {
+    document.addEventListener("DOMContentLoaded", () => {
         receiptModalObj = new bootstrap.Modal(document.getElementById('receiptModal'));
         document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
-        
-        loadCache();
-        await fetchPartiesData();
-        await loadVouchers();
+        // التحميل يتم مرة واحدة فقط عبر init() في آخر الملف
     });
 
     function loadCache() {
@@ -874,6 +877,7 @@
     };
 
     window.resetVoucherForm = () => {
+        pendingVoucherId = null; // السند التالي يأخذ رقماً جديداً
         document.getElementById('editVoucherId').value = '';
         document.getElementById('voucherForm').reset();
         document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
@@ -976,6 +980,8 @@
 
     document.getElementById('voucherForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (isSubmitting) return; // قفل: تجاهل أي ضغطة ثانية أثناء الحفظ
+
         const editId = document.getElementById('editVoucherId').value;
         const type = document.getElementById('vType').value;
         const partyType = document.getElementById('partyType').value;
@@ -1003,6 +1009,11 @@
             alert("خطأ: يرجى إدخال مبلغ صحيح أكبر من صفر.");
             return;
         }
+
+        isSubmitting = true;
+        const saveBtn = document.getElementById('btnSubmitForm');
+        saveBtn.disabled = true;
+        if (!editId && !pendingVoucherId) pendingVoucherId = newVoucherId();
         
         const docData = { 
             date, 
@@ -1012,10 +1023,12 @@
             customerId: partyType === 'عميل' ? partyId : null,
             partyType, 
             customerName: customerName,
+            partyName: customerName,
             custody: custody,
             amount, 
             method, 
             note,
+            isManualVoucher: true,
             ...(editId ? {} : { timestamp: serverTimestamp() })
         };
         
@@ -1024,9 +1037,11 @@
                 await updateDoc(doc(db, "transactions", editId), docData);
                 alert("تم تحديث بيانات السند بنجاح.");
             } else {
-                const docRef = await addDoc(collection(db, "transactions"), docData);
+                // رقم ثابت للسند: لو تكرر الإرسال يُكتب فوق نفس المستند ولا يُنشأ مستند ثانٍ
+                const voucherDocId = pendingVoucherId;
+                await setDoc(doc(db, "transactions", voucherDocId), docData);
                 alert("تم حفظ السند الجديد بنجاح بقاعدة البيانات.");
-                await openReceiptModal(type, date, amount, partyId, customerName, null, docRef.id);
+                await openReceiptModal(type, date, amount, partyId, customerName, null, voucherDocId);
             }
             resetVoucherForm();
             await fetchPartiesData();
@@ -1034,6 +1049,8 @@
         } catch (err) {
             console.error("Error storing transaction record:", err);
             alert("حدث خطأ أثناء الاتصال بقاعدة البيانات وإتمام العملية.");
+        } finally {
+            setTimeout(() => { isSubmitting = false; saveBtn.disabled = false; }, 3000);
         }
     });
 
@@ -1172,12 +1189,12 @@
                         <table class="receipt-table-layout border-bottom mb-2">
                             <tr>
                                 <td style="text-align: right; width: 50%;"><strong>الحركة:</strong> ${v.type === 'قبض' ? 'سند قبض' : 'سند صرف'}</td>
-                                <td style="text-align: left; width: 50%;"><strong>التاريخ:</strong> ${v.date}</td>
+                                <td style="text-align: left; width: 50%;"><strong>التاريخ:</strong> ${escapeHtml(v.date)}</td>
                             </tr>
                         </table>
                         <table class="receipt-table-layout border-bottom mb-2">
                             <tr>
-                                <td style="text-align: right; padding: 6px 0;"><strong>الاسم:</strong> <span class="fw-bold" style="font-size: 0.85rem;">${v.resolvedName}</span></td>
+                                <td style="text-align: right; padding: 6px 0;"><strong>الاسم:</strong> <span class="fw-bold" style="font-size: 0.85rem;">${escapeHtml(v.resolvedName)}</span></td>
                             </tr>
                         </table>
                         <div class="my-2 py-2 border-bottom text-center" style="background: #f9f9f9; width: 100%;">
