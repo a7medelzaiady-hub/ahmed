@@ -90,6 +90,7 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
 .movement-item.out::before { background:var(--danger); }
 .mv-info { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; padding-right:8px; }
 .mv-note { font-weight:800; color:var(--text-dark); font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mv-party { font-weight:700; color:var(--wallet-primary); font-size:0.75rem; }
 .mv-meta { font-size:0.7rem; color:var(--text-muted); font-weight:700; }
 .mv-badge { font-size:0.65rem; padding:2px 7px; border-radius:6px; font-weight:800; display:inline-block; margin-top:3px; }
 .badge-in { background:var(--success-light); color:#065f46; }
@@ -187,7 +188,7 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
     </div>
 
     <div class="filter-row">
-        <input type="text" id="searchInput" class="input-field" placeholder="بحث بالبيان..." onkeyup="renderMovements()">
+        <input type="text" id="searchInput" class="input-field" placeholder="بحث بالبيان أو اسم العميل/المورد..." onkeyup="renderMovements()">
         <input type="date" id="dateFilter" class="input-field" onchange="renderMovements()">
     </div>
 
@@ -329,52 +330,52 @@ async function loadCashData() {
     const suppliersMap = {};
     suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
 
-    const movements = [];
+    const movementsMap = new Map();
 
-    // مبيعات نقدية (التي ليست عبر المحفظة)
     invSnap.forEach(d => {
         const data = d.data();
         if (data.isDeleted) return;
         const method = data.paymentMethod || data.method || 'نقدي';
-        if (isWalletPayment(method)) return; // يتم معالجتها في المحفظة
+        if (isWalletPayment(method)) return;
         
         const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
         if (cash > 0) {
-            movements.push({
+            const customerName = data.customerName || 'عميل نقدي';
+            movementsMap.set('inv_' + d.id, {
                 id: 'inv_' + d.id, direction: 'in', amount: cash,
-                note: `مبيعات نقدية - ${data.customerName || 'عميل نقدي'}`,
+                note: `مبيعات نقدية`, partyName: customerName,
                 date: getDateStr(data), timeMs: toMillis(data), source: 'sales'
             });
         }
     });
 
-    // سندات قبض/صرف كاش
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
         if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
         const method = tr.method || tr.paymentMethod || 'نقدى';
-        if (isWalletPayment(method)) return; // للمحفظة
+        if (isWalletPayment(method)) return;
 
         const isCash = (method === 'نقدى' || method === 'نقدي' || method === 'كاش');
         const cashAmt = tr.cashPaid !== undefined ? Number(tr.cashPaid) : (isCash ? Number(tr.amount || tr.total || 0) : 0);
         if (cashAmt <= 0) return;
+        
+        const partyName = tr.customerName || tr.partyName || 'جهة غير معروغة';
         if (tr.type === 'قبض') {
-            movements.push({
+            movementsMap.set('trin_' + d.id, {
                 id: 'trin_' + d.id, direction: 'in', amount: cashAmt,
-                note: `سند قبض - ${tr.customerName || tr.partyName || 'عميل'}`,
+                note: `سند قبض`, partyName: partyName,
                 date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
             });
         } else if (tr.type === 'صرف') {
-            movements.push({
+            movementsMap.set('trout_' + d.id, {
                 id: 'trout_' + d.id, direction: 'out', amount: cashAmt,
-                note: `سند صرف - ${tr.partyName || tr.customerName || 'جهة'}`,
+                note: `سند صرف`, partyName: partyName,
                 date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
             });
         }
     });
 
-    // مشتريات نقدية (غير المحفظة)
     supTransSnap.forEach(d => {
         const data = d.data();
         const method = data.paymentMethod || data.method || '';
@@ -384,46 +385,44 @@ async function loadCashData() {
         if (cashPaid <= 0) return;
         const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
         if (data.type === 'مرتجع شراء') {
-            movements.push({
+            movementsMap.set('pret_' + d.id, {
                 id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
-                note: `مرتجع مشتريات نقدي - ${supName}`,
+                note: `مرتجع مشتريات نقدي`, partyName: supName,
                 date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
             });
         } else {
-            movements.push({
+            movementsMap.set('pout_' + d.id, {
                 id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
-                note: `مشتريات نقدية - ${supName}`,
+                note: `مشتريات نقدية`, partyName: supName,
                 date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
             });
         }
     });
 
-    // مصروفات كاش
     expSnap.forEach(d => {
         const data = d.data();
         if (data.paymentMethod !== 'نقدى' && data.paymentMethod !== 'نقدي') return;
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
-        movements.push({
+        movementsMap.set('exp_' + d.id, {
             id: 'exp_' + d.id, direction: 'out', amount: amt,
-            note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
+            note: `مصروف: ${data.type}`, partyName: data.note || '',
             date: getDateStr(data), timeMs: toMillis(data), source: 'expense'
         });
     });
 
-    // حركات يدوية للخزينة
     manualSnap.forEach(d => {
         const data = d.data();
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
-        movements.push({
+        movementsMap.set('man_' + d.id, {
             id: 'man_' + d.id, direction: data.type, amount: amt,
-            note: data.note || (data.type === 'in' ? 'إيداع يدوي' : 'سحب يدوي'),
+            note: data.type === 'in' ? 'إيداع يدوي' : 'سحب يدوي', partyName: data.note || '',
             date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
         });
     });
 
-    sortAndSetMovements(movements);
+    sortAndSetMovements(Array.from(movementsMap.values()));
 }
 
 async function loadWalletData() {
@@ -443,9 +442,8 @@ async function loadWalletData() {
     const suppliersMap = {};
     suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
 
-    const movements = [];
+    const movementsMap = new Map();
 
-    // 1. فواتير المبيعات المسددة عبر المحفظة
     invSnap.forEach(d => {
         const data = d.data();
         if (data.isDeleted) return;
@@ -455,17 +453,17 @@ async function loadWalletData() {
         if (walletPaid > 0 || isWalletPayment(method)) {
             const amt = walletPaid > 0 ? walletPaid : (Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0);
             if (amt > 0) {
-                movements.push({
+                const customerName = data.customerName || 'عميل';
+                movementsMap.set('inv_wal_' + d.id, {
                     id: 'inv_wal_' + d.id, direction: 'in', amount: amt,
                     provider: method || 'محفظة إلكترونية',
-                    note: `مبيعات محفظة - ${data.customerName || 'عميل'}`,
+                    note: `مبيعات محفظة`, partyName: customerName,
                     date: getDateStr(data), timeMs: toMillis(data)
                 });
             }
         }
     });
 
-    // 2. فواتير المشتريات المسددة عبر المحفظة
     supTransSnap.forEach(d => {
         const data = d.data();
         const method = data.paymentMethod || data.method || '';
@@ -474,44 +472,41 @@ async function loadWalletData() {
             if (paidAmt > 0) {
                 const supName = suppliersMap[data.supplierId] || 'مورد';
                 const isReturn = data.type === 'مرتجع شراء';
-                movements.push({
+                movementsMap.set('sup_wal_' + d.id, {
                     id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
                     provider: method || 'محفظة إلكترونية',
-                    note: isReturn ? `مرتجع مشتريات محفظة - ${supName}` : `مشتريات محفظة - ${supName}`,
+                    note: isReturn ? `مرتجع مشتريات محفظة` : `مشتريات محفظة`, partyName: supName,
                     date: getDateStr(data), timeMs: toMillis(data)
                 });
             }
         }
     });
 
-    // 3. حركات محفظة يدوية
     manualSnap.forEach(d => {
         const data = d.data();
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
-        movements.push({
+        movementsMap.set('wal_' + d.id, {
             id: 'wal_' + d.id, direction: data.type, amount: amt,
             provider: data.provider || 'محفظة إلكترونية',
-            note: data.note || (data.type === 'in' ? 'إيداع محفظة' : 'تحويل محفظة'),
+            note: data.type === 'in' ? 'إيداع محفظة' : 'تحويل محفظة', partyName: data.note || '',
             date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
         });
     });
 
-    // 4. مصروفات عبر المحفظة
     expSnap.forEach(d => {
         const data = d.data();
         if (!isWalletPayment(data.paymentMethod)) return;
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
-        movements.push({
+        movementsMap.set('exp_' + d.id, {
             id: 'exp_' + d.id, direction: 'out', amount: amt,
             provider: data.paymentMethod,
-            note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
+            note: `مصروف: ${data.type}`, partyName: data.note || '',
             date: getDateStr(data), timeMs: toMillis(data)
         });
     });
 
-    // 5. سندات عبر المحفظة
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
@@ -520,15 +515,16 @@ async function loadWalletData() {
         const amt = Number(tr.amount || tr.total || 0);
         if (amt <= 0) return;
 
-        movements.push({
+        const partyName = tr.customerName || tr.partyName || 'جهة';
+        movementsMap.set('tr_' + d.id, {
             id: 'tr_' + d.id, direction: tr.type === 'قبض' ? 'in' : 'out', amount: amt,
             provider: method,
-            note: `سند ${tr.type} - ${tr.customerName || tr.partyName || 'جهة'}`,
+            note: `سند ${tr.type}`, partyName: partyName,
             date: getDateStr(tr), timeMs: toMillis(tr)
         });
     });
 
-    sortAndSetMovements(movements);
+    sortAndSetMovements(Array.from(movementsMap.values()));
 }
 
 function sortAndSetMovements(movements) {
@@ -547,7 +543,7 @@ window.renderMovements = function () {
     const dateFilter = document.getElementById('dateFilter').value;
 
     let list = [...allMovements].reverse();
-    if (search) list = list.filter(m => m.note.toLowerCase().includes(search) || (m.provider && m.provider.toLowerCase().includes(search)));
+    if (search) list = list.filter(m => m.note.toLowerCase().includes(search) || (m.partyName && m.partyName.toLowerCase().includes(search)) || (m.provider && m.provider.toLowerCase().includes(search)));
     if (dateFilter) list = list.filter(m => m.date === dateFilter);
 
     const totalIn = allMovements.filter(m => m.direction === 'in' && (!dateFilter || m.date === dateFilter)).reduce((s, m) => s + m.amount, 0);
@@ -568,6 +564,7 @@ window.renderMovements = function () {
         <div class="movement-item ${m.direction}">
             <div class="mv-info">
                 <span class="mv-note">${m.note}</span>
+                ${m.partyName ? `<span class="mv-party"><i class="fas fa-user me-1"></i>${m.partyName}</span>` : ''}
                 <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${m.date || 'بلا تاريخ'}</span></span>
                 <div>
                     <span class="mv-badge ${m.direction === 'in' ? 'badge-in' : 'badge-out'}">${m.direction === 'in' ? 'وارد' : 'صادر'}</span>
@@ -662,20 +659,20 @@ window.exportToExcel = function () {
     if (allMovements.length === 0) return alert("لا توجد حركات لتصديرها");
     const isWallet = currentTab === 'wallet';
     const rows = isWallet 
-        ? [["التاريخ", "الوسيلة", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]]
-        : [["التاريخ", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]];
+        ? [["التاريخ", "الوسيلة", "البيان", "الطرف (عميل/مورد)", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]]
+        : [["التاريخ", "البيان", "الطرف (عميل/مورد)", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]];
 
     [...allMovements].reverse().forEach(m => {
         if (isWallet) {
-            rows.push([m.date, m.provider || 'محفظة', m.note, m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
+            rows.push([m.date, m.provider || 'محفظة', m.note, m.partyName || '', m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
         } else {
-            rows.push([m.date, m.note, m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
+            rows.push([m.date, m.note, m.partyName || '', m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
         }
     });
     rows.push([]);
     rows.push(["الرصيد الافتتاحي", "", "", openingBalance, ""]);
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = (isWallet ? [15, 18, 40, 12, 14, 16] : [15, 40, 12, 14, 16]).map(w => ({ wch: w }));
+    ws['!cols'] = (isWallet ? [15, 18, 30, 25, 12, 14, 16] : [15, 30, 25, 12, 14, 16]).map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     const sheetName = isWallet ? "دفتر المحفظة" : "دفتر النقدية";
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
