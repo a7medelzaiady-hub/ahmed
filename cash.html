@@ -80,9 +80,12 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
 .input-field:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(11,94,61,0.08); background:#fff; }
 .input-group-custom { margin-bottom:14px; }
 .btn-save-entry { width:100%; border:none; padding:13px; border-radius:var(--radius-sm); font-weight:800; font-size:0.9rem; color:#fff; }
+.btn-save-entry:disabled { opacity:0.6; }
 
 .filter-row { display:flex; gap:8px; margin:0 16px 14px; }
 .filter-row input { flex:1; }
+
+.dup-note { margin:0 16px 12px; padding:8px 12px; border-radius:var(--radius-sm); background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:0.72rem; font-weight:800; display:none; }
 
 .movement-item { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:14px; border-radius:var(--radius-md); margin:0 16px 12px; border:1px solid rgba(0,0,0,0.03); box-shadow:var(--card-shadow); position:relative; }
 .movement-item::before { content:''; position:absolute; top:0; bottom:0; right:0; width:4px; border-radius:0 var(--radius-md) var(--radius-md) 0; }
@@ -192,6 +195,8 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
         <input type="date" id="dateFilter" class="input-field" onchange="renderMovements()">
     </div>
 
+    <div class="dup-note" id="dupNote"></div>
+
     <div id="movementsList">
         <div class="loading-wrapper">
             <div class="spinner-border text-success" role="status" style="width:2rem; height:2rem;"></div>
@@ -225,14 +230,25 @@ catch (e) { db = getFirestore(app); }
 let currentTab = 'cash'; 
 let openingBalance = 0;
 let allMovements = [];
+let hiddenDuplicates = 0;
+let customersMap = {};
+let isSaving = false;
+let loadToken = 0;
 
 function convertArabicDigits(str) {
     const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
     return String(str || '').replace(/[٠-٩]/g, d => map[d]);
 }
 
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function hasRealTs(item) { return !!(item.timestamp?.seconds || item.createdAt?.seconds); }
+
 function toMillis(item) {
     if (item.timestamp?.seconds) return item.timestamp.seconds * 1000;
+    if (item.createdAt?.seconds) return item.createdAt.seconds * 1000;
     if (item.date) {
         const p = Date.parse(convertArabicDigits(item.date));
         if (!isNaN(p)) return p;
@@ -253,12 +269,89 @@ function getDateStr(item) {
     return '';
 }
 
+// حقول مشتركة لكل حركة: التاريخ + الوقت + هل الوقت حقيقي + مفتاح ربط السند
+const LINK_FIELDS = ['voucherNo','voucherId','receiptNo','refId','linkedId','originalId','clientRequestId'];
+function baseMeta(data) {
+    let linkKey = '';
+    for (const f of LINK_FIELDS) { if (data[f]) { linkKey = f + ':' + data[f]; break; } }
+    return { date: getDateStr(data), timeMs: toMillis(data), hasTs: hasRealTs(data), linkKey };
+}
+
 function fmt(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 function isWalletPayment(methodStr) {
     if (!methodStr) return false;
     const m = String(methodStr).toLowerCase();
     return m.includes('فودافون') || m.includes('vodafone') || m.includes('انستا') || m.includes('instapay') || m.includes('redot') || m.includes('محفظة') || m.includes('wallet');
+}
+
+/* ========== استخراج اسم العميل / المورد ========== */
+const PARTY_FIELDS = ['customerName','partyName','clientName','supplierName','name','customer','supplier','party','client','accountName','personName','beneficiary','payee','payeeName','receiverName','toName','fromName'];
+const PARTY_IDS = ['customerId','supplierId','partyId','clientId','accountId'];
+const SKIP_KEY = /^(createdby|updatedby|deletedby|username|user|userid|type|note|notes|method|paymentmethod|provider)$/i;
+
+function strOf(v) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (v && typeof v === 'object' && typeof v.name === 'string' && v.name.trim()) return v.name.trim();
+    return '';
+}
+
+function resolveParty(d, suppliersMap) {
+    for (const f of PARTY_FIELDS) { const s = strOf(d[f]); if (s) return s; }
+    for (const f of PARTY_IDS) {
+        const id = d[f];
+        if (id && (customersMap[id] || suppliersMap[id])) return customersMap[id] || suppliersMap[id];
+    }
+    // بحث احتياطي: أي حقل اسمه فيه name أو اسم
+    for (const k of Object.keys(d)) {
+        if (SKIP_KEY.test(k)) continue;
+        if (/name|اسم/i.test(k)) { const s = strOf(d[k]); if (s) return s; }
+    }
+    // آخر محاولة: أي حقل يحتوي id يطابق عميل أو مورد
+    for (const k of Object.keys(d)) {
+        if (/id$/i.test(k) && typeof d[k] === 'string' && (customersMap[d[k]] || suppliersMap[d[k]])) {
+            return customersMap[d[k]] || suppliersMap[d[k]];
+        }
+    }
+    return '';
+}
+
+async function loadCustomers() {
+    customersMap = {};
+    for (const col of ['customers', 'clients']) {
+        try {
+            const snap = await getDocs(collection(db, col));
+            snap.forEach(d => { const x = d.data(); customersMap[d.id] = x.name || x.customerName || x.clientName || ''; });
+        } catch (e) { /* المجموعة غير موجودة أو ممنوعة */ }
+    }
+}
+
+/* ========== منع التكرار في العرض ========== */
+function isDuplicate(a, b) {
+    if (a.linkKey && a.linkKey === b.linkKey) return true;              // نفس رقم/رابط السند
+    if (a.hasTs && b.hasTs && Math.abs(a.timeMs - b.timeMs) <= 120000) return true; // نفس الحركة خلال دقيقتين
+    return false;                                                       // بدون وقت حقيقي لا نحذف أي حركة
+}
+
+function dedupeMovements(list) {
+    const out = [];
+    const seen = new Map();
+    hiddenDuplicates = 0;
+    list.forEach(m => {
+        if (m.source === 'manual') { out.push(m); return; }
+        const key = [m.note, m.direction, m.amount, m.date, m.provider || ''].join('|');
+        const cands = seen.get(key) || [];
+        const hit = cands.find(i => isDuplicate(out[i], m));
+        if (hit !== undefined) {
+            if (!out[hit].partyName && m.partyName) out[hit].partyName = m.partyName;
+            hiddenDuplicates++;
+            return;
+        }
+        cands.push(out.length);
+        seen.set(key, cands);
+        out.push(m);
+    });
+    return out;
 }
 
 window.switchTab = function(tab) {
@@ -297,15 +390,16 @@ window.switchTab = function(tab) {
 };
 
 window.init = async function () {
+    const token = ++loadToken; // يمنع تداخل تحميلين متتاليين
     const listEl = document.getElementById('movementsList');
     const spinColor = currentTab === 'cash' ? 'text-success' : 'text-primary';
     listEl.innerHTML = `<div class="loading-wrapper"><div class="spinner-border ${spinColor}" role="status" style="width:2rem;height:2rem;"></div><p>جاري تجميع الحركات...</p></div>`;
 
     try {
         if (currentTab === 'cash') {
-            await loadCashData();
+            await loadCashData(token);
         } else {
-            await loadWalletData();
+            await loadWalletData(token);
         }
     } catch (e) {
         console.error(e);
@@ -313,7 +407,7 @@ window.init = async function () {
     }
 };
 
-async function loadCashData() {
+async function loadCashData(token) {
     const [openingSnap, invSnap, transSnap, supTransSnap, expSnap, manualSnap, suppliersSnap] = await Promise.all([
         getDoc(doc(db, "cash_settings", "opening")),
         getDocs(collection(db, "invoices")),
@@ -323,12 +417,15 @@ async function loadCashData() {
         getDocs(collection(db, "cash_manual_entries")),
         getDocs(collection(db, "suppliers"))
     ]);
+    if (token !== loadToken) return;
 
     openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
     document.getElementById('openingBalanceDisplay').innerText = fmt(openingBalance);
 
     const suppliersMap = {};
     suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
+    await loadCustomers();
+    if (token !== loadToken) return;
 
     const movementsMap = new Map();
 
@@ -340,11 +437,11 @@ async function loadCashData() {
         
         const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
         if (cash > 0) {
-            const customerName = data.customerName || 'عميل نقدي';
+            const customerName = resolveParty(data, suppliersMap) || 'عميل نقدي';
             movementsMap.set('inv_' + d.id, {
                 id: 'inv_' + d.id, direction: 'in', amount: cash,
                 note: `مبيعات نقدية`, partyName: customerName,
-                date: getDateStr(data), timeMs: toMillis(data), source: 'sales'
+                ...baseMeta(data), source: 'sales'
             });
         }
     });
@@ -360,54 +457,56 @@ async function loadCashData() {
         const cashAmt = tr.cashPaid !== undefined ? Number(tr.cashPaid) : (isCash ? Number(tr.amount || tr.total || 0) : 0);
         if (cashAmt <= 0) return;
         
-        const partyName = tr.customerName || tr.partyName || 'جهة غير معروغة';
+        const partyName = resolveParty(tr, suppliersMap) || 'جهة غير معروفة';
         if (tr.type === 'قبض') {
             movementsMap.set('trin_' + d.id, {
                 id: 'trin_' + d.id, direction: 'in', amount: cashAmt,
                 note: `سند قبض`, partyName: partyName,
-                date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
+                ...baseMeta(tr), source: 'voucher'
             });
         } else if (tr.type === 'صرف') {
             movementsMap.set('trout_' + d.id, {
                 id: 'trout_' + d.id, direction: 'out', amount: cashAmt,
                 note: `سند صرف`, partyName: partyName,
-                date: getDateStr(tr), timeMs: toMillis(tr), source: 'voucher'
+                ...baseMeta(tr), source: 'voucher'
             });
         }
     });
 
     supTransSnap.forEach(d => {
         const data = d.data();
+        if (data.isDeleted) return;
         const method = data.paymentMethod || data.method || '';
         if (isWalletPayment(method)) return;
 
         const cashPaid = Number(data.cashPaid || 0);
         if (cashPaid <= 0) return;
-        const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
+        const supName = suppliersMap[data.supplierId] || resolveParty(data, suppliersMap) || 'مورد غير معروف';
         if (data.type === 'مرتجع شراء') {
             movementsMap.set('pret_' + d.id, {
                 id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
                 note: `مرتجع مشتريات نقدي`, partyName: supName,
-                date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
+                ...baseMeta(data), source: 'purchase'
             });
         } else {
             movementsMap.set('pout_' + d.id, {
                 id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
                 note: `مشتريات نقدية`, partyName: supName,
-                date: getDateStr(data), timeMs: toMillis(data), source: 'purchase'
+                ...baseMeta(data), source: 'purchase'
             });
         }
     });
 
     expSnap.forEach(d => {
         const data = d.data();
+        if (data.isDeleted) return;
         if (data.paymentMethod !== 'نقدى' && data.paymentMethod !== 'نقدي') return;
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
         movementsMap.set('exp_' + d.id, {
             id: 'exp_' + d.id, direction: 'out', amount: amt,
             note: `مصروف: ${data.type}`, partyName: data.note || '',
-            date: getDateStr(data), timeMs: toMillis(data), source: 'expense'
+            ...baseMeta(data), source: 'expense'
         });
     });
 
@@ -418,14 +517,14 @@ async function loadCashData() {
         movementsMap.set('man_' + d.id, {
             id: 'man_' + d.id, direction: data.type, amount: amt,
             note: data.type === 'in' ? 'إيداع يدوي' : 'سحب يدوي', partyName: data.note || '',
-            date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
+            ...baseMeta(data), source: 'manual', manualId: d.id
         });
     });
 
     sortAndSetMovements(Array.from(movementsMap.values()));
 }
 
-async function loadWalletData() {
+async function loadWalletData(token) {
     const [openingSnap, manualSnap, expSnap, transSnap, invSnap, supTransSnap, suppliersSnap] = await Promise.all([
         getDoc(doc(db, "wallet_settings", "opening")),
         getDocs(collection(db, "wallet_entries")),
@@ -435,12 +534,15 @@ async function loadWalletData() {
         getDocs(collection(db, "supplier_transactions")),
         getDocs(collection(db, "suppliers"))
     ]);
+    if (token !== loadToken) return;
 
     openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
     document.getElementById('openingBalanceDisplay').innerText = fmt(openingBalance);
 
     const suppliersMap = {};
     suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
+    await loadCustomers();
+    if (token !== loadToken) return;
 
     const movementsMap = new Map();
 
@@ -453,12 +555,12 @@ async function loadWalletData() {
         if (walletPaid > 0 || isWalletPayment(method)) {
             const amt = walletPaid > 0 ? walletPaid : (Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0);
             if (amt > 0) {
-                const customerName = data.customerName || 'عميل';
+                const customerName = resolveParty(data, suppliersMap) || 'عميل';
                 movementsMap.set('inv_wal_' + d.id, {
                     id: 'inv_wal_' + d.id, direction: 'in', amount: amt,
                     provider: method || 'محفظة إلكترونية',
                     note: `مبيعات محفظة`, partyName: customerName,
-                    date: getDateStr(data), timeMs: toMillis(data)
+                    ...baseMeta(data), source: 'sales'
                 });
             }
         }
@@ -466,17 +568,18 @@ async function loadWalletData() {
 
     supTransSnap.forEach(d => {
         const data = d.data();
+        if (data.isDeleted) return;
         const method = data.paymentMethod || data.method || '';
         if (isWalletPayment(method)) {
             const paidAmt = Number(data.walletPaid || data.cashPaid || data.paid || 0);
             if (paidAmt > 0) {
-                const supName = suppliersMap[data.supplierId] || 'مورد';
+                const supName = suppliersMap[data.supplierId] || resolveParty(data, suppliersMap) || 'مورد';
                 const isReturn = data.type === 'مرتجع شراء';
                 movementsMap.set('sup_wal_' + d.id, {
                     id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
                     provider: method || 'محفظة إلكترونية',
                     note: isReturn ? `مرتجع مشتريات محفظة` : `مشتريات محفظة`, partyName: supName,
-                    date: getDateStr(data), timeMs: toMillis(data)
+                    ...baseMeta(data), source: 'purchase'
                 });
             }
         }
@@ -490,12 +593,13 @@ async function loadWalletData() {
             id: 'wal_' + d.id, direction: data.type, amount: amt,
             provider: data.provider || 'محفظة إلكترونية',
             note: data.type === 'in' ? 'إيداع محفظة' : 'تحويل محفظة', partyName: data.note || '',
-            date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
+            ...baseMeta(data), source: 'manual', manualId: d.id
         });
     });
 
     expSnap.forEach(d => {
         const data = d.data();
+        if (data.isDeleted) return;
         if (!isWalletPayment(data.paymentMethod)) return;
         const amt = Number(data.amount || 0);
         if (amt <= 0) return;
@@ -503,7 +607,7 @@ async function loadWalletData() {
             id: 'exp_' + d.id, direction: 'out', amount: amt,
             provider: data.paymentMethod,
             note: `مصروف: ${data.type}`, partyName: data.note || '',
-            date: getDateStr(data), timeMs: toMillis(data)
+            ...baseMeta(data), source: 'expense'
         });
     });
 
@@ -515,12 +619,13 @@ async function loadWalletData() {
         const amt = Number(tr.amount || tr.total || 0);
         if (amt <= 0) return;
 
-        const partyName = tr.customerName || tr.partyName || 'جهة';
+        const partyName = resolveParty(tr, suppliersMap);
+        if (!partyName) console.warn('سند بدون اسم جهة - حقول المستند:', d.id, Object.keys(tr));
         movementsMap.set('tr_' + d.id, {
             id: 'tr_' + d.id, direction: tr.type === 'قبض' ? 'in' : 'out', amount: amt,
             provider: method,
-            note: `سند ${tr.type}`, partyName: partyName,
-            date: getDateStr(tr), timeMs: toMillis(tr)
+            note: `سند ${tr.type}`, partyName: partyName || 'جهة غير معروفة',
+            ...baseMeta(tr), source: 'voucher'
         });
     });
 
@@ -529,6 +634,7 @@ async function loadWalletData() {
 
 function sortAndSetMovements(movements) {
     movements.sort((a, b) => a.timeMs - b.timeMs);
+    movements = dedupeMovements(movements);
     let running = openingBalance;
     movements.forEach(m => {
         running += (m.direction === 'in' ? m.amount : -m.amount);
@@ -554,6 +660,14 @@ window.renderMovements = function () {
     document.getElementById('totalOut').innerText = fmt(totalOut);
     document.getElementById('currentBalance').innerText = fmt(currentBalance);
 
+    const dupEl = document.getElementById('dupNote');
+    if (hiddenDuplicates > 0) {
+        dupEl.style.display = 'block';
+        dupEl.innerHTML = `<i class="fas fa-info-circle me-1"></i>تم إخفاء ${hiddenDuplicates} حركة مكررة تلقائياً (نفس النوع والمبلغ والتاريخ في نفس الدقيقة)`;
+    } else {
+        dupEl.style.display = 'none';
+    }
+
     const container = document.getElementById('movementsList');
     if (list.length === 0) {
         container.innerHTML = `<div class="empty-msg"><i class="fas ${currentTab === 'cash' ? 'fa-inbox' : 'fa-wallet'} fa-2x mb-2 d-block text-secondary"></i>لا توجد حركات مطابقة</div>`;
@@ -563,12 +677,12 @@ window.renderMovements = function () {
     container.innerHTML = list.map(m => `
         <div class="movement-item ${m.direction}">
             <div class="mv-info">
-                <span class="mv-note">${m.note}</span>
-                ${m.partyName ? `<span class="mv-party"><i class="fas fa-user me-1"></i>${m.partyName}</span>` : ''}
-                <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${m.date || 'بلا تاريخ'}</span></span>
+                <span class="mv-note">${escapeHtml(m.note)}</span>
+                ${m.partyName ? `<span class="mv-party"><i class="fas fa-user me-1"></i>${escapeHtml(m.partyName)}</span>` : ''}
+                <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${escapeHtml(m.date) || 'بلا تاريخ'}</span></span>
                 <div>
                     <span class="mv-badge ${m.direction === 'in' ? 'badge-in' : 'badge-out'}">${m.direction === 'in' ? 'وارد' : 'صادر'}</span>
-                    ${m.provider ? `<span class="mv-badge badge-provider"><i class="fas fa-mobile-alt me-1"></i>${m.provider}</span>` : ''}
+                    ${m.provider ? `<span class="mv-badge badge-provider"><i class="fas fa-mobile-alt me-1"></i>${escapeHtml(m.provider)}</span>` : ''}
                 </div>
             </div>
             <div class="d-flex align-items-center">
@@ -588,7 +702,7 @@ window.editOpeningBalance = async function () {
     const label = currentTab === 'cash' ? 'الخزينة' : 'المحفظة';
     const val = prompt(`أدخل قيمة الرصيد الافتتاحي الجديد لـ ${label}:`, current);
     if (val === null) return;
-    const num = parseFloat(val);
+    const num = parseFloat(convertArabicDigits(val));
     if (isNaN(num)) return alert("قيمة غير صحيحة");
     try {
         await setDoc(targetDoc, {
@@ -614,6 +728,7 @@ window.openEntryForm = function (type) {
 };
 
 window.saveManualEntry = async function () {
+    if (isSaving) return; // منع الضغط المزدوج
     const type = document.getElementById('entryType').value;
     const amount = parseFloat(document.getElementById('entryAmount').value);
     const date = document.getElementById('entryDate').value;
@@ -623,6 +738,16 @@ window.saveManualEntry = async function () {
     if (!amount || amount <= 0) return alert("برجاء إدخال مبلغ صحيح");
     if (!date) return alert("برجاء اختيار التاريخ");
     if (!note) return alert("برجاء كتابة بيان للحركة");
+
+    // تحذير لو توجد حركة يدوية مطابقة بالفعل
+    const dup = allMovements.find(m => m.source === 'manual' && m.direction === type && m.amount === amount && m.date === date && m.partyName === note);
+    if (dup && !confirm("توجد حركة يدوية مطابقة (نفس المبلغ والتاريخ والبيان). هل تريد الحفظ مرة أخرى؟")) return;
+
+    const btn = document.getElementById('entrySaveBtn');
+    isSaving = true;
+    btn.disabled = true;
+    const oldText = btn.innerText;
+    btn.innerText = 'جاري الحفظ...';
 
     try {
         if (currentTab === 'cash') {
@@ -643,7 +768,12 @@ window.saveManualEntry = async function () {
         document.getElementById('entryCard').classList.remove('show');
         alert("تم حفظ الحركة بنجاح ✅");
         init();
-    } catch (e) { alert("خطأ أثناء الحفظ: " + e.message); }
+    } catch (e) {
+        alert("خطأ أثناء الحفظ: " + e.message);
+    } finally {
+        btn.innerText = oldText;
+        setTimeout(() => { isSaving = false; btn.disabled = false; }, 2000);
+    }
 };
 
 window.deleteManualEntry = async function (id) {
