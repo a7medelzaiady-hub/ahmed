@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>مولد الصور بالذكاء الاصطناعي — الزيادي</title>
+    
+    <!-- PWA Settings -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <!-- Fonts & CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --germany-black: #000000;
+            --germany-red: #FF0000;
+            --germany-gold: #FFCC00;
+            --purple: #5b21b6;
+            --bg-light: #f4f6f8;
+            --card-radius: 20px;
+            --input-radius: 14px;
+            --shadow-sm: 0 4px 12px rgba(0,0,0,0.06);
+            --shadow-md: 0 8px 24px rgba(0,0,0,0.12);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--germany-black);
+            padding-bottom: 90px;
+            font-size: 0.9rem;
+        }
+
+        .header-nav {
+            background: linear-gradient(135deg, #000000, #1a1a1a);
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            border-bottom: 4px solid var(--germany-red);
+            box-shadow: var(--shadow-md);
+        }
+
+        .header-nav h6 {
+            font-weight: 900;
+            font-size: 1.05rem;
+            margin: 0;
+            color: #fff;
+        }
+
+        .icon-btn {
+            background: rgba(255, 255, 255, 0.15);
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s ease;
+        }
+        .icon-btn:active { transform: scale(0.92); }
+
+        .app-card {
+            background: #ffffff;
+            border-radius: var(--card-radius);
+            padding: 20px;
+            margin-top: 16px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid #e5e9f0;
+        }
+
+        .prompt-input {
+            border: 1.5px solid #dcdcdc;
+            border-radius: var(--input-radius);
+            padding: 14px;
+            font-size: 0.92rem;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 700;
+            width: 100%;
+            resize: none;
+            transition: all 0.2s ease;
+        }
+        .prompt-input:focus {
+            border-color: var(--germany-black);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.1);
+            outline: none;
+        }
+
+        .style-badge {
+            border: 1px solid #dcdcdc;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            cursor: pointer;
+            background: #f8fafc;
+            color: #475569;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .style-badge.active {
+            background: var(--germany-black);
+            color: #ffffff;
+            border-color: var(--germany-black);
+        }
+
+        .btn-generate {
+            background: var(--germany-black);
+            color: #ffffff;
+            border: none;
+            border-radius: var(--input-radius);
+            padding: 14px;
+            font-weight: 900;
+            font-size: 0.95rem;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+        .btn-generate:active { transform: scale(0.97); }
+
+        .image-preview-box {
+            width: 100%;
+            min-height: 320px;
+            border-radius: var(--card-radius);
+            border: 2px dashed #cbd5e1;
+            background: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            margin-top: 16px;
+        }
+
+        .image-preview-box img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+            border-radius: var(--card-radius);
+            display: none;
+        }
+
+        .action-btns-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 14px;
+            display: none;
+        }
+
+        .action-btn {
+            padding: 10px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 0.8rem;
+            border: 1px solid var(--germany-black);
+            background: #fff;
+            color: var(--germany-black);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .action-btn.primary {
+            background: var(--germany-black);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <a href="index.html" class="icon-btn" title="الصفحة الرئيسية"><i class="fas fa-arrow-right"></i></a>
+    <h6><i class="fas fa-wand-magic-sparkles me-1" style="color:var(--germany-gold)"></i> توليد الصور بالذكاء الاصطناعي</h6>
+    <a href="index.html" class="icon-btn" title="الرئيسية"><i class="fas fa-home"></i></a>
+</div>
+
+<div class="container px-3">
+    <!-- كارت إدخال الأوامر -->
+    <div class="app-card">
+        <label class="fw-bold mb-2 d-block text-dark" style="font-size: 0.88rem;">
+            <i class="fas fa-pen-nib me-1" style="color:var(--purple)"></i> وصف الصورة (Prompt):
+        </label>
+        <textarea id="promptInput" class="form-control prompt-input" rows="3" placeholder="اكتب وصف الصورة هنا بالتفصيل... (مثال: أسد صغير يحمل حقيبة مدرسة برسم كرتوني سينمائي)"></textarea>
+
+        <!-- اختيار النمط (Style) -->
+        <label class="fw-bold my-2 d-block text-dark" style="font-size: 0.82rem;">نمط الصورة:</label>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="style-badge active" onclick="selectStyle(this, 'Photorealistic, 8k, highly detailed')">واقعي سينمائي</span>
+            <span class="style-badge" onclick="selectStyle(this, '3D Pixar Disney style render')">كرتوني 3D</span>
+            <span class="style-badge" onclick="selectStyle(this, 'Digital Art, vibrant colors')">رسم رقمي</span>
+            <span class="style-badge" onclick="selectStyle(this, 'Anime style, Studio Ghibli')">أنمي</span>
+        </div>
+
+        <!-- اختيار الأبعاد -->
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <label class="fw-bold mb-1 text-dark" style="font-size: 0.78rem;">أبعاد الصورة:</label>
+                <select id="aspectRatio" class="form-select fw-bold" style="border-radius:12px; font-size:0.82rem;">
+                    <option value="1:1">مربع (1:1)</option>
+                    <option value="9:16">طولي ستوري (9:16)</option>
+                    <option value="16:9">عريض (16:9)</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label class="fw-bold mb-1 text-dark" style="font-size: 0.78rem;">مفتاح الـ API (اختياري):</label>
+                <input type="password" id="apiKeyInput" class="form-control fw-bold" style="border-radius:12px; font-size:0.82rem;" placeholder="ضع API Key هنا">
+            </div>
+        </div>
+
+        <button class="btn-generate" id="generateBtn" onclick="generateImage()">
+            <i class="fas fa-wand-magic-sparkles" style="color:var(--germany-gold)"></i> إنشاء الصورة الآن
+        </button>
+    </div>
+
+    <!-- كارت النتيجة والفرز -->
+    <div class="app-card p-3">
+        <div class="image-preview-box" id="previewContainer">
+            <div id="placeholderText" class="text-center p-3">
+                <i class="fas fa-image text-muted fa-3x mb-2"></i>
+                <p class="fw-bold text-secondary mb-0" style="font-size:0.82rem;">ستظهر الصورة المولدة هنا بعد الضغط على "إنشاء"</p>
+            </div>
+            <div id="loadingSpinner" class="text-center p-3" style="display:none;">
+                <div class="spinner-border text-dark mb-2" role="status"></div>
+                <p class="fw-bold text-dark mb-0" style="font-size:0.85rem;">جاري تصميم وتوليد الصورة بالذكاء الاصطناعي...</p>
+            </div>
+            <img id="generatedImage" alt="الصورة المولدة">
+        </div>
+
+        <div class="action-btns-group" id="actionButtons">
+            <button class="action-btn primary" onclick="downloadImage()"><i class="fas fa-download"></i> تحميل الصورة</button>
+            <button class="action-btn" onclick="shareImage()"><i class="fas fa-share-alt"></i> مشاركة الصورة</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedStylePrefix = "Photorealistic, 8k, highly detailed";
+
+    function selectStyle(element, styleText) {
+        document.querySelectorAll('.style-badge').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+        selectedStylePrefix = styleText;
+    }
+
+    async function generateImage() {
+        const prompt = document.getElementById('promptInput').value.trim();
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        const placeholder = document.getElementById('placeholderText');
+        const spinner = document.getElementById('loadingSpinner');
+        const imgElement = document.getElementById('generatedImage');
+        const actionBtns = document.getElementById('actionButtons');
+
+        if (!prompt) {
+            alert("يرجى كتابة وصف الصورة أولاً!");
+            return;
+        }
+
+        const fullPrompt = `${prompt}, ${selectedStylePrefix}`;
+
+        placeholder.style.display = 'none';
+        imgElement.style.display = 'none';
+        actionBtns.style.display = 'none';
+        spinner.style.display = 'block';
+
+        try {
+            // استخدام محرك توليد الصور المجاني السريع (Pollinations.ai) كمحرك افتراضي مجاني
+            const encodedPrompt = encodeURIComponent(fullPrompt);
+            const seed = Math.floor(Math.random() * 999999);
+            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=true`;
+
+            // تحميل الصورة للتأكد من اكتمال التوليد
+            const img = new Image();
+            img.src = imageUrl;
+            img.onload = () => {
+                spinner.style.display = 'none';
+                imgElement.src = imageUrl;
+                imgElement.style.display = 'block';
+                actionBtns.style.display = 'grid';
+            };
+            img.onerror = () => {
+                throw new Error("تعذر توليد الصورة، يرجى المحاولة مرة أخرى.");
+            };
+
+        } catch (error) {
+            spinner.style.display = 'none';
+            placeholder.style.display = 'block';
+            alert("حدث خطأ أثناء توليد الصورة: " + error.message);
+        }
+    }
+
+    async function downloadImage() {
+        const img = document.getElementById('generatedImage');
+        if (!img.src) return;
+
+        try {
+            const response = await fetch(img.src);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ai_image_${Date.now()}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            window.open(img.src, '_blank');
+        }
+    }
+
+    async function shareImage() {
+        const img = document.getElementById('generatedImage');
+        if (!img.src) return;
+
+        try {
+            const response = await fetch(img.src);
+            const blob = await response.blob();
+            const file = new File([blob], 'ai_generated.png', { type: 'image/png' });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: 'صورة مولدة بالذكاء الاصطناعي',
+                    text: 'شاهد هذه الصورة التي قمت بتوليدها بواسطة الذكاء الاصطناعي!'
+                });
+            } else {
+                alert("المشاركة غير مدعومة مباشرة على هذا المتصفح، يمكنك تحميل الصورة أولاً.");
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+</script>
+
+</body>
+</html>
