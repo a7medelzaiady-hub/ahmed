@@ -327,31 +327,23 @@ async function loadCustomers() {
 }
 
 /* ========== منع التكرار في العرض ========== */
-function isDuplicate(a, b) {
-    if (a.linkKey && a.linkKey === b.linkKey) return true;              // نفس رقم/رابط السند
-    if (a.hasTs && b.hasTs && Math.abs(a.timeMs - b.timeMs) <= 120000) return true; // نفس الحركة خلال دقيقتين
-    return false;                                                       // بدون وقت حقيقي لا نحذف أي حركة
-}
-
-function dedupeMovements(list) {
-    const out = [];
-    const seen = new Map();
-    hiddenDuplicates = 0;
+function markSuspectedDuplicates(list) {
+    // لا يحذف ولا يخفي شيئاً: فقط يضع علامة على الحركات المتطابقة ليظهر مصدرها
+    const groups = new Map();
     list.forEach(m => {
-        if (m.source === 'manual') { out.push(m); return; }
+        if (m.source === 'manual') return;
         const key = [m.note, m.direction, m.amount, m.date, m.provider || ''].join('|');
-        const cands = seen.get(key) || [];
-        const hit = cands.find(i => isDuplicate(out[i], m));
-        if (hit !== undefined) {
-            if (!out[hit].partyName && m.partyName) out[hit].partyName = m.partyName;
-            hiddenDuplicates++;
-            return;
-        }
-        cands.push(out.length);
-        seen.set(key, cands);
-        out.push(m);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(m);
     });
-    return out;
+    hiddenDuplicates = 0;
+    groups.forEach(g => {
+        if (g.length > 1) {
+            g.forEach(m => { m.suspect = true; m.groupIds = g.map(x => x.id).join(' , '); });
+            hiddenDuplicates += g.length;
+        }
+    });
+    return list;
 }
 
 window.switchTab = function(tab) {
@@ -441,7 +433,7 @@ async function loadCashData(token) {
             movementsMap.set('inv_' + d.id, {
                 id: 'inv_' + d.id, direction: 'in', amount: cash,
                 note: `مبيعات نقدية`, partyName: customerName,
-                ...baseMeta(data), source: 'sales'
+                ...baseMeta(data), source: 'sales', raw: data, docId: d.id
             });
         }
     });
@@ -462,13 +454,13 @@ async function loadCashData(token) {
             movementsMap.set('trin_' + d.id, {
                 id: 'trin_' + d.id, direction: 'in', amount: cashAmt,
                 note: `سند قبض`, partyName: partyName,
-                ...baseMeta(tr), source: 'voucher'
+                ...baseMeta(tr), source: 'voucher', raw: tr, docId: d.id
             });
         } else if (tr.type === 'صرف') {
             movementsMap.set('trout_' + d.id, {
                 id: 'trout_' + d.id, direction: 'out', amount: cashAmt,
                 note: `سند صرف`, partyName: partyName,
-                ...baseMeta(tr), source: 'voucher'
+                ...baseMeta(tr), source: 'voucher', raw: tr, docId: d.id
             });
         }
     });
@@ -486,13 +478,13 @@ async function loadCashData(token) {
             movementsMap.set('pret_' + d.id, {
                 id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
                 note: `مرتجع مشتريات نقدي`, partyName: supName,
-                ...baseMeta(data), source: 'purchase'
+                ...baseMeta(data), source: 'purchase', raw: data, docId: d.id
             });
         } else {
             movementsMap.set('pout_' + d.id, {
                 id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
                 note: `مشتريات نقدية`, partyName: supName,
-                ...baseMeta(data), source: 'purchase'
+                ...baseMeta(data), source: 'purchase', raw: data, docId: d.id
             });
         }
     });
@@ -560,7 +552,7 @@ async function loadWalletData(token) {
                     id: 'inv_wal_' + d.id, direction: 'in', amount: amt,
                     provider: method || 'محفظة إلكترونية',
                     note: `مبيعات محفظة`, partyName: customerName,
-                    ...baseMeta(data), source: 'sales'
+                    ...baseMeta(data), source: 'sales', raw: data, docId: d.id
                 });
             }
         }
@@ -579,7 +571,7 @@ async function loadWalletData(token) {
                     id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
                     provider: method || 'محفظة إلكترونية',
                     note: isReturn ? `مرتجع مشتريات محفظة` : `مشتريات محفظة`, partyName: supName,
-                    ...baseMeta(data), source: 'purchase'
+                    ...baseMeta(data), source: 'purchase', raw: data, docId: d.id
                 });
             }
         }
@@ -625,7 +617,7 @@ async function loadWalletData(token) {
             id: 'tr_' + d.id, direction: tr.type === 'قبض' ? 'in' : 'out', amount: amt,
             provider: method,
             note: `سند ${tr.type}`, partyName: partyName || 'جهة غير معروفة',
-            ...baseMeta(tr), source: 'voucher'
+            ...baseMeta(tr), source: 'voucher', raw: tr, docId: d.id
         });
     });
 
@@ -634,7 +626,7 @@ async function loadWalletData(token) {
 
 function sortAndSetMovements(movements) {
     movements.sort((a, b) => a.timeMs - b.timeMs);
-    movements = dedupeMovements(movements);
+    movements = markSuspectedDuplicates(movements);
     let running = openingBalance;
     movements.forEach(m => {
         running += (m.direction === 'in' ? m.amount : -m.amount);
@@ -663,7 +655,7 @@ window.renderMovements = function () {
     const dupEl = document.getElementById('dupNote');
     if (hiddenDuplicates > 0) {
         dupEl.style.display = 'block';
-        dupEl.innerHTML = `<i class="fas fa-info-circle me-1"></i>تم إخفاء ${hiddenDuplicates} حركة مكررة تلقائياً (نفس النوع والمبلغ والتاريخ في نفس الدقيقة)`;
+        dupEl.innerHTML = `<i class="fas fa-info-circle me-1"></i>يوجد ${hiddenDuplicates} حركة متطابقة (لم يُخفَ شيء). اضغط زر الفحص 🔍 على أي منها لمعرفة المستند المصدر`;
     } else {
         dupEl.style.display = 'none';
     }
@@ -677,7 +669,7 @@ window.renderMovements = function () {
     container.innerHTML = list.map(m => `
         <div class="movement-item ${m.direction}">
             <div class="mv-info">
-                <span class="mv-note">${escapeHtml(m.note)}</span>
+                <span class="mv-note">${escapeHtml(m.note)}${m.suspect ? ' <span class="mv-badge badge-out">⚠ متطابقة</span>' : ''}</span>
                 ${m.partyName ? `<span class="mv-party"><i class="fas fa-user me-1"></i>${escapeHtml(m.partyName)}</span>` : ''}
                 <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${escapeHtml(m.date) || 'بلا تاريخ'}</span></span>
                 <div>
@@ -690,10 +682,24 @@ window.renderMovements = function () {
                     <div class="mv-amount ${m.direction === 'in' ? 'text-success' : 'text-danger'} num">${m.direction === 'in' ? '+' : '-'}${fmt(m.amount)}</div>
                     <div class="mv-balance num">الرصيد: ${fmt(m.balanceAfter)}</div>
                 </div>
+                ${m.raw ? `<button class="mv-del" style="color:#6366f1" onclick="inspectMovement('${m.id}')" title="فحص"><i class="fas fa-search"></i></button>` : ''}
                 ${m.source === 'manual' ? `<button class="mv-del" onclick="deleteManualEntry('${m.manualId}')" title="حذف"><i class="fas fa-trash-alt"></i></button>` : ''}
             </div>
         </div>
     `).join('');
+};
+
+window.inspectMovement = function (id) {
+    const m = allMovements.find(x => x.id === id);
+    if (!m) return;
+    const clean = {};
+    Object.keys(m.raw || {}).forEach(k => {
+        const v = m.raw[k];
+        clean[k] = (v && v.seconds !== undefined) ? new Date(v.seconds * 1000).toISOString() : v;
+    });
+    const text = "معرّف المستند: " + m.docId + (m.suspect ? "\nمتطابق مع: " + m.groupIds : "") + "\n\n" + JSON.stringify(clean, null, 2);
+    console.log(text);
+    alert(text);
 };
 
 window.editOpeningBalance = async function () {
