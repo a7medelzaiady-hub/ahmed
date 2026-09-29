@@ -1,357 +1,406 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <script src="auth-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>مولد الصور بالذكاء الاصطناعي — الزيادي</title>
-    
+    <title>توليد الفيديو بالذكاء الاصطناعي — الزيادي</title>
+
     <!-- PWA Settings -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#000000">
+    <meta name="theme-color" content="#5b21b6">
     <meta name="apple-mobile-web-app-capable" content="yes">
 
-    <!-- Fonts & CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Montserrat:wght@600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
 
     <style>
         :root {
-            --germany-black: #000000;
-            --germany-red: #FF0000;
-            --germany-gold: #FFCC00;
-            --purple: #5b21b6;
-            --bg-light: #f4f6f8;
+            --purple-primary: #7c3aed;
+            --purple-gradient: linear-gradient(135deg, #8b5cf6, #6366f1);
+            --bg-app: #f8fafc;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --warning-bg: #fffbeb;
+            --warning-border: #fef3c7;
+            --warning-text: #d97706;
             --card-radius: 20px;
-            --input-radius: 14px;
-            --shadow-sm: 0 4px 12px rgba(0,0,0,0.06);
-            --shadow-md: 0 8px 24px rgba(0,0,0,0.12);
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
-            background: var(--bg-light);
+            background-color: var(--bg-app);
             font-family: 'Cairo', sans-serif;
-            color: var(--germany-black);
-            padding-bottom: 90px;
+            color: var(--text-dark);
+            padding-bottom: 120px;
             font-size: 0.9rem;
         }
 
-        .header-nav {
-            background: linear-gradient(135deg, #000000, #1a1a1a);
-            padding: 18px 20px;
+        /* Header Navigation */
+        .top-header {
+            background: #ffffff;
+            padding: 14px 18px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            color: white;
+            border-bottom: 1px solid var(--border-color);
             position: sticky;
             top: 0;
             z-index: 1000;
-            border-bottom-left-radius: 20px;
-            border-bottom-right-radius: 20px;
-            border-bottom: 4px solid var(--germany-red);
-            box-shadow: var(--shadow-md);
         }
 
-        .header-nav h6 {
-            font-weight: 900;
-            font-size: 1.05rem;
-            margin: 0;
-            color: #fff;
-        }
-
-        .icon-btn {
-            background: rgba(255, 255, 255, 0.15);
-            width: 38px;
-            height: 38px;
+        .header-tools { display: flex; gap: 8px; }
+        .tool-btn {
+            width: 38px; height: 38px;
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            text-decoration: none;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.2s ease;
-        }
-        .icon-btn:active { transform: scale(0.92); }
-
-        .app-card {
-            background: #ffffff;
-            border-radius: var(--card-radius);
-            padding: 20px;
-            margin-top: 16px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid #e5e9f0;
-        }
-
-        .prompt-input {
-            border: 1.5px solid #dcdcdc;
-            border-radius: var(--input-radius);
-            padding: 14px;
-            font-size: 0.92rem;
-            font-family: 'Cairo', sans-serif;
-            font-weight: 700;
-            width: 100%;
-            resize: none;
-            transition: all 0.2s ease;
-        }
-        .prompt-input:focus {
-            border-color: var(--germany-black);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.1);
-            outline: none;
-        }
-
-        .style-badge {
-            border: 1px solid #dcdcdc;
-            padding: 8px 14px;
-            border-radius: 999px;
-            font-size: 0.78rem;
-            font-weight: 800;
-            cursor: pointer;
-            background: #f8fafc;
+            background: #f1f5f9;
+            border: 1px solid var(--border-color);
             color: #475569;
-            transition: all 0.2s ease;
-            user-select: none;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: 0.2s;
         }
-        .style-badge.active {
-            background: var(--germany-black);
-            color: #ffffff;
-            border-color: var(--germany-black);
-        }
+        .tool-btn:active { transform: scale(0.92); }
 
-        .btn-generate {
-            background: var(--germany-black);
-            color: #ffffff;
-            border: none;
-            border-radius: var(--input-radius);
-            padding: 14px;
-            font-weight: 900;
-            font-size: 0.95rem;
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.2s ease;
-        }
-        .btn-generate:active { transform: scale(0.97); }
-
-        .image-preview-box {
-            width: 100%;
-            min-height: 320px;
-            border-radius: var(--card-radius);
-            border: 2px dashed #cbd5e1;
-            background: #f8fafc;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            position: relative;
-            margin-top: 16px;
-        }
-
-        .image-preview-box img {
-            width: 100%;
-            height: auto;
-            object-fit: cover;
-            border-radius: var(--card-radius);
-            display: none;
-        }
-
-        .action-btns-group {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-top: 14px;
-            display: none;
-        }
-
-        .action-btn {
-            padding: 10px;
-            border-radius: 12px;
+        .header-title {
+            font-size: 1.05rem;
             font-weight: 800;
-            font-size: 0.8rem;
-            border: 1px solid var(--germany-black);
-            background: #fff;
-            color: var(--germany-black);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .app-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 16px 12px;
+        }
+
+        /* Main Wrapper Card */
+        .main-card {
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            padding: 18px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.03);
+            margin-bottom: 16px;
+        }
+
+        .card-heading {
+            font-size: 0.95rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            color: var(--text-dark);
+            margin-bottom: 14px;
+        }
+
+        /* Yellow Warning Notice Box */
+        .notice-box {
+            background: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 18px;
+            text-align: center;
+        }
+        .notice-title {
+            color: var(--warning-text);
+            font-weight: 800;
+            font-size: 0.9rem;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
-            cursor: pointer;
+            margin-bottom: 6px;
         }
-        .action-btn.primary {
-            background: var(--germany-black);
-            color: #fff;
+        .notice-body {
+            font-size: 0.8rem;
+            color: #92400e;
+            font-weight: 600;
+            line-height: 1.6;
+        }
+
+        /* Prompt Textarea */
+        .prompt-box {
+            background: #ffffff;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 14px;
+            padding: 12px;
+            width: 100%;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 700;
+            font-size: 0.9rem;
+            resize: none;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .prompt-box:focus {
+            border-color: var(--purple-primary);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        /* Custom Range Slider */
+        .slider-wrap {
+            margin: 20px 0;
+        }
+        .range-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: linear-gradient(90deg, #a855f7, #3b82f6);
+            outline: none;
+        }
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid var(--purple-primary);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        /* Purple Action Button */
+        .btn-submit-ai {
+            background: var(--purple-gradient);
+            color: #ffffff;
+            border: none;
+            width: 100%;
+            padding: 14px;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+            transition: 0.2s;
+        }
+        .btn-submit-ai:active { transform: scale(0.98); }
+
+        /* Progress Processing Card */
+        .process-card {
+            background: #ffffff;
+            border-radius: var(--card-radius);
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .progress-bar-custom {
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 16px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 45%;
+            background: var(--purple-gradient);
+            border-radius: 10px;
+            animation: pulseProgress 2s infinite ease-in-out;
+        }
+
+        @keyframes pulseProgress {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        /* History Placeholder */
+        .history-card {
+            background: #ffffff;
+            border-radius: var(--card-radius);
+            padding: 24px 16px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        /* Bottom Floating Toast Box */
+        .bottom-toast {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #ea580c, #c2410c);
+            color: #ffffff;
+            padding: 14px 16px;
+            border-radius: 20px 20px 0 0;
+            z-index: 2000;
+            box-shadow: 0 -6px 20px rgba(0,0,0,0.15);
+        }
+        .toast-content {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .btn-cancel-task {
+            background: #ffffff;
+            color: #1e293b;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 0.8rem;
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
 
-<div class="header-nav">
-    <a href="index.html" class="icon-btn" title="الصفحة الرئيسية"><i class="fas fa-arrow-right"></i></a>
-    <h6><i class="fas fa-wand-magic-sparkles me-1" style="color:var(--germany-gold)"></i> توليد الصور بالذكاء الاصطناعي</h6>
-    <a href="index.html" class="icon-btn" title="الرئيسية"><i class="fas fa-home"></i></a>
-</div>
+<!-- Header -->
+<header class="top-header">
+    <div class="header-tools">
+        <a href="index.html" class="tool-btn" title="الرئيسية"><i class="fas fa-home"></i></a>
+        <button class="tool-btn" title="اللغة"><i class="fas fa-globe"></i></button>
+        <button class="tool-btn" title="الإعدادات"><i class="fas fa-cog"></i></button>
+    </div>
+    <div class="header-title">
+        <span>نص إلى فيديو</span>
+        <i class="fas fa-bars text-secondary"></i>
+    </div>
+</header>
 
-<div class="container px-3">
-    <!-- كارت إدخال الأوامر -->
-    <div class="app-card">
-        <label class="fw-bold mb-2 d-block text-dark" style="font-size: 0.88rem;">
-            <i class="fas fa-pen-nib me-1" style="color:var(--purple)"></i> وصف الصورة (Prompt):
-        </label>
-        <textarea id="promptInput" class="form-control prompt-input" rows="3" placeholder="اكتب وصف الصورة هنا بالتفصيل... (مثال: أسد صغير يحمل حقيبة مدرسة برسم كرتوني سينمائي)"></textarea>
+<div class="app-container">
 
-        <!-- اختيار النمط (Style) -->
-        <label class="fw-bold my-2 d-block text-dark" style="font-size: 0.82rem;">نمط الصورة:</label>
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <span class="style-badge active" onclick="selectStyle(this, 'Photorealistic, 8k, highly detailed')">واقعي سينمائي</span>
-            <span class="style-badge" onclick="selectStyle(this, '3D Pixar Disney style render')">كرتوني 3D</span>
-            <span class="style-badge" onclick="selectStyle(this, 'Digital Art, vibrant colors')">رسم رقمي</span>
-            <span class="style-badge" onclick="selectStyle(this, 'Anime style, Studio Ghibli')">أنمي</span>
+    <!-- Card 1: Input Form -->
+    <div class="main-card">
+        <div class="card-heading">
+            <span>نص إلى فيديو — LTX 2.5</span>
+            <i class="fas fa-video text-primary"></i>
         </div>
 
-        <!-- اختيار الأبعاد -->
-        <div class="row g-2 mb-3">
-            <div class="col-6">
-                <label class="fw-bold mb-1 text-dark" style="font-size: 0.78rem;">أبعاد الصورة:</label>
-                <select id="aspectRatio" class="form-select fw-bold" style="border-radius:12px; font-size:0.82rem;">
-                    <option value="1:1">مربع (1:1)</option>
-                    <option value="9:16">طولي ستوري (9:16)</option>
-                    <option value="16:9">عريض (16:9)</option>
-                </select>
+        <!-- Warning Box -->
+        <div class="notice-box">
+            <div class="notice-title">
+                <i class="fas fa-exclamation-triangle"></i> مش متخصص في النطق العربي
             </div>
-            <div class="col-6">
-                <label class="fw-bold mb-1 text-dark" style="font-size: 0.78rem;">مفتاح الـ API (اختياري):</label>
-                <input type="password" id="apiKeyInput" class="form-control fw-bold" style="border-radius:12px; font-size:0.82rem;" placeholder="ضع API Key هنا">
+            <div class="notice-body">
+                محرك LTX 2.5 ممتاز في الصورة والحركة، لكنه مش متدرب على نطق العربي 100%. لو عايز نطق عربي مظبوط، استخدم أقسام <b class="text-dark">MiniMax H3</b>.
             </div>
         </div>
 
-        <button class="btn-generate" id="generateBtn" onclick="generateImage()">
-            <i class="fas fa-wand-magic-sparkles" style="color:var(--germany-gold)"></i> إنشاء الصورة الآن
+        <!-- Prompt Description Textarea -->
+        <div class="mb-3">
+            <label class="fw-bold mb-2 text-dark d-flex align-items-center gap-1" style="font-size: 0.88rem;">
+                <i class="fas fa-pen text-success me-1"></i> وصف الفيديو (بالعربي)
+            </label>
+            <textarea id="promptInput" class="prompt-box" rows="4" placeholder="اكتب وصفاً بالعربي وسيتم تحويله إلى فيديو احترافي مباشرة باستخدام AI - بدون الحاجة لصورة!"></textarea>
+        </div>
+
+        <!-- Duration Slider -->
+        <div class="slider-wrap">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-muted" style="font-size: 0.8rem;"><i class="fas fa-info-circle me-1"></i> كل ما زادت المدة، كل ما زاد وقت التوليد</span>
+                <span class="fw-bold text-primary" style="font-size: 0.88rem;"><i class="far fa-clock"></i> مدة الفيديو <span id="durationVal">5</span> ثواني</span>
+            </div>
+            <input type="range" class="range-slider" min="2" max="10" step="2" value="5" id="durationSlider" oninput="document.getElementById('durationVal').innerText = this.value">
+            <div class="slider-labels">
+                <span>2 ث</span>
+                <span>4 ث</span>
+                <span>6 ث</span>
+                <span>8 ث</span>
+                <span>10 ث</span>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button class="btn-submit-ai" id="submitBtn" onclick="startGeneration()">
+            <i class="fas fa-spinner fa-spin d-none" id="btnSpinner"></i>
+            <span id="btnText"><i class="fas fa-paper-plane me-1"></i> جاري الإرسال...</span>
         </button>
     </div>
 
-    <!-- كارت النتيجة والفرز -->
-    <div class="app-card p-3">
-        <div class="image-preview-box" id="previewContainer">
-            <div id="placeholderText" class="text-center p-3">
-                <i class="fas fa-image text-muted fa-3x mb-2"></i>
-                <p class="fw-bold text-secondary mb-0" style="font-size:0.82rem;">ستظهر الصورة المولدة هنا بعد الضغط على "إنشاء"</p>
-            </div>
-            <div id="loadingSpinner" class="text-center p-3" style="display:none;">
-                <div class="spinner-border text-dark mb-2" role="status"></div>
-                <p class="fw-bold text-dark mb-0" style="font-size:0.85rem;">جاري تصميم وتوليد الصورة بالذكاء الاصطناعي...</p>
-            </div>
-            <img id="generatedImage" alt="الصورة المولدة">
+    <!-- Card 2: Live Processing Status -->
+    <div class="process-card" id="processingBox">
+        <div class="fw-bold text-dark d-flex align-items-center justify-content-center gap-2" style="font-size: 0.95rem;">
+            <i class="fas fa-spinner fa-spin text-primary"></i> جاري التوليد...
         </div>
 
-        <div class="action-btns-group" id="actionButtons">
-            <button class="action-btn primary" onclick="downloadImage()"><i class="fas fa-download"></i> تحميل الصورة</button>
-            <button class="action-btn" onclick="shareImage()"><i class="fas fa-share-alt"></i> مشاركة الصورة</button>
+        <div class="progress-bar-custom">
+            <div class="progress-fill"></div>
+        </div>
+
+        <div class="fw-bold text-dark mb-1" style="font-size: 0.88rem;">
+            🧠 جاري معالجة النص بالذكاء الاصطناعي...
+        </div>
+        <div class="text-muted fw-bold" style="font-size: 0.78rem;">
+            قد تستغرق العملية من 2-5 دقائق
         </div>
     </div>
+
+    <!-- Card 3: Previous Videos Archive -->
+    <div class="history-card">
+        <div class="fw-bold text-dark mb-3 d-flex align-items-center justify-content-center gap-2" style="font-size: 0.9rem;">
+            <span>فيديوهاتي السابقة</span>
+            <i class="fas fa-history text-warning"></i>
+        </div>
+
+        <div class="py-3">
+            <i class="fas fa-video text-muted fa-3x mb-2" style="opacity: 0.3;"></i>
+            <p class="text-muted fw-bold mb-0" style="font-size: 0.82rem;">لم تقم بإنشاء أي فيديو بعد. جرّب الآن!</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- Bottom Floating Task Alert Notice -->
+<div class="bottom-toast" id="bottomToast">
+    <div class="toast-content">
+        <i class="fas fa-hourglass-half me-1"></i> عندك طلب شغّال في «فيديو من نص» (بقاله <span id="timerText">23</span> ثانية) — مش هتقدر تبدأ طلب جديد لحد ما يخلص
+    </div>
+    <button class="btn-cancel-task" onclick="cancelTask()">إلغاء الطلب الجاري</button>
 </div>
 
 <script>
-    let selectedStylePrefix = "Photorealistic, 8k, highly detailed";
+    let secondsElapsed = 23;
+    let timerInterval = setInterval(() => {
+        secondsElapsed++;
+        document.getElementById('timerText').innerText = secondsElapsed;
+    }, 1000);
 
-    function selectStyle(element, styleText) {
-        document.querySelectorAll('.style-badge').forEach(el => el.classList.remove('active'));
-        element.classList.add('active');
-        selectedStylePrefix = styleText;
-    }
-
-    async function generateImage() {
+    function startGeneration() {
         const prompt = document.getElementById('promptInput').value.trim();
-        const apiKey = document.getElementById('apiKeyInput').value.trim();
-        const placeholder = document.getElementById('placeholderText');
-        const spinner = document.getElementById('loadingSpinner');
-        const imgElement = document.getElementById('generatedImage');
-        const actionBtns = document.getElementById('actionButtons');
-
-        if (!prompt) {
-            alert("يرجى كتابة وصف الصورة أولاً!");
+        if(!prompt) {
+            alert("برجاء كتابة وصف الفيديو أولاً!");
             return;
         }
 
-        const fullPrompt = `${prompt}, ${selectedStylePrefix}`;
-
-        placeholder.style.display = 'none';
-        imgElement.style.display = 'none';
-        actionBtns.style.display = 'none';
-        spinner.style.display = 'block';
-
-        try {
-            // استخدام محرك توليد الصور المجاني السريع (Pollinations.ai) كمحرك افتراضي مجاني
-            const encodedPrompt = encodeURIComponent(fullPrompt);
-            const seed = Math.floor(Math.random() * 999999);
-            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=true`;
-
-            // تحميل الصورة للتأكد من اكتمال التوليد
-            const img = new Image();
-            img.src = imageUrl;
-            img.onload = () => {
-                spinner.style.display = 'none';
-                imgElement.src = imageUrl;
-                imgElement.style.display = 'block';
-                actionBtns.style.display = 'grid';
-            };
-            img.onerror = () => {
-                throw new Error("تعذر توليد الصورة، يرجى المحاولة مرة أخرى.");
-            };
-
-        } catch (error) {
-            spinner.style.display = 'none';
-            placeholder.style.display = 'block';
-            alert("حدث خطأ أثناء توليد الصورة: " + error.message);
-        }
+        document.getElementById('processingBox').scrollIntoView({ behavior: 'smooth' });
     }
 
-    async function downloadImage() {
-        const img = document.getElementById('generatedImage');
-        if (!img.src) return;
-
-        try {
-            const response = await fetch(img.src);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `ai_image_${Date.now()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        } catch (e) {
-            window.open(img.src, '_blank');
-        }
-    }
-
-    async function shareImage() {
-        const img = document.getElementById('generatedImage');
-        if (!img.src) return;
-
-        try {
-            const response = await fetch(img.src);
-            const blob = await response.blob();
-            const file = new File([blob], 'ai_generated.png', { type: 'image/png' });
-
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                await navigator.share({
-                    files: [file],
-                    title: 'صورة مولدة بالذكاء الاصطناعي',
-                    text: 'شاهد هذه الصورة التي قمت بتوليدها بواسطة الذكاء الاصطناعي!'
-                });
-            } else {
-                alert("المشاركة غير مدعومة مباشرة على هذا المتصفح، يمكنك تحميل الصورة أولاً.");
-            }
-        } catch (e) {
-            console.error(e);
+    function cancelTask() {
+        if(confirm("هل أنت متأكد من إلغاء الطلب الجاري؟")) {
+            document.getElementById('bottomToast').style.display = 'none';
+            document.getElementById('processingBox').style.display = 'none';
+            clearInterval(timerInterval);
         }
     }
 </script>
