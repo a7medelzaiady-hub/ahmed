@@ -277,6 +277,12 @@ function baseMeta(data) {
     return { date: getDateStr(data), timeMs: toMillis(data), hasTs: hasRealTs(data), linkKey };
 }
 
+// نفس شرط صفحة السندات: السند المرتبط بفاتورة/مشتريات محسوب مسبقاً ضمن الفاتورة، فلا يُحسب مرة ثانية
+function isInvoiceLinked(d) {
+    return !!(d.invoiceId || d.purchaseId || d.billId || d.isInvoicePayment || d.supplierTransactionId ||
+        (d.note && (String(d.note).includes('فاتورة') || String(d.note).includes('فواتير'))));
+}
+
 function fmt(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 function isWalletPayment(methodStr) {
@@ -441,7 +447,7 @@ async function loadCashData(token) {
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
-        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+        if (isInvoiceLinked(tr)) return;
         const method = tr.method || tr.paymentMethod || 'نقدى';
         if (isWalletPayment(method)) return;
 
@@ -606,6 +612,8 @@ async function loadWalletData(token) {
     transSnap.forEach(d => {
         const tr = d.data();
         if (tr.isDeleted) return;
+        if (isInvoiceLinked(tr)) return;
+        if (tr.type !== 'قبض' && tr.type !== 'صرف') return; // كان أي نوع آخر يُحسب صادراً
         const method = tr.method || tr.paymentMethod || '';
         if (!isWalletPayment(method)) return;
         const amt = Number(tr.amount || tr.total || 0);
