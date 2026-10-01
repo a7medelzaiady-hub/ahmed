@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تحويل النص إلى صورة (مع الترجمة التلقائية)</title>
+    <title>تحويل النص إلى صورة</title>
     <style>
         * {
             box-sizing: border-box;
@@ -199,11 +199,11 @@
 
 <div class="container">
     <h1>تحويل النص إلى صورة 🎨</h1>
-    <p class="subtitle">اكتبي الوصف بأي لغة وسيقوم البرنامج بترجمته وتوليد الصورة تلقائياً</p>
+    <p class="subtitle">اكتبي الوصف بأي لغة وسيقوم الذكاء الاصطناعي بتوليد الصورة تلقائياً</p>
 
     <div class="input-group">
         <textarea id="promptInput" placeholder="اكتبي وصف الصورة هنا (مثال: سيارة طائرة في مدينة مستقبلية عند الغروب...)"></textarea>
-        <button id="generateBtn" onclick="processAndGenerate()">إنشاء الصورة ✨</button>
+        <button id="generateBtn" onclick="generateImage()">إنشاء الصورة ✨</button>
     </div>
 
     <div class="result-box" id="resultBox">
@@ -212,7 +212,7 @@
         <img id="generatedImage" alt="الصورة المنشأة" onload="imageLoaded()" onerror="imageError()">
     </div>
 
-    <a href="#" id="downloadBtn" class="download-btn" target="_blank" download="ai-image.jpg">تحميل الصورة 📥</a>
+    <a href="#" id="downloadBtn" class="download-btn" target="_blank">تحميل الصورة 📥</a>
 </div>
 
 <!-- نافذة التنبيه المخصصة -->
@@ -233,22 +233,7 @@
         document.getElementById('customModal').style.display = 'none';
     }
 
-    // دالة لترجمة النص إلى اللغة الإنجليزية تلقائياً
-    async function translateText(text) {
-        try {
-            const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|en`);
-            const data = await response.json();
-            if (data && data.responseData && data.responseData.translatedText) {
-                return data.responseData.translatedText;
-            }
-            return text; // في حال فشل الترجمة يتم إرجاع النص كما هو
-        } catch (error) {
-            console.error("خطأ في الترجمة:", error);
-            return text;
-        }
-    }
-
-    async function processAndGenerate() {
+    function generateImage() {
         const promptInput = document.getElementById('promptInput').value.trim();
         const btn = document.getElementById('generateBtn');
         const loader = document.getElementById('loader');
@@ -267,17 +252,14 @@
         placeholder.style.display = 'none';
         loader.style.display = 'block';
         btn.disabled = true;
-        btn.innerText = "جاري ترجمة النص ومعالجته...";
-
-        // Step 1: ترجمة النص تلقائياً إلى الإنجليزية
-        const englishPrompt = await translateText(promptInput);
-
         btn.innerText = "جاري إنشاء الصورة...";
 
-        // Step 2: إرسال النص الإنجليزي المترجم لتوليد الصورة
-        const encodedPrompt = encodeURIComponent(englishPrompt);
+        // تجهيز الوصف العشوائي ورابط الصورة المباشر
+        const encodedPrompt = encodeURIComponent(promptInput);
         const randomSeed = Math.floor(Math.random() * 1000000);
-        const imageUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&seed=${randomSeed}&nologo=true`;
+        
+        // استخدام خدمة التوليد مع معالجة حواف التسميات تلقائياً
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${randomSeed}&nologo=true`;
 
         img.src = imageUrl;
     }
@@ -298,7 +280,7 @@
     }
 
     function imageError() {
-        showCustomAlert("تعذر إنشاء الصورة. يرجى محاولة إعادة صياغة الوصف أو التحقق من الاتصال بالإنترنت.");
+        showCustomAlert("تعذر إنشاء الصورة. يرجى التحقق من الاتصال بالإنترنت أو محاولة كتابة وصف مختلف.");
         resetUI();
     }
 
