@@ -130,13 +130,13 @@
 
 <script>
 (() => {
-  const TIMEOUT_MS = 45000;
+  const TIMEOUT_MS = 30000;
   const $ = id => document.getElementById(id);
-  const input = $('promptInput'), btn = $('generateBtn'), img = $('generatedImage'),
-        box = $('resultBox'), placeholder = $('placeholderText'), loader = $('loaderWrap'),
-        dl = $('downloadBtn'), modal = $('customModal');
+  const input = $('promptInput'), btn = $('generateBtn'), img =$('generatedImage'),
+        box = $('resultBox'), placeholder = $('placeholderText'), loader =$('loaderWrap'),
+        dl = $('downloadBtn'), modal =$('customModal');
 
-  let current = null;        // { loader: Image, timer: id }
+  let currentTimer = null;
   let currentUrl = '';
   let busy = false;
 
@@ -150,7 +150,7 @@
   function setLoading(on) {
     busy = on;
     btn.disabled = on;
-    btn.textContent = on ? 'جاري إنشاء الصورة...' : 'إنشاء الصورة ✨';
+    btn.textContent = on ? 'جاري معالجة الصورة...' : 'إنشاء الصورة ✨';
     loader.style.display = on ? 'flex' : 'none';
     if (on) {
       img.style.display = 'none';
@@ -166,80 +166,69 @@
     showAlert(msg);
   }
 
-  function cancelCurrent() {
-    if (!current) return;
-    clearTimeout(current.timer);
-    current.loader.onload = current.loader.onerror = null;
-    current = null;
-  }
-
-  const MODELS = ['flux', 'turbo', ''];   // تجربة نماذج مختلفة عند الفشل
-  const RETRY_DELAYS = [0, 8000, 16000];  // الخدمة المجانية تحدّ الطلبات، فننتظر ونعيد
-
-  function buildUrl(prompt, model) {
-    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
-      '?width=1024&height=1024&nologo=true&seed=' + Math.floor(Math.random() * 1e6) +
-      (model ? '&model=' + model : '');
-  }
-
-  function tryLoad(prompt, attempt, token) {
-    const url = buildUrl(prompt, MODELS[attempt]);
-    const loaderImg = new Image();
-    const timer = setTimeout(() => onFail(), TIMEOUT_MS);
-    current = { loader: loaderImg, timer, token };
-
-    function onFail() {
-      cancelCurrent();
-      if (token !== runToken) return;
-      if (attempt + 1 < MODELS.length) {
-        $('loaderText').textContent = 'الخدمة مشغولة، جاري إعادة المحاولة (' + (attempt + 2) + '/' + MODELS.length + ')...';
-        setTimeout(() => { if (token === runToken) tryLoad(prompt, attempt + 1, token); }, RETRY_DELAYS[attempt + 1]);
-      } else {
-        fail('الخدمة المجانية مشغولة أو تحدّ عدد الطلبات حالياً. انتظري نحو 30 ثانية ثم حاولي مجدداً.');
-      }
+  // دالة الترجمة التلقائية بالخلفية لضمان نجاح السيرفر
+  async function translateText(text) {
+    try {
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|en`);
+      const data = await res.json();
+      return (data && data.responseData && data.responseData.translatedText) ? data.responseData.translatedText : text;
+    } catch {
+      return text;
     }
+  }
+
+  async function generate() {
+    if (busy) return;
+    const rawPrompt = input.value.trim();
+    if (!rawPrompt) return showAlert('يرجى كتابة وصف للصورة أولاً!');
+
+    setLoading(true);
+    $('loaderText').textContent = 'جاري ترجمة ومعالجة النص...';
+
+    // ترجمة النص خفية
+    const translatedPrompt = await translateText(rawPrompt);
+
+    $('loaderText').textContent = 'جاري رسم الصورة بالذكاء الاصطناعي...';
+
+    const seed = Math.floor(Math.random() * 1000000);
+    currentUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(translatedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+
+    const loaderImg = new Image();
+    
+    if (currentTimer) clearTimeout(currentTimer);
+    
+    currentTimer = setTimeout(() => {
+      loaderImg.onload = loaderImg.onerror = null;
+      fail('استغرقت العملية وقتاً أطول من المتوقع. يرجى إعادة المحاولة.');
+    }, TIMEOUT_MS);
+
     loaderImg.onload = () => {
-      cancelCurrent();
-      if (token !== runToken) return;
-      currentUrl = url;
-      img.src = url;
+      clearTimeout(currentTimer);
+      img.src = currentUrl;
       img.style.display = 'block';
       box.classList.add('has-image');
       dl.style.display = 'inline-block';
       setLoading(false);
     };
-    loaderImg.onerror = onFail;
-    loaderImg.src = url;
+
+    loaderImg.onerror = () => {
+      clearTimeout(currentTimer);
+      fail('تعذر إنشاء الصورة حالياً. حاول إعادة صياغة النص أو الانتظار ثوانٍ.');
+    };
+
+    loaderImg.src = currentUrl;
   }
 
-  let runToken = 0;
-  function generate() {
-    if (busy) return;
-    const prompt = input.value.trim();
-    if (!prompt) return showAlert('يرجى كتابة وصف للصورة أولاً!');
-    cancelCurrent();
-    setLoading(true);
-    $('loaderText').textContent = 'جاري إنشاء الصورة، قد يستغرق ذلك دقيقة...';
-    tryLoad(prompt, 0, ++runToken);
-  }
-
-  async function download() {
+  // تنزيل آمن ومباشر عبر فتح رابط الصورة للتنزيل المباشر
+  function download() {
     if (!currentUrl) return;
-    try {
-      const res = await fetch(currentUrl);
-      if (!res.ok) throw new Error('bad response');
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'image-' + Date.now() + '.png';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    } catch {
-      // احتياط: فتح الصورة في تبويب جديد لحفظها يدوياً
-      window.open(currentUrl, '_blank', 'noopener');
-    }
+    const a = document.createElement('a');
+    a.href = currentUrl;
+    a.target = '_blank';
+    a.download = 'ai-image.jpg';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   btn.addEventListener('click', generate);
