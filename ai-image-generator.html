@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مولد الصور بالذكاء الاصطناعي</title>
+    <title>تحويل النص إلى صورة (مع الترجمة التلقائية)</title>
     <style>
         * {
             box-sizing: border-box;
@@ -115,7 +115,6 @@
             display: none;
         }
 
-        /* Loading Spinner */
         .loader {
             display: none;
             border: 4px solid #334155;
@@ -151,17 +150,60 @@
         .download-btn:hover {
             background: #16a34a;
         }
+
+        /* نافذة التنبيه المخصصة */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-box {
+            background: #1e293b;
+            padding: 25px;
+            border-radius: 15px;
+            max-width: 350px;
+            width: 90%;
+            text-align: center;
+            border: 1px solid #334155;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .modal-box p {
+            font-size: 15px;
+            color: #e2e8f0;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .modal-btn {
+            background: #ef4444;
+            color: white;
+            padding: 8px 25px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>تحويل النص إلى صورة 🎨</h1>
-    <p class="subtitle">اكتبي وصف الصورة باللغة الإنجليزية للحصول على أفضل نتيجة</p>
+    <p class="subtitle">اكتبي الوصف بأي لغة وسيقوم البرنامج بترجمته وتوليد الصورة تلقائياً</p>
 
     <div class="input-group">
-        <textarea id="promptInput" placeholder="مثال: A futuristic city with flying cars at sunset, highly detailed..."></textarea>
-        <button id="generateBtn" onclick="generateImage()">إنشاء الصورة ✨</button>
+        <textarea id="promptInput" placeholder="اكتبي وصف الصورة هنا (مثال: سيارة طائرة في مدينة مستقبلية عند الغروب...)"></textarea>
+        <button id="generateBtn" onclick="processAndGenerate()">إنشاء الصورة ✨</button>
     </div>
 
     <div class="result-box" id="resultBox">
@@ -173,36 +215,70 @@
     <a href="#" id="downloadBtn" class="download-btn" target="_blank" download="ai-image.jpg">تحميل الصورة 📥</a>
 </div>
 
+<!-- نافذة التنبيه المخصصة -->
+<div class="modal-overlay" id="customModal">
+    <div class="modal-box">
+        <p id="modalMessage">حدث خطأ. حاول مرة أخرى.</p>
+        <button class="modal-btn" onclick="closeCustomAlert()">حسناً</button>
+    </div>
+</div>
+
 <script>
-    function generateImage() {
-        const prompt = document.getElementById('promptInput').value.trim();
+    function showCustomAlert(message) {
+        document.getElementById('modalMessage').innerText = message;
+        document.getElementById('customModal').style.display = 'flex';
+    }
+
+    function closeCustomAlert() {
+        document.getElementById('customModal').style.display = 'none';
+    }
+
+    // دالة لترجمة النص إلى اللغة الإنجليزية تلقائياً
+    async function translateText(text) {
+        try {
+            const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|en`);
+            const data = await response.json();
+            if (data && data.responseData && data.responseData.translatedText) {
+                return data.responseData.translatedText;
+            }
+            return text; // في حال فشل الترجمة يتم إرجاع النص كما هو
+        } catch (error) {
+            console.error("خطأ في الترجمة:", error);
+            return text;
+        }
+    }
+
+    async function processAndGenerate() {
+        const promptInput = document.getElementById('promptInput').value.trim();
         const btn = document.getElementById('generateBtn');
         const loader = document.getElementById('loader');
         const img = document.getElementById('generatedImage');
         const placeholder = document.getElementById('placeholderText');
         const downloadBtn = document.getElementById('downloadBtn');
 
-        if (!prompt) {
-            alert("يرجى كتابة وصف للصورة أولاً!");
+        if (!promptInput) {
+            showCustomAlert("يرجى كتابة وصف للصورة أولاً!");
             return;
         }
 
-        // إخفاء الصورة السابقة وتفعيل حالة التحميل
+        // تجهيز الواجهة للتحميل
         img.style.display = 'none';
         downloadBtn.style.display = 'none';
         placeholder.style.display = 'none';
         loader.style.display = 'block';
         btn.disabled = true;
+        btn.innerText = "جاري ترجمة النص ومعالجته...";
+
+        // Step 1: ترجمة النص تلقائياً إلى الإنجليزية
+        const englishPrompt = await translateText(promptInput);
+
         btn.innerText = "جاري إنشاء الصورة...";
 
-        // تجهيز النص وإضافة رقم عشوائي لمنع الكاش (الذاكرة المؤقتة)
-        const encodedPrompt = encodeURIComponent(prompt);
+        // Step 2: إرسال النص الإنجليزي المترجم لتوليد الصورة
+        const encodedPrompt = encodeURIComponent(englishPrompt);
         const randomSeed = Math.floor(Math.random() * 1000000);
-        
-        // استخدام رابط الخدمة لتوليد الصورة
         const imageUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&seed=${randomSeed}&nologo=true`;
 
-        // تحميل الصورة في عنصر ה-img
         img.src = imageUrl;
     }
 
@@ -212,19 +288,17 @@
         const img = document.getElementById('generatedImage');
         const downloadBtn = document.getElementById('downloadBtn');
 
-        // إعادة ضبط العناصر بعد تنزيل الصورة بنجاح
         loader.style.display = 'none';
         img.style.display = 'block';
         btn.disabled = false;
         btn.innerText = "إنشاء الصورة ✨";
 
-        // تجهيز زر التحميل
         downloadBtn.href = img.src;
         downloadBtn.style.display = 'inline-block';
     }
 
     function imageError() {
-        alert("حدث خطأ أثناء إنشاء الصورة. حاول مرة أخرى بوصف مختلف.");
+        showCustomAlert("تعذر إنشاء الصورة. يرجى محاولة إعادة صياغة الوصف أو التحقق من الاتصال بالإنترنت.");
         resetUI();
     }
 
