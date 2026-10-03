@@ -545,25 +545,13 @@
                 <a href="cash-register.html" class="btn btn-sm btn-outline-dark fw-bold py-1 px-2" style="font-size:0.75rem; font-family:'Cairo';"><i class="fas fa-book me-1"></i> سجل النقدية</a>
             </div>
             <div class="row g-2 align-items-center">
-                <div class="col-12">
-                    <label class="stat-label mb-1 fw-bold text-dark d-block">النقدية الموجودة معك (اكتب كل مبلغ استلمته وبينهم مسافة):</label>
-                    <input type="text" id="actualCashInput" class="form-control text-center recon-input fw-bold num" placeholder="مثال: 5000 4000 11000" oninput="window.calculateCashReconciliation()">
-                    <div id="cashPartsSummary" class="text-center fw-bold mt-1" style="font-size:0.75rem; color:#4a4a4a;"></div>
+                <div class="col-6">
+                    <label class="stat-label mb-1 fw-bold text-dark d-block">النقدية الموجودة معك حالياً:</label>
+                    <input type="text" id="actualCashInput" class="form-control text-center recon-input fw-bold num" placeholder="مثال: 30000 5400 470" oninput="window.calculateCashReconciliation()">
                 </div>
-                <div class="col-4">
-                    <label class="stat-label mb-1 fw-bold text-dark d-block">عهدة</label>
-                    <input type="text" id="custodyInput" class="form-control text-center recon-input fw-bold num" placeholder="0" oninput="window.calculateCashReconciliation()">
-                </div>
-                <div class="col-4">
-                    <label class="stat-label mb-1 fw-bold text-dark d-block">مصروفات</label>
-                    <input type="text" id="expensesInput" class="form-control text-center recon-input fw-bold num" placeholder="0" oninput="window.calculateCashReconciliation()">
-                </div>
-                <div class="col-4">
-                    <label class="stat-label mb-1 fw-bold text-dark d-block">مشتريات</label>
-                    <input type="text" id="purchasesInput" class="form-control text-center recon-input fw-bold num" placeholder="0" oninput="window.calculateCashReconciliation()">
-                </div>
-                <div class="col-12">
-                    <div id="reconResultBox" class="text-center fw-bold text-muted p-2" style="border-radius: var(--input-radius); font-size: 0.8rem; background: #f8fafc; border: 1px dashed var(--border); min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <div class="col-6">
+                    <label class="stat-label mb-1 fw-bold text-dark d-block">حالة المطابقة والفارق:</label>
+                    <div id="reconResultBox" class="text-center fw-bold text-muted p-2" style="border-radius: var(--input-radius); font-size: 0.8rem; background: #f8fafc; border: 1px dashed var(--border); height: 44px; display: flex; align-items: center; justify-content: center; gap: 4px;">
                         بانتظار جردك الفعلي...
                     </div>
                 </div>
@@ -1412,99 +1400,54 @@
         window.globalExpectedTodayCash = totalCash; window.calculateCashReconciliation();
     }
 
-    // === تحويل نص المبالغ (مثل: 5000 4000 11000) إلى قائمة وإجمالي ===
-    window.parseAmounts = (str) => {
-        const parts = [];
-        convertToEnglishNumbers(String(str || '')).replace(/[+،]/g, ' ').split(/\s+/).forEach(p => {
-            const n = parseFloat(p);
-            if (!isNaN(n)) parts.push(n);
-        });
-        return { parts, total: parts.reduce((a, b) => a + b, 0) };
-    };
-
-    // === قراءة خانات المطابقة وحساب المتوقع: نقدى اليوم + العهدة - المصروفات - المشتريات ===
-    window.readReconInputs = () => {
-        const cash = window.parseAmounts(document.getElementById('actualCashInput')?.value);
-        const custody = window.parseAmounts(document.getElementById('custodyInput')?.value).total;
-        const expenses = window.parseAmounts(document.getElementById('expensesInput')?.value).total;
-        const purchases = window.parseAmounts(document.getElementById('purchasesInput')?.value).total;
-        const salesCash = window.globalExpectedTodayCash || 0;
-        return {
-            cash, custody, expenses, purchases, salesCash,
-            expected: salesCash + custody - expenses - purchases,
-            custodyRemaining: custody - expenses - purchases
-        };
-    };
-
     window.calculateCashReconciliation = () => {
-        const resultBox = document.getElementById('reconResultBox');
-        const summary = document.getElementById('cashPartsSummary');
-        if (!resultBox) return;
-        const r = window.readReconInputs();
-
-        if (summary) {
-            summary.innerHTML = r.cash.parts.length > 0
-                ? `تفاصيل الاستلام: ${r.cash.parts.join(' + ')} = <span class="num">${r.cash.total.toFixed(1)}</span>`
-                : '';
-        }
-
-        if (r.cash.parts.length === 0) {
-            resultBox.className = "text-center fw-bold text-muted p-2";
-            resultBox.style.background = "#f8fafc"; resultBox.style.border = "1px dashed var(--border)";
-            resultBox.innerHTML = "بانتظار جردك الفعلي...";
-            return;
-        }
-
-        const diff = r.cash.total - r.expected;
-        const exp = `<small>(المتوقع: ${r.expected.toFixed(1)})</small>`;
-        if (Math.abs(diff) < 0.1) {
-            resultBox.className = "text-center fw-bold text-dark p-2";
-            resultBox.style.background = "#f0fdf4"; resultBox.style.border = "1px solid var(--germany-black)";
-            resultBox.innerHTML = `<i class="fas fa-check-circle"></i> مطابق تماماً (0.00) ${exp}`;
-        } else if (diff > 0) {
-            resultBox.className = "text-center fw-bold text-primary p-2";
-            resultBox.style.background = "#eff6ff"; resultBox.style.border = "1px solid #3b82f6";
-            resultBox.innerHTML = `<i class="fas fa-circle-plus"></i> زيادة (+${diff.toFixed(1)}) ${exp}`;
-        } else {
-            resultBox.className = "text-center fw-bold text-danger p-2";
-            resultBox.style.background = "#fff1f2"; resultBox.style.border = "1px solid var(--germany-red)";
-            resultBox.innerHTML = `<i class="fas fa-circle-minus"></i> عجز (${diff.toFixed(1)}) ${exp}`;
-        }
+        const inputField = document.getElementById('actualCashInput'), resultBox = document.getElementById('reconResultBox');
+        if (!inputField || !resultBox) return;
+        const inputVal = inputField.value.trim();
+        if (inputVal === "") { resultBox.className = "text-center fw-bold text-muted p-2"; resultBox.style.background = "#f8fafc"; resultBox.style.border = "1px dashed var(--border)"; resultBox.innerHTML = "بانتظار جردك الفعلي..."; return; }
+        let actual = 0; convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => { const n = parseFloat(p.trim()); if (!isNaN(n)) actual += n; });
+        const diff = actual - (window.globalExpectedTodayCash || 0);
+        let prefix = inputVal.split(/\s+/).length > 1 ? `[جردك: ${actual.toFixed(1)}] ` : '';
+        if (Math.abs(diff) < 0.1) { resultBox.className = "text-center fw-bold text-dark p-2"; resultBox.style.background = "#f0fdf4"; resultBox.style.border = "1px solid var(--germany-black)"; resultBox.innerHTML = `<i class="fas fa-check-circle"></i> ${prefix} مطابق تماماً (0.00)`; } 
+        else if (diff > 0) { resultBox.className = "text-center fw-bold text-primary p-2"; resultBox.style.background = "#eff6ff"; resultBox.style.border = "1px solid #3b82f6"; resultBox.innerHTML = `<i class="fas fa-circle-plus"></i> ${prefix} زيادة (+${diff.toFixed(1)})`; } 
+        else { resultBox.className = "text-center fw-bold text-danger p-2"; resultBox.style.background = "#fff1f2"; resultBox.style.border = "1px solid var(--germany-red)"; resultBox.innerHTML = `<i class="fas fa-circle-minus"></i> ${prefix} عجز (${diff.toFixed(1)})`; }
     };
 
     window.saveDailyCashRegister = async () => {
         const targetDate = document.getElementById('dateFilterInput')?.value || new Date().toLocaleDateString('en-CA');
+        const todayCash = parseFloat(document.getElementById('todayCash')?.innerText || 0);
         const todayWallet = parseFloat(document.getElementById('todayWallet')?.innerText || 0);
         const todayRemaining = parseFloat(document.getElementById('todayRemaining')?.innerText || 0);
         const todayTotalSales = parseFloat(document.getElementById('todayTotalSales')?.innerText || 0);
 
-        const r = window.readReconInputs();
         const inputVal = document.getElementById('actualCashInput')?.value.trim() || "";
-        const actualCash = r.cash.parts.length > 0 ? r.cash.total : r.expected;
-        const diff = actualCash - r.expected;
-        const partsText = r.cash.parts.length > 0 ? r.cash.parts.join(' + ') : '';
+
+        let actualCash = 0;
+        if (inputVal !== "") {
+            convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => {
+                const n = parseFloat(p.trim());
+                if (!isNaN(n)) actualCash += n;
+            });
+        } else {
+            actualCash = todayCash;
+        }
+
+        const diff = actualCash - todayCash;
 
         window.showCustomUi({
             title: "تأكيد ترحيل النقدية",
-            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- إجمالي المبيعات: ${todayTotalSales.toFixed(2)}\n- نقدى اليوم: ${r.salesCash.toFixed(2)}\n- العهدة: ${r.custody.toFixed(2)}\n- المصروفات: ${r.expenses.toFixed(2)}\n- المشتريات: ${r.purchases.toFixed(2)}\n- المتوقع في الدرج: ${r.expected.toFixed(2)}\n- الفعلي: ${actualCash.toFixed(2)}${partsText ? ` (${partsText})` : ''}\n- الفارق: ${diff.toFixed(2)}`,
+            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- إجمالي المبيعات: ${todayTotalSales.toFixed(2)}\n- المتوقع كاش: ${todayCash.toFixed(2)}\n- الفعلي كاش: ${actualCash.toFixed(2)}\n- الفارق: ${diff.toFixed(2)}`,
             type: "confirm", 
             icon: "info",
             onConfirm: async () => {
                 try {
                     await db.collection("daily_cash_register").doc(targetDate).set({
                         date: targetDate, 
-                        salesCash: r.salesCash,
-                        custodyAmount: r.custody,
-                        expensesAmount: r.expenses,
-                        purchasesAmount: r.purchases,
-                        custodyRemaining: r.custodyRemaining,
-                        expectedCash: r.expected, 
+                        expectedCash: todayCash, 
                         actualCash: actualCash,
                         actualCashAmount: actualCash,
                         cashAmount: actualCash,
                         actualCashInput: inputVal,
-                        cashParts: r.cash.parts,
-                        cashPartsText: partsText,
                         difference: diff,
                         totalSales: todayTotalSales,
                         todayTotalSales: todayTotalSales,
@@ -1863,4 +1806,69 @@
 
                     // 1. إعادة كميات أصناف الفاتورة إلى المخزن
                     if (Array.isArray(inv.items) && inv.items.length > 0) {
-                        for (co
+                        for (const item of inv.items) {
+                            const stockId = item.stockId || item.id;
+                            if (stockId) {
+                                const itemRef = db.collection("inventory").doc(stockId);
+                                const factor = Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1;
+                                const isCarton = (item.unit === 'box' || item.unit === 'carton' || item.unit === 'كرتونة' || item.unitName === 'كرتونة' || item.isCarton === true);
+                                const qtyPcs = Number(item.qty || 0);
+                                
+                                // إذا كانت مرتجع بيع، نعكس الخصم/الإضافة كمرتجع
+                                const totalPcsToReturn = item.isReturn 
+                                    ? -(isCarton ? qtyPcs * factor : qtyPcs)
+                                    : (isCarton ? qtyPcs * factor : qtyPcs);
+
+                                batch.update(itemRef, {
+                                    totalPcs: firebase.firestore.FieldValue.increment(totalPcsToReturn),
+                                    qty: firebase.firestore.FieldValue.increment(totalPcsToReturn)
+                                });
+                            }
+                        }
+                    }
+
+                    // 2. تحديث حالة الفاتورة لتصبح محذوفة
+                    const invRef = db.collection("invoices").doc(id);
+                    batch.update(invRef, {
+                        isDeleted: true,
+                        deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    // 3. تحديث أي معالم وسندات مالية مرتبطة بالفاتورة
+                    const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
+                    for (const tr of relatedTrans) {
+                        const trRef = db.collection("transactions").doc(tr.id);
+                        batch.update(trRef, {
+                            isDeleted: true,
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+
+                    // تنفيذ الـ Batch دفعة واحدة لضمان جودة الأداء والاتساق
+                    await batch.commit();
+
+                    window.showCustomUi({
+                        title: "تم الحذف والإرجاع",
+                        message: "✅ تم نقل الفاتورة بنجاح إلى سلة المحذوفات وتحديث رصيد المخزن.",
+                        icon: "success",
+                        onConfirm: () => {
+                            loadData(true, loadedScope === 'ARCHIVE');
+                        }
+                    });
+                } catch (err) {
+                    console.error("خطأ أثناء الحذف والإرجاع:", err);
+                    window.showCustomUi({
+                        title: "خطأ",
+                        message: "تعذر نقل الفاتورة للسلة: " + err.message,
+                        icon: "danger"
+                    });
+                }
+            }
+        });
+    };
+
+    checkAdminPermissions();
+    loadData(true, false);
+</script>
+</body>
+</html>
