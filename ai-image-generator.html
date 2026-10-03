@@ -1,246 +1,581 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تحويل النص إلى صورة</title>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0f172a;
-    --card: rgba(30, 41, 59, .75);
-    --line: #334155;
-    --text: #f1f5f9;
-    --muted: #94a3b8;
-    --accent: #38bdf8;
-    --accent-dark: #0284c7;
-    --ok: #22c55e;
-    --danger: #ef4444;
-  }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
-  body {
-    font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    color: var(--text);
-    display: flex; justify-content: center; align-items: flex-start;
-    padding: 20px; overflow-y: auto;
-  }
-  .container {
-    background: var(--card);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 20px;
-    padding: 28px;
-    width: 100%; max-width: 620px;
-    margin: auto;
-    box-shadow: 0 15px 35px rgba(0,0,0,.5);
-    text-align: center;
-  }
-  h1 { font-size: 26px; margin-bottom: 8px; color: var(--accent); }
-  .subtitle { font-size: 14px; color: var(--muted); margin-bottom: 22px; }
-  textarea {
-    width: 100%; height: 110px; padding: 14px;
-    border-radius: 12px; border: 1px solid var(--line);
-    background: var(--bg); color: #fff;
-    font: inherit; font-size: 15px; resize: none; outline: none;
-    transition: border-color .2s;
-  }
-  textarea:focus { border-color: var(--accent); }
-  .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 6px 2px 12px; }
-  button, .download-btn {
-    font: inherit; font-weight: 700; cursor: pointer; border: none; color: #fff;
-  }
-  #generateBtn {
-    width: 100%; padding: 14px; font-size: 16px; border-radius: 12px;
-    background: linear-gradient(90deg, var(--accent-dark), var(--accent));
-    transition: transform .2s, opacity .2s;
-  }
-  #generateBtn:hover:not(:disabled) { transform: translateY(-2px); }
-  #generateBtn:disabled { background: #475569; cursor: not-allowed; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صورة إلى فيديو - MiniMax H3</title>
+    <!-- استدعاء خط Cairo المماثل للخط في الصور -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+            --primary-green: #0d9488;
+            --light-green-bg: #ccfbf1;
+            --red-accent: #f43f5e;
+            --border-light: #e2e8f0;
+            --blue-accent: #0ea5e9;
+        }
 
-  .result-box {
-    margin-top: 22px; aspect-ratio: 1 / 1; width: 100%;
-    display: flex; justify-content: center; align-items: center;
-    border-radius: 12px; background: var(--bg);
-    border: 2px dashed var(--line); overflow: hidden;
-  }
-  .result-box.has-image { border-style: solid; }
-  .result-box img { width: 100%; height: 100%; object-fit: contain; display: none; }
-  .placeholder { color: #64748b; font-size: 14px; padding: 0 16px; }
-  .loader-wrap { display: none; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
-  .loader {
-    width: 40px; height: 40px; border-radius: 50%;
-    border: 4px solid var(--line); border-top-color: var(--accent);
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .loader { animation-duration: 3s; } }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', sans-serif;
+        }
 
-  .download-btn {
-    margin-top: 16px; display: none; padding: 11px 24px;
-    background: var(--ok); border-radius: 10px; font-size: 14px;
-  }
-  .download-btn:hover { background: #16a34a; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 15px 10px;
+            display: flex;
+            justify-content: center;
+        }
 
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6);
-    display: none; justify-content: center; align-items: center; z-index: 1000;
-  }
-  .modal-box {
-    background: #1e293b; padding: 24px; border-radius: 15px;
-    max-width: 360px; width: 90%; text-align: center;
-    border: 1px solid var(--line);
-  }
-  .modal-box p { font-size: 15px; line-height: 1.7; margin-bottom: 18px; color: #e2e8f0; }
-  .modal-btn { background: var(--danger); padding: 8px 26px; border-radius: 8px; font-size: 14px; }
-</style>
+        .main-container {
+            width: 100%;
+            max-width: 480px; /* مقاس متجاوب ومخصص للموبايل */
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* الكروت الرئيسية */
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            border: 1px solid #f1f5f9;
+        }
+
+        /* الهيدر العلوي */
+        .top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 5px;
+        }
+
+        .header-icons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            background: #fff;
+            border: 1px solid var(--border-light);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .page-title-top {
+            font-size: 1.1rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* عنوان القسم المحرك */
+        .engine-title {
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        /* كارت التخصص */
+        .specialist-card {
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 14px;
+            padding: 14px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .specialist-badge {
+            color: #16a34a;
+            font-weight: 800;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .specialist-perc {
+            color: #16a34a;
+            font-weight: 800;
+            font-size: 1.1rem;
+            margin: 4px 0;
+        }
+
+        .specialist-desc {
+            font-size: 0.8rem;
+            color: #374151;
+            line-height: 1.5;
+        }
+
+        .sub-instructions {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        /* العناوين الداخلية */
+        .section-label {
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* رفع الصورة */
+        .upload-box {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 15px;
+        }
+
+        .upload-box:hover {
+            border-color: var(--red-accent);
+            background: #fff5f5;
+        }
+
+        .upload-icon-circle {
+            width: 45px;
+            height: 45px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-size: 1.2rem;
+        }
+
+        .upload-main-text {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        .upload-sub-text {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        /* مربع النص */
+        .prompt-textarea {
+            width: 100%;
+            height: 90px;
+            border: 1px solid var(--border-light);
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 0.85rem;
+            outline: none;
+            resize: none;
+        }
+
+        .info-hint {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            margin: 6px 0 15px;
+            line-height: 1.4;
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        /* خيارات المقاس والجودة (شبكة الأزرار) */
+        .grid-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .grid-3-col {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .option-card {
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fff;
+        }
+
+        .option-card.active-red {
+            border-color: #f43f5e;
+            background-color: #fff5f7;
+        }
+
+        .option-card.active-cyan {
+            border-color: #06b6d4;
+            background-color: #ecfeff;
+        }
+
+        .option-title {
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .option-sub {
+            font-size: 0.7rem;
+            color: var(--text-sub);
+            margin-top: 2px;
+        }
+
+        .square-option {
+            grid-column: span 2;
+        }
+
+        /* التحكم بالمدة (السلايدر) */
+        .duration-header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .duration-badge {
+            color: #0284c7;
+        }
+
+        .range-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 5px;
+            background: linear-gradient(to left, #8b5cf6, #3b82f6);
+            outline: none;
+            accent-color: #7c3aed;
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        /* سويتش البرومبت الذكي */
+        .prompt-switch-box {
+            background: #f8fafc;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px;
+            margin: 15px 0;
+        }
+
+        .switch-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .switch-title {
+            font-weight: 700;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .switch-desc {
+            font-size: 0.72rem;
+            color: var(--text-sub);
+            line-height: 1.4;
+        }
+
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+        }
+
+        .toggle input { opacity: 0; width: 0; height: 0; }
+
+        .slider-round {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .3s;
+            border-radius: 20px;
+        }
+
+        .slider-round:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider-round { background-color: #22c55e; }
+        input:checked + .slider-round:before { transform: translateX(18px); }
+
+        /* زر توليد الفيديو الرئيسي */
+        .btn-generate {
+            width: 100%;
+            background-color: #f43f5e;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(244, 63, 94, 0.2);
+        }
+
+        /* قسم الفيديوهات السابقة */
+        .history-card {
+            background: #f8fafc;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .history-item-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .history-meta {
+            font-size: 0.7rem;
+            color: var(--text-sub);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .video-preview-box {
+            width: 100%;
+            height: 140px;
+            background: #0f172a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .play-btn {
+            width: 45px;
+            height: 45px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
 
-<main class="container">
-  <h1>تحويل النص إلى صورة 🎨</h1>
-  <p class="subtitle">اكتبي الوصف بأي لغة وسيتم توليد الصورة تلقائياً</p>
+    <div class="main-container">
 
-  <textarea id="promptInput" maxlength="500" aria-label="وصف الصورة"
-    placeholder="مثال: سيارة طائرة في مدينة مستقبلية عند الغروب"></textarea>
-  <div class="meta">
-    <span>Ctrl + Enter للإنشاء</span>
-    <span id="counter">0 / 500</span>
-  </div>
+        <!-- الشريط العلوي -->
+        <div class="top-header">
+            <div class="header-icons">
+                <button class="icon-btn">⚙️</button>
+                <button class="icon-btn">🌐</button>
+                <button class="icon-btn">🔔</button>
+            </div>
+            <div class="page-title-top">
+                <span>صورة إلى فيديو</span>
+                <span>☰</span>
+            </div>
+        </div>
 
-  <button id="generateBtn" type="button">إنشاء الصورة ✨</button>
+        <!-- الكارت الأساسي للنماذج والخيارات -->
+        <div class="card">
+            
+            <div class="engine-title">
+                <span>🎬 MiniMax H3 — من صورة إلى فيديو</span>
+                <span>🪄</span>
+            </div>
 
-  <div class="result-box" id="resultBox" aria-live="polite">
-    <span class="placeholder" id="placeholderText">ستظهر الصورة هنا بعد التوليد</span>
-    <div class="loader-wrap" id="loaderWrap"><div class="loader"></div><span id="loaderText">جاري إنشاء الصورة...</span></div>
-    <img id="generatedImage" alt="الصورة المنشأة">
-  </div>
+            <!-- كارت التخصص بالنطق -->
+            <div class="specialist-card">
+                <div class="specialist-badge">
+                    <span>✔ متخصص في النطق العربي الصحيح</span>
+                </div>
+                <div class="specialist-perc">%100</div>
+                <div class="specialist-desc">
+                    المحرك ده متدرب على نطق العربي بشفايف متزامنة — لو محتاج الشخصية تتكلم عربي صح، ده مكانك.
+                </div>
+            </div>
 
-  <button id="downloadBtn" class="download-btn" type="button">تحميل الصورة 📥</button>
-</main>
+            <div class="sub-instructions">
+                ارفع صورة واكتب وصفاً بالعربي — محرك MiniMax H3 هيزوّلها لفيديو بصوت طبيعي مولّد معاه.
+            </div>
 
-<div class="modal-overlay" id="customModal" role="alertdialog" aria-modal="true">
-  <div class="modal-box">
-    <p id="modalMessage"></p>
-    <button class="modal-btn" id="modalClose" type="button">حسناً</button>
-  </div>
-</div>
+            <!-- رفع الصورة -->
+            <div class="section-label">🖼️ ارفع الصورة الأساسية</div>
+            <div class="upload-box" onclick="document.getElementById('imgInput').click()">
+                <div class="upload-icon-circle">⬆</div>
+                <div class="upload-main-text">اضغط لرفع صورة أو اسحبها هنا</div>
+                <div class="upload-sub-text">JPG, PNG (حد أقصى 10MB)</div>
+                <input type="file" id="imgInput" hidden accept="image/*">
+            </div>
 
-<script>
-(() => {
-  const TIMEOUT_MS = 30000;
-  const $ = id => document.getElementById(id);
-  const input = $('promptInput'), btn = $('generateBtn'), img =$('generatedImage'),
-        box = $('resultBox'), placeholder = $('placeholderText'), loader =$('loaderWrap'),
-        dl = $('downloadBtn'), modal =$('customModal');
+            <!-- وصف الفيديو -->
+            <div class="section-label">✏️ وصف الفيديو (بالعربي)</div>
+            <textarea class="prompt-textarea" placeholder="اكتب وصف الحركة المطلوبة بالعربي...
+مثال: الشخص يبتسم ببطء ثم يستدير ناحية الكاميرا، الإضاءة تتغير من الأزرق للبرتقالي"></textarea>
+            
+            <div class="info-hint">
+                <span>ℹ️</span>
+                <span>الوصف بيتحول تلقائياً لبرومبت إنجليزي بمشاهد (SHOT 1/2/3) + وصف صوت — وده اللي محرك MiniMax بيفهمه أحسن.</span>
+            </div>
 
-  let currentTimer = null;
-  let currentUrl = '';
-  let busy = false;
+            <!-- مقاس الفيديو -->
+            <div class="section-label">🔲 مقاس الفيديو</div>
+            <div class="grid-options">
+                <div class="option-card active-red">
+                    <div>📺</div>
+                    <div class="option-title">عرضي (Landscape)</div>
+                    <div class="option-sub">16:9</div>
+                </div>
+                <div class="option-card">
+                    <div>📱</div>
+                    <div class="option-title">طولي (Portrait)</div>
+                    <div class="option-sub">9:16</div>
+                </div>
+                <div class="option-card square-option">
+                    <div>🔲</div>
+                    <div class="option-title">مربع (Square)</div>
+                    <div class="option-sub">1:1</div>
+                </div>
+            </div>
 
-  function showAlert(msg) {
-    $('modalMessage').textContent = msg;
-    modal.style.display = 'flex';
-    $('modalClose').focus();
-  }
-  const closeAlert = () => { modal.style.display = 'none'; };
+            <!-- جودة الفيديو -->
+            <div class="section-label">💎 جودة الفيديو</div>
+            <div class="grid-options">
+                <div class="option-card active-cyan">
+                    <div>⚡</div>
+                    <div class="option-title">جودة 0.4</div>
+                    <div class="option-sub">أسرع — 864 × 480 — لحد 7 ث</div>
+                </div>
+                <div class="option-card">
+                    <div>⭐</div>
+                    <div class="option-title">أعلى جودة</div>
+                    <div class="option-sub">1088 × 672 — لحد 5 ث</div>
+                </div>
+            </div>
 
-  function setLoading(on) {
-    busy = on;
-    btn.disabled = on;
-    btn.textContent = on ? 'جاري معالجة الصورة...' : 'إنشاء الصورة ✨';
-    loader.style.display = on ? 'flex' : 'none';
-    if (on) {
-      img.style.display = 'none';
-      dl.style.display = 'none';
-      placeholder.style.display = 'none';
-      box.classList.remove('has-image');
-    }
-  }
+            <!-- مدة الفيديو -->
+            <div class="duration-header">
+                <span>🕒 مدة الفيديو</span>
+                <span class="duration-badge" id="durationText">5 ثواني</span>
+            </div>
+            <input type="range" class="range-slider" min="5" max="7" value="5" id="rangeInput" oninput="document.getElementById('durationText').innerText = this.value + ' ثواني'">
+            <div class="range-labels">
+                <span>5 ث</span>
+                <span>6 ث</span>
+                <span>7 ث</span>
+            </div>
 
-  function fail(msg) {
-    setLoading(false);
-    if (!img.src || img.style.display === 'none') placeholder.style.display = 'block';
-    showAlert(msg);
-  }
+            <div class="info-hint" style="margin-top: 8px;">
+                <span>ℹ️</span>
+                <span>محرك MiniMax متدرب على مدى يبدأ من 5 ثواني — أقل من كده الجودة بتقل، كل ما زادت المدة والجودة زاد وقت التوليد.</span>
+            </div>
 
-  // دالة الترجمة التلقائية بالخلفية لضمان نجاح السيرفر
-  async function translateText(text) {
-    try {
-      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|en`);
-      const data = await res.json();
-      return (data && data.responseData && data.responseData.translatedText) ? data.responseData.translatedText : text;
-    } catch {
-      return text;
-    }
-  }
+            <!-- البرومبت الذكي -->
+            <div class="prompt-switch-box">
+                <div class="switch-top">
+                    <div class="switch-title">
+                        <span>🎬 البرومبت الذكي للحركة والصوت</span>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox">
+                        <span class="slider-round"></span>
+                    </label>
+                </div>
+                <div class="switch-desc">
+                    يبني البرومبت بتقسيم زمني للحركة + سطر صوت واضح — نفس أسلوب قسم النطق العربي.
+                </div>
+            </div>
 
-  async function generate() {
-    if (busy) return;
-    const rawPrompt = input.value.trim();
-    if (!rawPrompt) return showAlert('يرجى كتابة وصف للصورة أولاً!');
+            <!-- زر التوليد -->
+            <button class="btn-generate">
+                ✏️ توليد الفيديو
+            </button>
 
-    setLoading(true);
-    $('loaderText').textContent = 'جاري ترجمة ومعالجة النص...';
+        </div>
 
-    // ترجمة النص خفية
-    const translatedPrompt = await translateText(rawPrompt);
+        <!-- كارت الفيديوهات السابقة -->
+        <div class="card">
+            <div class="section-label">🕒 فيديوهاتي السابقة</div>
+            
+            <div class="history-card">
+                <div class="history-item-title">
+                    ✅ غمر الوادي نور أسطوري أعلن بداية عهد جديد من الأمل والحرية، وأصبح إيلان حارس الن...
+                </div>
+                <div class="history-meta">
+                    <span>🕒 3 أكتوبر 2026, 3:28 ص</span>
+                    <span>• 1088×672</span>
+                    <span>• 5 ث</span>
+                </div>
+                <div class="video-preview-box">
+                    <div class="play-btn">▶</div>
+                </div>
+            </div>
+        </div>
 
-    $('loaderText').textContent = 'جاري رسم الصورة بالذكاء الاصطناعي...';
+    </div>
 
-    const seed = Math.floor(Math.random() * 1000000);
-    currentUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(translatedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
-
-    const loaderImg = new Image();
-    
-    if (currentTimer) clearTimeout(currentTimer);
-    
-    currentTimer = setTimeout(() => {
-      loaderImg.onload = loaderImg.onerror = null;
-      fail('استغرقت العملية وقتاً أطول من المتوقع. يرجى إعادة المحاولة.');
-    }, TIMEOUT_MS);
-
-    loaderImg.onload = () => {
-      clearTimeout(currentTimer);
-      img.src = currentUrl;
-      img.style.display = 'block';
-      box.classList.add('has-image');
-      dl.style.display = 'inline-block';
-      setLoading(false);
-    };
-
-    loaderImg.onerror = () => {
-      clearTimeout(currentTimer);
-      fail('تعذر إنشاء الصورة حالياً. حاول إعادة صياغة النص أو الانتظار ثوانٍ.');
-    };
-
-    loaderImg.src = currentUrl;
-  }
-
-  // تنزيل آمن ومباشر عبر فتح رابط الصورة للتنزيل المباشر
-  function download() {
-    if (!currentUrl) return;
-    const a = document.createElement('a');
-    a.href = currentUrl;
-    a.target = '_blank';
-    a.download = 'ai-image.jpg';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-
-  btn.addEventListener('click', generate);
-  dl.addEventListener('click', download);
-  $('modalClose').addEventListener('click', closeAlert);
-  modal.addEventListener('click', e => { if (e.target === modal) closeAlert(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAlert(); });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); generate(); }
-  });
-  input.addEventListener('input', () => { $('counter').textContent = input.value.length + ' / 500'; });
-})();
-</script>
 </body>
 </html>
