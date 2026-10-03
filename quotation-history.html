@@ -569,7 +569,7 @@ document.getElementById('summaryDate').value = defaultDateStr;
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
 
-let drafts = {};            // قيم مكتوبة لم تُعتمد بعد (لا تلمس الحالة المعتمدة)
+let drafts = {};            // قيم مكتوبة لم تُعتمد بعد
 let editingIds = new Set(); // أصناف قيد التعديل محلياً
 let busyIds = new Set();
 let lastDailySig = null, currentListenDate = null, invoicesDate = null;
@@ -579,7 +579,7 @@ const saveTimers = {};
 const isActive = id => document.getElementById(id).classList.contains('active');
 
 // ==========================================
-// CACHE HELPERS (FALLBACK & SPEED-UP ONLY)
+// CACHE HELPERS
 // ==========================================
 function loadFromLocalCache(dateStr) {
   try {
@@ -612,7 +612,7 @@ function updateSyncUIStatus(status, text) {
 }
 
 // ==========================================
-// FIRESTORE REALTIME LISTENERS (SINGLETONS)
+// FIRESTORE REALTIME LISTENERS
 // ==========================================
 function refreshActivePages() {
   if (isActive('pg-load')) renderLoadFlow();
@@ -626,7 +626,7 @@ function refreshActivePages() {
 
 function listenToDailyLoadChanges() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
-  if (unsubscribeDailyLoad && currentListenDate === d) return;   // لا إعادة اشتراك بدون تغيير تاريخ
+  if (unsubscribeDailyLoad && currentListenDate === d) return;
   if (unsubscribeDailyLoad) unsubscribeDailyLoad();
   currentListenDate = d; lastDailySig = null; drafts = {}; editingIds.clear();
 
@@ -689,7 +689,7 @@ function listenToLiveInvoices() {
   invoicesDate = sel; dayInvoices = new Map(); memorySalesCache = null;
 
   unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snap) => {
-    snap.docChanges().forEach(ch => {            // فقط الفواتير التي تغيّرت
+    snap.docChanges().forEach(ch => {
       const inv = ch.doc.data();
       if (ch.type === 'removed' || inv.isDeleted || !Array.isArray(inv.items) ||
           parseDate(inv.date, inv.timestamp) !== sel) dayInvoices.delete(ch.doc.id);
@@ -702,7 +702,7 @@ function listenToLiveInvoices() {
 }
 
 // ==========================================
-// CORE PERSISTENCE (كتابة صنف واحد فقط، الحذف عبر deleteField)
+// CORE PERSISTENCE
 // ==========================================
 function writeItem(itemId, { session = true, cart = true } = {}) {
   const d = currentListenDate || document.getElementById('summaryDate').value || defaultDateStr;
@@ -800,7 +800,7 @@ function focusCard(id) {
   el.querySelector('input[type=number]')?.focus({ preventScroll: true });
 }
 
-window.handleLiveInputChange = function(id) { drafts[id] = readInputs(id); };  // لا يمس الحالة المعتمدة
+window.handleLiveInputChange = function(id) { drafts[id] = readInputs(id); };
 
 function getUnitName(name) {
   const n = (name || '').toLowerCase();
@@ -894,7 +894,7 @@ window.selectSuggestItem = function(itemId) {
   filterLoadFlow();
   const targetEl = document.getElementById('step-' + itemId);
   if (targetEl) targetEl.classList.add('active');
-  focusCard(itemId);   // متزامن داخل حدث المستخدم ⇒ يسمح المتصفح بفتح الكيبورد
+  focusCard(itemId);
 };
 
 window.handleSearchKeydown = function(e) {
@@ -924,14 +924,16 @@ function filterLoadFlow() {
   });
 }
 
+/* ========================================================================= */
+/* تعديل جوهري: عدم خصم المبيعات من المخزن الرئيسي لحماية رصيد المستودع     */
+/* ========================================================================= */
 window.fetchInventoryFresh = async function() {
   if (window._invBusy) return;
   window._invBusy = true;
   const card = document.getElementById('itemsCard');
   if (card) card.innerHTML = '<div class="spin"></div>';
   try {
-    const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
-      getDocs(collection(db, "invoices")),
+    const [supplierSnap, inventorySnap, transSnap] = await Promise.all([
       getDocs(collection(db, "supplier_transactions")),
       getDocs(collection(db, "inventory")),
       getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
@@ -946,7 +948,6 @@ window.fetchInventoryFresh = async function() {
       if (data.name) namesMap[cleanItemName(data.name)] = d.id;
     });
 
-    let salesMap = {};
     let purchasesMap = {};
     let openingMap = {};
 
@@ -955,29 +956,6 @@ window.fetchInventoryFresh = async function() {
       if (data.productId) {
         openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
       }
-    });
-
-    invoicesSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      if (data.isDeleted) return;
-      data.items?.forEach(item => {
-        const id = getProductIdForItem(item);
-        if (id) {
-          if (!salesMap[id]) salesMap[id] = 0;
-          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
-          const rawQty = Number(item.qty) || 0;
-          const isCartonItem = isCartonUnit(item.unit || item.unitName, item.isCarton);
-          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
-          
-          const isReturn = data.type === 'return' || data.isReturn === true || item.isReturn === true;
-
-          if (isReturn) {
-            salesMap[id] -= Math.abs(pcs);
-          } else {
-            salesMap[id] += pcs;
-          }
-        }
-      });
     });
 
     supplierSnap.forEach(docSnap => {
@@ -1016,9 +994,10 @@ window.fetchInventoryFresh = async function() {
           openingTotalPcs = openingMap[doc.id];
         }
 
-        const salesPcs = salesMap[doc.id] || 0;
         const purchasesPcs = purchasesMap[doc.id] || 0;
-        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+        
+        // الخصم أُلغي نهائياً من مبيعات المخزن العام بناءً على التوجيه
+        const calculatedRealPcs = openingTotalPcs + purchasesPcs;
 
         if (calculatedRealPcs !== 0) {
           firebaseItems.push({
@@ -1035,9 +1014,9 @@ window.fetchInventoryFresh = async function() {
     renderItemsPage();
     firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
     isInventoryLoadedOnce = true;
-    recomputeSales();       // factorsMap تغيّر ⇒ نعيد الحساب بدون إعادة اشتراك
+    recomputeSales();
     refreshActivePages();
-    window.toast('✅ تم تحديث الأرصدة التراكمية بنجاح');
+    window.toast('✅ تم تحديث أرصدة المخزن بدون خصم المبيعات الفردية');
   } catch(e) { console.error(e); window.toast('❌ تعذر جلب الأصناف من السيرفر'); }
   finally { window._invBusy = false; }
 };
@@ -1200,7 +1179,6 @@ function buildStep(it, idx, sortedItems, pendingItems, loadedCount) {
   return div;
 }
 
-// رسم تفاضلي: لا نمس الكروت التي لم تتغير ولا الكارت الذي يكتب فيه المستخدم
 function renderLoadFlow() {
   const flow    = document.getElementById('loadFlow');
   const doneMsg = document.getElementById('loadDoneMsg');
@@ -1242,19 +1220,19 @@ window.confirmStep = function(itemId) {
     if (btn) { btn.disabled = true; btn.textContent = 'جاري الحفظ... ⏳'; }
     applyLoad(itemId, it, readInputs(itemId));
     delete drafts[itemId]; editingIds.delete(itemId);
-    writeItem(itemId);                                   // بدون await: لا يتجمد الزر أوفلاين
+    writeItem(itemId);
     const i = firebaseItems.findIndex(x => x.id === itemId);
     const next = firebaseItems.slice(i + 1).find(x => loadedInSession[x.id] === undefined);
     if (firebaseItems.every(x => loadedInSession[x.id] !== undefined)) forceShowLoadList = false;
     renderLoadFlow();
-    focusCard(next && next.id);      // نفس حدث اللمس ⇒ الكيبورد يبقى مفتوحاً
+    focusCard(next && next.id);
   } finally { busyIds.delete(itemId); }
 };
 
 window.editStep = function(itemId) {
   const s = loadedInSession[itemId];
   if (!s) return;
-  drafts[itemId] = { ...s }; editingIds.add(itemId);     // تعديل محلي، لا نلمس السيرفر حتى "تم"
+  drafts[itemId] = { ...s }; editingIds.add(itemId);
   renderLoadFlow();
   focusCard(itemId);
 };
@@ -1298,7 +1276,7 @@ window.updateManualSummaryField = function(itemId, field, val) {
     cartItems[itemId].inTruckPcs = r.inTruckPcs;
   }
   clearTimeout(saveTimers[itemId]);
-  saveTimers[itemId] = setTimeout(() => flushItem(itemId), 500);   // تجميع الكتابة أثناء الطباعة
+  saveTimers[itemId] = setTimeout(() => flushItem(itemId), 500);
 };
 
 window.toggleItemInventoryComplete = async function(itemId, isComplete) {
@@ -1338,6 +1316,9 @@ window.onSummaryDateChange = function() { listenToDailyLoadChanges(); listenToLi
 
 window.refreshSummaryData = function() { recomputeSales(); window.filterSummaryUI(); };
 
+/* ========================================================================= */
+/* احتساب مبيعات العربية فقط وخصمها من الكمية المحملة بداخل السيستم         */
+/* ========================================================================= */
 function buildCalculatedRows() {
   const processedIds = new Set();
   const rows = [];
@@ -1373,6 +1354,8 @@ function buildCalculatedRows() {
     const liveSales = memorySalesCache || {};
     const unit = getUnitName(cartData.name); 
     const cap  = cartData.capacity || 1; 
+    
+    // المبيعات تُخصم حصراً هنا من حمولة العربة
     const totalSoldPcs = liveSales[fbItem.id] || 0;
     
     const totalPrevPcs   = ((parseFloat(cartData.prevCartons || 0)) * cap) + parseInt(cartData.prevLoose || 0);
@@ -1613,7 +1596,6 @@ window.archiveInventory = async function() {
       lastEditedAt: String(r.lastEditedAt || '')
     }));
 
-    // حفظ المتبقي بالعربية المحسوب (inTruckPcs) ليُرحَّل لليوم التالي
     Object.keys(saveTimers).forEach(flushItem);
     await setDoc(doc(db, 'daily_loads', d), { cartItems, updatedAt: serverTimestamp() }, { merge: true });
 
@@ -1644,9 +1626,6 @@ window.archiveInventory = async function() {
   } catch (e) {
 
     console.error('❌ خطأ كامل أثناء ترحيل الجرد:', e);
-    console.error('اسم الخطأ:', e?.name);
-    console.error('رسالة الخطأ:', e?.message);
-    console.error('الكود:', e?.code);
 
     let errorMessage = '❌ حدث خطأ أثناء ترحيل الجرد';
 
@@ -1666,6 +1645,7 @@ window.archiveInventory = async function() {
     window.toast(errorMessage);
   } finally { window._archiving = false; }
 };
+
 window.fetchArchive = async function() {
   const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
@@ -1749,7 +1729,6 @@ window.fetchArchive = async function() {
   }
 };
 
-// بناء صفوف/جدول تقرير الأرشيف (مشترك بين المشاركة والعرض)
 async function buildArchiveReportHtml(d, areaId) {
   const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
   const loadDoc = await getDoc(doc(db, 'archived_loads', d));
@@ -1932,7 +1911,7 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(db, 'archived_inventory', d));   // كان doc(doc(...)) ويرمي خطأ
+    await deleteDoc(doc(db, 'archived_inventory', d));
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
@@ -2321,9 +2300,6 @@ window.exportArchiveExcel = async function(d) {
   }
 };
 
-// ==========================================
-// TOAST (يدعم زر إجراء) + الانتقال لصنف
-// ==========================================
 let toastTimer;
 window.toast = function(msg, action) {
   const el = document.getElementById('toast');
@@ -2353,9 +2329,6 @@ window.goToItem = async function(itemId) {
 window.announceNewItem = (id, name) =>
   window.toast('✅ تمت إضافة الصنف: ' + name, { label: 'عرض الصنف', onClick: () => window.goToItem(id) });
 
-// ==========================================
-// التنقل بين الخانات (Enter) داخل صفحة التحميل
-// ==========================================
 const flowEl = document.getElementById('loadFlow');
 flowEl.addEventListener('focusin', e => {
   const t = e.target;
@@ -2370,8 +2343,8 @@ flowEl.addEventListener('keydown', e => {
   const card = e.target.closest('.lstep');
   const inputs = [...card.querySelectorAll('input[type=number]')];
   const i = inputs.indexOf(e.target);
-  if (i < inputs.length - 1) inputs[i + 1].focus();      // متزامن داخل حدث المستخدم
-  else window.confirmStep(card.dataset.itemid);          // آخر خانة ⇒ "تم" ثم الصنف التالي
+  if (i < inputs.length - 1) inputs[i + 1].focus();
+  else window.confirmStep(card.dataset.itemid);
 });
 
 startApp();
