@@ -521,7 +521,6 @@
         window.handleInput();
     };
 
-    // التحقق الفعلي مما إذا كانت الوحدة كرتونة
     function isCartonUnit(unitValue, isCartonFlag) {
         if (isCartonFlag === true) return true;
         if (!unitValue) return false;
@@ -529,47 +528,52 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
-    // === دالة احتساب الرصيد الحقيقي للمورد (المعتمدة على partyId) ===
+    // === دالة احتساب الرصيد الحقيقي الدقيق للمورد المماثلة تماماً لصفحة سجل المشتريات ===
     async function getRealSupplierBalance(supplierId) {
         try {
             const supDoc = await getDoc(doc(db, "suppliers", supplierId));
             const openingBal = supDoc.exists() ? Number(supDoc.data().openingBalance || 0) : 0;
 
             const [snapTrans, snapItems] = await Promise.all([
-                getDocs(query(collection(db, "transactions"), where("partyId", "==", supplierId))),
-                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supplierId)))
+                getDocs(collection(db, "transactions")),
+                getDocs(collection(db, "supplier_transactions"))
             ]);
 
             let totalPurchases = 0; 
             let totalPayments = 0;  
 
-            // 1. حساب السندات المالية (صرف/قبض/سداد)
+            // 1. حساب السندات المالية العامة (صرف/قبض/سداد)
             snapTrans.forEach(docSnap => {
                 const d = docSnap.data();
                 const amt = Number(d.amount) || 0;
-                if (d.type === "صرف" || d.type === "سداد") {
-                    totalPayments += amt;
-                } else if (d.type === "قبض") {
-                    totalPurchases += amt;
+                if (d.partyId === supplierId || d.supplierId === supplierId) {
+                    if (!d.invoiceId) {
+                        if (d.type === "صرف" || d.actionType === "سداد مورد" || String(d.details || '').includes("سداد")) {
+                            totalPayments += amt;
+                        } else if (d.type === "قبض") {
+                            totalPurchases += amt;
+                        }
+                    }
                 }
             });
 
-            // 2. حساب فواتير المشتريات والمدفوع الداخلي والمرتجعات
+            // 2. حساب الفواتير والمسددات المباشرة منها
             snapItems.forEach(docSnap => {
-                if (editId && docSnap.id === editId) return;
+                if (docSnap.data().supplierId === supplierId) {
+                    // في حالة التعديل على الفاتورة الحالية، لا ندرج قيمتها القديمة ضمن الرصيد السابـق
+                    if (editId && docSnap.id === editId) return;
 
-                const d = docSnap.data();
-                const totalInvoice = Number(d.total) || Number(d.grossTotal) || Number(d.amount) || 0;
-                
-                const paidInsideInvoice = Number(d.paid) || 
-                    (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
-                    (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+                    const d = docSnap.data();
+                    const totalInvoice = Number(d.grossTotal) || Number(d.total) || Number(d.amount) || 0;
+                    const paidInsideInvoice = Number(d.totalPaid) || Number(d.paid) || 
+                        (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 0;
 
-                if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
-                    totalPurchases += totalInvoice;
-                    totalPayments += paidInsideInvoice;
-                } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
-                    totalPayments += totalInvoice;
+                    if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                        totalPurchases += totalInvoice;
+                        totalPayments += paidInsideInvoice;
+                    } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
+                        totalPayments += totalInvoice;
+                    }
                 }
             });
 
@@ -649,7 +653,6 @@
         if (balanceSpan) { balanceSpan.innerText = formatNumClean(val); }
     }
 
-    // دالة المساعدة لصياغة نص رصيد الصنف تفصيلياً بالكرتونة والقطع
     function formatStockText(totalPcs, factor) {
         const isNegative = totalPcs < 0;
         const absTotal = Math.abs(totalPcs);
@@ -1066,7 +1069,6 @@
         if (el) el.innerHTML = `<i class="fas ${icon} me-1"></i> ${text}`;
     }
 
-    // === دالة جلب قائمة الموردين والأصناف واحتساب رصيد المخزن الفعلي الحي بأسلوب كود المخزن (inventory.html) ===
     async function fetchFreshLists() {
         const [sSnap, invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
             getDocs(collection(db, "suppliers")),
@@ -1092,7 +1094,6 @@
         const purchasesMap = new Map();
         const openingMap = new Map();
 
-        // أرصدة بداية المدة
         transSnap.forEach(docSnap => {
             const data = docSnap.data();
             if (data.productId) {
@@ -1101,7 +1102,6 @@
             }
         });
 
-        // حساب المبيعات
         invoicesSnap.forEach(docSnap => {
             const items = docSnap.data().items || [];
             for (let i = 0; i < items.length; i++) {
@@ -1119,7 +1119,6 @@
             }
         });
 
-        // حساب المشتريات
         supplierSnap.forEach(docSnap => {
             const items = docSnap.data().items || [];
             for (let i = 0; i < items.length; i++) {
