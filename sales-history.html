@@ -539,19 +539,36 @@
             </div>
         </div>
 
+        <!-- خانة مطابقة النقدية المعدلة -->
         <div class="recon-card">
             <div class="recon-title">
                 <span><i class="fas fa-scale-balanced" style="color:var(--germany-red);"></i> مطابقة النقدية (الكاش)</span>
                 <a href="cash-register.html" class="btn btn-sm btn-outline-dark fw-bold py-1 px-2" style="font-size:0.75rem; font-family:'Cairo';"><i class="fas fa-book me-1"></i> سجل النقدية</a>
             </div>
+            
+            <div class="row g-2 mb-2">
+                <div class="col-4">
+                    <label class="stat-label mb-1 fw-bold text-dark d-block text-truncate" title="+ العهدة (مبلغ البداية)">+ العهدة:</label>
+                    <input type="number" id="custodyInput" class="form-control text-center recon-input fw-bold num" placeholder="0" oninput="window.calculateCashReconciliation()">
+                </div>
+                <div class="col-4">
+                    <label class="stat-label mb-1 fw-bold text-danger d-block text-truncate" title="- المصروفات">- المصروفات:</label>
+                    <input type="number" id="expensesInput" class="form-control text-center recon-input fw-bold num text-danger" placeholder="0" oninput="window.calculateCashReconciliation()">
+                </div>
+                <div class="col-4">
+                    <label class="stat-label mb-1 fw-bold text-danger d-block text-truncate" title="- المشتريات النقدية">- المشتريات:</label>
+                    <input type="number" id="purchasesInput" class="form-control text-center recon-input fw-bold num text-danger" placeholder="0" oninput="window.calculateCashReconciliation()">
+                </div>
+            </div>
+
             <div class="row g-2 align-items-center">
                 <div class="col-6">
                     <label class="stat-label mb-1 fw-bold text-dark d-block">النقدية الموجودة معك حالياً:</label>
-                    <input type="text" id="actualCashInput" class="form-control text-center recon-input fw-bold num" placeholder="مثال: 30000 5400 470" oninput="window.calculateCashReconciliation()">
+                    <input type="text" id="actualCashInput" class="form-control text-center recon-input fw-bold num" placeholder="مثال: 2000 8000 10000" oninput="window.calculateCashReconciliation()">
                 </div>
                 <div class="col-6">
                     <label class="stat-label mb-1 fw-bold text-dark d-block">حالة المطابقة والفارق:</label>
-                    <div id="reconResultBox" class="text-center fw-bold text-muted p-2" style="border-radius: var(--input-radius); font-size: 0.8rem; background: #f8fafc; border: 1px dashed var(--border); height: 44px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    <div id="reconResultBox" class="text-center fw-bold text-muted p-2" style="border-radius: var(--input-radius); font-size: 0.8rem; background: #f8fafc; border: 1px dashed var(--border); min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
                         بانتظار جردك الفعلي...
                     </div>
                 </div>
@@ -1093,14 +1110,12 @@
         }
     };
 
-    // === الدالة المحدثة التي تعالج التوقيتات وتطابق طريقة كشف العملاء بدقة 100% ===
     async function calculateCumulativeBalances() {
         if (!allInvoices || allInvoices.length === 0) return;
 
         let fullInvoicesList = [...allInvoices];
         let fullTransactionsList = [...rawTransactionsList];
 
-        // في كل الحالات، سنجلب كافة الفواتير والسندات لبناء التراكمي الدقيق كلياً
         try {
             const [allInvSnap, allTransSnap] = await Promise.all([
                 db.collection("invoices").get(),
@@ -1131,7 +1146,6 @@
 
         const customerGroupMap = {};
 
-        // 1. تجميع فواتير العملاء مع دقة استخدام ID والاسم المطابق للعملاء
         fullInvoicesList.forEach(inv => {
             let groupKey = inv.customerId;
             if (!groupKey && inv.customerName) groupKey = customersNameMap[normalizeName(inv.customerName)];
@@ -1143,7 +1157,6 @@
             customerGroupMap[groupKey].push({ type: 'invoice', data: inv, timeMs });
         });
 
-        // 2. تجميع سندات القبض والصرف
         fullTransactionsList.forEach(tr => {
             const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
             if (isInvoicePayment) return;
@@ -1159,7 +1172,6 @@
             customerGroupMap[groupKey].push({ type: 'transaction', data: tr, timeMs });
         });
 
-        // 3. الترتيب الزمني الصارم حسب timeMs الدقيق واحتساب الحساب السابق
         Object.keys(customerGroupMap).forEach(groupKey => {
             const events = customerGroupMap[groupKey];
             events.sort((a, b) => a.timeMs - b.timeMs);
@@ -1179,7 +1191,6 @@
                     const inv = event.data;
                     const targetInvoice = allInvoices.find(i => i.id === inv.id);
 
-                    // الحساب السابق للفاتورة هو نفس قيمة RunningBalance تماماً قبل تطبيق تأثير هذه الفاتورة
                     const prevBal = runningBalance;
 
                     const total = Number(inv.total) || 0;
@@ -1400,54 +1411,102 @@
         window.globalExpectedTodayCash = totalCash; window.calculateCashReconciliation();
     }
 
+    // === دالة مطابقة النقدية المُحدثة بعد إضافة العهدة والمصروفات والمشتريات ===
     window.calculateCashReconciliation = () => {
-        const inputField = document.getElementById('actualCashInput'), resultBox = document.getElementById('reconResultBox');
+        const inputField = document.getElementById('actualCashInput');
+        const resultBox = document.getElementById('reconResultBox');
         if (!inputField || !resultBox) return;
+
+        const custodyVal = parseFloat(document.getElementById('custodyInput')?.value || 0) || 0;
+        const expensesVal = parseFloat(document.getElementById('expensesInput')?.value || 0) || 0;
+        const purchasesVal = parseFloat(document.getElementById('purchasesInput')?.value || 0) || 0;
+
+        // الصافي المتوقع = (كاش المبيعات + العهدة) - (المصروفات + المشتريات)
+        const expectedNetCash = (window.globalExpectedTodayCash || 0) + custodyVal - expensesVal - purchasesVal;
+
         const inputVal = inputField.value.trim();
-        if (inputVal === "") { resultBox.className = "text-center fw-bold text-muted p-2"; resultBox.style.background = "#f8fafc"; resultBox.style.border = "1px dashed var(--border)"; resultBox.innerHTML = "بانتظار جردك الفعلي..."; return; }
-        let actual = 0; convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => { const n = parseFloat(p.trim()); if (!isNaN(n)) actual += n; });
-        const diff = actual - (window.globalExpectedTodayCash || 0);
+        if (inputVal === "") { 
+            resultBox.className = "text-center fw-bold text-muted p-2"; 
+            resultBox.style.background = "#f8fafc"; 
+            resultBox.style.border = "1px dashed var(--border)"; 
+            resultBox.innerHTML = `<div>الصافي المتوقع: <span class="num">${expectedNetCash.toFixed(1)}</span></div><div style="font-size:0.7rem;">(بانتظار جردك الفعلي...)</div>`; 
+            return; 
+        }
+
+        let actual = 0; 
+        convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => { 
+            const n = parseFloat(p.trim()); 
+            if (!isNaN(n)) actual += n; 
+        });
+
+        const diff = actual - expectedNetCash;
         let prefix = inputVal.split(/\s+/).length > 1 ? `[جردك: ${actual.toFixed(1)}] ` : '';
-        if (Math.abs(diff) < 0.1) { resultBox.className = "text-center fw-bold text-dark p-2"; resultBox.style.background = "#f0fdf4"; resultBox.style.border = "1px solid var(--germany-black)"; resultBox.innerHTML = `<i class="fas fa-check-circle"></i> ${prefix} مطابق تماماً (0.00)`; } 
-        else if (diff > 0) { resultBox.className = "text-center fw-bold text-primary p-2"; resultBox.style.background = "#eff6ff"; resultBox.style.border = "1px solid #3b82f6"; resultBox.innerHTML = `<i class="fas fa-circle-plus"></i> ${prefix} زيادة (+${diff.toFixed(1)})`; } 
-        else { resultBox.className = "text-center fw-bold text-danger p-2"; resultBox.style.background = "#fff1f2"; resultBox.style.border = "1px solid var(--germany-red)"; resultBox.innerHTML = `<i class="fas fa-circle-minus"></i> ${prefix} عجز (${diff.toFixed(1)})`; }
+
+        if (Math.abs(diff) < 0.1) { 
+            resultBox.className = "text-center fw-bold text-dark p-2"; 
+            resultBox.style.background = "#f0fdf4"; 
+            resultBox.style.border = "1px solid var(--germany-black)"; 
+            resultBox.innerHTML = `<div><i class="fas fa-check-circle"></i> ${prefix} مطابق تماماً (0.00)</div><div style="font-size:0.7rem; color:#475569;">المتوقع الصافي: ${expectedNetCash.toFixed(1)}</div>`; 
+        } 
+        else if (diff > 0) { 
+            resultBox.className = "text-center fw-bold text-primary p-2"; 
+            resultBox.style.background = "#eff6ff"; 
+            resultBox.style.border = "1px solid #3b82f6"; 
+            resultBox.innerHTML = `<div><i class="fas fa-circle-plus"></i> ${prefix} زيادة (+${diff.toFixed(1)})</div><div style="font-size:0.7rem; color:#475569;">المتوقع الصافي: ${expectedNetCash.toFixed(1)}</div>`; 
+        } 
+        else { 
+            resultBox.className = "text-center fw-bold text-danger p-2"; 
+            resultBox.style.background = "#fff1f2"; 
+            resultBox.style.border = "1px solid var(--germany-red)"; 
+            resultBox.innerHTML = `<div><i class="fas fa-circle-minus"></i> ${prefix} عجز (${diff.toFixed(1)})</div><div style="font-size:0.7rem; color:#475569;">المتوقع الصافي: ${expectedNetCash.toFixed(1)}</div>`; 
+        }
     };
 
+    // === دالة حفظ وترحيل سجل النقدية المحدثة بالحقول النصية والتفصيلية ===
     window.saveDailyCashRegister = async () => {
         const targetDate = document.getElementById('dateFilterInput')?.value || new Date().toLocaleDateString('en-CA');
-        const todayCash = parseFloat(document.getElementById('todayCash')?.innerText || 0);
+        const todayCashSales = parseFloat(document.getElementById('todayCash')?.innerText || 0);
         const todayWallet = parseFloat(document.getElementById('todayWallet')?.innerText || 0);
         const todayRemaining = parseFloat(document.getElementById('todayRemaining')?.innerText || 0);
         const todayTotalSales = parseFloat(document.getElementById('todayTotalSales')?.innerText || 0);
 
-        const inputVal = document.getElementById('actualCashInput')?.value.trim() || "";
+        const custodyVal = parseFloat(document.getElementById('custodyInput')?.value || 0) || 0;
+        const expensesVal = parseFloat(document.getElementById('expensesInput')?.value || 0) || 0;
+        const purchasesVal = parseFloat(document.getElementById('purchasesInput')?.value || 0) || 0;
+
+        const expectedNetCash = todayCashSales + custodyVal - expensesVal - purchasesVal;
+        const rawInputVal = document.getElementById('actualCashInput')?.value.trim() || "";
 
         let actualCash = 0;
-        if (inputVal !== "") {
-            convertToEnglishNumbers(inputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => {
+        if (rawInputVal !== "") {
+            convertToEnglishNumbers(rawInputVal).replace(/\+/g, ' ').split(/\s+/).forEach(p => {
                 const n = parseFloat(p.trim());
                 if (!isNaN(n)) actualCash += n;
             });
         } else {
-            actualCash = todayCash;
+            actualCash = expectedNetCash;
         }
 
-        const diff = actualCash - todayCash;
+        const diff = actualCash - expectedNetCash;
 
         window.showCustomUi({
             title: "تأكيد ترحيل النقدية",
-            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- إجمالي المبيعات: ${todayTotalSales.toFixed(2)}\n- المتوقع كاش: ${todayCash.toFixed(2)}\n- الفعلي كاش: ${actualCash.toFixed(2)}\n- الفارق: ${diff.toFixed(2)}`,
+            message: `هل تريد ترحيل وإغلاق سجل النقدية ليوم (${targetDate})؟\n- المبيعات الكاش: ${todayCashSales.toFixed(2)}\n- العهدة: ${custodyVal.toFixed(2)}\n- المصروفات: ${expensesVal.toFixed(2)}\n- المشتريات: ${purchasesVal.toFixed(2)}\n- الصافي المتوقع: ${expectedNetCash.toFixed(2)}\n- الجرد الفعلي: ${actualCash.toFixed(2)} (${rawInputVal || 'مطابق'})\n- الفارق: ${diff.toFixed(2)}`,
             type: "confirm", 
             icon: "info",
             onConfirm: async () => {
                 try {
                     await db.collection("daily_cash_register").doc(targetDate).set({
                         date: targetDate, 
-                        expectedCash: todayCash, 
+                        salesCash: todayCashSales,
+                        custody: custodyVal,
+                        expenses: expensesVal,
+                        purchases: purchasesVal,
+                        expectedCash: expectedNetCash, 
                         actualCash: actualCash,
                         actualCashAmount: actualCash,
                         cashAmount: actualCash,
-                        actualCashInput: inputVal,
+                        actualCashInput: rawInputVal, // ترحيل المبلغ المكتوب كما هو بنفس صيغته النصية (2000 8000 10000)
                         difference: diff,
                         totalSales: todayTotalSales,
                         todayTotalSales: todayTotalSales,
@@ -1462,7 +1521,7 @@
 
                     window.showCustomUi({ 
                         title: "تم الترحيل بنجاح", 
-                        message: `✅ تم حفظ وإغلاق سجل النقدية بنجاح.`, 
+                        message: `✅ تم حفظ وترحيل سجل النقدية بنجاح بالحساب التفصيلي.`, 
                         icon: "success" 
                     });
                 } catch (err) { 
@@ -1789,7 +1848,6 @@
     window.toggleDetails = (id) => { const el = document.getElementById(`details_box_${id}`); el.style.display = el.style.display === "none" ? "block" : "none"; };
     window.editInvoice = (id) => { window.location.href = `sales-invoice.html?edit=${id}&allowDateEdit=true`; };
 
-    // === دالة حذف الفاتورة المُعدّلة مع إرجاع الكميات المباشر للمخزن ===
     window.deleteInvoice = (id) => {
         const inv = allInvoices.find(i => i.id === id);
         if (!inv) return;
@@ -1804,7 +1862,6 @@
                 try {
                     const batch = db.batch();
 
-                    // 1. إعادة كميات أصناف الفاتورة إلى المخزن
                     if (Array.isArray(inv.items) && inv.items.length > 0) {
                         for (const item of inv.items) {
                             const stockId = item.stockId || item.id;
@@ -1814,7 +1871,6 @@
                                 const isCarton = (item.unit === 'box' || item.unit === 'carton' || item.unit === 'كرتونة' || item.unitName === 'كرتونة' || item.isCarton === true);
                                 const qtyPcs = Number(item.qty || 0);
                                 
-                                // إذا كانت مرتجع بيع، نعكس الخصم/الإضافة كمرتجع
                                 const totalPcsToReturn = item.isReturn 
                                     ? -(isCarton ? qtyPcs * factor : qtyPcs)
                                     : (isCarton ? qtyPcs * factor : qtyPcs);
@@ -1827,14 +1883,12 @@
                         }
                     }
 
-                    // 2. تحديث حالة الفاتورة لتصبح محذوفة
                     const invRef = db.collection("invoices").doc(id);
                     batch.update(invRef, {
                         isDeleted: true,
                         deletedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
 
-                    // 3. تحديث أي معالم وسندات مالية مرتبطة بالفاتورة
                     const relatedTrans = rawTransactionsList.filter(t => t.invoiceId === id);
                     for (const tr of relatedTrans) {
                         const trRef = db.collection("transactions").doc(tr.id);
@@ -1844,7 +1898,6 @@
                         });
                     }
 
-                    // تنفيذ الـ Batch دفعة واحدة لضمان جودة الأداء والاتساق
                     await batch.commit();
 
                     window.showCustomUi({
