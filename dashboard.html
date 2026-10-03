@@ -405,7 +405,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, getDocsFromServer, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -451,8 +451,18 @@
 
         function isDocDeleted(data) {
             if (!data) return false;
-            return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
+            const st = String(data.status || '').toLowerCase();
+            return data.isDeleted === true || data.deleted === true || data.isCancelled === true ||
+                   data.cancelled === true || data.voided === true || data.isVoid === true ||
+                   !!data.deletedAt ||
+                   ['deleted', 'cancelled', 'canceled', 'void', 'voided', 'ملغي', 'ملغى', 'محذوف'].includes(st);
         }
+
+        // جلب من السيرفر أولاً لتجنب بيانات الكاش المحلي القديمة
+        const fetchCol = async (name) => {
+            try { return await getDocsFromServer(collection(db, name)); }
+            catch (e) { return await getDocs(collection(db, name)); }
+        };
 
         function showStatus(msg, ok = true) {
             const el = document.getElementById('statusAlert');
@@ -551,123 +561,105 @@
                     inventorySnap, invoicesSnap,
                     customersSnap, suppliersSnap, cashLogsSnap, expensesSnap, supplierTransSnap, transactionsSnap
                 ] = await Promise.all([
-                    getDocs(collection(db, 'inventory')),
-                    getDocs(collection(db, 'invoices')),
-                    getDocs(collection(db, 'customers')),
-                    getDocs(collection(db, 'suppliers')),
-                    getDocs(collection(db, 'cash_logs')),
-                    getDocs(collection(db, 'expenses')),
-                    getDocs(collection(db, 'supplier_transactions')),
-                    getDocs(collection(db, 'transactions')),
+                    fetchCol('inventory'),
+                    fetchCol('invoices'),
+                    fetchCol('customers'),
+                    fetchCol('suppliers'),
+                    fetchCol('cash_logs'),
+                    fetchCol('expenses'),
+                    fetchCol('supplier_transactions'),
+                    fetchCol('transactions'),
                 ]);
 
                 netCashFlow = 0;
                 netWalletFlow = 0;
 
-                /* ---- 1. المبيعات ---- */
+                const flow = (toWallet, signedAmt, bucket) => {
+                    const acc = toWallet ? analytics.wallet : analytics.cash;
+                    if (toWallet) netWalletFlow += signedAmt; else netCashFlow += signedAmt;
+                    acc[bucket] += signedAmt;
+                };
+
+                /* ---- 1. المبيعات (المرتجع يخصم) ---- */
                 invoicesSnap.forEach(docItem => {
                     const data = docItem.data();
                     if (isDocDeleted(data)) return;
 
+                    const isRet = data.type === 'مرتجع' || data.isReturn === true;
+                    const sign = isRet ? -1 : 1;
+
                     const cAmt = num(data.cashAmount ?? data.cashPaid ?? (data.paymentMethod === 'cash' ? data.paid : 0));
                     const wAmt = num(data.walletAmount ?? data.walletPaid ?? (isWalletMethod(data.paymentMethod) ? data.paid : 0));
 
-                    netCashFlow += cAmt;
-                    netWalletFlow += wAmt;
-                    
-                    analytics.cash.sales += cAmt;
-                    analytics.wallet.sales += wAmt;
+                    flow(false, sign * cAmt, 'sales');
+                    flow(true, sign * wAmt, 'sales');
 
                     const totalInvAmt = num(data.total || data.grandTotal);
-                    if (data.type === 'مرتجع' || data.isReturn === true) {
-                        analytics.inventory.totalReturnsVal += totalInvAmt;
-                    } else {
-                        analytics.inventory.totalSalesVal += totalInvAmt;
-                    }
+                    if (isRet) analytics.inventory.totalReturnsVal += totalInvAmt;
+                    else analytics.inventory.totalSalesVal += totalInvAmt;
                 });
 
-                /* ---- 2. المشتريات والمرتجعات عبر supplier_transactions ---- */
+                /* ---- 2. المشتريات (مرتجع الشراء يرجّع فلوس) ---- */
                 supplierTransSnap.forEach(docItem => {
                     const data = docItem.data();
                     if (isDocDeleted(data)) return;
 
+                    const isRet = data.type === 'مرتجع شراء' || data.type === 'مرتجع' || data.isReturn === true;
+                    const sign = isRet ? 1 : -1;
+
                     const cPaid = num(data.cashPaid ?? (data.paymentType?.includes('كاش') ? data.totalPaid : 0));
                     const wPaid = num(data.walletPaid ?? (data.paymentType?.includes('محفظة') ? data.totalPaid : 0));
 
-                    netCashFlow -= cPaid;
-                    netWalletFlow -= wPaid;
+                    flow(false, sign * cPaid, 'purchases');
+                    flow(true, sign * wPaid, 'purchases');
 
-                    analytics.cash.purchases += cPaid;
-                    analytics.wallet.purchases += wPaid;
-                    
                     const totalSupAmt = num(data.total || data.amount || data.grossTotal);
-                    if (data.type === 'مرتجع شراء' || data.type === 'مرتجع' || data.isReturn === true) {
-                        analytics.inventory.totalReturnsVal += totalSupAmt;
-                    } else {
-                        analytics.inventory.totalPurchasesVal += totalSupAmt;
-                    }
+                    if (isRet) analytics.inventory.totalReturnsVal += totalSupAmt;
+                    else analytics.inventory.totalPurchasesVal += totalSupAmt;
                 });
 
-                /* ---- 3. حركات الصندوق والمحفظة الدقيقة المباشرة والسندات المعتمدة ---- */
-                const processedTransIds = new Set();
+                /* ---- 3. المستندات الأصلية (حية أو محذوفة) لمنع احتساب سجل الصندوق المرتبط بها ---- */
+                const sourceIds = new Set();
+                [transactionsSnap, expensesSnap, invoicesSnap, supplierTransSnap].forEach(s => s.forEach(d => sourceIds.add(d.id)));
+                const LINK_FIELDS = ['transactionId', 'voucherId', 'refId', 'referenceId', 'sourceId', 'relatedId', 'expenseId', 'invoiceId', 'supplierTransactionId', 'purchaseId', 'billId', 'linkedTo'];
 
+                /* ---- 4. cash_logs: المستقل فقط، والمرتبط بمستند يتجاهل (المستند هو المرجع) ---- */
                 cashLogsSnap.forEach(docItem => {
                     const data = docItem.data();
                     if (isDocDeleted(data)) return;
+                    if (sourceIds.has(docItem.id)) return;
+                    if (LINK_FIELDS.some(f => data[f])) return;
 
-                    processedTransIds.add(docItem.id);
-
-                    const amt = num(data.amount);
+                    const amt = Math.abs(num(data.amount));
                     const methodText = data.method || data.paymentMethod || '';
-                    const toWallet = isWalletMethod(methodText) || isWalletMethod(data.note) || data.type === 'wallet';
+                    const toWallet = isWalletMethod(methodText) || isWalletMethod(data.note) || data.type === 'wallet' || data.account === 'wallet';
 
-                    const isIncoming = ['in', 'قبض', 'إيراد', 'ايراد'].includes(data.type);
-                    const isOutgoing = ['out', 'صرف'].includes(data.type);
-
-                    if (isIncoming) {
-                        if (toWallet) { netWalletFlow += amt; analytics.wallet.incoming += amt; } 
-                        else { netCashFlow += amt; analytics.cash.incoming += amt; }
-                    } else if (isOutgoing) {
-                        if (toWallet) { netWalletFlow -= amt; analytics.wallet.outgoing += amt; } 
-                        else { netCashFlow -= amt; analytics.cash.outgoing += amt; }
-                    }
+                    const dir = data.direction || data.type;
+                    if (['in', 'قبض', 'إيراد', 'ايراد'].includes(dir)) flow(toWallet, amt, 'incoming');
+                    else if (['out', 'صرف'].includes(dir)) flow(toWallet, -amt, 'outgoing');
                 });
 
-                /* ---- 4. سندات القبض والصرف الفردية المستقلة غير المكررة ---- */
+                /* ---- 5. السندات المستقلة (القيمة الحالية بعد التعديل) ---- */
                 transactionsSnap.forEach(docItem => {
                     const data = docItem.data();
                     if (isDocDeleted(data)) return;
-                    if (processedTransIds.has(docItem.id)) return;
-                    if (data.invoiceId || data.supplierTransactionId) return; // منع التكرار المعاملاتي للفواتير
+                    if (data.invoiceId || data.supplierTransactionId || data.purchaseId || data.billId || data.isInvoicePayment) return;
 
-                    const amt = num(data.amount || data.total);
-                    const methodText = data.paymentMethod || data.method || '';
-                    const toWallet = isWalletMethod(methodText) || isWalletMethod(data.details) || isWalletMethod(data.note);
+                    const amt = Math.abs(num(data.amount || data.total));
+                    const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.details) || isWalletMethod(data.note);
 
-                    if (data.type === 'قبض') {
-                        if (toWallet) { netWalletFlow += amt; analytics.wallet.incoming += amt; } 
-                        else { netCashFlow += amt; analytics.cash.incoming += amt; }
-                    } else if (data.type === 'صرف') {
-                        if (toWallet) { netWalletFlow -= amt; analytics.wallet.outgoing += amt; } 
-                        else { netCashFlow -= amt; analytics.cash.outgoing += amt; }
-                    }
+                    if (data.type === 'قبض') flow(toWallet, amt, 'incoming');
+                    else if (data.type === 'صرف') flow(toWallet, -amt, 'outgoing');
                 });
 
-                /* ---- 5. المصروفات ---- */
+                /* ---- 5-ب. المصروفات ---- */
                 expensesSnap.forEach(docItem => {
                     const data = docItem.data();
                     if (isDocDeleted(data)) return;
 
                     const amt = Math.abs(num(data.amount || data.total));
                     const toWallet = isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note);
-
-                    if (toWallet) {
-                        netWalletFlow -= amt;
-                        analytics.wallet.expenses += amt;
-                    } else {
-                        netCashFlow -= amt;
-                        analytics.cash.expenses += amt;
-                    }
+                    flow(toWallet, -amt, 'expenses');
                 });
 
                 /* ---- 6. المخزون ---- */
