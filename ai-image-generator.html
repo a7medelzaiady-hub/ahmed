@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>صورة إلى فيديو - MiniMax H3</title>
-    <!-- استدعاء خط Cairo المماثل للخط في الصور -->
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -36,13 +35,12 @@
 
         .main-container {
             width: 100%;
-            max-width: 480px; /* مقاس متجاوب ومخصص للموبايل */
+            max-width: 480px;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
 
-        /* الكروت الرئيسية */
         .card {
             background: var(--card-bg);
             border-radius: 16px;
@@ -51,7 +49,6 @@
             border: 1px solid #f1f5f9;
         }
 
-        /* الهيدر العلوي */
         .top-header {
             display: flex;
             align-items: center;
@@ -85,7 +82,6 @@
             gap: 8px;
         }
 
-        /* عنوان القسم المحرك */
         .engine-title {
             text-align: center;
             font-size: 1rem;
@@ -97,7 +93,6 @@
             gap: 6px;
         }
 
-        /* كارت التخصص */
         .specialist-card {
             background-color: #f0fdf4;
             border: 1px solid #bbf7d0;
@@ -138,7 +133,6 @@
             line-height: 1.5;
         }
 
-        /* العناوين الداخلية */
         .section-label {
             font-size: 0.9rem;
             font-weight: 700;
@@ -148,7 +142,6 @@
             gap: 6px;
         }
 
-        /* رفع الصورة */
         .upload-box {
             border: 2px dashed #cbd5e1;
             border-radius: 12px;
@@ -158,6 +151,8 @@
             cursor: pointer;
             transition: 0.2s;
             margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
         }
 
         .upload-box:hover {
@@ -190,7 +185,14 @@
             margin-top: 4px;
         }
 
-        /* مربع النص */
+        .image-preview {
+            width: 100%;
+            max-height: 180px;
+            object-fit: cover;
+            border-radius: 8px;
+            display: none;
+        }
+
         .prompt-textarea {
             width: 100%;
             height: 90px;
@@ -212,16 +214,11 @@
             gap: 4px;
         }
 
-        /* خيارات المقاس والجودة (شبكة الأزرار) */
         .grid-options {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 10px;
             margin-bottom: 15px;
-        }
-
-        .grid-3-col {
-            grid-template-columns: repeat(2, 1fr);
         }
 
         .option-card {
@@ -260,7 +257,6 @@
             grid-column: span 2;
         }
 
-        /* التحكم بالمدة (السلايدر) */
         .duration-header {
             display: flex;
             align-items: center;
@@ -293,7 +289,6 @@
             font-weight: 600;
         }
 
-        /* سويتش البرومبت الذكي */
         .prompt-switch-box {
             background: #f8fafc;
             border: 1px solid var(--border-light);
@@ -356,7 +351,6 @@
         input:checked + .slider-round { background-color: #22c55e; }
         input:checked + .slider-round:before { transform: translateX(18px); }
 
-        /* زر توليد الفيديو الرئيسي */
         .btn-generate {
             width: 100%;
             background-color: #f43f5e;
@@ -372,9 +366,15 @@
             justify-content: center;
             gap: 8px;
             box-shadow: 0 4px 10px rgba(244, 63, 94, 0.2);
+            transition: 0.2s;
         }
 
-        /* قسم الفيديوهات السابقة */
+        .btn-generate:disabled {
+            background-color: #94a3b8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
         .history-card {
             background: #f8fafc;
             border: 1px solid var(--border-light);
@@ -407,6 +407,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
         }
 
         .play-btn {
@@ -439,7 +440,7 @@
             </div>
         </div>
 
-        <!-- الكارت الأساسي للنماذج والخيارات -->
+        <!-- الكارت الأساسي -->
         <div class="card">
             
             <div class="engine-title">
@@ -447,33 +448,35 @@
                 <span>🪄</span>
             </div>
 
-            <!-- كارت التخصص بالنطق -->
             <div class="specialist-card">
                 <div class="specialist-badge">
                     <span>✔ متخصص في النطق العربي الصحيح</span>
                 </div>
                 <div class="specialist-perc">%100</div>
                 <div class="specialist-desc">
-                    المحرك ده متدرب على نطق العربي بشفايف متزامنة — لو محتاج الشخصية تتكلم عربي صح، ده مكانك.
+                    المحرك متدرب على نطق العربي بشفايف متزامنة — لو محتاج الشخصية تتكلم عربي صح، ده مكانك.
                 </div>
             </div>
 
             <div class="sub-instructions">
-                ارفع صورة واكتب وصفاً بالعربي — محرك MiniMax H3 هيزوّلها لفيديو بصوت طبيعي مولّد معاه.
+                ارفع صورة واكتب وصفاً بالعربي — محرك MiniMax H3 هيحولها لفيديو بصوت طبيعي مولّد معاه.
             </div>
 
             <!-- رفع الصورة -->
             <div class="section-label">🖼️ ارفع الصورة الأساسية</div>
-            <div class="upload-box" onclick="document.getElementById('imgInput').click()">
-                <div class="upload-icon-circle">⬆</div>
-                <div class="upload-main-text">اضغط لرفع صورة أو اسحبها هنا</div>
-                <div class="upload-sub-text">JPG, PNG (حد أقصى 10MB)</div>
+            <div class="upload-box" id="uploadBox">
+                <div id="uploadContent">
+                    <div class="upload-icon-circle">⬆</div>
+                    <div class="upload-main-text">اضغط لرفع صورة أو اسحبها هنا</div>
+                    <div class="upload-sub-text">JPG, PNG (حد أقصى 10MB)</div>
+                </div>
+                <img id="imgPreview" class="image-preview" alt="معاينة الصورة">
                 <input type="file" id="imgInput" hidden accept="image/*">
             </div>
 
             <!-- وصف الفيديو -->
             <div class="section-label">✏️ وصف الفيديو (بالعربي)</div>
-            <textarea class="prompt-textarea" placeholder="اكتب وصف الحركة المطلوبة بالعربي...
+            <textarea id="promptText" class="prompt-textarea" placeholder="اكتب وصف الحركة المطلوبة بالعربي...
 مثال: الشخص يبتسم ببطء ثم يستدير ناحية الكاميرا، الإضاءة تتغير من الأزرق للبرتقالي"></textarea>
             
             <div class="info-hint">
@@ -483,18 +486,18 @@
 
             <!-- مقاس الفيديو -->
             <div class="section-label">🔲 مقاس الفيديو</div>
-            <div class="grid-options">
-                <div class="option-card active-red">
+            <div class="grid-options" id="ratioOptions">
+                <div class="option-card active-red" data-ratio="16:9">
                     <div>📺</div>
                     <div class="option-title">عرضي (Landscape)</div>
                     <div class="option-sub">16:9</div>
                 </div>
-                <div class="option-card">
+                <div class="option-card" data-ratio="9:16">
                     <div>📱</div>
                     <div class="option-title">طولي (Portrait)</div>
                     <div class="option-sub">9:16</div>
                 </div>
-                <div class="option-card square-option">
+                <div class="option-card square-option" data-ratio="1:1">
                     <div>🔲</div>
                     <div class="option-title">مربع (Square)</div>
                     <div class="option-sub">1:1</div>
@@ -503,13 +506,13 @@
 
             <!-- جودة الفيديو -->
             <div class="section-label">💎 جودة الفيديو</div>
-            <div class="grid-options">
-                <div class="option-card active-cyan">
+            <div class="grid-options" id="qualityOptions">
+                <div class="option-card active-cyan" data-quality="864x480">
                     <div>⚡</div>
                     <div class="option-title">جودة 0.4</div>
                     <div class="option-sub">أسرع — 864 × 480 — لحد 7 ث</div>
                 </div>
-                <div class="option-card">
+                <div class="option-card" data-quality="1088x672">
                     <div>⭐</div>
                     <div class="option-title">أعلى جودة</div>
                     <div class="option-sub">1088 × 672 — لحد 5 ث</div>
@@ -521,7 +524,7 @@
                 <span>🕒 مدة الفيديو</span>
                 <span class="duration-badge" id="durationText">5 ثواني</span>
             </div>
-            <input type="range" class="range-slider" min="5" max="7" value="5" id="rangeInput" oninput="document.getElementById('durationText').innerText = this.value + ' ثواني'">
+            <input type="range" class="range-slider" min="5" max="7" value="5" id="rangeInput">
             <div class="range-labels">
                 <span>5 ث</span>
                 <span>6 ث</span>
@@ -540,7 +543,7 @@
                         <span>🎬 البرومبت الذكي للحركة والصوت</span>
                     </div>
                     <label class="toggle">
-                        <input type="checkbox">
+                        <input type="checkbox" id="smartPromptToggle" checked>
                         <span class="slider-round"></span>
                     </label>
                 </div>
@@ -550,8 +553,8 @@
             </div>
 
             <!-- زر التوليد -->
-            <button class="btn-generate">
-                ✏️ توليد الفيديو
+            <button class="btn-generate" id="generateBtn">
+                ✏️️ توليد الفيديو
             </button>
 
         </div>
@@ -559,23 +562,145 @@
         <!-- كارت الفيديوهات السابقة -->
         <div class="card">
             <div class="section-label">🕒 فيديوهاتي السابقة</div>
-            
-            <div class="history-card">
-                <div class="history-item-title">
-                    ✅ غمر الوادي نور أسطوري أعلن بداية عهد جديد من الأمل والحرية، وأصبح إيلان حارس الن...
-                </div>
-                <div class="history-meta">
-                    <span>🕒 3 أكتوبر 2026, 3:28 ص</span>
-                    <span>• 1088×672</span>
-                    <span>• 5 ث</span>
-                </div>
-                <div class="video-preview-box">
-                    <div class="play-btn">▶</div>
+            <div id="historyList">
+                <div class="history-card">
+                    <div class="history-item-title">
+                        ✅ غمر الوادي نور أسطوري أعلن بداية عهد جديد من الأمل والحرية...
+                    </div>
+                    <div class="history-meta">
+                        <span>🕒 3 أكتوبر 2026, 3:28 ص</span>
+                        <span>• 1088×672</span>
+                        <span>• 5 ث</span>
+                    </div>
+                    <div class="video-preview-box">
+                        <div class="play-btn">▶</div>
+                    </div>
                 </div>
             </div>
         </div>
 
     </div>
 
+    <script>
+        // إعداد العناصر وتفاعلات الواجهة
+        const uploadBox = document.getElementById('uploadBox');
+        const imgInput = document.getElementById('imgInput');
+        const imgPreview = document.getElementById('imgPreview');
+        const uploadContent = document.getElementById('uploadContent');
+        const rangeInput = document.getElementById('rangeInput');
+        const durationText = document.getElementById('durationText');
+        const generateBtn = document.getElementById('generateBtn');
+        const promptText = document.getElementById('promptText');
+        const historyList = document.getElementById('historyList');
+
+        let selectedImage = null;
+        let selectedRatio = '16:9';
+        let selectedQuality = '864x480';
+
+        // رفع الصورة ومعاينتها
+        uploadBox.addEventListener('click', () => imgInput.click());
+        imgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedImage = file;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    imgPreview.src = event.target.result;
+                    imgPreview.style.display = 'block';
+                    uploadContent.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // تغيير السلايدر
+        rangeInput.addEventListener('input', (e) => {
+            durationText.innerText = `${e.target.value} ثواني`;
+        });
+
+        // اختيار النسبة
+        document.querySelectorAll('#ratioOptions .option-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('#ratioOptions .option-card').forEach(c => c.classList.remove('active-red'));
+                card.classList.add('active-red');
+                selectedRatio = card.dataset.ratio;
+            });
+        });
+
+        // اختيار الجودة
+        document.querySelectorAll('#qualityOptions .option-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('#qualityOptions .option-card').forEach(c => c.classList.remove('active-cyan'));
+                card.classList.add('active-cyan');
+                selectedQuality = card.dataset.quality;
+            });
+        });
+
+        // دالة توليد الفيديو
+        generateBtn.addEventListener('click', async () => {
+            const text = promptText.value.trim();
+            if (!text && !selectedImage) {
+                alert('يرجى اختيار صورة أو كتابة وصف للبدء');
+                return;
+            }
+
+            // تعطيل الزر أثناء التوليد
+            generateBtn.disabled = true;
+                generateBtn.innerText = '⏳ جاري التوليد باستخدام MiniMax...';
+
+            try {
+                // محاكاة طلب توليد الفيديو إلى خادم MiniMax
+                const videoData = await mockVideoGeneration({
+                    prompt: text,
+                    duration: rangeInput.value,
+                    ratio: selectedRatio,
+                    quality: selectedQuality,
+                    isSmartPrompt: document.getElementById('smartPromptToggle').checked
+                });
+
+                // إضافة الفيديو المولّد إلى السجل
+                addVideoToHistory(videoData);
+            } catch (err) {
+                alert('حدث خطأ أثناء التوليد، يرجى المحاولة لاحقاً');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerText = '✏️ توليد الفيديو';
+            }
+        });
+
+        // محاكاة عملية الاتصال بـ MiniMax API
+        function mockVideoGeneration(params) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve({
+                        title: params.prompt || "فيديو بدون وصف",
+                        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                        quality: params.quality,
+                        duration: params.duration
+                    });
+                }, 2500);
+            });
+        }
+
+        // إدراج النتيجة في السجل
+        function addVideoToHistory(data) {
+            const newCard = document.createElement('div');
+            newCard.className = 'history-card';
+            newCard.innerHTML = `
+                <div class="history-item-title">
+                    ✅ ${data.title}
+                </div>
+                <div class="history-meta">
+                    <span>🕒 الآن (${data.time})</span>
+                    <span>• ${data.quality}</span>
+                    <span>• ${data.duration} ث</span>
+                </div>
+                <div class="video-preview-box">
+                    <div class="play-btn">▶</div>
+                </div>
+            `;
+            historyList.prepend(newCard);
+        }
+    </script>
 </body>
 </html>
