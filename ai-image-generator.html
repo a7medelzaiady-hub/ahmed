@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صورة إلى فيديو - MiniMax H3</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+            --primary-green: #0d9488;
+            --light-green-bg: #ccfbf1;
+            --red-accent: #f43f5e;
+            --border-light: #e2e8f0;
+            --blue-accent: #0ea5e9;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 15px 10px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            border: 1px solid #f1f5f9;
+        }
+
+        .top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 5px;
+        }
+
+        .header-icons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            background: #fff;
+            border: 1px solid var(--border-light);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .page-title-top {
+            font-size: 1.1rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .engine-title {
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .specialist-card {
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 14px;
+            padding: 14px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .specialist-badge {
+            color: #16a34a;
+            font-weight: 800;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .specialist-perc {
+            color: #16a34a;
+            font-weight: 800;
+            font-size: 1.1rem;
+            margin: 4px 0;
+        }
+
+        .specialist-desc {
+            font-size: 0.8rem;
+            color: #374151;
+            line-height: 1.5;
+        }
+
+        .sub-instructions {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .section-label {
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .upload-box {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-box:hover {
+            border-color: var(--red-accent);
+            background: #fff5f5;
+        }
+
+        .upload-icon-circle {
+            width: 45px;
+            height: 45px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-size: 1.2rem;
+        }
+
+        .upload-main-text {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        .upload-sub-text {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .image-preview {
+            width: 100%;
+            max-height: 180px;
+            object-fit: cover;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .prompt-textarea {
+            width: 100%;
+            height: 90px;
+            border: 1px solid var(--border-light);
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 0.85rem;
+            outline: none;
+            resize: none;
+        }
+
+        .info-hint {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            margin: 6px 0 15px;
+            line-height: 1.4;
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        .grid-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .option-card {
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fff;
+        }
+
+        .option-card.active-red {
+            border-color: #f43f5e;
+            background-color: #fff5f7;
+        }
+
+        .option-card.active-cyan {
+            border-color: #06b6d4;
+            background-color: #ecfeff;
+        }
+
+        .option-title {
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .option-sub {
+            font-size: 0.7rem;
+            color: var(--text-sub);
+            margin-top: 2px;
+        }
+
+        .square-option {
+            grid-column: span 2;
+        }
+
+        .duration-header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .duration-badge {
+            color: #0284c7;
+        }
+
+        .range-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 5px;
+            background: linear-gradient(to left, #8b5cf6, #3b82f6);
+            outline: none;
+            accent-color: #7c3aed;
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        .prompt-switch-box {
+            background: #f8fafc;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px;
+            margin: 15px 0;
+        }
+
+        .switch-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .switch-title {
+            font-weight: 700;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .switch-desc {
+            font-size: 0.72rem;
+            color: var(--text-sub);
+            line-height: 1.4;
+        }
+
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+        }
+
+        .toggle input { opacity: 0; width: 0; height: 0; }
+
+        .slider-round {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .3s;
+            border-radius: 20px;
+        }
+
+        .slider-round:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider-round { background-color: #22c55e; }
+        input:checked + .slider-round:before { transform: translateX(18px); }
+
+        .btn-generate {
+            width: 100%;
+            background-color: #f43f5e;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(244, 63, 94, 0.2);
+            transition: 0.2s;
+        }
+
+        .btn-generate:disabled {
+            background-color: #94a3b8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .history-card {
+            background: #f8fafc;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .history-item-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .history-meta {
+            font-size: 0.7rem;
+            color: var(--text-sub);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .video-preview-box {
+            width: 100%;
+            background: #0f172a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .video-player {
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #0ea5e9;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+        }
+
+        .api-input-box {
+            background: #fff;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 15px;
+            font-size: 0.8rem;
+            width: 100%;
+        }
+
+        /* تنسيق مربع دردشة المساعد الذكي */
+        .ai-chat-box {
+            background: #f1f5f9;
+            border: 1px solid var(--border-light);
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 0.85rem;
+            margin-top: 5px;
+            min-height: 50px;
+            line-height: 1.6;
+            color: #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .ai-chat-box b {
+            color: #0ea5e9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+
+        <!-- الشريط العلوي -->
+        <div class="top-header">
+            <div class="header-icons">
+                <button class="icon-btn" onclick="alert('الإعدادات مفعّلة')">⚙</button>
+                <button class="icon-btn" onclick="alert('تغيير اللغة مفعّل')">🌐</button>
+                <button class="icon-btn" onclick="alert('لا توجد إشعارات جديدة')">🔔</button>
+            </div>
+            <div class="page-title-top">
+                <span>صورة إلى فيديو</span>
+                <span>☰</span>
+            </div>
+        </div>
+
+        <div class="card">
+            
+            <div class="engine-title">
+                <span>🎬 MiniMax H3 — من صورة إلى فيديو</span>
+                <span>🪄</span>
+            </div>
+
+            <div class="specialist-card">
+                <div class="specialist-badge">
+                    <span>✔ متخصص في النطق العربي الصحيح</span>
+                </div>
+                <div class="specialist-perc">%100</div>
+                <div class="specialist-desc">
+                    المحرك متدرب على نطق العربي بشفايف متزامنة — لو محتاج الشخصية تتكلم عربي صح، ده مكانك.
+                </div>
+            </div>
+
+            <!-- إدخال مفتاح API للتوليد الحقيقي عبر سيرفر MiniMax -->
+            <div class="section-label">🔑 مفتاح MiniMax API (اختياري)</div>
+            <input type="password" id="apiKeyInput" class="api-input-box" placeholder="أدخل API Key الخاص بك هنا لتوليد سحابي مباشر...">
+
+            <!-- رفع الصورة -->
+            <div class="section-label">🖼️️ ارفع الصورة الأساسية</div>
+            <div class="upload-box" id="uploadBox">
+                <div id="uploadContent">
+                    <div class="upload-icon-circle">⬆</div>
+                    <div class="upload-main-text">اضغط لرفع صورة أو اسحبها هنا</div>
+                    <div class="upload-sub-text">JPG, PNG (حد أقصى 10MB)</div>
+                </div>
+                <img id="imgPreview" class="image-preview" alt="معاينة الصورة">
+                <input type="file" id="imgInput" hidden accept="image/*">
+            </div>
+
+            <!-- وصف الفيديو -->
+            <div class="section-label">💬 أمر المساعد (بالعربي)</div>
+            <textarea id="promptText" class="prompt-textarea" placeholder="أعطني أوامرك هنا...
+مثال: حرك الشخصية لتتكلم، غير الإضاءة، واجعل المشهد درامياً."></textarea>
+            
+            <div class="info-hint">
+                <span>ℹ️</span>
+                <span>سيقوم المساعد الذكي بتحليل أمرك وتنفيذه بناءً على اختياراتك أدناه.</span>
+            </div>
+
+            <!-- مقاس الفيديو -->
+            <div class="section-label">🔲 مقاس الفيديو</div>
+            <div class="grid-options" id="ratioOptions">
+                <div class="option-card active-red" data-ratio="16:9" data-w="640" data-h="360">
+                    <div>📺</div>
+                    <div class="option-title">عرضي (Landscape)</div>
+                    <div class="option-sub">16:9</div>
+                </div>
+                <div class="option-card" data-ratio="9:16" data-w="360" data-h="640">
+                    <div>📱</div>
+                    <div class="option-title">طولي (Portrait)</div>
+                    <div class="option-sub">9:16</div>
+                </div>
+                <div class="option-card square-option" data-ratio="1:1" data-w="480" data-h="480">
+                    <div>🔲</div>
+                    <div class="option-title">مربع (Square)</div>
+                    <div class="option-sub">1:1</div>
+                </div>
+            </div>
+
+            <!-- جودة الفيديو -->
+            <div class="section-label">💎 جودة الفيديو</div>
+            <div class="grid-options" id="qualityOptions">
+                <div class="option-card active-cyan" data-quality="864x480">
+                    <div>⚡</div>
+                    <div class="option-title">جودة 0.4</div>
+                    <div class="option-sub">أسرع — 864 × 480 — لحد 7 ث</div>
+                </div>
+                <div class="option-card" data-quality="1088x672">
+                    <div>⭐</div>
+                    <div class="option-title">أعلى جودة</div>
+                    <div class="option-sub">1088 × 672 — لحد 5 ث</div>
+                </div>
+            </div>
+
+            <!-- مدة الفيديو -->
+            <div class="duration-header">
+                <span>🕒 مدة الفيديو</span>
+                <span class="duration-badge" id="durationText">5 ثواني</span>
+            </div>
+            <input type="range" class="range-slider" min="5" max="7" value="5" id="rangeInput">
+            <div class="range-labels">
+                <span>5 ث</span>
+                <span>6 ث</span>
+                <span>7 ث</span>
+            </div>
+
+            <div class="prompt-switch-box">
+                <div class="switch-top">
+                    <div class="switch-title">
+                        <span>🎬 البرومبت الذكي للحركة والصوت</span>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="smartPromptToggle" checked>
+                        <span class="slider-round"></span>
+                    </label>
+                </div>
+                <div class="switch-desc">
+                    يبني البرومبت بتقسيم زمني للحركة + سطر صوت واضح.
+                </div>
+            </div>
+
+            <button class="btn-generate" id="generateBtn">
+                🚀 تنفيذ الأمر عبر الذكاء الاصطناعي
+            </button>
+
+            <!-- مربع رد المساعد الذكي المضاف حديثاً -->
+            <div class="section-label" style="margin-top: 15px;">🤖 رد المساعد الذكي:</div>
+            <div class="ai-chat-box" id="aiResponse">
+                <span>أهلاً بك! في انتظار أمرك أو رفعك للصورة لنبدأ العمل...</span>
+            </div>
+
+        </div>
+
+        <div class="card">
+            <div class="section-label">🕒 فيديوهاتي السابقة</div>
+            <div id="historyList"></div>
+        </div>
+
+    </div>
+
+    <script>
+        const uploadBox = document.getElementById('uploadBox');
+        const imgInput = document.getElementById('imgInput');
+        const imgPreview = document.getElementById('imgPreview');
+        const uploadContent = document.getElementById('uploadContent');
+        const rangeInput = document.getElementById('rangeInput');
+        const durationText = document.getElementById('durationText');
+        const generateBtn = document.getElementById('generateBtn');
+        const promptText = document.getElementById('promptText');
+        const historyList = document.getElementById('historyList');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        
+        // جلب عنصر المساعد الذكي
+        const aiResponse = document.getElementById('aiResponse');
+
+        let loadedImageElement = null;
+        let selectedWidth = 640;
+        let selectedHeight = 360;
+        let selectedQuality = '864x480';
+        let currentRatioText = '16:9';
+
+        // تفعيل أزرار رفع الصور
+        uploadBox.addEventListener('click', () => imgInput.click());
+        imgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    imgPreview.src = event.target.result;
+                    imgPreview.style.display = 'block';
+                    uploadContent.style.display = 'none';
+
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => loadedImageElement = img;
+                    
+                    aiResponse.innerHTML = `<span><b>المساعد:</b> ممتاز! لقد استلمت الصورة. ماذا تريدني أن أفعل بها؟</span>`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // تفعيل سلايدر الوقت
+        rangeInput.addEventListener('input', (e) => {
+            durationText.innerText = `${e.target.value} ثواني`;
+        });
+
+        // تفعيل أزرار الأبعاد
+        document.querySelectorAll('#ratioOptions .option-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('#ratioOptions .option-card').forEach(c => c.classList.remove('active-red'));
+                card.classList.add('active-red');
+                selectedWidth = parseInt(card.dataset.w);
+                selectedHeight = parseInt(card.dataset.h);
+                currentRatioText = card.dataset.ratio;
+            });
+        });
+
+        // تفعيل أزرار الجودة
+        document.querySelectorAll('#qualityOptions .option-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('#qualityOptions .option-card').forEach(c => c.classList.remove('active-cyan'));
+                card.classList.add('active-cyan');
+                selectedQuality = card.dataset.quality;
+            });
+        });
+
+        // دالة الاتصال بـ MiniMax API الحقيقي
+        async function fetchMiniMaxApi(apiKey, prompt, imageBase64, duration) {
+            const response = await fetch('https://api.minimax.chat/v1/video_generation', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'video-01',
+                    prompt: prompt,
+                    image_url: imageBase64,
+                    duration: parseInt(duration)
+                })
+            });
+            const data = await response.json();
+            return data.video_url;
+        }
+
+        // دالة معالجة محلية حقيقية تسري على أي هاتف في حال عدم وجود API Key
+        function generateLocalVideo(imageEl, text, durationSec, width, height) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                const stream = canvas.captureStream(30);
+                let mimeType = 'video/webm';
+                if (MediaRecorder.isTypeSupported('video/mp4')) {
+                    mimeType = 'video/mp4';
+                }
+                
+                const recorder = new MediaRecorder(stream, { mimeType });
+                const chunks = [];
+
+                recorder.ondataavailable = e => chunks.push(e.data);
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: mimeType });
+                    resolve(URL.createObjectURL(blob));
+                };
+
+                recorder.start();
+                let frame = 0;
+                const totalFrames = 30 * durationSec;
+
+                function renderFrame() {
+                    if (imageEl) {
+                        const scale = 1 + (frame / totalFrames) * 0.15;
+                        const w = canvas.width * scale;
+                        const h = canvas.height * scale;
+                        const x = (canvas.width - w) / 2;
+                        const y = (canvas.height - h) / 2;
+                        ctx.drawImage(imageEl, x, y, w, h);
+                    } else {
+                        ctx.fillStyle = '#0f172a';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+
+                    if (text) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 16px Cairo, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(text, canvas.width / 2, canvas.height - 25);
+                    }
+
+                    frame++;
+                    if (frame < totalFrames) {
+                        requestAnimationFrame(renderFrame);
+                    } else {
+                        recorder.stop();
+                    }
+                }
+
+                renderFrame();
+            });
+        }
+
+        // تفعيل زر التوليد والتفاعل مع المساعد الذكي
+        generateBtn.addEventListener('click', async () => {
+            const text = promptText.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!text && !loadedImageElement) {
+                aiResponse.innerHTML = `<span><b>المساعد:</b> عذراً، يرجى اختيار صورة أو إدخال أمر لأتمكن من مساعدتك.</span>`;
+                alert('يرجى اختيار صورة أو إدخال وصف للبدء');
+                return;
+            }
+
+            generateBtn.disabled = true;
+            generateBtn.innerText = '⏳ جاري التنفيذ...';
+            
+            // رد المساعد الذكي بأنه يعالج الطلب
+            const commandSummary = text ? `تطبيق الأمر "${text}"` : "الاعتماد على الصورة فقط";
+            aiResponse.innerHTML = `<span><b>المساعد:</b> فهمت طلبك! سأقوم الآن بـ ${commandSummary}. جاري بناء فيديو بمدة ${rangeInput.value} ثواني وبأبعاد ${currentRatioText}... يرجى الانتظار قليلاً. ⏳</span>`;
+
+            try {
+                let videoUrl = '';
+                const duration = parseInt(rangeInput.value);
+
+                if (apiKey) {
+                    videoUrl = await fetchMiniMaxApi(apiKey, text, imgPreview.src, duration);
+                } else {
+                    videoUrl = await generateLocalVideo(loadedImageElement, text, duration, selectedWidth, selectedHeight);
+                }
+
+                addVideoToHistory({
+                    title: text || "فيديو مولد بنجاح",
+                    time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                    quality: selectedQuality,
+                    duration: duration,
+                    videoUrl: videoUrl
+                });
+                
+                // رد المساعد الذكي عند الانتهاء
+                aiResponse.innerHTML = `<span><b>المساعد:</b> ✅ تمت المهمة بنجاح! لقد قمت بإنشاء الفيديو وإضافته إلى قائمة "فيديوهاتي السابقة" بالأسفل لتتمكن من مشاهدته أو تنزيله.</span>`;
+
+            } catch (err) {
+                aiResponse.innerHTML = `<span><b>المساعد:</b> ❌ عذراً، واجهت مشكلة أثناء محاولة إنشاء الفيديو. الرجاء المحاولة مرة أخرى لاحقاً.</span>`;
+                alert('حدث خطأ أثناء معالجة الفيديو، يرجى إعادة المحاولة');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerText = '🚀 تنفيذ الأمر عبر الذكاء الاصطناعي';
+            }
+        });
+
+        // إضافة الفيديو المولّد وإتاحته للتشغيل والتنزيل
+        function addVideoToHistory(data) {
+            const newCard = document.createElement('div');
+            newCard.className = 'history-card';
+            newCard.innerHTML = `
+                <div class="history-item-title">
+                    ✅ ${data.title}
+                </div>
+                <div class="history-meta">
+                    <span>🕒 الآن (${data.time})</span>
+                    <span>• ${data.quality}</span>
+                    <span>• ${data.duration} ث</span>
+                </div>
+                <div class="video-preview-box">
+                    <video class="video-player" controls autoplay loop playsinline>
+                        <source src="${data.videoUrl}">
+                        متصفحك لا يدعم تشغيل الفيديو.
+                    </video>
+                </div>
+                <a class="download-btn" href="${data.videoUrl}" download="minimax-video.mp4">
+                    ⬇ تنزيل الفيديو MP4
+                </a>
+            `;
+            historyList.prepend(newCard);
+        }
+    </script>
+</body>
+</html>

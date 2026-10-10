@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>مقارنة الأسعار وتجهيز الطلبيات - شركة الزيادي</title>
+    
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- مكتبة تحويل HTML إلى صورة للمشاركة -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #0b5e3d;
+            --primary-gradient: linear-gradient(135deg, #0b5e3d, #148054);
+            --bg-light: #f4f6f8;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --white: #ffffff;
+            --amber: #d97706;
+            --amber-light: #fef3c7;
+            --card-shadow: 0 3px 10px rgba(0, 0, 0, 0.03);
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 110px;
+            direction: rtl;
+            font-size: 0.88rem;
+        }
+
+        .header {
+            background: var(--primary-gradient);
+            padding: 0 14px;
+            height: 54px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            color: white;
+            box-shadow: 0 4px 12px rgba(11, 94, 61, 0.15);
+        }
+
+        .header h6 { margin: 0; font-weight: 800; font-size: 0.95rem; }
+        .back-btn {
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 50%;
+            text-decoration: none !important;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .main-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 12px;
+        }
+
+        .btn-toggle-price {
+            background: white;
+            border: 1px solid var(--border-color);
+            color: var(--primary);
+            padding: 6px 10px;
+            border-radius: var(--radius-md);
+            font-size: 0.76rem;
+            font-weight: 800;
+            box-shadow: var(--card-shadow);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-toggle-price:active { transform: scale(0.95); }
+
+        .search-box { position: relative; margin-bottom: 0; flex-grow: 1; }
+        .search-box input {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 8px 36px 8px 12px;
+            width: 100%;
+            font-weight: 700;
+            font-size: 0.82rem;
+            outline: none;
+            box-shadow: var(--card-shadow);
+        }
+        .search-box i { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--primary); font-size: 0.85rem; }
+
+        .auto-supplier-box {
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            color: white;
+            border-radius: var(--radius-lg);
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+        }
+        .auto-supplier-title {
+            font-weight: 800;
+            font-size: 0.85rem;
+            margin-bottom: 2px;
+        }
+        .auto-supplier-sub {
+            font-size: 0.7rem;
+            opacity: 0.9;
+            font-weight: 600;
+        }
+        .btn-auto-build {
+            background: #ffffff;
+            color: #0284c7;
+            border: none;
+            padding: 7px 12px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 0.76rem;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-auto-build:active { transform: scale(0.95); background: #f0f9ff; }
+
+        .select-supplier-build {
+            background: #ffffff;
+            color: #0369a1;
+            border: none;
+            font-weight: 800;
+            font-size: 0.78rem;
+            border-radius: 10px;
+            padding: 5px 8px;
+            outline: none;
+        }
+
+        .section-header-reorder {
+            background: #fff5f5;
+            border: 1px solid #fecaca;
+            border-radius: var(--radius-md);
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .section-header-reorder h6 {
+            margin: 0;
+            font-weight: 800;
+            color: #991b1b;
+            font-size: 0.84rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .badge-reorder-count {
+            background: #dc2626;
+            color: #ffffff;
+            font-size: 0.7rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .product-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--card-shadow);
+        }
+
+        .product-card.reorder-card {
+            border-color: #fca5a5;
+            background: #fffbfb;
+        }
+
+        .product-title {
+            font-weight: 800;
+            font-size: 0.9rem;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .stock-badge {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stock-badge.low-stock {
+            background: #fee2e2;
+            color: #b91c1c;
+            border-color: #fca5a5;
+        }
+
+        .stock-badge.zero-stock {
+            background: #f1f5f9;
+            color: #64748b;
+            border-color: #cbd5e1;
+        }
+
+        .sales-count-tag {
+            background: #fef3c7;
+            color: #b45309;
+            border: 1px solid #fde68a;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .reorder-needed-tag {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .supplier-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-top: 1px dashed var(--border-color);
+            gap: 8px;
+        }
+
+        .supplier-row-header {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
+        }
+
+        .price-details-box {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-top: 1px;
+        }
+
+        .price-text {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 800;
+            font-size: 0.84rem;
+            color: var(--primary);
+        }
+
+        .badge-recommended {
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+            padding: 2px 6px;
+            border-radius: 16px;
+            font-size: 0.64rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .badge-outdated {
+            background: var(--amber-light);
+            color: var(--amber);
+            border: 1px solid #fde68a;
+            padding: 2px 6px;
+            border-radius: 16px;
+            font-size: 0.64rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .badge-diff-high {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+            padding: 2px 6px;
+            border-radius: 16px;
+            font-size: 0.64rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .btn-add-order {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 0.72rem;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(11, 102, 65, 0.12);
+            flex-shrink: 0;
+        }
+        .btn-add-order:active { transform: scale(0.95); background: #0a5234; }
+
+        .btn-add-custom-product {
+            background: #f59e0b;
+            color: #ffffff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 0.82rem;
+            box-shadow: 0 3px 10px rgba(245, 158, 11, 0.25);
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 12px;
+            transition: all 0.2s ease;
+        }
+        .btn-add-custom-product:active { transform: scale(0.97); background: #d97706; }
+
+        .order-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 2px solid var(--primary);
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.08);
+            z-index: 1050;
+        }
+
+        .order-count-badge {
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 800;
+            margin-right: 5px;
+        }
+
+        .force-ltr { direction: ltr; display: inline-block; }
+
+        .cart-item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .hidden-price {
+            letter-spacing: 2px;
+            filter: blur(4px);
+            user-select: none;
+        }
+
+        #thermalReceiptTemplate {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            width: 380px;
+            background: #ffffff;
+            padding: 25px 20px;
+            font-family: 'Cairo', sans-serif;
+            color: #000000;
+            direction: rtl;
+        }
+        .thermal-header {
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+        .thermal-divider {
+            border-bottom: 2px dashed #000000;
+            margin: 8px 0;
+        }
+        .thermal-table-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 800;
+            font-size: 0.9rem;
+            padding-bottom: 4px;
+        }
+        .thermal-row {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 5px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="d-flex align-items-center gap-2">
+        <button onclick="handleNavigation('purchase-mgmt.html')" class="back-btn"><i class="fas fa-arrow-right"></i></button>
+        <h6>مقارنة الأسعار وتجهيز الطلبيات</h6>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <button onclick="openOrdersHistoryModal()" class="back-btn" title="سجل الطلبيات السابقة"><i class="fas fa-history"></i></button>
+        <button onclick="handleNavigation('index.html')" class="back-btn"><i class="fas fa-home"></i></button>
+    </div>
+</div>
+
+<div class="main-wrapper">
+
+    <!-- شريط البحث والزر العلوي -->
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="ابحث عن صنف لمعرفة الأرخص وتجهيز الطلبية..." onkeyup="renderData()">
+        </div>
+        <button class="btn-toggle-price" id="btnTogglePrice" onclick="togglePriceVisibility()">
+            <i class="fas fa-eye-slash" id="toggleIcon"></i> <span id="toggleText">إخفاء الأسعار</span>
+        </button>
+    </div>
+
+    <!-- شريط التجهيز التلقائي للطلبية بناءً على المورد المختار -->
+    <div class="auto-supplier-box">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <div>
+                <div class="auto-supplier-title"><i class="fas fa-wand-magic-sparkles me-1"></i> تجميع الأصناف المطلوبة بكثرة</div>
+                <div class="auto-supplier-sub">اختر المورد لتجميع الأصناف الأكثر مبيعاً والنادرة الرصيد فقط</div>
+            </div>
+            <button class="btn-auto-build" onclick="autoBuildSupplierOrder()">
+                <i class="fas fa-cart-plus me-1"></i> جهز الفواتير
+            </button>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="small fw-bold text-white-50" style="font-size:0.75rem;">المورد المطلوب:</span>
+            <select id="builderSupplierSelect" class="select-supplier-build flex-grow-1">
+                <option value="ALL_CHEAPEST">-- كل الموردين (تلقائي للأرخص) --</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- قسم خاص بالنواقص الأكثر تداولاً -->
+    <div id="reorderSectionContainer" style="display: none;">
+        <div class="section-header-reorder">
+            <h6><i class="fas fa-triangle-exclamation text-danger fs-6"></i> نواقص متداولة (تحتاج إعادة طلب)</h6>
+            <span class="badge-reorder-count" id="reorderCountBadge">0 صنف</span>
+        </div>
+        <div id="reorderProductsList"></div>
+    </div>
+
+    <!-- حاوية عرض النتائج لكافة الأصناف -->
+    <div id="contentContainer">
+        <div class="text-center text-muted py-4 fw-bold small">
+            <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري احتساب رصيد المخزن الفعلي وسجل الأسعار...
+        </div>
+    </div>
+
+</div>
+
+<!-- شريط السلة العائم للطلبية -->
+<div class="order-bar" id="orderBar" style="display: none;">
+    <div>
+        <span class="fw-bold small"><i class="fas fa-shopping-cart text-success me-1"></i> الأصناف المختارة</span>
+        <span class="order-count-badge" id="orderItemCount">0</span>
+    </div>
+    <button class="btn btn-success fw-bold btn-sm px-3 py-1" style="font-size:0.78rem;" onclick="openOrderModal()">
+        عرض وتجهيز الطلبية <i class="fas fa-chevron-left ms-1"></i>
+    </button>
+</div>
+
+<!-- Modal إضافة صنف غير موجود يدوياً للطلبية -->
+<div class="modal fade" id="addCustomProductModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px;">
+            <div class="modal-header bg-warning text-dark py-2">
+                <h6 class="modal-title fw-bold small"><i class="fas fa-plus-circle me-1"></i> إضافة صنف يدوي للطلبية</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="mb-2">
+                    <label class="form-label fw-bold small text-muted">اسم الصنف</label>
+                    <input type="text" id="customProdName" class="form-control form-control-sm fw-bold" style="border-radius:10px;">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold small text-muted">اختر المورد</label>
+                    <select id="customSupplierSelect" class="form-select form-select-sm fw-bold" style="border-radius:10px;"></select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label fw-bold small text-muted">الوحدة</label>
+                        <select id="customUnitSelect" class="form-select form-select-sm fw-bold" style="border-radius:10px;">
+                            <option value="كرتونة">كرتونة</option>
+                            <option value="جركن">جركن</option>
+                            <option value="قطعة">قطعة</option>
+                            <option value="برميل">برميل</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold small text-muted">السعر التقديري/السابق</label>
+                        <input type="number" id="customPriceInput" class="form-control form-control-sm fw-bold" placeholder="0.00" style="border-radius:10px;">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light p-2 justify-content-between">
+                <button type="button" class="btn btn-secondary btn-sm fw-bold" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="confirmAddCustomProduct()">إضافة للطلبية</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal لعرض وتجهيز الطلبية -->
+<div class="modal fade" id="orderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px;">
+            <div class="modal-header bg-light py-2 d-flex justify-content-between align-items-center">
+                <h6 class="modal-title fw-bold text-success m-0 small"><i class="fas fa-list-alt me-1"></i> الطلبية المجهزة للموردين</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3" id="orderModalBody"></div>
+            <div class="modal-footer bg-light p-2 d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-success btn-sm fw-bold" style="font-size:0.75rem;" onclick="returnToComparisonPage()">
+                    <i class="fas fa-plus me-1"></i> إضافة أصناف أخرى
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm fw-bold" style="font-size:0.75rem;" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal عرض سجل الطلبيات المحفوظة -->
+<div class="modal fade" id="ordersHistoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="border-radius: 16px;">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title fw-bold small"><i class="fas fa-history me-1"></i> سجل الطلبيات المجهزة والمحفوظة</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3" id="ordersHistoryModalBody">
+                <div class="text-center text-muted py-4 small">جاري تحميل سجل الطلبيات...</div>
+            </div>
+            <div class="modal-footer bg-light p-2">
+                <button type="button" class="btn btn-secondary btn-sm fw-bold" style="font-size:0.75rem;" data-bs-dismiss="modal">إغلاق السجل</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal تحذير المورد الأغلى أو القديم -->
+<div class="modal fade" id="warningModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px;">
+            <div class="modal-header bg-warning text-dark py-2">
+                <h6 class="modal-title fw-bold small"><i class="fas fa-exclamation-triangle me-1"></i> تنبيه توجيه الطلبية</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3 text-center" id="warningModalBody"></div>
+            <div class="modal-footer bg-light p-2 justify-content-center gap-2">
+                <button type="button" class="btn btn-success btn-sm fw-bold px-3" style="font-size:0.75rem;" id="btnRedirectCheapest">
+                    <i class="fas fa-arrow-down me-1"></i> وجه الطلبية للأرخص
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm fw-bold px-3" style="font-size:0.75rem;" id="btnKeepSelected">
+                    أعي ذلك، أضف هذا المورد
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal تأكيد الخروج عند وجود مسودة -->
+<div class="modal fade" id="exitConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content text-center p-3" style="border-radius: 16px;">
+            <div class="text-warning fs-2 mb-1"><i class="fas fa-exclamation-circle"></i></div>
+            <h6 class="fw-bold mb-1 small">تنبيه: توجد مسودة طلبية</h6>
+            <p class="text-muted small mb-2" style="font-size:0.75rem;">لديك أصناف مجهزة في الطلبية الحالية. هل أنت متأكد من الخروج والإلغاء؟</p>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-danger btn-sm fw-bold w-100" style="font-size:0.75rem;" id="btnConfirmExit">نعم، اخرج</button>
+                <button type="button" class="btn btn-secondary btn-sm fw-bold w-100" style="font-size:0.75rem;" data-bs-dismiss="modal">متابعة العمل</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal تنبيه عام -->
+<div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content text-center p-3" style="border-radius: 16px;">
+            <div class="text-success fs-2 mb-1"><i class="fas fa-check-circle"></i></div>
+            <h6 class="fw-bold mb-1 small" id="infoModalTitle">تمت العملية</h6>
+            <p class="text-muted small mb-2" style="font-size:0.75rem;" id="infoModalBody">تم التجهيز بنجاح!</p>
+            <button type="button" class="btn btn-success btn-sm fw-bold w-100" style="font-size:0.75rem;" data-bs-dismiss="modal">موافق</button>
+        </div>
+    </div>
+</div>
+
+<!-- كارت الفاتورة الحرارية المخفي -->
+<div id="thermalReceiptTemplate">
+    <div class="thermal-header">[ مطلوب ]</div>
+    <div class="thermal-divider"></div>
+    <div class="thermal-table-header">
+        <span>الصنف</span>
+        <span>الكمية المطلوبة</span>
+    </div>
+    <div class="thermal-divider"></div>
+    <div id="thermalItemsList"></div>
+    <div class="thermal-divider"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, doc, deleteDoc, updateDoc, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let productPricesMap = {};
+    let inventoryStockMap = {};
+    let salesCountMap = {}; 
+    let suppliersBase = {};
+    let supplierNameToInfo = {};
+    let cartOrders = {};
+    let fetchedOrdersHistory = [];
+    let showPrices = true;
+    let pendingTargetUrl = null;
+
+    function cleanModalBackdrops() {
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+    }
+
+    document.addEventListener('hidden.bs.modal', function () {
+        cleanModalBackdrops();
+    });
+
+    window.returnToComparisonPage = function() {
+        const modalElem = document.getElementById('orderModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalElem);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+        cleanModalBackdrops();
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
+
+    function hasDraft() {
+        return Object.keys(cartOrders).some(s => cartOrders[s] && cartOrders[s].length > 0);
+    }
+
+    window.addEventListener('beforeunload', function (e) {
+        if (hasDraft()) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+
+    window.handleNavigation = function(targetUrl) {
+        if (hasDraft()) {
+            pendingTargetUrl = targetUrl;
+            const exitModal = new bootstrap.Modal(document.getElementById('exitConfirmModal'));
+            exitModal.show();
+        } else {
+            window.location.href = targetUrl;
+        }
+    };
+
+    document.getElementById('btnConfirmExit').addEventListener('click', function() {
+        cartOrders = {};
+        cleanModalBackdrops();
+        if (pendingTargetUrl) {
+            window.location.href = pendingTargetUrl;
+        }
+    });
+
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
+
+    window.togglePriceVisibility = function() {
+        showPrices = !showPrices;
+        const icon = document.getElementById('toggleIcon');
+        const text = document.getElementById('toggleText');
+
+        if (showPrices) {
+            icon.className = 'fas fa-eye-slash';
+            text.innerText = 'إخفاء الأسعار';
+        } else {
+            icon.className = 'fas fa-eye';
+            text.innerText = 'إظهار الأسعار';
+        }
+
+        renderData();
+    };
+
+    function getDaysDifference(dateStr) {
+        if (!dateStr) return 999;
+        try {
+            const cleanDateStr = dateStr.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+            const parts = cleanDateStr.split(/[-/]/);
+            if (parts.length < 3) return 999;
+            
+            let y = parseInt(parts[0]), m = parseInt(parts[1]) - 1, d = parseInt(parts[2]);
+            if (y < 100) y += 2000;
+
+            const invDate = new Date(y, m, d);
+            const today = new Date();
+            const diffTime = Math.abs(today - invDate);
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        } catch (e) {
+            return 999;
+        }
+    }
+
+    async function loadPriceComparison() {
+        try {
+            const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(collection(db, "inventory")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+            ]);
+
+            const factorsMap = new Map();
+            const namesMap = new Map();
+            const inventoryDocs = [];
+
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                if (!data.isDeleted) {
+                    const factor = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                    factorsMap.set(d.id, factor);
+                    if (data.name) namesMap.set(data.name.trim(), d.id);
+                    inventoryDocs.push({ id: d.id, ...data, factor });
+                }
+            });
+
+            const salesMap = new Map();
+            const purchasesMap = new Map();
+            const openingMap = new Map();
+            salesCountMap = {};
+
+            transSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.productId) {
+                    const current = openingMap.get(data.productId) || 0;
+                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
+                }
+            });
+
+            invoicesSnap.forEach(docSnap => {
+                const invData = docSnap.data();
+                if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') return;
+
+                const items = invData.items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    const nameKey = item.name ? item.name.trim() : null;
+
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const rawQty = Number(item.qty) || 0;
+                        const isCarton = isCartonUnit(item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+                        
+                        const current = salesMap.get(id) || 0;
+                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
+                    }
+
+                    if (nameKey && !item.isReturn) {
+                        salesCountMap[nameKey] = (salesCountMap[nameKey] || 0) + 1;
+                    }
+                }
+            });
+
+            supplierSnap.forEach(docSnap => {
+                const items = docSnap.data().items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+
+                        const current = purchasesMap.get(id) || 0;
+                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
+                    }
+                }
+            });
+
+            inventoryStockMap = {};
+            inventoryDocs.forEach(item => {
+                const factor = item.factor;
+                let openingTotalPcs = 0;
+
+                if (item.openingTotalPcs != null) {
+                    openingTotalPcs = Number(item.openingTotalPcs);
+                } else if (item.openingQty != null) {
+                    openingTotalPcs = Math.round(Number(item.openingQty) * factor);
+                } else if (openingMap.has(item.id)) {
+                    openingTotalPcs = openingMap.get(item.id);
+                }
+
+                const salesPcs = salesMap.get(item.id) || 0;
+                const purchasesPcs = purchasesMap.get(item.id) || 0;
+                const totalPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+                const isNegative = totalPcs < 0;
+                const absTotal = Math.abs(totalPcs);
+                const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+                const pcs = (absTotal % factor) * (isNegative ? -1 : 1);
+
+                if (item.name) {
+                    inventoryStockMap[item.name.trim()] = {
+                        cartons,
+                        pcs,
+                        totalPcs,
+                        factor
+                    };
+                }
+            });
+
+            const supSnap = await getDocs(collection(db, "suppliers"));
+            const bSelect = document.getElementById('builderSupplierSelect');
+            let bSelectOptions = `<option value="ALL_CHEAPEST">-- كل الموردين (تلقائي للأرخص) --</option>`;
+
+            supSnap.forEach(d => {
+                const data = d.data();
+                const name = data.name ? data.name.trim() : 'مورد غير معروف';
+                const phone = data.phone || data.mobile || '';
+                
+                suppliersBase[d.id] = { name: name, phone: phone };
+                supplierNameToInfo[name] = { phone: phone };
+                bSelectOptions += `<option value="${name}">${name}</option>`;
+            });
+
+            if (bSelect) bSelect.innerHTML = bSelectOptions;
+
+            const map = {};
+
+            supplierSnap.forEach(docSnap => {
+                const inv = docSnap.data();
+                if (inv.isDeleted || inv.type === "مرتجع شراء") return;
+
+                const supObj = suppliersBase[inv.supplierId] || { name: 'مورد غير معروف', phone: '' };
+                const supName = supObj.name;
+                const invDate = inv.date || '---';
+                const items = inv.items || [];
+
+                items.forEach(item => {
+                    const name = item.name ? item.name.trim() : null;
+                    const price = Number(item.buy || 0);
+                    const unit = item.unitName || item.unit || 'كرتونة';
+
+                    if (!name || price <= 0) return;
+                    if (!map[name]) map[name] = {};
+
+                    map[name][supName] = { price: price, unit: unit, date: invDate };
+                });
+            });
+
+            productPricesMap = {};
+
+            Object.keys(map).forEach(prodName => {
+                const suppliersObj = map[prodName];
+                let list = [];
+
+                Object.keys(suppliersObj).forEach(sName => {
+                    const info = suppliersObj[sName];
+                    const daysOld = getDaysDifference(info.date);
+                    const isOlderThanMonth = daysOld > 30;
+
+                    list.push({ 
+                        supplier: sName, 
+                        price: info.price, 
+                        unit: info.unit, 
+                        date: info.date,
+                        daysOld: daysOld,
+                        isOlderThanMonth: isOlderThanMonth 
+                    });
+                });
+
+                list.sort((a,b) => a.price - b.price);
+
+                if (list.length > 1) {
+                    const cheapestPrice = list[0].price;
+                    const secondPrice = list[1].price;
+                    
+                    if ((secondPrice - cheapestPrice) > 50) {
+                        list[0].isPriceDiffTooHigh = true;
+                    }
+                }
+
+                let recommended = list.find(s => !s.isOlderThanMonth && !s.isPriceDiffTooHigh);
+
+                if (!recommended) {
+                    let sortedByDate = [...list].sort((a,b) => a.daysOld - b.daysOld);
+                    recommended = sortedByDate[0];
+                }
+
+                productPricesMap[prodName] = {
+                    recommendedSupplier: recommended,
+                    allSuppliers: list
+                };
+            });
+
+            renderData();
+
+        } catch (e) {
+            console.error("خطأ في جلب بيانات مقارنة الأسعار والمخزن:", e);
+            document.getElementById('contentContainer').innerHTML = '<div class="text-danger text-center p-4">حدث خطأ أثناء تحميل سجل الأسعار والمخزون.</div>';
+        }
+    }
+
+    window.autoBuildSupplierOrder = function() {
+        const selectedSupplier = document.getElementById('builderSupplierSelect').value;
+        let addedCount = 0;
+
+        Object.keys(productPricesMap).forEach(pName => {
+            const stock = inventoryStockMap[pName] || { cartons: 0, pcs: 0, totalPcs: 0 };
+            const sCount = salesCountMap[pName] || 0;
+
+            if (sCount >= 3 && stock.cartons <= 2) {
+                const prodData = productPricesMap[pName];
+
+                if (selectedSupplier === 'ALL_CHEAPEST') {
+                    const recSupplier = prodData.recommendedSupplier || prodData.allSuppliers[0];
+                    if (recSupplier) {
+                        executeAddToCart(pName, recSupplier.supplier, recSupplier.price, recSupplier.unit);
+                        addedCount++;
+                    }
+                } else {
+                    const supplierInfo = prodData.allSuppliers.find(s => s.supplier === selectedSupplier);
+                    if (supplierInfo) {
+                        executeAddToCart(pName, supplierInfo.supplier, supplierInfo.price, supplierInfo.unit);
+                        addedCount++;
+                    }
+                }
+            }
+        });
+
+        if (addedCount > 0) {
+            openOrderModal();
+        } else {
+            const supplierTitle = selectedSupplier === 'ALL_CHEAPEST' ? 'الموردين' : `المورد (${selectedSupplier})`;
+            showInfoModal('تنبيه', `لا توجد أصناف ناقصة من الأصناف المطلوبة بكثرة لدى ${supplierTitle} حالياً.`);
+        }
+    };
+
+    function buildProductCardHtml(pName, isReorderHighlight = false) {
+        const data = productPricesMap[pName];
+        if (!data) return '';
+
+        const stockInfo = inventoryStockMap[pName] || { cartons: 0, pcs: 0, totalPcs: 0 };
+        const isNegative = stockInfo.totalPcs < 0;
+        const isZero = stockInfo.totalPcs === 0;
+        const isLowStock = stockInfo.totalPcs > 0 && stockInfo.totalPcs <= 5;
+        const sCount = salesCountMap[pName] || 0;
+        
+        let stockDisplay = `${stockInfo.cartons} كرتونة`;
+        if (stockInfo.pcs !== 0) {
+            stockDisplay += ` و ${stockInfo.pcs} قطعة`;
+        }
+
+        let badgeClass = 'stock-badge';
+        if (isNegative || isLowStock) badgeClass += ' low-stock';
+        else if (isZero) badgeClass += ' zero-stock';
+
+        const salesTagHtml = sCount > 0 ? `<span class="sales-count-tag"><i class="fas fa-fire me-1"></i> أُبيعت ${sCount} مرة</span>` : '';
+        const reorderTagHtml = (stockInfo.cartons <= 2 && sCount >= 3) ? `<span class="reorder-needed-tag"><i class="fas fa-exclamation-circle me-1"></i> إعادة طلب</span>` : '';
+
+        return `
+            <div class="product-card ${isReorderHighlight ? 'reorder-card' : ''}">
+                <div class="product-title">
+                    <div>
+                        <i class="fas fa-box text-success me-1"></i> ${pName}
+                        <div class="mt-1 d-flex gap-1 flex-wrap">${salesTagHtml}${reorderTagHtml}</div>
+                    </div>
+                    <div class="${badgeClass}" title="الكمية الحالية المتوفرة بالمخزن">
+                        <i class="fas fa-cubes"></i> بالمخزن: <b>${stockDisplay}</b>
+                    </div>
+                </div>
+                
+                ${data.allSuppliers.map((sInfo) => {
+                    const isRecommended = sInfo === data.recommendedSupplier;
+                    const priceDisplay = showPrices ? `${sInfo.price.toFixed(2)} EGP` : '••••••';
+                    
+                    return `
+                        <div class="supplier-row">
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="supplier-row-header">
+                                    <span class="fw-bold text-dark" style="font-size:0.82rem;">${sInfo.supplier}</span>${isRecommended ? '<span class="badge-recommended"><i class="fas fa-check-circle"></i> المرشح الأرخص والمستقر</span>' : ''}
+                                    ${sInfo.isOlderThanMonth ? '<span class="badge-outdated"><i class="fas fa-clock"></i> سعر قديم (+30 يوم)</span>' : ''}
+                                    ${sInfo.isPriceDiffTooHigh ? '<span class="badge-diff-high"><i class="fas fa-exclamation-triangle"></i> فارق سعر أكبر من 50ج</span>' : ''}
+                                </div>
+                                <div class="price-details-box">
+                                    <span>سعر الشراء:</span>
+                                    <b class="price-text force-ltr ${!showPrices ? 'hidden-price' : ''}">${priceDisplay}</b>
+                                    <span>/ ${sInfo.unit}</span>
+                                    <span class="text-muted opacity-75">(${sInfo.date})</span>
+                                </div>
+                            </div>
+                            <button class="btn-add-order" onclick="handleAddOrderClick('${escapeHtml(pName)}', '${escapeHtml(sInfo.supplier)}', ${sInfo.price}, '${escapeHtml(sInfo.unit)}')">
+                                <i class="fas fa-plus me-1"></i> إضافة للطلب
+                            </button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    window.renderData = function() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+        const container = document.getElementById('contentContainer');
+        const reorderContainer = document.getElementById('reorderSectionContainer');
+        const reorderListBody = document.getElementById('reorderProductsList');
+        const reorderBadge = document.getElementById('reorderCountBadge');
+
+        if (Object.keys(productPricesMap).length === 0) {
+            container.innerHTML = `<div class="text-center text-muted py-5 fw-bold"><i class="fas fa-info-circle fa-2x mb-2"></i><br>لا توجد فواتير مشتريات سابقة لتحليل الأسعار</div>`;
+            reorderContainer.style.display = 'none';
+            return;
+        }
+
+        let filteredProducts = Object.keys(productPricesMap).filter(pName => {
+            if (!searchTerm) return true;
+            const data = productPricesMap[pName];
+            return pName.toLowerCase().includes(searchTerm) || data.allSuppliers.some(s => s.supplier.toLowerCase().includes(searchTerm));
+        });
+
+        let reorderProducts = filteredProducts.filter(pName => {
+            const stock = inventoryStockMap[pName] || { cartons: 0, pcs: 0, totalPcs: 0 };
+            const sCount = salesCountMap[pName] || 0;
+            return (sCount >= 3) && (stock.cartons <= 2);
+        });
+
+        reorderProducts.sort((a, b) => (salesCountMap[b] || 0) - (salesCountMap[a] || 0));
+
+        if (reorderProducts.length > 0) {
+            reorderContainer.style.display = 'block';
+            reorderBadge.innerText = `${reorderProducts.length} صنف`;
+            let reorderHtml = '';
+            reorderProducts.forEach(pName => {
+                reorderHtml += buildProductCardHtml(pName, true);
+            });
+            reorderListBody.innerHTML = reorderHtml;
+        } else {
+            reorderContainer.style.display = 'none';
+        }
+
+        filteredProducts.sort((a, b) => {
+            const stockA = inventoryStockMap[a] ? inventoryStockMap[a].totalPcs : 0;
+            const stockB = inventoryStockMap[b] ? inventoryStockMap[b].totalPcs : 0;
+            const sCountA = salesCountMap[a] || 0;
+            const sCountB = salesCountMap[b] || 0;
+
+            if (stockA !== stockB) {
+                return stockA - stockB;
+            }
+
+            if (sCountB !== sCountA) {
+                return sCountB - sCountA;
+            }
+
+            return a.localeCompare(b, 'ar');
+        });
+
+        let html = '';
+
+        filteredProducts.forEach(pName => {
+            html += buildProductCardHtml(pName, false);
+        });
+
+        if (searchTerm) {
+            html += `
+                <button class="btn-add-custom-product" onclick="openAddCustomProductModal('${escapeHtml(searchTerm)}')">
+                    <i class="fas fa-plus-circle fa-lg"></i> إضافة صنف غير موجود للطلبية: "<b>${searchTerm}</b>"
+                </button>
+            `;
+        } else if (filteredProducts.length === 0) {
+            html = `<div class="text-center text-muted py-5">لا توجد أصناف مطابقة للبحث</div>`;
+        }
+
+        container.innerHTML = html;
+    };
+
+    function escapeHtml(str) {
+        return String(str).replace(/'/g, "\\'");
+    }
+
+    window.openAddCustomProductModal = function(initialName) {
+        const currentModal = bootstrap.Modal.getInstance(document.getElementById('orderModal'));
+        if (currentModal) currentModal.hide();
+
+        document.getElementById('customProdName').value = initialName || '';
+        document.getElementById('customPriceInput').value = '';
+        
+        const supSelect = document.getElementById('customSupplierSelect');
+        let optionsHtml = '';
+        
+        const supplierNames = Object.keys(supplierNameToInfo);
+        if (supplierNames.length > 0) {
+            supplierNames.forEach(sName => {
+                optionsHtml += `<option value="${sName}">${sName}</option>`;
+            });
+        } else {
+            optionsHtml = `<option value="مورد عام">مورد عام</option>`;
+        }
+        supSelect.innerHTML = optionsHtml;
+
+        setTimeout(() => {
+            new bootstrap.Modal(document.getElementById('addCustomProductModal')).show();
+        }, 150);
+    };
+
+    window.confirmAddCustomProduct = function() {
+        const pName = document.getElementById('customProdName').value.trim();
+        const supName = document.getElementById('customSupplierSelect').value;
+        const unit = document.getElementById('customUnitSelect').value;
+        const price = Number(document.getElementById('customPriceInput').value || 0);
+
+        if (!pName) {
+            alert('يرجى كتابة اسم الصنف');
+            return;
+        }
+
+        executeAddToCart(pName, supName, price, unit);
+
+        const modalElem = document.getElementById('addCustomProductModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalElem);
+        if (modalInstance) modalInstance.hide();
+
+        showInfoModal('تمت الإضافة', `تمت إضافة الصنف (${pName}) لطلبية المورد (${supName}) بنجاح.`);
+    };
+
+    window.handleAddOrderClick = function(productName, selectedSupplier, price, unit) {
+        const prodData = productPricesMap[productName];
+        if (!prodData) return;
+
+        const recSupplier = prodData.recommendedSupplier;
+
+        if (recSupplier && recSupplier.supplier !== selectedSupplier) {
+            const warningBody = `
+                <p class="mb-2 small">الصنف: <b>${productName}</b></p>
+                <div class="alert alert-warning py-2 small mb-2" style="font-size:0.75rem;">
+                    المورد المختار (<b>${selectedSupplier}</b>) غير مرشح تلقائياً نظراً لوجود فارق سعر أو مرور أكثر من شهر على آخر شراء منه.<br>
+                    المورد المرشح والمعتمد حالياً: <b>${recSupplier.supplier}</b> بسعر (<b>${recSupplier.price.toFixed(2)} EGP</b>).
+                </div>
+                <p class="small text-muted mb-0" style="font-size:0.72rem;">كيف ترغب في توجيه هذه الطلبية؟</p>
+            `;
+
+            document.getElementById('warningModalBody').innerHTML = warningBody;
+
+            const btnRedirect = document.getElementById('btnRedirectCheapest');
+            const btnKeep = document.getElementById('btnKeepSelected');
+
+            const warningModal = new bootstrap.Modal(document.getElementById('warningModal'));
+
+            btnRedirect.onclick = function() {
+                warningModal.hide();
+                executeAddToCart(productName, recSupplier.supplier, recSupplier.price, recSupplier.unit);
+            };
+
+            btnKeep.onclick = function() {
+                warningModal.hide();
+                executeAddToCart(productName, selectedSupplier, price, unit);
+            };
+
+            warningModal.show();
+        } else {
+            executeAddToCart(productName, selectedSupplier, price, unit);
+        }
+    };
+
+    function executeAddToCart(productName, supplierName, price, unit) {
+        if (!cartOrders[supplierName]) {
+            cartOrders[supplierName] = [];
+        }
+
+        const existingItem = cartOrders[supplierName].find(i => i.productName === productName);
+        if (existingItem) {
+            existingItem.qty += 1;
+        } else {
+            cartOrders[supplierName].push({
+                productName: productName,
+                price: price,
+                unit: unit,
+                qty: 1
+            });
+        }
+
+        updateOrderBar();
+    }
+
+    function updateOrderBar() {
+        let totalItems = 0;
+        Object.keys(cartOrders).forEach(s => {
+            cartOrders[s].forEach(item => totalItems += item.qty);
+        });
+
+        const bar = document.getElementById('orderBar');
+        if (totalItems > 0) {
+            bar.style.display = 'flex';
+            document.getElementById('orderItemCount').innerText = totalItems;
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+
+    window.openOrderModal = function() {
+        const body = document.getElementById('orderModalBody');
+        let html = '';
+
+        if (Object.keys(cartOrders).length === 0) {
+            body.innerHTML = '<div class="text-center text-muted py-4 small">الطلبية فارغة</div>';
+            new bootstrap.Modal(document.getElementById('orderModal')).show();
+            return;
+        }
+
+        Object.keys(cartOrders).forEach(supplierName => {
+            const items = cartOrders[supplierName];
+            if (items.length === 0) return;
+
+            html += `
+                <div class="card mb-2 border-success" style="border-radius:12px;">
+                    <div class="card-header bg-success text-white fw-bold py-1 px-2 d-flex justify-content-between align-items-center" style="font-size:0.8rem;">
+                        <span><i class="fas fa-truck me-1"></i> طلبية: ${supplierName}</span>
+                    </div>
+                    <div class="card-body p-2">
+                        ${items.map((item, idx) => {
+                            const stockInfo = inventoryStockMap[item.productName] || { cartons: 0, pcs: 0 };
+                            let stockText = `${stockInfo.cartons} كرتونة`;
+                            if (stockInfo.pcs !== 0) stockText += ` و ${stockInfo.pcs} قطعة`;
+
+                            return `
+                            <div class="cart-item-row">
+                                <div class="flex-grow-1 min-w-0 me-2">
+                                    <div class="fw-bold small text-dark d-flex align-items-center gap-1">
+                                        <span>${item.productName}</span>
+                                        <button class="btn btn-sm p-0 text-warning" title="تعديل اسم الصنف" onclick="editProductNameDirect('${escapeHtml(supplierName)}',${idx})">
+                                            <i class="fas fa-pen-to-square ms-1" style="font-size:0.75rem;"></i>
+                                        </button>
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">${showPrices ? item.price.toFixed(2) + ' EGP' : '••••••'} / ${item.unit}</small>
+                                    <small class="text-primary fw-bold" style="font-size:0.68rem;"><i class="fas fa-cubes me-1"></i> بالمخزن: ${stockText}</small>
+                                </div>
+                                <div class="d-flex align-items-center gap-1">
+                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;" title="تعديل الكمية" onclick="editQtyDirect('${escapeHtml(supplierName)}',${idx})"><i class="fas fa-edit"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.75rem;" onclick="changeQty('${escapeHtml(supplierName)}',${idx}, -1)">-</button>
+                                    <span class="fw-bold px-1" style="font-size:0.82rem;">${item.qty}</span>
+                                    <button class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:0.75rem;" onclick="changeQty('${escapeHtml(supplierName)}',${idx}, 1)">+</button>
+                                </div>
+                            </div>
+                            `;
+                        }).join('')}
+
+                        <div class="mt-2">
+                            <button class="btn btn-success btn-sm w-100 fw-bold py-1" style="font-size:0.78rem;" id="btnShareImg_${escapeHtml(supplierName)}" onclick="shareReceiptImage('${escapeHtml(supplierName)}')">
+                                <i class="fab fa-whatsapp me-1"></i> مشاركة صورة الفاتورة للواتساب والحفظ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        body.innerHTML = html;
+        new bootstrap.Modal(document.getElementById('orderModal')).show();
+    };
+
+    window.editProductNameDirect = function(supplierName, index) {
+        if (cartOrders[supplierName] && cartOrders[supplierName][index]) {
+            const currentName = cartOrders[supplierName][index].productName;
+            const newName = prompt("تعديل اسم الصنف في المسودة:", currentName);
+            if (newName !== null && newName.trim() !== "") {
+                cartOrders[supplierName][index].productName = newName.trim();
+                openOrderModal();
+            }
+        }
+    };
+
+    window.editQtyDirect = function(supplierName, index) {
+        if (cartOrders[supplierName] && cartOrders[supplierName][index]) {
+            const currentQty = cartOrders[supplierName][index].qty;
+            const newQtyStr = prompt("أدخل الكمية المطلوبة للصنف:", currentQty);
+            if (newQtyStr !== null) {
+                const newQty = parseInt(newQtyStr, 10);
+                if (!isNaN(newQty) && newQty > 0) {
+                    cartOrders[supplierName][index].qty = newQty;
+                } else if (newQty === 0) {
+                    cartOrders[supplierName].splice(index, 1);
+                    if (cartOrders[supplierName].length === 0) delete cartOrders[supplierName];
+                }
+                updateOrderBar();
+                openOrderModal();
+            }
+        }
+    };
+
+    window.changeQty = function(supplierName, index, delta) {
+        if (cartOrders[supplierName] && cartOrders[supplierName][index]) {
+            cartOrders[supplierName][index].qty += delta;
+            if (cartOrders[supplierName][index].qty <= 0) {
+                cartOrders[supplierName].splice(index, 1);
+            }
+            if (cartOrders[supplierName].length === 0) {
+                delete cartOrders[supplierName];
+            }
+        }
+        updateOrderBar();
+        openOrderModal();
+    };
+
+    window.shareReceiptImage = async function(supplierName) {
+        const items = cartOrders[supplierName];
+        if (!items || items.length === 0) return;
+
+        const btn = document.getElementById(`btnShareImg_${supplierName}`);
+        const originalText = btn.innerHTML;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> جاري التجهيز...`;
+        btn.disabled = true;
+
+        try {
+            const orderDocData = {
+                supplierName: supplierName,
+                items: items.map(i => ({ productName: i.productName, qty: i.qty, unit: i.unit, price: i.price })),
+                totalItemsCount: items.reduce((sum, item) => sum + item.qty, 0),
+                createdAt: new Date().toISOString(),
+                status: 'مجهزة'
+            };
+            await addDoc(collection(db, "purchase_orders"), orderDocData);
+        } catch (err) {
+            console.error("خطأ أثناء حفظ الطلبية في السجل:", err);
+        }
+
+        const listDiv = document.getElementById('thermalItemsList');
+        let htmlItems = '';
+        items.forEach(item => {
+            htmlItems += `
+                <div class="thermal-row">
+                    <span>${item.productName}</span>
+                    <span>(${item.qty}) ${item.unit}</span>
+                </div>
+            `;
+        });
+        listDiv.innerHTML = htmlItems;
+
+        const receiptElem = document.getElementById('thermalReceiptTemplate');
+
+        try {
+            const canvas = await html2canvas(receiptElem, {
+                scale: 2,
+                backgroundColor: '#ffffff'
+            });
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    alert("تعذر توليد صورة الفاتورة");
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                const file = new File([blob], `طلب_المورد_${supplierName}.png`, { type: 'image/png' });
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: `مطلوب`,
+                            text: `مطلوب`
+                        });
+                    } catch (err) {
+                        console.log("تم إلغاء المشاركة أو إغلاق الشاشة");
+                    }
+                } else {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `طلب_المورد_${supplierName}.png`;
+                    a.click();
+                    showInfoModal('تم التجهيز والحفظ', 'تم حفظ الطلبية بالسجل وحفظ الصورة على جهازك بنجاح! يمكنك الآن إرسالها للمورد عبر الواتساب.');
+                }
+
+                delete cartOrders[supplierName];
+                updateOrderBar();
+
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+
+                const orderModalElem = document.getElementById('orderModal');
+                const orderModalInst = bootstrap.Modal.getInstance(orderModalElem);
+                if (orderModalInst) orderModalInst.hide();
+
+            }, 'image/png');
+
+        } catch (e) {
+            console.error("خطأ في تصوير الفاتورة الحرارية:", e);
+            alert("حدث خطأ أثناء إعداد صورة الفاتورة");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    };
+
+    window.openOrdersHistoryModal = async function() {
+        const body = document.getElementById('ordersHistoryModalBody');
+        body.innerHTML = `<div class="text-center text-muted py-4 small"><div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل سجل الطلبيات...</div>`;
+        
+        new bootstrap.Modal(document.getElementById('ordersHistoryModal')).show();
+
+        try {
+            const ordersSnap = await getDocs(collection(db, "purchase_orders"));
+            fetchedOrdersHistory = [];
+            ordersSnap.forEach(docSnap => {
+                fetchedOrdersHistory.push({ id: docSnap.id, ...docSnap.data() });
+            });
+
+            fetchedOrdersHistory.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+            if (fetchedOrdersHistory.length === 0) {
+                body.innerHTML = `<div class="text-center text-muted py-4 small"><i class="fas fa-folder-open fa-2x mb-2"></i><br>لا توجد طلبيات مجهزة ومحفوظة بالسجل حتى الآن</div>`;
+                return;
+            }
+
+            let html = '';
+            fetchedOrdersHistory.forEach(order => {
+                const orderDateStr = order.createdAt ? new Date(order.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : '---';
+                
+                html += `
+                    <div class="card mb-2 border-secondary" style="border-radius:12px;">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center fw-bold py-1 px-2 small">
+                            <span><i class="fas fa-truck text-success me-1"></i> مورد: ${order.supplierName}</span>
+                            <span class="badge bg-success" style="font-size:0.65rem;">${order.status || 'مجهزة'}</span>
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="text-muted mb-1" style="font-size:0.7rem;"><i class="far fa-clock me-1"></i> تاريخ الطلب: <b>${orderDateStr}</b></div>
+                            <div class="border rounded p-1 bg-light mb-2">
+                                ${(order.items || []).map(item => `
+                                    <div class="d-flex justify-content-between align-items-center border-bottom py-1 small fw-bold" style="font-size:0.75rem;">
+                                        <span>${item.productName}</span>
+                                        <span class="text-success">(${item.qty})${item.unit}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary btn-sm fw-bold w-100 py-1" style="font-size:0.72rem;" onclick="convertToPurchaseInvoice('${order.id}')">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i> تحويل إلى فاتورة شراء
+                                </button>
+                                <button class="btn btn-warning btn-sm fw-bold w-100 py-1" style="font-size:0.72rem;" onclick="editOrderFromHistory('${order.id}')">
+                                    <i class="fas fa-edit me-1"></i> تعديل
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm fw-bold w-100 py-1" style="font-size:0.72rem;" onclick="deleteOrderFromHistory('${order.id}')">
+                                    <i class="fas fa-trash me-1"></i> حذف
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            body.innerHTML = html;
+
+        } catch (e) {
+            console.error("خطأ في جلب سجل الطلبيات:", e);
+            body.innerHTML = `<div class="text-danger text-center py-4 small">حدث خطأ أثناء تحميل سجل الطلبيات</div>`;
+        }
+    };
+
+    // 🚀 تنزيل ملف الطلبية مباشرة على الموبايل والتوجيه لصفحة الفواتير
+    window.convertToPurchaseInvoice = function(orderId) {
+        try {
+            const targetOrder = fetchedOrdersHistory.find(o => o.id === orderId);
+            if (!targetOrder) {
+                alert("لم يتم العثور على بيانات الطلبية المحفوظة!");
+                return;
+            }
+
+            const purchaseInvoiceData = {
+                supplierName: targetOrder.supplierName || '',
+                items: (targetOrder.items || []).map(i => ({
+                    name: i.productName || i.name || '',
+                    qty: Number(i.qty) || 1,
+                    unit: i.unit || 'كرتونة',
+                    price: Number(i.price) || 0,
+                    total: (Number(i.qty) || 1) * (Number(i.price) || 0)
+                })),
+                convertedFromOrder: true,
+                orderId: orderId,
+                timestamp: new Date().getTime()
+            };
+
+            const dataStr = JSON.stringify(purchaseInvoiceData, null, 2);
+
+            // 1. إنشاء ملف JSON وتنزيله على الموبايل داخل Downloads
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const fileUrl = URL.createObjectURL(blob);
+            
+            const downloadLink = document.createElement('a');
+            downloadLink.href = fileUrl;
+            downloadLink.download = `فاتورة_${(targetOrder.supplierName || 'المورد').replace(/\s+/g, '_')}_${orderId.slice(-4)}.json`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(fileUrl);
+
+            cleanModalBackdrops();
+
+            // 2. التوجيه المباشر لصفحة new-purchase-invoice.html مع تمرير معرف الطلبية في الـ URL
+            setTimeout(() => {
+                window.location.href = `new-purchase-invoice.html?orderId=${encodeURIComponent(orderId)}&fromFile=true`;
+            }, 300);
+            
+        } catch (err) {
+            console.error("خطأ أثناء تحويل الطلبية إلى ملف:", err);
+            alert("حدث خطأ أثناء حفظ الملف: " + err.message);
+        }
+    };
+
+    window.editOrderFromHistory = function(orderId) {
+        const targetOrder = fetchedOrdersHistory.find(o => o.id === orderId);
+        if (!targetOrder) return;
+
+        const supName = targetOrder.supplierName;
+        if (!cartOrders[supName]) {
+            cartOrders[supName] = [];
+        }
+
+        (targetOrder.items || []).forEach(item => {
+            const existing = cartOrders[supName].find(i => i.productName === item.productName);
+            if (existing) {
+                existing.qty = item.qty;
+            } else {
+                cartOrders[supName].push({
+                    productName: item.productName,
+                    qty: item.qty,
+                    unit: item.unit || 'كرتونة',
+                    price: item.price || 0
+                });
+            }
+        });
+
+        updateOrderBar();
+
+        const historyModalElem = document.getElementById('ordersHistoryModal');
+        const historyModalInst = bootstrap.Modal.getInstance(historyModalElem);
+        if (historyModalInst) historyModalInst.hide();
+
+        cleanModalBackdrops();
+
+        openOrderModal();
+    };
+
+    window.deleteOrderFromHistory = async function(orderId) {
+        if (confirm("هل أنت متأكد من حذف هذه الطلبية من السجل؟")) {
+            try {
+                await deleteDoc(doc(db, "purchase_orders", orderId));
+                openOrdersHistoryModal();
+            } catch (e) {
+                alert("حدث خطأ أثناء حذف الطلبية");
+            }
+        }
+    };
+
+    function showInfoModal(title, message) {
+        document.getElementById('infoModalTitle').innerText = title;
+        document.getElementById('infoModalBody').innerText = message;
+        new bootstrap.Modal(document.getElementById('infoModal')).show();
+    }
+
+    loadPriceComparison();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
+}
+</script>
+</body>
+</html>

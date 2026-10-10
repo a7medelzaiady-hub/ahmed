@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل النقدية وإغلاق اليوم - الزيادي لزيوت السيارات</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --accent: #000000;
+            --header-bg: linear-gradient(135deg, #000000, #252525 80%);
+            --bg-light: #f5f6f6;
+            --text-primary: #000000;
+            --text-secondary: #4a4a4a;
+            --border: #dcdcdc;
+            --white: #ffffff;
+            --germany-red: #FF0000;
+            --germany-gold: #FFCC00;
+            --purple: #5b21b6;
+            --card-radius: 20px;
+            --input-radius: 14px;
+            --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--text-primary);
+            padding-bottom: 60px;
+            font-size: 0.88rem;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .num { 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: 700; 
+            letter-spacing: -0.5px; 
+        }
+
+        .header-nav {
+            background: var(--header-bg);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-md);
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            border-bottom: 4px solid var(--germany-red);
+        }
+        .header-nav h6 { 
+            font-weight: 900; 
+            font-size: 1.05rem;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .add-btn {
+            background: rgba(255, 255, 255, 0.15);
+            width: 38px; 
+            height: 38px;
+            border-radius: 12px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            color: white; 
+            text-decoration: none; 
+            font-size: 0.95rem;
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+            transition: all 0.2s ease;
+        }
+        .add-btn:active { transform: scale(0.92); }
+
+        .register-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: var(--shadow-sm);
+            border-right: 5px solid var(--accent);
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .register-card.has-deficit { border-right-color: var(--germany-red); }
+        .register-card.has-surplus { border-right-color: #3b82f6; }
+        .register-card.matched { border-right-color: #22c55e; }
+
+        .status-badge {
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .badge-matched { background: #dcfce7; color: #15803d; }
+        .badge-surplus { background: #dbeafe; color: #1e40af; }
+        .badge-deficit { background: #fee2e2; color: #b91c1c; }
+
+        .btn-delete-card {
+            background: #fff1f2;
+            color: var(--germany-red);
+            border: 1px solid rgba(255, 0, 0, 0.2);
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .btn-delete-card:active {
+            transform: scale(0.9);
+            background: var(--germany-red);
+            color: white;
+        }
+
+        .financial-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 8px;
+            background: #f8fafc; 
+            padding: 12px; 
+            border-radius: 14px;
+            margin-top: 12px; 
+            border: 1px dashed var(--border);
+        }
+        .fin-box { font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); text-align: center; }
+        .fin-box span { display: block; font-size: 0.92rem; margin-top: 2px; font-weight: 800; color: var(--text-primary); }
+
+        .cash-details-box {
+            background: #fffbe3;
+            border: 1px solid #fde047;
+            border-radius: 12px;
+            padding: 10px 12px;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #713f12;
+            font-weight: 700;
+        }
+
+        .meta-text {
+            font-size: 0.73rem;
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .filter-input {
+            border: 1px solid var(--border);
+            border-radius: var(--input-radius);
+            padding: 10px 14px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            font-family: 'Cairo', sans-serif;
+            background: var(--white);
+            width: 100%;
+        }
+
+        .empty-state { text-align: center; padding: 60px 10px; color: var(--text-secondary); }
+
+        .custom-popup-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6); 
+            z-index: 10000; 
+            display: flex;
+            align-items: center;  
+            justify-content: center; 
+            backdrop-filter: blur(4px);
+        }
+        .custom-popup-box {
+            background: white;
+            width: 90%; 
+            max-width: 400px; 
+            padding: 26px;
+            border-radius: 24px; 
+            text-align: center; 
+            font-family: 'Cairo';
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <a href="index.html" class="add-btn" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
+    <h6 class="m-0"><i class="fas fa-cash-register me-1"></i> سجل النقدية المُرَحَّلة</h6>
+    <a href="sales-archive.html" class="add-btn" title="سجل المبيعات"><i class="fas fa-history"></i></a>
+</div>
+
+<div class="container px-2 mt-3">
+
+    <!-- شريط البحث والفلترة -->
+    <div class="row g-2 mb-3">
+        <div class="col-8">
+            <input type="date" id="registerDateFilter" class="form-control filter-input" onchange="filterRegister()">
+        </div>
+        <div class="col-4">
+            <button class="btn btn-dark w-100 fw-bold h-100" style="border-radius: var(--input-radius); font-size:0.8rem;" onclick="resetRegisterFilter()">
+                عرض الكل
+            </button>
+        </div>
+    </div>
+
+    <!-- القائمة الرئيسية للكروت -->
+    <div id="registerList">
+        <div class="empty-state">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p class="mt-3 fw-bold">جاري تحميل سجلات النقدية...</p>
+        </div>
+    </div>
+</div>
+
+<div id="customGlobalModal" class="custom-popup-overlay" style="display: none;">
+    <div class="custom-popup-box">
+        <div id="customModalIcon" style="width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;"></div>
+        <h6 class="fw-bold mb-2" id="customModalTitle" style="font-size: 1.05rem;">تنبيه النظام</h6>
+        <div id="customModalBody" style="font-size: 0.85rem; color: #475569; margin-bottom: 20px; text-align: right; white-space: pre-line; line-height: 1.7; max-height: 300px; overflow-y: auto; padding: 5px;"></div>
+        <div class="d-flex gap-2 justify-content-center" id="customModalActions"></div>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let allRegisterRecords = [];
+
+    window.showCustomUi = (options) => {
+        const modal = document.getElementById('customGlobalModal');
+        const title = document.getElementById('customModalTitle');
+        const body = document.getElementById('customModalBody');
+        const iconContainer = document.getElementById('customModalIcon');
+        const actions = document.getElementById('customModalActions');
+
+        title.innerText = options.title || "تنبيه النظام";
+        body.innerHTML = options.message || "";
+
+        if (options.icon === "success") {
+            iconContainer.style.background = "#f0fdf4";
+            iconContainer.innerHTML = `<i class="fas fa-check-circle" style="color: #000000; font-size: 1.7rem;"></i>`;
+        } else if (options.icon === "danger") {
+            iconContainer.style.background = "#fff1f2";
+            iconContainer.innerHTML = `<i class="fas fa-exclamation-triangle" style="color: var(--germany-red); font-size: 1.7rem;"></i>`;
+        } else {
+            iconContainer.style.background = "#f1f5f9";
+            iconContainer.innerHTML = `<i class="fas fa-info-circle" style="color: var(--accent); font-size: 1.7rem;"></i>`;
+        }
+
+        actions.innerHTML = "";
+
+        if (options.type === "confirm") {
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = "btn btn-sm btn-danger px-4 fw-bold";
+            confirmBtn.style.fontFamily = "Cairo";
+            confirmBtn.style.borderRadius = "10px";
+            confirmBtn.innerText = options.confirmText || "حذف";
+            confirmBtn.onclick = () => {
+                modal.style.display = 'none';
+                if (options.onConfirm) options.onConfirm();
+            };
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = "btn btn-sm btn-light text-dark px-4 fw-bold";
+            cancelBtn.style.fontFamily = "Cairo";
+            cancelBtn.style.borderRadius = "10px";
+            cancelBtn.innerText = "إلغاء";
+            cancelBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+            actions.appendChild(confirmBtn);
+            actions.appendChild(cancelBtn);
+        } else {
+            const closeBtn = document.createElement('button');
+            closeBtn.className = "btn btn-sm btn-dark px-5 fw-bold";
+            closeBtn.style.fontFamily = "Cairo";
+            closeBtn.style.borderRadius = "10px";
+            closeBtn.innerText = "موافق";
+            closeBtn.onclick = () => {
+                modal.style.display = 'none';
+                if (options.onConfirm) options.onConfirm();
+            };
+            actions.appendChild(closeBtn);
+        }
+        modal.style.display = 'flex';
+    };
+
+    // دالة تفكيك النص المدخل للنقدية (مثال: 200*4*8 أو 200 8000 2000)
+    function parseCashBreakdown(inputRaw) {
+        if (!inputRaw) return { total: 0, textDisplay: "لم تُسجل تفاصيل" };
+        
+        let str = String(inputRaw).trim();
+        if (!str) return { total: 0, textDisplay: "لم تُسجل تفاصيل" };
+
+        try {
+            // استبدال أداة الضرب بأشكالها المتنوعة بـ *
+            let normalized = str.replace(/[×xX]/g, '*').replace(/\s+/g, ' ');
+            
+            // تقسيم النص إما بالفواصل أو المسافات أو علامة +
+            let parts = normalized.split(/[\+\,\s]+/);
+            let parsedItems = [];
+            let calculatedTotal = 0;
+
+            parts.forEach(p => {
+                p = p.trim();
+                if (!p) return;
+
+                if (p.includes('*')) {
+                    let factors = p.split('*').map(Number);
+                    let product = factors.reduce((a, b) => a * (isNaN(b) ? 1 : b), 1);
+                    if (!isNaN(product)) {
+                        calculatedTotal += product;
+                        parsedItems.push(`${p} = ${product} ج.م`);
+                    }
+                } else {
+                    let val = Number(p);
+                    if (!isNaN(val)) {
+                        calculatedTotal += val;
+                        parsedItems.push(`${val} ج.م`);
+                    }
+                }
+            });
+
+            return {
+                total: calculatedTotal,
+                textDisplay: parsedItems.length > 0 ? parsedItems.join(' | ') : str
+            };
+        } catch (e) {
+            return { total: Number(str) || 0, textDisplay: str };
+        }
+    }
+
+    async function loadCashRegisterData() {
+        const container = document.getElementById('registerList');
+        try {
+            const snap = await db.collection("daily_cash_register")
+                .orderBy("timestamp", "desc")
+                .get();
+
+            if (snap.empty) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-box-open fa-2x mb-2"></i>
+                        <p class="fw-bold">لا توجد سجلات نقدية مُرَحَّلة حتى الآن.</p>
+                    </div>`;
+                return;
+            }
+
+            allRegisterRecords = [];
+            snap.forEach(doc => {
+                allRegisterRecords.push({ id: doc.id, ...doc.data() });
+            });
+
+            renderRegisterCards(allRegisterRecords);
+
+        } catch (e) {
+            console.error("خطأ في تحميل البيانات:", e);
+            container.innerHTML = `
+                <div class="alert alert-danger text-center p-3" style="border-radius:14px;">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2 d-block"></i>
+                    حدث خطأ أثناء تحميل سجل النقدية: ${e.message}
+                </div>`;
+        }
+    }
+
+    function renderRegisterCards(records) {
+        const container = document.getElementById('registerList');
+        if (!records || records.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search fa-2x mb-2"></i>
+                    <p class="fw-bold">لا توجد نتائج مطابقة لفلتر التاريخ المختار.</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = records.map(item => {
+            const expectedCashNum = Number(item.expectedCash || 0);
+
+            // استخراج العهدة والمصروفات والمشتريات
+            const custodyNum = Number(item.custody || item.ohda || 0);
+            const expensesNum = Number(item.expenses || item.masrofat || 0);
+            const purchasesNum = Number(item.purchases || item.moshtarayat || 0);
+
+            // النص الخام المسجل للنقدية الفعلية
+            const rawCashInput = item.actualCashRaw || item.cashDetails || item.actualCash || item.actualCashAmount || "";
+            const breakdown = parseCashBreakdown(rawCashInput);
+
+            // الكاش الفعلي المحسوب
+            const actualCashNum = breakdown.total > 0 ? breakdown.total : Number(item.actualCashAmount || item.actualCash || 0);
+
+            // الفارق بين الفعلي والمتوقع
+            const diff = actualCashNum - expectedCashNum;
+
+            let statusBadge = "";
+            let cardClass = "matched";
+
+            if (Math.abs(diff) < 0.1) {
+                statusBadge = `<span class="status-badge badge-matched"><i class="fas fa-check-circle"></i> مطابق (0.00)</span>`;
+                cardClass = "matched";
+            } else if (diff > 0) {
+                statusBadge = `<span class="status-badge badge-surplus"><i class="fas fa-plus-circle"></i> زيادة (+${diff.toFixed(1)})</span>`;
+                cardClass = "has-surplus";
+            } else {
+                statusBadge = `<span class="status-badge badge-deficit"><i class="fas fa-minus-circle"></i> عجز (${diff.toFixed(1)})</span>`;
+                cardClass = "has-deficit";
+            }
+
+            const expectedCash = expectedCashNum.toFixed(1);
+            const actualCash = actualCashNum.toFixed(1);
+            const custody = custodyNum.toFixed(1);
+            const expenses = expensesNum.toFixed(1);
+            const purchases = purchasesNum.toFixed(1);
+
+            const totalSales = Number(item.totalSales || 0).toFixed(1);
+            const walletTotal = Number(item.walletTotal || 0).toFixed(1);
+            const remainingTotal = Number(item.remainingTotal || 0).toFixed(1);
+            const docId = item.id;
+            const recordDate = item.date || item.id;
+            const userCreated = item.createdBy || item.closedBy || 'أحمد محمود الزيادي';
+
+            let formattedTime = "";
+            if (item.timestamp && item.timestamp.seconds) {
+                const dateObj = new Date(item.timestamp.seconds * 1000);
+                formattedTime = dateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            return `
+                <div class="register-card ${cardClass}" id="card_${docId}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h6 class="fw-bold mb-0 text-dark"><i class="far fa-calendar-alt me-1"></i> يوم: ${recordDate}</h6>
+                            <span class="meta-text"><i class="fas fa-user-check me-1"></i> بوسطة: ${userCreated} ${formattedTime ? '| ' + formattedTime : ''}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            ${statusBadge}
+                            <button class="btn-delete-card" onclick="deleteRegisterRecord('${docId}', '${recordDate}')" title="حذف سجل اليوم">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- شبكة البنود المالية الأساسية -->
+                    <div class="financial-grid">
+                        <div class="fin-box text-success">+ العهدة <span class="num">${custody} ج.م</span></div>
+                        <div class="fin-box text-danger">- المصروفات <span class="num">${expenses} ج.م</span></div>
+                        <div class="fin-box text-danger">- المشتريات <span class="num">${purchases} ج.م</span></div>
+
+                        <div class="fin-box text-dark">صافي المتوقع <span class="num">${expectedCash} ج.م</span></div>
+                        <div class="fin-box text-primary">الكاش الفعلي <span class="num">${actualCash} ج.م</span></div>
+                        <div class="fin-box text-dark">إجمالي المبيعات <span class="num">${totalSales} ج.م</span></div>
+
+                        <div class="fin-box" style="color:var(--purple);">المحفظة <span class="num">${walletTotal} ج.م</span></div>
+                        <div class="fin-box text-danger" style="grid-column: span 2;">الآجل الجديد <span class="num">${remainingTotal} ج.م</span></div>
+                    </div>
+
+                    <!-- مربع تفكيك فئات النقدية والتفاصيل -->
+                    <div class="cash-details-box">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span><i class="fas fa-coins me-1"></i> تفاصيل النقدية الفعلية:</span>
+                            <span class="num fw-bold">${actualCash} ج.م</span>
+                        </div>
+                        <div class="num dir-ltr text-end text-dark fs-7" style="word-break: break-all;">
+                            ${breakdown.textDisplay}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function deleteRegisterRecord(docId, dateDisplay) {
+        window.showCustomUi({
+            title: "تأكيد حذف السجل",
+            message: `هل أنت متأكد من حذف سجل النقدية المُرَحَّل ليوم (${dateDisplay}) نهائياً؟`,
+            type: "confirm",
+            icon: "danger",
+            confirmText: "نعم، إحذف",
+            onConfirm: async () => {
+                try {
+                    await db.collection("daily_cash_register").doc(docId).delete();
+                    
+                    // تحديث المصفوفة المحلية
+                    allRegisterRecords = allRegisterRecords.filter(r => r.id !== docId);
+                    filterRegister();
+
+                    window.showCustomUi({
+                        title: "تم الحذف",
+                        message: `✅ تم حذف سجل النقدية الخاص بيوم ${dateDisplay} بنجاح.`,
+                        icon: "success"
+                    });
+                } catch (err) {
+                    console.error("خطأ الحذف:", err);
+                    window.showCustomUi({
+                        title: "خطأ في الحذف",
+                        message: "حدث خطأ أثناء محاولة حذف السجل: " + err.message,
+                        icon: "danger"
+                    });
+                }
+            }
+        });
+    }
+
+    function filterRegister() {
+        const filterDate = document.getElementById('registerDateFilter').value;
+        if (!filterDate) {
+            renderRegisterCards(allRegisterRecords);
+            return;
+        }
+
+        const filtered = allRegisterRecords.filter(item => item.date === filterDate || item.id === filterDate);
+        renderRegisterCards(filtered);
+    }
+
+    function resetRegisterFilter() {
+        document.getElementById('registerDateFilter').value = "";
+        renderRegisterCards(allRegisterRecords);
+    }
+
+    // بدء التحميل عند فتح الصفحة
+    loadCashRegisterData();
+</script>
+</body>
+</html>
