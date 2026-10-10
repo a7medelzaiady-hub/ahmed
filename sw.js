@@ -1,6 +1,15 @@
-const CACHE_NAME = "elzaiady-cache-v9";
+const CACHE_NAME = "elzaiady-cache-v10";
 
-// 🔥 قائمة شاملة بكل صفحات وملفات المشروع الحقيقية (يتم تحديثها تلقائياً مع كل نسخة)
+// ملفات الصفحات الأساسية والحارس: تُجلب من الشبكة أولاً دائماً (Network First)
+// حتى لا تعلق نسخة قديمة منها في الكاش وتسبب حلقة إعادة التوجيه
+const NETWORK_FIRST_FILES = [
+  "auth-guard.js",
+  "index.html",
+  "index1.html",
+  "sw.js",
+  "manifest.json"
+];
+
 const STATIC_FILES = [
   "./",
   "./index.html",
@@ -12,7 +21,6 @@ const STATIC_FILES = [
   "./icon-192.jpg",
   "./icon-512.png",
 
-  "./#U200badd-shortages.html",
   "./add-customer.html",
   "./add-product.html",
   "./add-shortages.html",
@@ -123,70 +131,128 @@ const STATIC_FILES = [
 
   "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css",
   "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap",
-  "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+  "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
+
+  // مكتبات Firebase (ES modules) لتعمل الصفحات أوفلاين
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
 ];
 
 /* ===========================
-   INSTALL (تثبيت الملفات)
+   أدوات مساعدة
+=========================== */
+
+// نخزن فقط الردود السليمة، وغير المعاد توجيهها
+function isCacheable(response) {
+  return response && response.ok && response.status === 200 && !response.redirected;
+}
+
+// طلبات قواعد البيانات تُترك للمتصفح (Firestore يدير الأوفلاين بنفسه)
+function isDatabaseRequest(url) {
+  const h = url.hostname;
+  return (
+    h.includes("firestore.googleapis.com") ||
+    h.includes("firebaseio.com") ||
+    h.includes("identitytoolkit.googleapis.com") ||
+    h.includes("securetoken.googleapis.com") ||
+    h.includes("supabase")
+  );
+}
+
+function isNetworkFirst(url) {
+  if (url.origin !== self.location.origin) return false;
+  return NETWORK_FIRST_FILES.some(f => url.pathname.endsWith("/" + f) || url.pathname === "/" + f) ||
+         url.pathname.endsWith("/"); // الصفحة الرئيسية "/"
+}
+
+/* ===========================
+   INSTALL
 =========================== */
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      // نستخدم إضافة كل ملف بشكل منفصل بدل addAll
-      // عشان لو ملف واحد فشل (مثلاً غير موجود) مايوقفش تخزين باقي الملفات
-      return Promise.all(
+    caches.open(CACHE_NAME).then(cache =>
+      // إضافة كل ملف على حدة، فلو ملف فشل لا يتوقف الباقي
+      Promise.all(
         STATIC_FILES.map(url =>
-          cache.add(url).catch(err => console.warn("تعذر تخزين:", url, err))
+          // cache: "reload" لضمان جلب النسخة الحديثة من السيرفر وليس من كاش المتصفح
+          cache.add(new Request(url, { cache: "reload" })).catch(err =>
+            console.warn("تعذر تخزين:", url, err)
+          )
         )
-      );
-    })
+      )
+    )
   );
   self.skipWaiting();
 });
 
 /* ===========================
-   ACTIVATE (تحديث الإصدارات)
+   ACTIVATE (حذف الكاش القديم)
 =========================== */
 self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.map(key => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then(keys =>
+        Promise.all(
+          keys.map(key => (key !== CACHE_NAME ? caches.delete(key) : undefined))
+        )
+      )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 /* ===========================
-   FETCH (استراتيجية التشغيل أوفلاين + تسريع الصفحات + تقليل الاستهلاك)
+   FETCH
 =========================== */
 self.addEventListener("fetch", event => {
   const request = event.request;
 
-  // 1. استثناء طلبات قواعد البيانات (Firebase/Supabase) للسماح لها بالعمل أوفلاين ذاتياً
-  if (request.url.includes("firestore.googleapis.com") || request.url.includes("firebase") || request.url.includes("supabase")) {
+  // نتعامل فقط مع طلبات GET
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  // 1. طلبات قواعد البيانات: لا نتدخل
+  if (isDatabaseRequest(url)) return;
+
+  // 2. الملفات الحرجة (الحارس + صفحة الدخول + الرئيسية): الشبكة أولاً
+  //    الكاش يُستخدم فقط عند انقطاع الإنترنت
+  if (isNetworkFirst(url)) {
+    event.respondWith(
+      fetch(request)
+        .then(networkResponse => {
+          if (isCacheable(networkResponse)) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() =>
+          caches.match(request).then(cached => {
+            if (cached) return cached;
+            if (request.headers.get("accept")?.includes("text/html")) {
+              return caches.match("./offline.html");
+            }
+            return Response.error();
+          })
+        )
+    );
     return;
   }
 
-  // 2. صفحات الـ HTML: نعرض النسخة المخزنة فوراً (سرعة فائقة + بيانات أقل)
-  //    ثم نحدّث الكاش فى الخلفية بصمت لو فيه إنترنت (Stale-While-Revalidate)
+  // 3. باقي صفحات HTML: الكاش فوراً + تحديث في الخلفية (Stale-While-Revalidate)
   if (request.headers.get("accept")?.includes("text/html")) {
     event.respondWith(
       caches.open(CACHE_NAME).then(cache =>
         cache.match(request).then(cachedResponse => {
           const networkFetch = fetch(request)
             .then(networkResponse => {
-              cache.put(request, networkResponse.clone());
+              if (isCacheable(networkResponse)) {
+                cache.put(request, networkResponse.clone());
+              }
               return networkResponse;
             })
             .catch(() => cachedResponse || caches.match("./offline.html"));
 
-          // لو الصفحة موجودة بالكاش، رجّعها فوراً بدون انتظار الشبكة
           return cachedResponse || networkFetch;
         })
       )
@@ -194,14 +260,20 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // 3. استراتيجية الكاش أولاً للملفات الثابتة (CSS/JS/Images) لتقليل استهلاك البيانات
+  // 4. الملفات الثابتة (CSS/JS/صور/خطوط): الكاش أولاً
   event.respondWith(
     caches.match(request).then(cachedResponse => {
-      return cachedResponse || fetch(request).then(networkResponse => {
-        const responseClone = networkResponse.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(request, responseClone));
-        return networkResponse;
-      });
+      if (cachedResponse) return cachedResponse;
+
+      return fetch(request)
+        .then(networkResponse => {
+          if (isCacheable(networkResponse)) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => Response.error());
     })
   );
 });
