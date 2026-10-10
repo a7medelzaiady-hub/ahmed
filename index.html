@@ -192,16 +192,12 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    // ✅ تم إلغاء أي كاش محلي لفايرستور (persistentLocalCache) بالكامل.
-    // الاتصال هنا دايمًا هيروح للسيرفر مباشرة، مفيش أي نسخة محفوظة على الجهاز.
     const db = getFirestore(app);
 
     const loader = document.getElementById('loader');
     const loginContent = document.getElementById('loginContent');
     const ATTEMPTS_KEY = 'zaiady_login_attempts';
 
-    // حماية من الهجمات: نظام قفل المحاولات الفاشلة Rate-Limiting
-    // (ده عداد محاولات فقط، مش تخزين لباسورد أو بيانات دخول - فمفيش مشكلة إنه يفضل موجود)
     function checkBruteForceLockout() {
         try {
             const attempts = JSON.parse(localStorage.getItem(ATTEMPTS_KEY)) || { count: 0, lockUntil: 0 };
@@ -220,7 +216,7 @@
         try {
             let attempts = JSON.parse(localStorage.getItem(ATTEMPTS_KEY)) || { count: 0, lockUntil: 0 };
             attempts.count += 1;
-            if (attempts.count >= 5) { // بعد 5 محاولات خاطئة يتم الحظر لمرحلة مؤقتة (60 ثانية)
+            if (attempts.count >= 5) {
                 attempts.lockUntil = Date.now() + (60 * 1000); 
             }
             localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(attempts));
@@ -231,25 +227,25 @@
         localStorage.removeItem(ATTEMPTS_KEY);
     }
 
-    // تنظيف المدخلات للحماية
     function sanitizeInput(str) {
         return String(str || '').replace(/[<>'"/]/g, '').trim();
     }
 
-    // حفظ بيانات الجلسة بأسلوب آمن (Session فقط، بتتمسح لما التاب يتقفل)
+    // 🔴 تم تعديل هذه الدالة لتشمل جميع مفاتيح الجلسة المحتملة لحل مشكلة إعادة التوجيه
     function saveSessionData(username, role, userId = null) {
         const generatedUserId = userId || ('usr_' + username.toLowerCase().replace(/\s+/g, '_'));
         const token = 'token_' + Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
 
+        // الحفظ في Session Storage بجميع المسميات
         sessionStorage.setItem('isLoggedIn', 'true');
         sessionStorage.setItem('username', username);
+        sessionStorage.setItem('user', username); // تمت الإضافة هنا
         sessionStorage.setItem('user_name', username);
         sessionStorage.setItem('role', role);
         sessionStorage.setItem('userId', generatedUserId);
         sessionStorage.setItem('authToken', token);
 
-        // 🔒 حفظ جلسة دائمة (localStorage) يعتمد عليها auth-guard.js فى كل الصفحات
-        // لمنع الدخول المباشر بروابط خارجية ولإبطال الجلسة تلقائياً بعد يوم بدون استخدام
+        // الحفظ في Local Storage
         try {
             localStorage.setItem('authGuard_token', token);
             localStorage.setItem('authGuard_time', String(Date.now()));
@@ -316,7 +312,8 @@
         const loggedUser = sessionStorage.getItem('isLoggedIn');
         const authToken = sessionStorage.getItem('authToken');
         
-        if (loggedUser === 'true' && authToken) {
+        // تم إضافة فحص للتأكد أننا لا نقوم بالتوجيه بشكل متكرر
+        if (loggedUser === 'true' && authToken && !window.location.href.includes("redirected")) {
             window.location.href = "index1.html";
         } else {
             setTimeout(() => {
@@ -337,7 +334,6 @@
         const err = document.getElementById('errMsg');
         const btn = document.getElementById('btnLogin');
 
-        // فحص حالة الحظر من الهجمات المتكررة
         const lockStatus = checkBruteForceLockout();
         if (lockStatus.isLocked) {
             err.innerText = `⛔ تم حظر المحاولات مؤقتاً لحماية الحساب. انتظر ${lockStatus.remainingSecs} ثانية.`;
@@ -349,7 +345,6 @@
             return;
         }
 
-        // ✅ لازم يكون فيه إنترنت فعلي عشان يسجل دخول - مفيش أي دخول بدون نت
         if (!navigator.onLine) {
             err.innerText = "📡 لازم تكون متصل بالإنترنت لتسجيل الدخول";
             return;
@@ -359,18 +354,12 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري التحقق...';
         err.innerText = ""; 
 
-        // 🟢 الدخول أونلاين من الفايربيس فقط - قراءة مباشرة من السيرفر بدون أي كاش
         try {
             const userRef = doc(db, "users", userVal);
-
-            // getDocFromServer: يجبر القراءة من السيرفر مباشرة ويرفض أي نسخة محفوظة محليًا.
-            // لو مفيش اتصال فعلي بالسيرفر، هيرمي error، وده مقصود (مفيش fallback لكاش).
             const userSnap = await getDocFromServer(userRef);
 
             if (userSnap.exists()) {
                 const userData = userSnap.data();
-                
-                // قراءة كلمة المرور بأمان سواء كانت في pass أو password
                 const dbPass = String(userData.pass || userData.password || '').trim();
 
                 if (dbPass === passVal) {
