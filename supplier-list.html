@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قائمة الموردين - شركة الزيادى</title>
+    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { 
+            --accent: #0b5e3d; 
+            --header-bg: #0b5e3d;
+            --bg-light: #f4f7f6;
+            --text-primary: #1b2e26;
+            --border: #dce3de;
+            --white: #ffffff;
+            --danger: #d90429;
+            --success: #2d6a4f;
+            --info: #0d6efd;
+        }
+
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; color: var(--text-primary); }
+        
+        .header-section { 
+            padding: 15px 0; background: var(--header-bg); 
+            color: white; position: sticky; top: 0; z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .search-box { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 12px; padding: 10px 15px; display: flex; 
+            align-items: center; margin: 15px 15px 0; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+        .search-box input { 
+            background: transparent; border: none; color: var(--text-primary); 
+            width: 100%; outline: none; font-size: 0.9rem; font-weight: 600;
+        }
+        .search-box i { color: var(--accent); opacity: 0.7; margin-left: 10px; }
+
+        /* كارت الإجمالي */
+        .summary-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            margin: 15px 15px 5px 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+        .summary-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+        .summary-main-val {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--accent);
+            line-height: 1.2;
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--bg-light);
+            padding-top: 10px;
+            margin-top: 10px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .supplier-card { 
+            background: var(--white); border: 1px solid var(--border); 
+            border-radius: 18px; padding: 15px; margin-bottom: 12px; 
+            transition: 0.3s; display: flex; justify-content: space-between; 
+            align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+        .supplier-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+        .supplier-name { color: var(--accent); font-weight: 800; font-size: 1rem; margin: 0; }
+        .balance-label { font-size: 0.7rem; color: #6c757d; font-weight: 700; display: block; margin-bottom: 2px; }
+        .balance-value { font-weight: 800; font-size: 0.95rem; }
+        
+        .text-debt { color: var(--danger); }
+        .text-clear { color: var(--success); }
+        .text-credit { color: var(--info); }
+
+        .action-container { display: flex; gap: 8px; }
+        .action-btn { 
+            width: 40px; height: 40px; border-radius: 10px; 
+            display: flex; align-items: center; justify-content: center; 
+            text-decoration: none; transition: 0.2s; font-size: 1rem; 
+            border: 1px solid var(--border);
+        }
+        .btn-pay { background: #e9f5ee; color: var(--success); border-color: #c9e7d5; }
+        .btn-info { background: #f0f4ff; color: var(--info); border-color: #dbe4ff; }
+        
+        .spinner-custom { color: var(--accent); font-weight: 700; font-size: 0.85rem; }
+
+        /* زر حذف الكل وتنسيق أيقونة 3D */
+        .btn-delete-all {
+            background: rgba(217, 4, 41, 0.22);
+            border: 1px solid rgba(217, 4, 41, 0.45);
+            color: #ffc2cc;
+            padding: 5px 12px;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.25 ease;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.12);
+        }
+        .btn-delete-all:hover, .btn-delete-all:active {
+            background: rgba(217, 4, 41, 0.5);
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .trash-3d-icon {
+            font-size: 0.9rem;
+            color: #ff4d6d;
+            text-shadow: 
+                0px 1px 0px #a10022,
+                1px 2px 2px rgba(0, 0, 0, 0.5);
+            transition: transform 0.2s ease;
+            display: inline-block;
+        }
+        .btn-delete-all:hover .trash-3d-icon {
+            transform: scale(1.2) rotate(-8deg);
+        }
+    </style>
+</head>
+<body>
+
+<div class="header-section">
+    <div class="container d-flex justify-content-between align-items-center px-3">
+        <div class="d-flex align-items-center gap-3">
+            <a href="index.html" class="text-white text-decoration-none" title="الرئيسية">
+                <i class="fas fa-house fs-5"></i>
+            </a>
+            <a href="supplier-management.html" class="text-white text-decoration-none" title="رجوع">
+                <i class="fas fa-chevron-right fs-5"></i>
+            </a>
+        </div>
+        <h5 class="m-0 fw-bold">قائمة الموردين</h5>
+        <div>
+            <button class="btn-delete-all" onclick="deleteAllSuppliersPermanently()">
+                <i class="fas fa-trash-can trash-3d-icon"></i>
+                <span>حذف الكل</span>
+            </button>
+        </div>
+    </div>
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="ابحث باسم المورد أو الهاتف..." oninput="filterSuppliers()">
+    </div>
+</div>
+
+<!-- كارت إجمالي الموردين والمديونيات -->
+<div class="summary-card">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <div class="summary-title" id="summaryTitle">صافي إجمالي المديونيات للموردين</div>
+            <div class="summary-main-val" id="totalSuppliersBalance">0.00 ج.م</div>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-success bg-opacity-10 text-success p-2 rounded-3" id="suppliersCount">0 مورد</span>
+        </div>
+    </div>
+    <div class="summary-stats">
+        <span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i> علينا: <b id="totalDebtVal">0</b></span>
+        <span class="text-info"><i class="fas fa-arrow-circle-down me-1"></i> لنا: <b id="totalCreditVal">0</b></span>
+        <span class="text-success"><i class="fas fa-check-circle me-1"></i> خالص: <b id="totalClearVal">0</b></span>
+    </div>
+</div>
+
+<div class="container py-3" id="suppliersContainer">
+    <div class="text-center py-5 spinner-custom">
+        <div class="spinner-border spinner-border-sm me-2"></div>
+        جاري مراجعة حسابات الموردين...
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let allSuppliers = [];
+
+    // دالة احتساب الرصيد الموحدة والمطابقة لكشف الحساب
+    async function calculateSupplierBalance(supId, openingBal) {
+        let combinedData = [];
+        const initial = Number(openingBal) || 0;
+
+        const [transSnapParty, transSnapSup, invSnap] = await Promise.all([
+            getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
+            getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
+            getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
+        ]);
+
+        const processedTransIds = new Set();
+
+        const processTransDoc = (documentDoc) => {
+            if (processedTransIds.has(documentDoc.id)) return;
+            const d = documentDoc.data();
+
+            // منع تكرار سند الصرف إذا كان مسجلاً بالفعل مع فاتورة
+            if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+
+            processedTransIds.add(documentDoc.id);
+
+            combinedData.push({ 
+                type: d.type || 'سداد نقدية', 
+                amount: Number(d.amount || 0)
+            });
+        };
+
+        transSnapParty.forEach(processTransDoc);
+        transSnapSup.forEach(processTransDoc);
+
+        invSnap.forEach(documentDoc => {
+            const d = documentDoc.data();
+            const totalAmt = Number(d.total || d.amount || 0);
+            
+            combinedData.push({ 
+                type: d.type || 'شراء', 
+                amount: totalAmt
+            });
+
+            const paidAmt = Number(d.paid) || 
+                (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
+                (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
+
+            if (paidAmt > 0 && (d.type === 'شراء' || d.type === 'فاتورة شراء' || !d.type)) {
+                combinedData.push({
+                    type: 'سداد مع الفاتورة',
+                    amount: paidAmt,
+                    isCustomPayment: true
+                });
+            }
+        });
+
+        let totalDebit = initial > 0 ? initial : 0;
+        let totalCredit = initial < 0 ? Math.abs(initial) : 0;
+
+        combinedData.forEach(t => {
+            let isDebit = (t.type.includes('شراء') && !t.type.includes('مرتجع')) || t.type === 'قبض';
+            let isCredit = t.type.includes('مرتجع') || t.type.includes('صرف') || t.type.includes('سداد') || t.isCustomPayment;
+            
+            if (isDebit) totalDebit += t.amount;
+            if (isCredit) totalCredit += t.amount;
+        });
+
+        return totalDebit - totalCredit;
+    }
+
+    // تحديث كارت الإجمالي
+    function updateSummaryCard(list) {
+        let netTotal = 0;
+        let debtCount = 0;
+        let creditCount = 0;
+        let clearCount = 0;
+
+        list.forEach(s => {
+            const bal = s.calculatedBalance || 0;
+            netTotal += bal;
+            if (bal > 0.1) debtCount++;
+            else if (bal < -0.1) creditCount++;
+            else clearCount++;
+        });
+
+        const totalEl = document.getElementById('totalSuppliersBalance');
+        totalEl.innerText = Math.abs(netTotal).toLocaleString('ar-EG') + " ج.م";
+        totalEl.className = `summary-main-val ${netTotal >= 0 ? 'text-danger' : 'text-success'}`;
+
+        document.getElementById('summaryTitle').innerText = netTotal >= 0 ? "صافي إجمالي مديونية علينا للموردين" : "صافي إجمالي رصيد فائض لنا";
+        document.getElementById('suppliersCount').innerText = `${list.length} مورد`;
+        document.getElementById('totalDebtVal').innerText = debtCount;
+        document.getElementById('totalCreditVal').innerText = creditCount;
+        document.getElementById('totalClearVal').innerText = clearCount;
+    }
+
+    async function loadSuppliers() {
+        const container = document.getElementById('suppliersContainer');
+        try {
+            const snap = await getDocs(collection(db, "suppliers"));
+            
+            const supplierPromises = snap.docs.map(async (d) => {
+                const data = d.data();
+                const balance = await calculateSupplierBalance(d.id, data.openingBalance);
+                return { id: d.id, ...data, calculatedBalance: balance };
+            });
+
+            allSuppliers = await Promise.all(supplierPromises);
+            
+            // ترتيب الموردين من الأكبر للأصغر في الدين
+            allSuppliers.sort((a, b) => (b.calculatedBalance || 0) - (a.calculatedBalance || 0));
+
+            updateSummaryCard(allSuppliers);
+            renderSuppliers(allSuppliers);
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `<div class="text-danger text-center fw-bold">عذراً، فشل الاتصال بالقاعدة</div>`;
+        }
+    }
+
+    window.renderSuppliers = (list) => {
+        const container = document.getElementById('suppliersContainer');
+        if(list.length === 0) {
+            container.innerHTML = '<div class="text-center opacity-50 py-5 fw-bold">لا توجد نتائج بحث..</div>';
+            return;
+        }
+        
+        container.innerHTML = list.map(sup => {
+            const balance = sup.calculatedBalance || 0;
+            const balanceText = Math.abs(balance).toLocaleString('ar-EG') + " ج.م";
+            
+            let balanceClass = 'text-clear';
+            let label = 'الحساب خالص ✅';
+            
+            if (balance > 0.1) {
+                balanceClass = 'text-debt';
+                label = 'مديونية للمورد ⚠️';
+            } else if (balance < -0.1) {
+                balanceClass = 'text-credit';
+                label = 'رصيد لك 💎';
+            }
+
+            return `
+                <div class="supplier-card">
+                    <div>
+                        <h6 class="supplier-name">${sup.name || 'بدون اسم'}</h6>
+                        <div class="mt-2">
+                            <span class="balance-label">${label}</span>
+                            <span class="balance-value ${balanceClass}">${Math.abs(balance) < 0.1 ? '' : balanceText}</span>
+                        </div>
+                    </div>
+                    <div class="action-container">
+                        <a href="supplier-details.html?id=${sup.id}" class="action-btn btn-info" title="التفاصيل"><i class="fas fa-user-cog"></i></a>
+                        <a href="supplier-payment.html?id=${sup.id}" class="action-btn btn-pay" title="سداد"><i class="fas fa-wallet"></i></a>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.deleteAllSuppliersPermanently = async () => {
+        if (!confirm("⚠️ هل تريد حذف جميع الموردين نهائياً؟ لا يمكن التراجع عن هذه الخطوة!")) return;
+        
+        try {
+            const snap = await getDocs(collection(db, "suppliers"));
+            if (snap.empty) {
+                alert("لا يوجد موردين في القائمة لحذفهم.");
+                return;
+            }
+
+            const batch = writeBatch(db);
+            snap.forEach((docSnap) => {
+                batch.delete(doc(db, "suppliers", docSnap.id));
+            });
+
+            await batch.commit();
+            alert("تم حذف جميع الموردين بنجاح.");
+            
+            loadSuppliers();
+        } catch (e) {
+            alert("حدث خطأ أثناء الحذف: " + e.message);
+        }
+    };
+
+    window.filterSuppliers = () => {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = allSuppliers.filter(s => 
+            (s.name && s.name.toLowerCase().includes(term)) || 
+            (s.phone && s.phone.includes(term))
+        );
+        updateSummaryCard(filtered);
+        renderSuppliers(filtered);
+    }
+
+    loadSuppliers();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>
