@@ -43,6 +43,13 @@
             border-bottom-right-radius: 20px;
             box-shadow: 0 8px 18px rgba(59, 7, 100, 0.2);
             text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        /* عند فتح الكيبورد نقوم بتصغير الهيدر مؤقتاً لتوفير المساحة */
+        body.keyboard-open .hero-banner,
+        body.keyboard-open .banner-carousel-wrapper {
+            display: none !important;
         }
 
         .brand-title {
@@ -190,9 +197,9 @@
             border-radius: 10px;
         }
 
+        /* إلغاء الـ sticky عند فتح الكتابة لمنع التغطية */
         .search-container {
-            position: sticky;
-            top: 8px;
+            position: relative;
             z-index: 1010;
         }
 
@@ -212,7 +219,7 @@
             min-height: 40vh;
         }
 
-        /* كارت الصنف المطور */
+        /* كارت الصنف */
         .product-card-3d {
             background: #ffffff;
             border-radius: 16px;
@@ -231,10 +238,9 @@
             box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
         }
 
-        /* إطار الصورة المعروضة بشكل كامل واضح */
         .img-wrapper-3d {
             width: 100%;
-            height: 170px;
+            height: 160px;
             background: #ffffff;
             display: flex;
             align-items: center;
@@ -251,7 +257,6 @@
             transition: transform 0.3s ease;
         }
 
-        /* تفاصيل الصنف بالأسفل */
         .card-details {
             padding: 8px 10px 0 10px;
             display: flex;
@@ -296,7 +301,6 @@
             border-color: var(--primary-purple);
         }
 
-        /* التحكم بالكمية بدون مستطيلات خلفية تغطي الصورة */
         .inline-qty-control {
             display: flex;
             align-items: center;
@@ -358,16 +362,12 @@
             justify-content: space-between;
             box-shadow: 0 8px 22px rgba(59, 7, 100, 0.35);
             z-index: 999;
+            transition: all 0.2s ease;
         }
 
-        .btn-send-order {
-            background: #ffffff;
-            color: var(--primary-purple);
-            font-weight: 900;
-            border: none;
-            border-radius: 10px;
-            padding: 7px 16px;
-            font-size: 0.88rem;
+        /* إخفاء شريط الإرسال السفلي أثناء الكتابة لزيادة المساحة الظاهرة */
+        body.keyboard-open .floating-cta-bar {
+            display: none !important;
         }
 
         /* المودالات */
@@ -512,12 +512,12 @@
 
     <!-- اسم المحل -->
     <div class="mb-2">
-        <input type="text" id="clientNameInput" class="form-control form-control-md fw-bold shadow-sm" placeholder="أدخل اسم محلك هنا..." style="border-radius: 12px; border: 1px solid #d4d4d8; padding: 10px 12px;">
+        <input type="text" id="clientNameInput" class="form-control form-control-md fw-bold shadow-sm focus-scroll" placeholder="أدخل اسم محلك هنا..." style="border-radius: 12px; border: 1px solid #d4d4d8; padding: 10px 12px;">
     </div>
 
     <!-- البحث -->
     <div class="mb-2 search-container">
-        <input type="text" id="catalogSearch" class="form-control form-control-sm fw-bold shadow-sm" placeholder="🔍 ابحث عن نوع زيت..." oninput="filterCatalog()" style="border-radius: 10px; border: 1px solid #a1a1aa; padding: 9px 12px; background: #ffffff;">
+        <input type="text" id="catalogSearch" class="form-control form-control-sm fw-bold shadow-sm focus-scroll" placeholder="🔍 ابحث عن نوع زيت..." oninput="filterCatalog()" style="border-radius: 10px; border: 1px solid #a1a1aa; padding: 9px 12px; background: #ffffff;">
     </div>
 
     <!-- قائمة الأصناف -->
@@ -617,6 +617,20 @@ let cart = {};
 
 const COMMON_STOP_WORDS = ['جركن', 'علبة', 'زيت', 'زجاجة', 'جالون', 'جيلكن', 'كرتونة', 'نوع'];
 
+// كود التعامل مع الكيبورد لمنع التغطية
+document.querySelectorAll('.focus-scroll').forEach(input => {
+    input.addEventListener('focus', () => {
+        document.body.classList.add('keyboard-open');
+        setTimeout(() => {
+            input.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+    });
+
+    input.addEventListener('blur', () => {
+        document.body.classList.remove('keyboard-open');
+    });
+});
+
 // إعداد الكاروسيل
 let currentSlide = 0;
 const slides = document.querySelectorAll('.banner-slide');
@@ -698,7 +712,6 @@ function renderCatalog(items) {
         return `
             <div class="product-card-3d ${currentQty > 0 ? 'has-qty' : ''}" id="card_${p.id}">
                 <div>
-                    <!-- صورة المنتج واضحة بدون مستطيل حاطط عليها -->
                     <div class="img-wrapper-3d" onclick="openFullImg('${imgUrl}', '${p.name.replace(/'/g, "\\'")}')">
                         <img src="${imgUrl}" class="product-img" alt="${p.name}">
                     </div>
@@ -713,7 +726,6 @@ function renderCatalog(items) {
                             <button class="unit-pill" id="unit_pcs_${p.id}" onclick="selectUnit('${p.id}', 'pcs', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">علبة</button>
                         </div>
 
-                        <!-- أزرار الموجب والسالب والعدد أسفل التفاصيل وبدون خلفيات متداخلة مع الصورة -->
                         <div class="inline-qty-control">
                             <button class="btn-3d btn-qty-minus" onclick="alterQty('${p.id}', -1, '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">-</button>
                             <span class="qty-display" id="qty_num_${p.id}">${currentQty}</span>
