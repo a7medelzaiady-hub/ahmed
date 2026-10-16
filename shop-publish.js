@@ -12,7 +12,7 @@ import { __getDb } from "./firestore-offline.js";
 
 const STATE_KEY = "elzaiady_shop_publish_state";
 const AUTO_EVERY_MS = 3 * 60 * 60 * 1000;   // النشر التلقائي كل 3 ساعات بحد أقصى
-const CHUNK_SIZE = 1200;                    // عدد الأصناف في كل مستند (حد فايربيز 1MB للمستند)
+const CHUNK_SIZE = 50;                       // تقسيم الكتالوج لـ 50 صنفاً في كل مستند لضمان عدم تجاوُز 1MB بسبب صور الـ Base64
 
 const num = (v) => {
     if (v === null || v === undefined) return 0;
@@ -34,7 +34,12 @@ async function waitForDb(ms = 6000) {
 
 // ---------------- الكتالوج ----------------
 export async function publishCatalog(db, force = false) {
-    const snap = await FS.getDocs(FS.collection(db, "makhzan"));
+    // جلب الأصناف من مجموعة inventory أولاً وإذا كانت فارغة يقرأ من makhzan
+    let snap = await FS.getDocs(FS.collection(db, "inventory"));
+    if (snap.empty) {
+        snap = await FS.getDocs(FS.collection(db, "makhzan"));
+    }
+
     const items = [];
     snap.forEach((d) => {
         const x = d.data();
@@ -45,7 +50,7 @@ export async function publishCatalog(db, force = false) {
         const factor = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
         const it = { id: d.id, n: name, s: sell, f: factor };
         
-        // قراءة الصورة المرفوعة في المخزن بسماحية كاملة (روابط أو Base64)
+        // قراءة الصورة المرفوعة في المخزن بسماحية كاملة (سواء كانت رابطاً أو Base64)
         const img = String(x.imageUrl || x.image || x.img || "").trim();
         if (img && (img.startsWith("data:image/") || /^https?:\/\//.test(img))) {
             it.img = img;
@@ -146,7 +151,7 @@ export async function publishAll({ force = false } = {}) {
     return { catalog: cat, balances: bal, at: loadState().at };
 }
 
-// نشر تلقائي هادي (بيتنادى من الصفحات اللي المالك بيفتحها يوميًا)
+// نشر تلقائي هادي (بيتنادى من الصفحات اللي المالك بيفتحها يومياً)
 export async function autoPublish() {
     try {
         if (!navigator.onLine) return;
