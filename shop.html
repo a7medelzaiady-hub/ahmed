@@ -107,6 +107,12 @@
         <div id="histBox" style="display:none;margin-top:8px"></div>
     </div>
 
+    <!-- كارت العملاء غير المسجلين (لإدخال الاسم) -->
+    <div class="account-card" id="guestNameCard" style="display:none">
+        <label class="fw-bold mb-1" style="font-size:.82rem;color:#6b21a8"><i class="fas fa-store me-1"></i> اسم محلك أو اسمك الكريم:</label>
+        <input type="text" id="guestNameInput" class="form-control fw-bold" placeholder="أدخل اسم محلك هنا لتأكيد الطلب..." style="border-radius:12px;border:2px solid #8b5cf6">
+    </div>
+
     <div class="mt-2 search-container">
         <input type="text" id="catalogSearch" class="form-control fw-bold shadow-sm" placeholder="🔍 ابحث عن نوع زيت معين (مثل: برن)..." style="border-radius:12px;border:2px solid #8b5cf6;padding:10px 14px;background:#fff" autocomplete="off">
     </div>
@@ -165,7 +171,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp } from "./firestore-offline.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -175,7 +181,16 @@ const firebaseConfig = {
     messagingSenderId: "300306825071",
     appId: "1:300306825071:web:0426ddde56280fa090329a"
 };
-const db = getFirestore(initializeApp(firebaseConfig));
+
+const app = initializeApp(firebaseConfig);
+let db;
+try {
+    db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
+} catch (e) {
+    db = getFirestore(app);
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -183,7 +198,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const fmt = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 const cid = new URLSearchParams(location.search).get("cid") || "";
-const CART_KEY = "shop_cart_" + cid, HIST_KEY = "shop_hist_" + cid, LAST_KEY = "shop_last_order_" + cid;
+const CART_KEY = "shop_cart_" + (cid || "guest"), HIST_KEY = "shop_hist_" + (cid || "guest"), LAST_KEY = "shop_last_order_" + (cid || "guest");
 const MAX_LINES = 80, MAX_QTY = 9999, COOLDOWN_MS = 20 * 1000;
 const STOP = ["جركن", "علبة", "زيت", "زجاجة", "جالون", "جيلكن", "كرتونة", "اصلي", "نوع"];
 const COLORS = ["#7c3aed", "#db2777", "#0891b2", "#059669", "#d97706", "#2563eb", "#9333ea", "#dc2626"];
@@ -207,32 +222,50 @@ function norm(t) {
 
 // ---------------- تحميل البيانات ----------------
 async function load() {
+    if (!cid) {
+        $("guestNameCard").style.display = "block";
+        return loadCatalogFromFirestore();
+    }
+
     if (!/^[A-Za-z0-9_-]{6,60}$/.test(cid)) return fatal("الرابط غير صحيح. اطلب من المسؤول إرسال رابطك الخاص.");
     try {
         const accSnap = await getDoc(doc(db, "shop_accounts", cid));
-        if (!accSnap.exists()) return fatal("الرابط غير مفعّل بعد. تواصل مع الزيادي لتفعيل حسابك.");
-        account = accSnap.data();
-        renderAccount();
+        if (accSnap.exists()) {
+            account = accSnap.data();
+            renderAccount();
+        } else {
+            $("guestNameCard").style.display = "block";
+        }
+        await loadCatalogFromFirestore();
+    } catch (e) {
+        console.error(e);
+        fatal(navigator.onLine ? "تعذر تحميل البيانات. حاول مرة تانية." : "أنت بدون إنترنت ولسه ما فتحتش المتجر قبل كده. افتحه مرة واحدة والنت شغال.");
+    }
+}
 
+async function loadCatalogFromFirestore() {
+    try {
         const meta = await getDoc(doc(db, "shop_catalog", "meta"));
         if (!meta.exists()) return fatal("الكتالوج لسه ما اتنشرش. حاول بعد قليل.");
         const n = meta.data().chunks || 1;
         const parts = await Promise.all(Array.from({ length: n }, (_, i) => getDoc(doc(db, "shop_catalog", "c" + i))));
         items = parts.flatMap((s) => (s.exists() ? s.data().items || [] : []));
         byId = Object.fromEntries(items.map((p) => [p.id, p]));
-        for (const id of Object.keys(cart)) if (!byId[id]) delete cart[id];   // صنف اتشال من الكتالوج
+        for (const id of Object.keys(cart)) if (!byId[id]) delete cart[id];
         saveCart();
         renderCatalog();
-    } catch (e) {
-        console.error(e);
-        fatal(navigator.onLine ? "تعذر تحميل البيانات. حاول مرة تانية." : "أنت بدون إنترنت ولسه ما فتحتش المتجر قبل كده. افتحه مرة واحدة والنت شغال.");
+    } catch (err) {
+        console.error(err);
+        fatal("تعذر جلب أصناف الكتالوج.");
     }
 }
+
 function fatal(msg) {
     $("catalogList").innerHTML = `<div class="state-box text-danger">${esc(msg)}</div>`;
 }
 
 function renderAccount() {
+    if (!account) return;
     $("accountCard").style.display = "block";
     $("merchantName").textContent = account.name || "";
     const b = Number(account.balance) || 0;
@@ -243,7 +276,7 @@ function renderAccount() {
     if (account.updatedAt) $("balanceUpdated").textContent = "آخر تحديث للرصيد: " + new Date(account.updatedAt).toLocaleString("ar-EG");
 }
 
-// ---------------- عرض الأصناف ----------------
+// ---------------- عرض الأصناف مع الصور ----------------
 function renderCatalog() {
     const term = norm($("catalogSearch").value.trim());
     let words = term.split(/\s+/).filter(Boolean);
@@ -260,7 +293,13 @@ function renderCatalog() {
         const pills = p.f > 1
             ? `<div class="d-flex gap-1 my-1"><button class="unit-pill ${unit === "box" ? "active" : ""}" data-act="unit" data-id="${esc(p.id)}" data-unit="box">كرتونة</button><button class="unit-pill ${unit === "pcs" ? "active" : ""}" data-act="unit" data-id="${esc(p.id)}" data-unit="pcs">علبة</button></div>`
             : `<div class="my-1" style="font-size:.7rem;color:#6b7280;font-weight:700">بالوحدة</div>`;
-        const img = p.img ? `<img class="prod-img" src="${esc(p.img)}" alt="" loading="lazy">` : `<div class="avatar" style="background:${color}">${esc(p.n.trim().charAt(0))}</div>`;
+
+        // قراءة صورة الصنف القادمة من المخزن (سواء Base64 أو رابط)
+        const hasImg = p.img && (p.img.startsWith("data:image/") || /^https?:\/\//.test(p.img));
+        const img = hasImg 
+            ? `<img class="prod-img" src="${esc(p.img)}" alt="" loading="lazy">` 
+            : `<div class="avatar" style="background:${color}">${esc(p.n.trim().charAt(0))}</div>`;
+
         return `<div class="product-card-3d ${qty > 0 ? "has-qty" : ""}" id="card_${esc(p.id)}">
             <div>${img}
               <div class="prod-name">${esc(p.n)}</div>
@@ -347,6 +386,12 @@ $("confirmSendBtn").onclick = async () => {
     if (sending) return;
     const ids = Object.keys(cart);
     if (!ids.length) return;
+
+    let finalCustomerName = account ? account.name : ($("guestNameInput")?.value || "").trim();
+    if (!account && !finalCustomerName) {
+        return alertBox("يرجى إدخال اسم محلك أو اسمك في الحقل العلوي لتأكيد الطلب.", "تنبيه ✏️", "fa-pen");
+    }
+
     const last = Number(localStorage.getItem(LAST_KEY) || 0);
     if (Date.now() - last < COOLDOWN_MS) return alertBox("لسه باعت طلب حالًا. استنى لحظات قبل ما تبعت طلب جديد.", "استنى لحظة ⏳", "fa-hourglass-half");
 
@@ -357,8 +402,8 @@ $("confirmSendBtn").onclick = async () => {
         const total = round2(lines.reduce((s, l) => s + l.qty * l.price, 0));
         const wasOnline = navigator.onLine;
         await addDoc(collection(db, "orders"), {
-            customerId: cid,
-            customerName: account.name,
+            customerId: cid || null,
+            customerName: finalCustomerName,
             items: lines,
             total,
             notes: $("orderNotes").value.replace(/[<>]/g, "").trim().slice(0, 200),
@@ -371,16 +416,15 @@ $("confirmSendBtn").onclick = async () => {
         const h = history(); h.unshift({ ts: Date.now(), count: lines.length, total, pending: !wasOnline }); localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 5)));
         cart = {}; saveCart(); $("orderNotes").value = ""; renderCatalog();
         $("reviewModal").style.display = "none";
-        alertBox(wasOnline ? "تم إرسال طلبك بنجاح، وهنتواصل معاك لتأكيد التحميل." : "تم حفظ طلبك على جهازك، وهيوصلنا تلقائيًا أول ما النت يرجع. سيب الصفحة مفتوحة لحد ما يتبعت.", wasOnline ? "تم الإرسال 🚀" : "تم الحفظ 📥", "fa-circle-check");
+        alertBox(wasOnline ? "تم إرسال طلبك بنجاح، وهنتواصل معاك لتأكيد التحميل." : "تم حفظ طلبك على جهازك، وهيوصلنا تلقائيًا أول ما النت يرجع.", wasOnline ? "تم الإرسال 🚀" : "تم الحفظ 📥", "fa-circle-check");
     } catch (e) {
         console.error(e);
-        alertBox("حصل خطأ أثناء الإرسال. اطلبك لسه محفوظ عندك، حاول مرة تانية.", "خطأ ❌", "fa-triangle-exclamation");
+        alertBox("حصل خطأ أثناء الإرسال. حاول مرة تانية.", "خطأ ❌", "fa-triangle-exclamation");
     } finally {
         sending = false; btn.disabled = false; btn.innerHTML = "تأكيد وإرسال 🚀";
     }
 };
 
-// حالة الاتصال
 const net = () => { $("netBanner").style.display = navigator.onLine ? "none" : "block"; };
 window.addEventListener("online", net); window.addEventListener("offline", net); net();
 
