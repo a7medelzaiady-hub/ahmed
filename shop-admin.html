@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة المتجر الإلكتروني - الزيادي</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background: #f4f7f6; font-family: 'Cairo', sans-serif; color: #1b2e26; }
+        .header-nav { background: #0b5e3d; color: #fff; padding: 15px; text-align: center; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.1); position: relative; }
+        .card-x { background: #fff; border: 1px solid #dce3de; border-radius: 15px; padding: 18px; margin-bottom: 14px; }
+        .big-num { font-size: 2rem; font-weight: 800; color: #0b5e3d; line-height: 1; }
+        .btn-green { background: #0b5e3d; color: #fff; border: none; border-radius: 10px; font-weight: 700; padding: 10px 16px; }
+        .btn-green:disabled { background: #94a3a0; }
+        .log { font-size: .8rem; background: #f8faf9; border: 1px solid #e5ece8; border-radius: 10px; padding: 8px 10px; margin-top: 10px; display: none; max-height: 160px; overflow: auto; }
+    </style>
+</head>
+<body>
+<div class="header-nav">
+    <a href="index1.html" class="btn btn-sm text-white" style="border:1px solid #fff;position:absolute;right:15px;top:13px"><i class="fas fa-home"></i></a>
+    <h5 class="m-0"><i class="fas fa-store me-2"></i> إدارة المتجر الإلكتروني</h5>
+</div>
+
+<div class="container" style="max-width:640px">
+
+    <div class="card-x">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <div class="fw-bold">طلبات جديدة من المتجر</div>
+                <div class="text-muted" style="font-size:.78rem">قيد التنفيذ، لسه ما اتحولتش لفواتير</div>
+            </div>
+            <div class="big-num" id="pendingCount">...</div>
+        </div>
+        <a href="all-orders.html" class="btn-green d-block text-center text-decoration-none mt-3"><i class="fas fa-list-check me-1"></i> فتح كل الطلبات وكشف التحميل</a>
+        <a href="required-items-summary.html" class="btn btn-outline-success fw-bold d-block mt-2" style="border-radius:10px"><i class="fas fa-truck-ramp-box me-1"></i> كشف التحميل (تجميع الأصناف)</a>
+    </div>
+
+    <div class="card-x">
+        <div class="fw-bold mb-1"><i class="fas fa-cloud-arrow-up me-1"></i> نشر الكتالوج والأرصدة للتجار</div>
+        <div class="text-muted" style="font-size:.78rem;line-height:1.7">
+            المتجر بيعرض للتاجر الأصناف وأسعار البيع ورصيده من نسخة منشورة (من غير سعر الشراء).
+            بتتحدّث لوحدها كل 3 ساعات لما تفتح الرئيسية أو صفحة الطلبات، وتقدر تنشرها الآن بإيدك.
+        </div>
+        <div class="mt-2" style="font-size:.85rem">آخر نشر: <b id="lastPublish">لسه ما اتنشرش من الجهاز ده</b></div>
+        <div class="d-flex gap-2 mt-3 flex-wrap">
+            <button class="btn-green" id="btnPublish"><i class="fas fa-rotate me-1"></i> انشر الآن</button>
+            <button class="btn btn-outline-secondary fw-bold" id="btnForce" style="border-radius:10px">إعادة نشر كل شيء</button>
+        </div>
+        <div class="log" id="log"></div>
+    </div>
+
+    <div class="card-x">
+        <div class="fw-bold mb-1"><i class="fas fa-share-nodes me-1"></i> إرسال رابط المتجر للتجار</div>
+        <div class="text-muted" style="font-size:.78rem">كل تاجر له رابط خاص (بيظهر له اسمه ورصيده). ابعته من صفحة الروابط بزرار «المتجر».</div>
+        <a href="generate-links.html" class="btn-green d-block text-center text-decoration-none mt-3"><i class="fab fa-whatsapp me-1"></i> صفحة روابط العملاء</a>
+    </div>
+</div>
+
+<script type="module">
+import { getFirestore, collection, getDocs, query, where } from "./firestore-offline.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { publishAll, getPublishState } from "./shop-publish.js";
+
+const firebaseConfig = { apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls", projectId: "ahmedelzaiady" };
+const db = getFirestore(initializeApp(firebaseConfig));
+const $ = (id) => document.getElementById(id);
+
+function showLast() {
+    const at = getPublishState().at;
+    if (at) $("lastPublish").textContent = new Date(at).toLocaleString("ar-EG");
+}
+async function loadPending() {
+    try {
+        const snap = await getDocs(query(collection(db, "orders"), where("source", "==", "shop")));
+        $("pendingCount").textContent = snap.docs.filter((d) => d.data().status === "pending").length;
+    } catch (e) { $("pendingCount").textContent = "؟"; }
+}
+function log(m) { const l = $("log"); l.style.display = "block"; l.innerHTML += `<div>${m}</div>`; l.scrollTop = l.scrollHeight; }
+
+async function run(force) {
+    if (!navigator.onLine) return log("⚠️ لازم تكون متصل بالإنترنت للنشر.");
+    $("btnPublish").disabled = $("btnForce").disabled = true;
+    log("جاري النشر...");
+    try {
+        const r = await publishAll({ force });
+        log(`✅ الكتالوج: ${r.catalog.items} صنف${r.catalog.skipped ? " (بدون تغيير)" : ""} — الأرصدة: ${r.balances.customers} عميل، المحدّث ${r.balances.written}`);
+        showLast();
+    } catch (e) { log("❌ فشل: " + (e && e.message || e)); }
+    $("btnPublish").disabled = $("btnForce").disabled = false;
+}
+$("btnPublish").onclick = () => run(false);
+$("btnForce").onclick = () => { if (confirm("إعادة كتابة كل بيانات المتجر؟ (بتعمل كتابات كتير بعدد العملاء)")) run(true); };
+showLast(); loadPending();
+</script>
+</body>
+</html>
