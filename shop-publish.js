@@ -34,7 +34,7 @@ async function waitForDb(ms = 6000) {
 
 // ---------------- الكتالوج ----------------
 export async function publishCatalog(db, force = false) {
-    const snap = await FS.getDocs(FS.collection(db, "inventory"));
+    const snap = await FS.getDocs(FS.collection(db, "makhzan"));
     const items = [];
     snap.forEach((d) => {
         const x = d.data();
