@@ -34,11 +34,8 @@ async function waitForDb(ms = 6000) {
 
 // ---------------- الكتالوج ----------------
 export async function publishCatalog(db, force = false) {
-    // جلب الأصناف من مجموعة inventory أولاً وإذا كانت فارغة يقرأ من makhzan
-    let snap = await FS.getDocs(FS.collection(db, "inventory"));
-    if (snap.empty) {
-        snap = await FS.getDocs(FS.collection(db, "makhzan"));
-    }
+    // جلب الأصناف من مجموعة inventory حصرياً
+    const snap = await FS.getDocs(FS.collection(db, "inventory"));
 
     const items = [];
     snap.forEach((d) => {
@@ -50,8 +47,8 @@ export async function publishCatalog(db, force = false) {
         const factor = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
         const it = { id: d.id, n: name, s: sell, f: factor };
         
-        // قراءة الصورة المرفوعة في المخزن بسماحية كاملة (سواء كانت رابطاً أو Base64)
-        const img = String(x.imageUrl || x.image || x.img || "").trim();
+        // قراءة الصورة المرفوعة في المخزن حصرياً من حقول imageUrl و image المحفوظة في inventory
+        const img = String(x.imageUrl || x.image || "").trim();
         if (img && (img.startsWith("data:image/") || /^https?:\/\//.test(img))) {
             it.img = img;
         }
