@@ -101,6 +101,95 @@
             margin-top: 2px;
         }
 
+        /* البانر المتحرك (تصميم نون) */
+        .banner-carousel-wrapper {
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .banner-carousel {
+            display: flex;
+            transition: transform 0.4s ease-in-out;
+            width: 100%;
+        }
+
+        .banner-slide {
+            min-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .banner-card {
+            border-radius: 16px;
+            padding: 16px 20px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 120px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .bg-gradient-purple {
+            background: linear-gradient(135deg, #3b0764 0%, #6b21a8 100%);
+        }
+
+        .bg-gradient-dark {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        }
+
+        .banner-content h5 {
+            font-size: 1.1rem;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .banner-content p {
+            font-size: 0.75rem;
+            font-weight: 700;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .btn-banner-action {
+            background: #ffffff;
+            color: #1e1b4b;
+            border: none;
+            border-radius: 8px;
+            padding: 5px 14px;
+            font-size: 0.78rem;
+            font-weight: 900;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .banner-icon {
+            font-size: 3rem;
+            opacity: 0.85;
+            color: #f59e0b;
+        }
+
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            background: #d4d4d8;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dot.active {
+            background: #6b21a8;
+            width: 20px;
+            border-radius: 10px;
+        }
+
         .search-container {
             position: sticky;
             top: 8px;
@@ -366,6 +455,42 @@
 
 <div class="container px-2 mt-2">
 
+    <!-- قسم البانر المتحرك (Carousel) -->
+    <div class="banner-carousel-wrapper mb-2">
+        <div class="banner-carousel" id="bannerCarousel">
+            <div class="banner-slide">
+                <div class="banner-card bg-gradient-purple">
+                    <div class="banner-content">
+                        <h5>الجو بقى حر؟ ☀️</h5>
+                        <p>أفضل أنواع الزيوت لتبريد وحماية الموتور في الصيف</p>
+                        <button class="btn-banner-action" onclick="filterByKeyword('تخليقي')">اشتري دلوقتي</button>
+                    </div>
+                    <div class="banner-img-box">
+                        <i class="fas fa-oil-can banner-icon"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="banner-slide">
+                <div class="banner-card bg-gradient-dark">
+                    <div class="banner-content">
+                        <h5>انسى حر الصيف 🚗</h5>
+                        <p>مع أفضل زيوت المحركات ومياه التبريد الأصلية</p>
+                        <button class="btn-banner-action" onclick="filterByKeyword('شيل')">تصفح العروض</button>
+                    </div>
+                    <div class="banner-img-box">
+                        <i class="fas fa-car-battery banner-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="carousel-dots" id="carouselDots">
+            <span class="dot active" onclick="goToSlide(0)"></span>
+            <span class="dot" onclick="goToSlide(1)"></span>
+        </div>
+    </div>
+
     <!-- اسم المحل -->
     <div class="mb-2">
         <input type="text" id="clientNameInput" class="form-control form-control-md fw-bold shadow-sm" placeholder="أدخل اسم محلك هنا..." style="border-radius: 12px; border: 1px solid #d4d4d8; padding: 10px 12px;">
@@ -472,6 +597,36 @@ let inventoryList = [];
 let cart = {};
 
 const COMMON_STOP_WORDS = ['جركن', 'علبة', 'زيت', 'زجاجة', 'جالون', 'جيلكن', 'كرتونة', 'نوع'];
+
+// إعداد الكاروسيل
+let currentSlide = 0;
+const slides = document.querySelectorAll('.banner-slide');
+const dots = document.querySelectorAll('.dot');
+const carousel = document.getElementById('bannerCarousel');
+
+window.goToSlide = (index) => {
+    currentSlide = index;
+    if (carousel) carousel.style.transform = `translateX(${currentSlide * 100}%)`;
+    dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === currentSlide);
+    });
+};
+
+setInterval(() => {
+    if (slides.length > 0) {
+        currentSlide = (currentSlide + 1) % slides.length;
+        window.goToSlide(currentSlide);
+    }
+}, 4000);
+
+window.filterByKeyword = (keyword) => {
+    const input = document.getElementById('catalogSearch');
+    if (input) {
+        input.value = keyword;
+        window.filterCatalog();
+        input.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};
 
 window.openFullImg = (url, title) => {
     document.getElementById('fullImgSrc').src = url;
