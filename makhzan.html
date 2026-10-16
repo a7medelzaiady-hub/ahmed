@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <script src="auth-guard.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>المخزن - شركة الزيادي</title>
     <!-- إعدادات التطبيق الهاتفي PWA -->
     <link rel="manifest" href="manifest.json">
@@ -88,21 +88,6 @@
             transition: 0.2s;
         }
         .search-input:focus { border-color: var(--accent-green); }
-        
-        .qr-btn {
-            background: white;
-            color: var(--primary-green);
-            border: 1px solid var(--border-color);
-            width: 52px;
-            height: 52px;
-            border-radius: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
-            cursor: pointer;
-        }
 
         .grid-layout {
             display: grid;
@@ -122,25 +107,70 @@
         .table-headers div:first-child { text-align: right; }
 
         .item-card {
-            padding: 16px 20px;
+            padding: 14px 16px;
             background: white;
             border-radius: 20px;
             margin: 0 15px 12px;
             transition: all 0.2s ease;
-            cursor: pointer;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
             border: 1px solid rgba(0,0,0,0.01);
+            position: relative;
         }
-        .item-card:active { transform: scale(0.98); background: #f8f9fa; }
         
         .item-card.out-of-stock {
-            opacity: 0.6;
+            opacity: 0.7;
             background: #fdfdfd;
-            border-color: #f1f2f6;
         }
-        .item-card.out-of-stock .item-price { color: var(--text-muted); }
 
-        .item-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 3px; color: var(--text-dark); line-height: 1.3;}
+        .item-header-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* الصورة المصغرة للصنف وقابليتها للضغط لرفع صورة جديدة */
+        .img-upload-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: #f1f5f9;
+            border: 2px dashed #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.2s ease;
+        }
+
+        .img-upload-btn:active {
+            transform: scale(0.92);
+        }
+
+        .img-upload-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .img-upload-btn i.fa-camera {
+            position: absolute;
+            bottom: 3px;
+            right: 3px;
+            background: rgba(11, 102, 65, 0.85);
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .item-name { font-weight: 800; font-size: 0.95rem; color: var(--text-dark); line-height: 1.3;}
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
 
         .item-price { 
@@ -189,17 +219,8 @@
             height: 8px;
             border-radius: 50%;
             background: #d1d5db;
-            transition: background 0.3s ease;
-        }
-        .sync-dot.syncing {
-            background: #f59e0b;
-            animation: pulse 1s infinite ease-in-out;
         }
         .sync-dot.fresh { background: #10b981; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.35; }
-        }
 
         .fab {
             position: fixed;
@@ -216,17 +237,34 @@
             font-size: 1.6rem;
             box-shadow: 0 8px 25px rgba(11, 102, 65, 0.4);
             text-decoration: none;
-            transition: 0.3s;
             z-index: 1000;
         }
-        .fab:hover { background: #0a5234; transform: translateY(-3px); color: white;}
+
+        /* نافذة التنبيه جاري رفع الصورة */
+        .toast-loader {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0b6641;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.88rem;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
     </style>
 </head>
 <body>
 
 <div class="top-nav">
     <div class="d-flex align-items-center gap-3">
-        <a href="index.html" class="nav-icon" title="الصفحة الرئيسية">
+        <a href="index1.html" class="nav-icon" title="الصفحة الرئيسية">
             <i class="fas fa-home"></i>
         </a>
         <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
@@ -235,13 +273,21 @@
     <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
 </div>
 
+<!-- توست التنبيه التلقائي -->
+<div class="toast-loader" id="toastLoader">
+    <div class="spinner-border spinner-border-sm text-white"></div>
+    <span id="toastMsg">جاري ضغط ورفع الصورة...</span>
+</div>
+
 <div class="search-section">
-    <button class="qr-btn" aria-label="مسح الباركود"><i class="fas fa-qrcode"></i></button>
     <div class="search-wrapper">
         <i class="fas fa-search"></i>
         <input type="text" id="searchInput" class="search-input" placeholder="ابحث عن منتج أو باركود..." oninput="renderItems()">
     </div>
 </div>
+
+<!-- عنصر إدخال الصورة المخفي لتسهيل الالتقاط المباشر -->
+<input type="file" id="directImageInput" accept="image/*" style="display:none;" onchange="processDirectImage(event)">
 
 <div class="table-headers grid-layout">
     <div>المنتج والباركود</div>
@@ -258,7 +304,7 @@
 
 <div class="bottom-summary">
     <i class="fas fa-boxes me-2"></i> إجمالي الأصناف: <span id="totalCount" class="ms-2">0</span>
-    <span class="sync-dot" id="syncDot" title="حالة التحديث"></span>
+    <span class="sync-dot" id="syncDot"></span>
 </div>
 
 <a href="add-product.html" class="fab" aria-label="إضافة منتج">
@@ -267,184 +313,36 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-      authDomain: "ahmedelzaiady.firebaseapp.com",
-      projectId: "ahmedelzaiady",
-      storageBucket: "ahmedelzaiady.firebasestorage.app",
-      messagingSenderId: "300306825071",
-      appId: "1:300306825071:web:0426ddde56280fa090329a",
-      measurementId: "G-WE04GK5XZZ"
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a"
     };
 
     const app = initializeApp(firebaseConfig);
     let db;
     try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-        });
+        db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) });
     } catch (e) {
         db = getFirestore(app);
     }
+
     let allData = [];
+    let activeUploadProductId = null;
 
-    const CACHE_KEY = 'inventoryPageCache_v1';
-
-    function setSyncState(state) {
-        const dot = document.getElementById('syncDot');
-        if (!dot) return;
-        dot.classList.remove('syncing', 'fresh');
-        if (state) dot.classList.add(state);
-    }
-
-    function loadCachedRender() {
+    async function loadInventory() {
         try {
-            const cachedRaw = localStorage.getItem(CACHE_KEY);
-            if (!cachedRaw) return false;
-            const cached = JSON.parse(cachedRaw);
-            if (Array.isArray(cached.data) && cached.data.length) {
-                allData = cached.data;
-                renderItems();
-                setSyncState('syncing');
-                return true;
-            }
+            const snap = await getDocs(collection(db, "makhzan"));
+            allData = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => !i.isDeleted);
+            allData.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+            renderItems();
         } catch (e) {
-            console.warn('تعذرت قراءة الكاش المحلي', e);
-        }
-        return false;
-    }
-
-    function saveCache(data) {
-        try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() }));
-        } catch (e) {
-            console.warn('تعذر حفظ الكاش المحلي (ربما البيانات كبيرة جدًا)', e);
-        }
-    }
-
-    function isCartonUnit(unitValue, isCartonFlag) {
-        if (isCartonFlag === true) return true;
-        if (!unitValue) return false;
-        const u = String(unitValue).trim().toLowerCase();
-        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
-    }
-
-    async function loadLiveInventory() {
-        try {
-            const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
-                getDocs(collection(db, "invoices")),
-                getDocs(collection(db, "supplier_transactions")),
-                getDocs(collection(db, "inventory")),
-                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
-            ]);
-
-            const factorsMap = new Map();
-            const namesMap = new Map();
-
-            inventorySnap.forEach(d => {
-                const data = d.data();
-                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-                factorsMap.set(d.id, f);
-                if (data.name) namesMap.set(data.name.trim(), d.id);
-            });
-
-            const salesMap = new Map();
-            const purchasesMap = new Map();
-            const openingMap = new Map();
-
-            // أرصدة بداية المدة
-            transSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.productId) {
-                    const current = openingMap.get(data.productId) || 0;
-                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
-                }
-            });
-
-            // حساب المبيعات بسرعة أداء عالية (مع استبعاد الفواتير المحذوفة والملغاة)
-            invoicesSnap.forEach(docSnap => {
-                const invData = docSnap.data();
-
-                // 🛑 استبعاد الفاتورة إذا كانت محذوفة أو ملغاة لكي يعود رصيدها للمخزن تلقائياً
-                if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') {
-                    return;
-                }
-
-                const items = invData.items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const rawQty = Number(item.qty) || 0;
-                        const isCarton = isCartonUnit(item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-                        
-                        const current = salesMap.get(id) || 0;
-                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
-                    }
-                }
-            });
-
-            // حساب المشتريات
-            supplierSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-
-                        const current = purchasesMap.get(id) || 0;
-                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
-                    }
-                }
-            });
-
-            // الاستماع المباشر للتغيرات في المخزون
-            onSnapshot(collection(db, "inventory"), (snap) => {
-                const freshData = [];
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if (!data.isDeleted) {
-                        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                        
-                        let openingTotalPcs = 0;
-                        if (data.openingTotalPcs != null) {
-                            openingTotalPcs = Number(data.openingTotalPcs);
-                        } else if (data.openingQty != null) {
-                            openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-                        } else if (openingMap.has(doc.id)) {
-                            openingTotalPcs = openingMap.get(doc.id);
-                        }
-
-                        const salesPcs = salesMap.get(doc.id) || 0;
-                        const purchasesPcs = purchasesMap.get(doc.id) || 0;
-                        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
-
-                        freshData.push({ 
-                            id: doc.id, 
-                            ...data,
-                            totalPcs: calculatedRealPcs,
-                            qty: calculatedRealPcs
-                        });
-                    }
-                });
-                allData = freshData;
-                renderItems();
-                saveCache(freshData);
-                setSyncState('fresh');
-            });
-
-        } catch (e) {
-            console.error("خطأ في تجميع البيانات:", e);
-            setSyncState(null);
+            console.error("خطأ في جلب المخزن:", e);
         }
     }
 
@@ -457,65 +355,39 @@
             (i.barcode && String(i.barcode).includes(term))
         );
 
-        const getPriorityGroup = (item) => {
-            const sellPrice = Number(item.sell || 0);
-            const qty = Number(item.totalPcs || 0);
-
-            if (sellPrice <= 0 && qty !== 0) return 1;
-            if (qty < 0) return 2;
-            if (qty > 0) return 3;
-            return 4;
-        };
-
-        filtered.sort((a, b) => {
-            const qtyA = Number(a.totalPcs || 0);
-            const qtyB = Number(b.totalPcs || 0);
-
-            const groupA = getPriorityGroup(a);
-            const groupB = getPriorityGroup(b);
-
-            if (groupA !== groupB) return groupA - groupB;
-            if (qtyA !== qtyB) return qtyA - qtyB;
-
-            return (a.name || '').localeCompare(b.name || '', 'ar');
-        });
-
         let html = '';
         filtered.forEach(item => {
-            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1); 
-            const total = Number(item.totalPcs);
-            
-            const isNegative = total < 0;
-            const absTotal = Math.abs(total);
+            const factor = Math.max(1, Number(item.unitFactor || item.factor) || 1); 
+            const total = Number(item.totalPcs || item.qty || 0);
+            const cartons = Math.floor(total / factor);
+            const jerrycans = total % factor;
 
-            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
-            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
-
-            const isZero = total === 0;
-            const minAllowed = (Number(item.min) || 0) * factor;
-            const isLow = !isZero && (total <= minAllowed);
-
-            let badgeClass = 'qty-badge';
-            if (isZero) {
-                badgeClass += ' qty-zero';
-            } else if (isLow || isNegative) {
-                badgeClass += ' qty-low';
-            }
+            const imgSrc = item.imageUrl || item.image || item.img || "";
+            const imgHtml = imgSrc 
+                ? `<img src="${imgSrc}" alt="${item.name}">` 
+                : `<i class="fas fa-image text-secondary fs-5"></i>`;
 
             html += `
-                <div class="item-card grid-layout ${isZero ? 'out-of-stock' : ''}" onclick="goToDetails('${item.id}')">
-                    <div class="item-info">
-                        <div class="item-name">${item.name || 'بدون اسم'}</div>
-                        <div class="item-barcode">باركود: ${item.barcode || '---'}</div>
+                <div class="item-card grid-layout ${total === 0 ? 'out-of-stock' : ''}">
+                    <div class="item-header-row">
+                        <!-- زر رفع الصورة المباشر بضغط واحدة -->
+                        <div class="img-upload-btn" onclick="triggerImageUpload(event, '${item.id}')" title="اضغط لرفع / تغيير الصورة مباشرة">
+                            ${imgHtml}
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <div onclick="goToDetails('${item.id}')" style="cursor:pointer; flex-grow:1;">
+                            <div class="item-name">${item.name || 'بدون اسم'}</div>
+                            <div class="item-barcode">باركود: ${item.barcode || '---'}</div>
+                        </div>
                     </div>
-                    <div class="item-price">
-                        ${Number(item.sell || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                    <div class="item-price" onclick="goToDetails('${item.id}')">
+                        ${Number(item.sell || 0).toLocaleString('en-US', {minimumFractionDigits: 0})}
                     </div>
-                    <div>
-                        <div class="${badgeClass}">${cartons}</div>
+                    <div onclick="goToDetails('${item.id}')">
+                        <div class="qty-badge">${cartons}</div>
                     </div>
-                    <div>
-                        <div class="${badgeClass}">${jerrycans}</div>
+                    <div onclick="goToDetails('${item.id}')">
+                        <div class="qty-badge">${jerrycans}</div>
                     </div>
                 </div>
             `;
@@ -529,18 +401,93 @@
         document.getElementById('totalCount').innerText = filtered.length;
     };
 
+    window.triggerImageUpload = function(event, id) {
+        event.stopPropagation();
+        activeUploadProductId = id;
+        document.getElementById('directImageInput').click();
+    };
+
+    window.processDirectImage = function(event) {
+        const file = event.target.files[0];
+        if (!file || !activeUploadProductId) return;
+
+        showToast("جاري ضغط ورفع الصورة...");
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = async () => {
+                const canvas = document.createElement("canvas");
+                let width = img.width;
+                let height = img.height;
+                const maxSide = 500;
+
+                if (width > height && width > maxSide) {
+                    height = Math.round((height * maxSide) / width);
+                    width = maxSide;
+                } else if (height > maxSide) {
+                    width = Math.round((width * maxSide) / height);
+                    height = maxSide;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+
+                try {
+                    const updatePayload = {
+                        imageUrl: compressedBase64,
+                        image: compressedBase64,
+                        img: compressedBase64
+                    };
+
+                    await setDoc(doc(db, "makhzan", activeUploadProductId), updatePayload, { merge: true });
+                    await setDoc(doc(db, "inventory", activeUploadProductId), updatePayload, { merge: true });
+
+                    // تحديث الحالة محلياً
+                    const targetItem = allData.find(i => i.id === activeUploadProductId);
+                    if (targetItem) {
+                        targetItem.imageUrl = compressedBase64;
+                        targetItem.image = compressedBase64;
+                        targetItem.img = compressedBase64;
+                    }
+
+                    renderItems();
+                    showToast("تمت حِفظ الصورة بنجاح! 🚀", 2500);
+                } catch (err) {
+                    console.error("خطأ أثناء حفظ الصورة:", err);
+                    alert("تعذر حفظ الصورة، يرجى إعادة المحاولة.");
+                    hideToast();
+                } finally {
+                    document.getElementById('directImageInput').value = "";
+                }
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    function showToast(msg, timeout = 0) {
+        const toast = document.getElementById('toastLoader');
+        document.getElementById('toastMsg').innerText = msg;
+        toast.style.display = 'flex';
+        if (timeout > 0) {
+            setTimeout(() => { hideToast(); }, timeout);
+        }
+    }
+
+    function hideToast() {
+        document.getElementById('toastLoader').style.display = 'none';
+    }
+
     window.goToDetails = function(id) {
         window.location.href = `product-details.html?id=${id}`;
     };
 
-    const hadCache = loadCachedRender();
-    if (!hadCache) setSyncState('syncing');
-    loadLiveInventory();
-</script>
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
-}
+    loadInventory();
 </script>
 </body>
 </html>
