@@ -43,8 +43,28 @@
 
         .product-card-3d { background: #fff; border-radius: 18px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-3d); border: 1px solid rgba(107,33,168,.08); }
         .product-card-3d.has-qty { border: 2px solid #8b5cf6; background: #faf5ff; box-shadow: 0 10px 22px rgba(139,92,246,.25); }
-        .avatar { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.25rem; color: #fff; margin-bottom: 8px; }
-        .prod-img { width: 100%; height: 110px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; background: #f3e8ff; }
+        
+        /* تصميم حاوية الصورة مماثل للمخزن والتعديل */
+        .img-box-wrapper {
+            width: 100%;
+            height: 120px;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fafafa;
+            border: 1px solid #f3e8ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+        }
+        .img-box-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* عرض الصورة بنسبها الأصلية بنفس أسلوب صفحة التعديل */
+        }
+        
+        .avatar { width: 100%; height: 120px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 2rem; color: #fff; margin-bottom: 8px; }
+        
         .prod-name { font-weight: 800; font-size: .84rem; line-height: 1.35; min-height: 2.3em; }
         .prod-price { font-weight: 800; color: var(--primary-purple); font-size: .8rem; }
 
@@ -276,7 +296,7 @@ function renderAccount() {
     if (account.updatedAt) $("balanceUpdated").textContent = "آخر تحديث للرصيد: " + new Date(account.updatedAt).toLocaleString("ar-EG");
 }
 
-// ---------------- عرض الأصناف مع الصور ----------------
+// ---------------- عرض الأصناف بأسلوب ومطابقة المخزن ----------------
 function renderCatalog() {
     const term = norm($("catalogSearch").value.trim());
     let words = term.split(/\s+/).filter(Boolean);
@@ -294,14 +314,16 @@ function renderCatalog() {
             ? `<div class="d-flex gap-1 my-1"><button class="unit-pill ${unit === "box" ? "active" : ""}" data-act="unit" data-id="${esc(p.id)}" data-unit="box">كرتونة</button><button class="unit-pill ${unit === "pcs" ? "active" : ""}" data-act="unit" data-id="${esc(p.id)}" data-unit="pcs">علبة</button></div>`
             : `<div class="my-1" style="font-size:.7rem;color:#6b7280;font-weight:700">بالوحدة</div>`;
 
-        // قراءة صورة الصنف القادمة من المخزن (سواء Base64 أو رابط)
-        const hasImg = p.img && (p.img.startsWith("data:image/") || /^https?:\/\//.test(p.img));
-        const img = hasImg 
-            ? `<img class="prod-img" src="${esc(p.img)}" alt="" loading="lazy">` 
+        // التقاط أي صورة محفوظة بنفس أسلوب التعديل والمخزن
+        const imgSrc = p.img || p.imageUrl || p.image || "";
+        const hasImg = imgSrc && (imgSrc.startsWith("data:image/") || /^https?:\/\//.test(imgSrc));
+
+        const imgHtml = hasImg 
+            ? `<div class="img-box-wrapper"><img src="${esc(imgSrc)}" alt="${esc(p.n)}" loading="lazy"></div>` 
             : `<div class="avatar" style="background:${color}">${esc(p.n.trim().charAt(0))}</div>`;
 
         return `<div class="product-card-3d ${qty > 0 ? "has-qty" : ""}" id="card_${esc(p.id)}">
-            <div>${img}
+            <div>${imgHtml}
               <div class="prod-name">${esc(p.n)}</div>
               <div class="prod-price" id="price_${esc(p.id)}">${esc(fmt(unitPrice(p, unit)))} ج.م</div>
               ${pills}
