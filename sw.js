@@ -6,7 +6,7 @@
 // - طلبات قاعدة البيانات نفسها (firestore.googleapis.com) مش بيتدخل فيها:
 //   مكتبة فايربيز بتتولاها (تخزين محلي + رفع تلقائي لما النت يرجع).
 // =====================================================================
-const CACHE_NAME = "elzaiady-cache-v13";
+const CACHE_NAME = "elzaiady-cache-v14";
 
 const LOCAL_FILES = [
   "./",
@@ -57,6 +57,8 @@ const LOCAL_FILES = [
   "./file-backup.js",
   "./shop.html",
   "./shop-admin.html",
+  "./shop-menu.html",
+  "./shop-card.js",
   "./shop-publish.js",
   "./firestore-offline.js",
   "./general-ledger.html",
