@@ -2,7 +2,7 @@
 // shop-publish.js
 // ---------------------------------------------------------------------
 // بينشر للمتجر (shop.html) بيانات آمنة للعرض العام فقط:
-//   shop_catalog/meta + shop_catalog/c0,c1,...  : أسماء الأصناف وأسعار البيع (من غير سعر الشراء)
+//   shop_catalog/meta + shop_catalog/c0,c1,...  : أسماء الأصناف وأسعار البيع وصور المخزن (من غير سعر الشراء)
 //   shop_accounts/{customerId}                  : اسم التاجر + رصيده الحالي
 // طلبات التجار نفسها بتتكتب مباشرة في جدول orders (status: pending, source: shop)
 // فبتظهر في all-orders وكشف التحميل وتتحوّل لفاتورة بالطريقة المعتادة.
@@ -44,8 +44,13 @@ export async function publishCatalog(db, force = false) {
         if (!name || sell <= 0) return;
         const factor = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
         const it = { id: d.id, n: name, s: sell, f: factor };
-        const img = String(x.imageUrl || x.image || "").trim();
-        if (/^https:\/\//.test(img) && img.length < 400) it.img = img;   // صورة اختيارية لو الصنف ليه رابط صورة
+        
+        // قراءة الصورة المرفوعة في المخزن بسماحية كاملة (روابط أو Base64)
+        const img = String(x.imageUrl || x.image || x.img || "").trim();
+        if (img && (img.startsWith("data:image/") || /^https?:\/\//.test(img))) {
+            it.img = img;
+        }
+        
         items.push(it);
     });
     items.sort((a, b) => a.n.localeCompare(b.n, "ar"));
