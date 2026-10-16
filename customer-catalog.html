@@ -215,7 +215,7 @@
         /* كارت الصنف */
         .product-card-3d {
             background: #ffffff;
-            border-radius: 12px;
+            border-radius: 14px;
             padding: 0 0 10px 0;
             display: flex;
             flex-direction: column;
@@ -224,6 +224,7 @@
             border: 1px solid #e4e4e7;
             overflow: hidden;
             transition: transform 0.2s ease;
+            position: relative;
         }
 
         .product-card-3d.has-qty {
@@ -231,10 +232,10 @@
             box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
         }
 
-        /* إطار الصورة المربع */
+        /* إطار الصورة تكبير الارتفاع مع حجز موضع للأزرار العائمة */
         .img-wrapper-3d {
             width: 100%;
-            aspect-ratio: 1 / 1;
+            height: 220px; /* زيادة ارتفاع الصورة ليغطي الجزء الأكبر من الكارت */
             background: #ffffff;
             display: flex;
             align-items: center;
@@ -249,6 +250,59 @@
             height: 100%;
             object-fit: cover;
             transition: transform 0.3s ease;
+        }
+
+        /* أزرار الكميات العائمة فوق الصورة */
+        .floating-qty-control {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(6px);
+            border-radius: 25px;
+            padding: 4px 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10;
+        }
+
+        .btn-3d {
+            border: none;
+            border-radius: 50%;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .btn-qty-minus {
+            background: #f4f4f5;
+            color: #18181b;
+            width: 32px;
+            height: 32px;
+            font-size: 1.1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .btn-qty-plus {
+            background: var(--purple-gradient);
+            color: #ffffff;
+            width: 32px;
+            height: 32px;
+            font-size: 1.1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .qty-display {
+            font-size: 1.05rem;
+            font-weight: 900;
+            color: var(--primary-purple);
+            min-width: 22px;
+            text-align: center;
         }
 
         .card-details {
@@ -274,44 +328,11 @@
             color: #000000;
         }
 
-        .btn-3d {
-            border: none;
-            border-radius: 8px;
-            font-weight: 800;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .btn-qty-minus {
-            background: #f4f4f5;
-            color: #18181b;
-            width: 32px;
-            height: 32px;
-            font-size: 1.1rem;
-        }
-
-        .btn-qty-plus {
-            background: var(--purple-gradient);
-            color: #ffffff;
-            width: 32px;
-            height: 32px;
-            font-size: 1.1rem;
-        }
-
-        .qty-display {
-            font-size: 1.1rem;
-            font-weight: 900;
-            color: var(--primary-purple);
-            min-width: 22px;
-            text-align: center;
-        }
-
         .unit-pill {
             font-size: 0.68rem;
             font-weight: 800;
-            padding: 2px 4px;
-            border-radius: 6px;
+            padding: 3px 6px;
+            border-radius: 8px;
             flex: 1;
             border: 1px solid #e4e4e7;
             background: #ffffff;
@@ -679,8 +700,16 @@ function renderCatalog(items) {
         return `
             <div class="product-card-3d ${currentQty > 0 ? 'has-qty' : ''}" id="card_${p.id}">
                 <div>
+                    <!-- صورة المنتج مع أزرار الزيادة والنقصان العائمة فوقها -->
                     <div class="img-wrapper-3d" onclick="openFullImg('${imgUrl}', '${p.name.replace(/'/g, "\\'")}')">
                         <img src="${imgUrl}" class="product-img" alt="${p.name}">
+                        
+                        <!-- أزرار + و - عائمة فوق الصورة بأسلوب أنيق -->
+                        <div class="floating-qty-control" onclick="event.stopPropagation()">
+                            <button class="btn-3d btn-qty-minus" onclick="alterQty('${p.id}', -1, '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">-</button>
+                            <span class="qty-display" id="qty_num_${p.id}">${currentQty}</span>
+                            <button class="btn-3d btn-qty-plus" onclick="alterQty('${p.id}', 1, '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">+</button>
+                        </div>
                     </div>
                     
                     <div class="card-details">
@@ -690,17 +719,11 @@ function renderCatalog(items) {
                             <span class="price-text">${cartonPrice > 0 ? cartonPrice.toFixed(0) + ' ج.م' : 'سعر عند التحميل'}</span>
                         </div>
 
-                        <div class="d-flex gap-1 mb-2">
+                        <div class="d-flex gap-1 mb-1">
                             <button class="unit-pill active" id="unit_box_${p.id}" onclick="selectUnit('${p.id}', 'box', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">كرتونة</button>
                             <button class="unit-pill" id="unit_pcs_${p.id}" onclick="selectUnit('${p.id}', 'pcs', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">علبة</button>
                         </div>
                     </div>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between px-2 pt-1 border-top">
-                    <button class="btn-3d btn-qty-minus" onclick="alterQty('${p.id}', -1, '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">-</button>
-                    <span class="qty-display" id="qty_num_${p.id}">${currentQty}</span>
-                    <button class="btn-3d btn-qty-plus" onclick="alterQty('${p.id}', 1, '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">+</button>
                 </div>
             </div>
         `;
