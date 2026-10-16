@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تقييم المخزون - شركة الزيادي</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-green: #0b6641; 
+            --accent-green: #10b981;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --gold: #d97706;
+            --gold-light: #fef3c7;
+        }
+
+        body { 
+            background-color: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 90px;
+            direction: rtl;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            color: white;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-radius: 0 0 25px 25px;
+            box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
+        }
+
+        .top-nav .nav-icon { 
+            cursor: pointer; 
+            font-size: 1.2rem; 
+            transition: 0.2s; 
+            color: white;
+            text-decoration: none;
+        }
+
+        /* بطاقة الإجمالي الكلي */
+        .valuation-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            margin: 20px;
+            border-radius: 20px;
+            padding: 20px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .valuation-card::after {
+            content: "\f0d6";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            position: absolute;
+            left: -15px;
+            bottom: -20px;
+            font-size: 6rem;
+            opacity: 0.05;
+            transform: rotate(-15deg);
+        }
+        .val-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #cbd5e1;
+            margin-bottom: 5px;
+        }
+        .val-amount {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #fbbf24;
+            line-height: 1.2;
+        }
+        .val-amount small {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .search-section {
+            padding: 0 20px 15px 20px;
+        }
+        .search-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .search-wrapper i {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-green);
+        }
+        .search-input {
+            width: 100%;
+            padding: 14px 40px 14px 15px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            font-size: 0.95rem;
+            outline: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            transition: 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent-green); }
+
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 2fr 0.9fr 0.9fr 1.2fr;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .table-headers {
+            padding: 0 25px 10px 25px;
+            font-size: 0.8rem;
+            font-weight: 800;
+            color: var(--text-muted);
+        }
+        .table-headers div { text-align: center; }
+        .table-headers div:first-child { text-align: right; }
+
+        .item-card {
+            padding: 14px 15px;
+            background: white;
+            border-radius: 16px;
+            margin: 0 15px 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+
+        .item-name { font-weight: 800; font-size: 0.9rem; margin-bottom: 2px; color: var(--text-dark); line-height: 1.3;}
+        .item-barcode { font-size: 0.7rem; color: var(--text-muted); }
+
+        .item-val-text { 
+            text-align: center; 
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+        
+        .price-col { color: var(--text-muted); }
+        .total-col { color: var(--primary-green); font-weight: 800; font-size: 0.95rem; }
+
+        .qty-badge {
+            background: #f1f5f9;
+            color: var(--text-dark);
+            padding: 4px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-align: center;
+            display: block;
+        }
+
+        .bottom-summary {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: white;
+            padding: 15px 20px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <div class="d-flex align-items-center gap-3">
+        <a href="index.html" class="nav-icon" title="الرئيسية">
+            <i class="fas fa-home"></i>
+        </a>
+        <i class="fas fa-sync-alt nav-icon" onclick="window.location.reload(true)" title="تحديث"></i>
+    </div>
+    <span class="fw-bold">قيمة البضاعة</span>
+    <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
+</div>
+
+<!-- بطاقة الإجمالي الكلي -->
+<div class="valuation-card">
+    <div class="val-title">إجمالي قيمة البضاعة بالمخزن</div>
+    <div class="val-amount" id="grandTotalDisplay">0.00 <small>ج.م</small></div>
+</div>
+
+<div class="search-section">
+    <div class="search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" class="search-input" placeholder="ابحث لفلترة التقييم..." oninput="renderItems()">
+    </div>
+</div>
+
+<div class="table-headers grid-layout">
+    <div>الصنف</div>
+    <div>الكمية</div>
+    <div>السعر</div>
+    <div>الإجمالي</div>
+</div>
+
+<div id="itemsContainer">
+    <div class="text-center text-muted mt-5 fw-bold">
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري حساب قيمة المخزون...
+    </div>
+</div>
+
+<div class="bottom-summary">
+    <i class="fas fa-boxes me-2"></i> عدد الأصناف المقيمة: <span id="totalCount" class="ms-1 text-dark">0</span>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+    let allData = [];
+
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
+
+    async function loadLiveInventory() {
+        try {
+            const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(collection(db, "inventory")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+            ]);
+
+            const factorsMap = new Map();
+            const namesMap = new Map();
+
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+                factorsMap.set(d.id, f);
+                if (data.name) namesMap.set(data.name.trim(), d.id);
+            });
+
+            const salesMap = new Map();
+            const purchasesMap = new Map();
+            const openingMap = new Map();
+
+            transSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.productId) {
+                    const current = openingMap.get(data.productId) || 0;
+                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
+                }
+            });
+
+            invoicesSnap.forEach(docSnap => {
+                const invData = docSnap.data();
+                if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') return;
+
+                const items = invData.items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const rawQty = Number(item.qty) || 0;
+                        const isCarton = isCartonUnit(item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+                        
+                        const current = salesMap.get(id) || 0;
+                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
+                    }
+                }
+            });
+
+            supplierSnap.forEach(docSnap => {
+                const items = docSnap.data().items || [];
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const factor = factorsMap.get(id) || 1;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
+                        const pcs = isCarton ? (rawQty * factor) : rawQty;
+
+                        const current = purchasesMap.get(id) || 0;
+                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
+                    }
+                }
+            });
+
+            onSnapshot(collection(db, "inventory"), (snap) => {
+                const freshData = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.isDeleted) {
+                        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                        
+                        let openingTotalPcs = 0;
+                        if (data.openingTotalPcs != null) {
+                            openingTotalPcs = Number(data.openingTotalPcs);
+                        } else if (data.openingQty != null) {
+                            openingTotalPcs = Math.round(Number(data.openingQty) * factor);
+                        } else if (openingMap.has(doc.id)) {
+                            openingTotalPcs = openingMap.get(doc.id);
+                        }
+
+                        const salesPcs = salesMap.get(doc.id) || 0;
+                        const purchasesPcs = purchasesMap.get(doc.id) || 0;
+                        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+                        freshData.push({ 
+                            id: doc.id, 
+                            ...data,
+                            totalPcs: calculatedRealPcs
+                        });
+                    }
+                });
+                allData = freshData;
+                renderItems();
+            });
+
+        } catch (e) {
+            console.error("خطأ:", e);
+            document.getElementById('itemsContainer').innerHTML = `<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>`;
+        }
+    }
+
+    window.renderItems = function() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const container = document.getElementById('itemsContainer');
+        
+        let filtered = allData.filter(i => 
+            (i.name && i.name.toLowerCase().includes(term)) || 
+            (i.barcode && String(i.barcode).includes(term))
+        );
+
+        // ترتيب تنازلي بناءً على إجمالي القيمة للصنف
+        filtered.sort((a, b) => {
+            const getVal = (item) => {
+                const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1);
+                const price = Number(item.buy || item.cost || item.sell || 0); // الأولوية لسعر الشراء/التكلفة
+                return (Number(item.totalPcs || 0) / factor) * price;
+            };
+            return getVal(b) - getVal(a);
+        });
+
+        let html = '';
+        let grandTotalValue = 0;
+
+        filtered.forEach(item => {
+            const factor = Math.max(1, Number(item.unitFactor || item.factor || item.pcsPerCarton) || 1); 
+            const total = Number(item.totalPcs || 0);
+            
+            // تحديد سعر التقييم (سعر الشراء/التكلفة للكرتونة، وإذا لم يوجد نستخدم سعر البيع)
+            const cartonPrice = Number(item.buy || item.cost || item.sell || 0); 
+            const piecePrice = cartonPrice / factor;
+            
+            // حساب قيمة الصنف (بناءً على إجمالي القطع مضروباً في سعر القطعة)
+            const itemValue = total * piecePrice;
+            grandTotalValue += itemValue;
+
+            const isNegative = total < 0;
+            const absTotal = Math.abs(total);
+            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
+
+            html += `
+                <div class="item-card grid-layout">
+                    <div class="item-info">
+                        <div class="item-name">${item.name || 'بدون اسم'}</div>
+                        <div class="item-barcode">${item.barcode || '---'}</div>
+                    </div>
+                    <div>
+                        <div class="qty-badge">${cartons}ك / ${jerrycans}ج</div>
+                    </div>
+                    <div class="item-val-text price-col">
+                        ${cartonPrice.toLocaleString('en-US', {minimumFractionDigits: 1})}
+                    </div>
+                    <div class="item-val-text total-col" dir="ltr">
+                        ${itemValue.toLocaleString('en-US', {minimumFractionDigits: 1})}
+                    </div>
+                </div>
+            `;
+        });
+
+        if (filtered.length === 0) {
+            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-box-open fa-2x mb-2"></i><br>لا توجد بيانات للعرض</div>`;
+        }
+
+        container.innerHTML = html;
+        document.getElementById('totalCount').innerText = filtered.length;
+        document.getElementById('grandTotalDisplay').innerHTML = `${grandTotalValue.toLocaleString('en-US', {minimumFractionDigits: 2})} <small>ج.م</small>`;
+    };
+
+    loadLiveInventory();
+</script>
+</body>
+</html>

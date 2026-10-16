@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>كشف حساب السجل — شركة الزيادي</title>
+
+    <!-- PWA & Mobile Settings -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+
+    <!-- Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --germany-black: #000000;
+            --germany-gold: #FFCC00;
+            --germany-red: #d90429;
+            --italy-green: #178a4a;
+            --purple: #5b21b6;
+            --bg-paper: #f4f6f8;
+            --panel-bg: #ffffff;
+            --line-color: #e2e8f0;
+            --mute: #5a677d;
+        }
+
+        body {
+            background-color: var(--bg-paper);
+            font-family: 'Cairo', sans-serif;
+            color: #000000;
+            padding-bottom: 60px;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .num { font-family: 'Montserrat', 'Cairo', sans-serif !important; font-weight: 800; }
+
+        /* App Header */
+        header {
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+            color: #ffffff;
+            padding: 12px 14px 18px;
+            border-bottom: 4px solid var(--germany-red);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+        }
+
+        .party-toggle-btn {
+            border: 1px solid rgba(255,255,255,0.25);
+            color: #ffffff;
+            background: rgba(255,255,255,0.12);
+            font-weight: 800;
+            border-radius: 8px;
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .party-toggle-btn.active {
+            background: var(--italy-green);
+            border-color: var(--germany-gold);
+            color: #ffffff;
+        }
+
+        /* Search Filter Box */
+        .filter-card {
+            background: var(--panel-bg);
+            border-radius: 16px;
+            padding: 12px 14px;
+            border: 1px solid var(--line-color);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+            margin: -10px 8px 12px 8px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .search-dropdown-list {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            left: 0;
+            background: #ffffff;
+            border: 1px solid var(--line-color);
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .search-dropdown-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            font-weight: 800;
+            font-size: 0.85rem;
+        }
+        .search-dropdown-item:hover {
+            background: #eef9f4;
+            color: var(--italy-green);
+        }
+
+        /* Top Action Buttons Bar */
+        .top-action-bar {
+            margin: 0 8px 12px 8px;
+        }
+
+        /* Statement Card Item */
+        .statement-card-item {
+            background: #ffffff;
+            border: 1px solid var(--line-color);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.03);
+            position: relative;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .statement-card-item.clickable-card {
+            cursor: pointer;
+        }
+        .statement-card-item.clickable-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+            border-color: #cbd5e1;
+        }
+        .statement-card-item.invoice-card {
+            border-right: 5px solid var(--germany-black);
+        }
+        .statement-card-item.voucher-card {
+            border-right: 5px solid var(--purple);
+            background: #fdfcfd;
+        }
+        .statement-card-item.prev-balance-card {
+            border-right: 5px solid var(--germany-gold);
+            background: #fffdf5;
+        }
+
+        /* Table Inside Card */
+        .statement-item-table {
+            width: 100%;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            border-collapse: collapse;
+        }
+        .statement-item-table th {
+            background: #f1f5f9;
+            color: #000000;
+            padding: 6px;
+            border: 1px solid #e2e8f0;
+            font-weight: 800;
+            text-align: center;
+        }
+        .statement-item-table td {
+            padding: 6px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            font-weight: 700;
+            color: #000000;
+        }
+
+        /* Invoice Stats Inline Row */
+        .invoice-stats-inline {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 4px;
+            background: #f8fafc;
+            padding: 8px 4px;
+            border-radius: 10px;
+            border: 1px solid var(--line-color);
+            text-align: center;
+            margin: 8px 0;
+            font-size: 0.75rem;
+        }
+        .invoice-stats-inline .stat-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .invoice-stats-inline .stat-label {
+            color: var(--mute);
+            font-weight: 800;
+            font-size: 0.68rem;
+            margin-bottom: 2px;
+        }
+        .invoice-stats-inline .stat-val {
+            font-weight: 800;
+            font-size: 0.85rem;
+        }
+
+        /* Voucher Inline Row */
+        .voucher-stats-inline {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 4px;
+            background: #fcfaff;
+            padding: 8px 4px;
+            border-radius: 10px;
+            border: 1px dashed #d8b4fe;
+            text-align: center;
+            margin: 8px 0;
+            font-size: 0.75rem;
+        }
+
+        /* Header Summary Strip */
+        .statement-summary-header {
+            background: var(--germany-black);
+            color: #ffffff;
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.88rem;
+            font-weight: 800;
+            margin-bottom: 12px;
+            border-bottom: 3px solid var(--germany-red);
+        }
+
+        /* Exit Modal */
+        .exit-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 20000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .exit-modal-box {
+            background: #ffffff;
+            width: 90%;
+            max-width: 360px;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; }
+            .statement-card-item { box-shadow: none !important; page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container max-width-900 mx-auto px-1 px-md-3">
+
+    <!-- Header Block (No Print) -->
+    <header class="no-print rounded-bottom-4">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+                <a href="javascript:void(0)" onclick="safeNavigate('index.html')" class="btn btn-outline-light btn-sm rounded-circle p-1" style="width:34px;height:34px;" title="الرئيسية"><i class="fas fa-home"></i></a>
+                <h6 class="m-0 fw-bold text-white"><i class="fas fa-file-invoice-dollar text-warning me-1"></i> كشف حساب السجل</h6>
+            </div>
+            <!-- Toggle Customer / Supplier -->
+            <div class="btn-group" role="group">
+                <button type="button" class="party-toggle-btn active" id="btnTypeCustomer" onclick="switchType('customer')">عميل</button>
+                <button type="button" class="party-toggle-btn" id="btnTypeSupplier" onclick="switchType('supplier')">مورد</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Filter Card (No Print) -->
+    <div class="filter-card no-print">
+        <div class="row g-2">
+            <div class="col-12 position-relative">
+                <label class="form-label fw-bold text-muted small mb-1" id="partySelectLabel">ابحث باسم العميل:</label>
+                <input type="text" id="partyInput" class="form-control fw-bold form-control-sm" placeholder="اكتب أول حرف للبحث..." oninput="filterPartyList()" autocomplete="off">
+                <div id="partyDropdown" class="search-dropdown-list"></div>
+                <input type="hidden" id="selectedPartyId">
+            </div>
+            <div class="col-6">
+                <label class="form-label fw-bold text-muted small mb-1">من تاريخ:</label>
+                <input type="date" id="fromDate" class="form-control form-control-sm fw-bold" onchange="generateStatement()">
+            </div>
+            <div class="col-6">
+                <label class="form-label fw-bold text-muted small mb-1">إلى تاريخ:</label>
+                <input type="date" id="toDate" class="form-control form-control-sm fw-bold" onchange="generateStatement()">
+            </div>
+            <div class="col-12 d-flex gap-1 mt-2">
+                <button class="btn btn-dark btn-sm w-100 fw-bold" onclick="generateStatement()"><i class="fas fa-search me-1"></i> عرض كشف حساب السجل</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearDates()" title="تفريغ التواريخ"><i class="fas fa-undo"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Toolbar -->
+    <div class="d-flex justify-content-center gap-2 top-action-bar no-print">
+        <button class="btn btn-dark btn-sm w-50 fw-bold py-2 shadow-sm" onclick="window.print()"><i class="fas fa-print me-1"></i> طباعة الكشف</button>
+        <button class="btn btn-success btn-sm w-50 fw-bold py-2 shadow-sm" onclick="exportToExcel()"><i class="fas fa-file-excel me-1"></i> تصدير إكسيل</button>
+    </div>
+
+    <!-- Printable Statement Paper Container -->
+    <div id="statementPaper" class="px-1">
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2 bg-white p-3 rounded-3 border">
+            <div>
+                <h5 class="fw-bold m-0" style="color: var(--italy-green);">شركة الزيادي لزيوت السيارات</h5>
+                <small class="text-muted fw-bold" style="font-size:0.72rem;">إدارة المبيعات والحسابات — بيلا / كفر الشيخ</small><br>
+                <small class="text-muted fw-bold" style="font-size:0.72rem;"><i class="fas fa-phone me-1"></i> 01000197222 - 01027830834</small>
+            </div>
+            <div class="text-end">
+                <h6 class="fw-bold mb-1" id="docTitleDisplay">كشف حساب السجل</h6>
+                <span class="badge bg-dark px-3 py-1 fw-bold" id="partyNameDisplay" style="font-size: 0.88rem;">-</span>
+            </div>
+        </div>
+
+        <div id="statementCardsContainer">
+            <div class="text-center py-5 text-muted fw-bold" style="font-size:0.9rem;">اكتب أول حرف لظهور اسم الحساب واختياره لعرض السجل</div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top small text-muted fw-bold bg-white p-2 rounded border" style="font-size:0.72rem;">
+            <span>تاريخ الطباعة: <span class="num" id="printDateDisplay"></span></span>
+            <span>توقيع الحسابات: ....................</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- Custom Exit Confirmation Modal -->
+<div class="exit-modal-overlay" id="exitModal">
+    <div class="exit-modal-box">
+        <div class="mb-2 text-warning">
+            <i class="fas fa-arrow-right-from-bracket fa-2x"></i>
+        </div>
+        <h6 class="fw-bold mb-1 text-dark">تأكيد الخروج</h6>
+        <p class="text-muted small fw-bold mb-3" style="font-size: 0.8rem;">هل أنت متأكد من مغادرة كشف الحساب؟</p>
+        <div class="d-flex gap-2">
+            <button class="btn btn-danger btn-sm w-100 fw-bold rounded-2 py-2" id="btnConfirmExit">خروج</button>
+            <button class="btn btn-light btn-sm w-100 fw-bold rounded-2 py-2 border" id="btnCancelExit">بقاء</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a",
+        measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    let currentPartyType = 'customer';
+    let partyList = [];
+    let pendingTargetUrl = null;
+    let allowNavigation = false;
+    let currentExportRows = [];
+
+    const fmt = (n) => Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const safeNum = (v) => { let n = Number(v); return isNaN(n) ? 0 : n; };
+
+    function normalizeName(str) {
+        return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+    }
+
+    function parseDateToMs(dateStr) {
+        if (!dateStr) return 0;
+        try {
+            let cleanStr = String(dateStr).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            let match = cleanStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+            if (match) return new Date(match[1], match[2] - 1, match[3]).getTime();
+            match = cleanStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+            if (match) return new Date(match[3], match[2] - 1, match[1]).getTime();
+            return new Date(cleanStr).getTime() || 0;
+        } catch(e) { return 0; }
+    }
+
+    // دالة الانتقال المباشر لتعديل الفاتورة مع تعطيل حماية الخروج
+    window.openEditInvoice = function(id, type) {
+        if (!id) return;
+        allowNavigation = true;
+        window.removeEventListener('beforeunload', beforeUnloadHandler);
+        
+        let targetUrl = (type === 'customer') 
+            ? `sales-invoice.html?edit=${id}` 
+            : `new-purchase-invoice.html?edit=${id}`;
+
+        window.location.href = targetUrl;
+    };
+
+    function beforeUnloadHandler(e) {
+        if (!allowNavigation) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    }
+
+    window.safeNavigate = (url) => {
+        pendingTargetUrl = url;
+        document.getElementById('exitModal').style.display = 'flex';
+    };
+
+    document.getElementById('btnConfirmExit').onclick = () => {
+        allowNavigation = true;
+        document.getElementById('exitModal').style.display = 'none';
+        if (pendingTargetUrl) {
+            window.location.href = pendingTargetUrl;
+        } else {
+            window.history.back();
+        }
+    };
+
+    document.getElementById('btnCancelExit').onclick = () => {
+        document.getElementById('exitModal').style.display = 'none';
+        pendingTargetUrl = null;
+        history.pushState({ page: 'statement' }, '', location.href);
+    };
+
+    history.pushState({ page: 'statement' }, '', location.href);
+    window.addEventListener('popstate', (e) => {
+        if (!allowNavigation) {
+            history.pushState({ page: 'statement' }, '', location.href);
+            pendingTargetUrl = null;
+            document.getElementById('exitModal').style.display = 'flex';
+        }
+    });
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+
+    window.switchType = (type) => {
+        currentPartyType = type;
+        document.getElementById('btnTypeCustomer').classList.toggle('active', type === 'customer');
+        document.getElementById('btnTypeSupplier').classList.toggle('active', type === 'supplier');
+        document.getElementById('partySelectLabel').innerText = type === 'customer' ? 'ابحث باسم العميل:' : 'ابحث باسم المورد:';
+        document.getElementById('docTitleDisplay').innerText = type === 'customer' ? 'كشف حساب السجل' : 'كشف حساب المورد';
+        
+        document.getElementById('partyInput').value = '';
+        document.getElementById('selectedPartyId').value = '';
+        document.getElementById('partyDropdown').style.display = 'none';
+        loadPartyList();
+    };
+
+    async function loadPartyList() {
+        const partyInput = document.getElementById('partyInput');
+        partyInput.placeholder = 'جاري تحميل الأسماء...';
+        
+        const colName = currentPartyType === 'customer' ? 'customers' : 'suppliers';
+        
+        try {
+            const snap = await getDocs(query(collection(db, colName), orderBy("name")));
+            partyList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            partyInput.placeholder = `اكتب اسم ${currentPartyType === 'customer' ? 'العميل' : 'المورد'}...`;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const partyId = urlParams.get('id');
+            if (partyId) {
+                const found = partyList.find(p => p.id === partyId);
+                if (found) {
+                    partyInput.value = found.name;
+                    document.getElementById('selectedPartyId').value = found.id;
+                    generateStatement();
+                }
+            }
+        } catch(e) {
+            console.error(e);
+            partyInput.placeholder = 'فشل تحميل القائمة!';
+        }
+    }
+
+    window.filterPartyList = () => {
+        const inputVal = document.getElementById('partyInput').value.trim().toLowerCase();
+        const dropdown = document.getElementById('partyDropdown');
+        const hiddenIdInput = document.getElementById('selectedPartyId');
+
+        if (!inputVal || inputVal.length === 0) {
+            hiddenIdInput.value = '';
+            dropdown.style.display = 'none';
+            dropdown.innerHTML = '';
+            return;
+        }
+
+        const filtered = partyList.filter(p => p.name && p.name.toLowerCase().includes(inputVal));
+
+        if (filtered.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        dropdown.innerHTML = filtered.map(p => `
+            <div class="search-dropdown-item" onclick="selectParty('${p.id}', '${p.name.replace(/'/g, "\\'")}')">
+                <i class="fas fa-user me-1 text-muted"></i> ${p.name}
+            </div>
+        `).join('');
+
+        dropdown.style.display = 'block';
+    };
+
+    window.selectParty = (id, name) => {
+        document.getElementById('partyInput').value = name;
+        document.getElementById('selectedPartyId').value = id;
+        document.getElementById('partyDropdown').style.display = 'none';
+        generateStatement();
+    };
+
+    document.addEventListener('click', (e) => {
+        const input = document.getElementById('partyInput');
+        const dropdown = document.getElementById('partyDropdown');
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    window.clearDates = () => {
+        document.getElementById('fromDate').value = '';
+        document.getElementById('toDate').value = '';
+        generateStatement();
+    };
+
+    window.generateStatement = async () => {
+        const partyId = document.getElementById('selectedPartyId').value;
+        const partyInputVal = document.getElementById('partyInput').value.trim();
+        const cardsContainer = document.getElementById('statementCardsContainer');
+        
+        if (!partyId) {
+            cardsContainer.innerHTML = '<div class="text-center py-5 text-muted fw-bold" style="font-size:0.9rem;">اكتب أول حرف واختر اسماً صحيحاً من القائمة لعرض التفاصيل</div>';
+            document.getElementById('partyNameDisplay').innerText = partyInputVal || '-';
+            return;
+        }
+
+        const partyObj = partyList.find(p => p.id === partyId);
+        const partyName = partyObj ? partyObj.name : partyInputVal;
+        document.getElementById('partyNameDisplay').innerText = partyName;
+
+        const fromDateVal = document.getElementById('fromDate').value;
+        const toDateVal = document.getElementById('toDate').value;
+
+        const fromMs = fromDateVal ? new Date(fromDateVal + 'T00:00:00').getTime() : 0;
+        const toMs = toDateVal ? new Date(toDateVal + 'T23:59:59').getTime() : Infinity;
+
+        cardsContainer.innerHTML = '<div class="text-center py-5 fw-bold"><i class="fas fa-spinner fa-spin me-2 fs-4"></i><p class="mt-2">جاري جلب كافة الأصناف والحركات للسجل...</p></div>';
+
+        try {
+            let events = [];
+
+            if (currentPartyType === 'customer') {
+                const [invSnap, transSnap] = await Promise.all([
+                    getDocs(collection(db, "invoices")),
+                    getDocs(collection(db, "transactions"))
+                ]);
+
+                invSnap.forEach(d => {
+                    const data = d.data();
+                    if (data.isDeleted) return;
+                    if (data.customerId !== partyId && normalizeName(data.customerName) !== normalizeName(partyName)) return;
+
+                    const calculatedCash = safeNum(data.cashAmount ?? data.cashPaid ?? data.paid);
+                    const calculatedWallet = safeNum(data.walletAmount ?? data.walletPaid);
+                    const total = safeNum(data.total);
+                    const paid = calculatedCash + calculatedWallet;
+                    const remaining = total - paid;
+                    const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseDateToMs(data.time || data.date);
+
+                    let parsedCustomerItems = (data.items || []).map(i => {
+                        let q = safeNum(i.qty ?? i.quantity ?? 1);
+                        let p = safeNum(i.price ?? i.unitPrice ?? i.sellPrice);
+                        let tot = safeNum(i.total) || (q * p);
+                        return {
+                            name: i.name || i.productName || 'صنف',
+                            qty: q,
+                            price: p,
+                            total: tot
+                        };
+                    });
+
+                    events.push({
+                        docId: d.id,
+                        type: 'invoice',
+                        timeMs,
+                        date: data.date || data.time || '-',
+                        paymentMethod: data.paymentMethod || 'آجل',
+                        cashPaid: calculatedCash,
+                        walletPaid: calculatedWallet,
+                        items: parsedCustomerItems,
+                        total: total,
+                        paid: paid,
+                        remaining: remaining,
+                        debit: remaining,
+                        credit: 0
+                    });
+                });
+
+                transSnap.forEach(d => {
+                    const tr = d.data();
+                    if (tr.isDeleted) return;
+                    if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+                    if (tr.partyId !== partyId && tr.customerId !== partyId && normalizeName(tr.customerName) !== normalizeName(partyName)) return;
+
+                    const amt = Math.abs(safeNum(tr.amount || tr.total));
+                    const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseDateToMs(tr.date || tr.time);
+
+                    events.push({
+                        docId: d.id,
+                        type: 'voucher',
+                        timeMs,
+                        date: tr.date || tr.time || '-',
+                        voucherType: tr.type || 'قبض',
+                        method: tr.method || 'نقدى',
+                        note: tr.note || '',
+                        amt: amt,
+                        debit: tr.type === 'صرف' ? amt : 0,
+                        credit: tr.type === 'قبض' ? amt : 0
+                    });
+                });
+
+            } else {
+                const [supInvSnap, trSnap] = await Promise.all([
+                    getDocs(collection(db, "supplier_transactions")),
+                    getDocs(collection(db, "transactions"))
+                ]);
+
+                supInvSnap.forEach(d => {
+                    const data = d.data();
+                    if (data.isDeleted) return;
+                    if (data.supplierId !== partyId && normalizeName(data.supplierName) !== normalizeName(partyName)) return;
+
+                    const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseDateToMs(data.date || data.time);
+                    
+                    const totalAmt = safeNum(data.grossTotal ?? data.total ?? data.amount);
+                    const paidAmt = safeNum(data.cashPaid ?? data.paid ?? data.paidAmount);
+                    const remAmt = totalAmt - paidAmt;
+
+                    let parsedItems = (data.items || []).map(i => {
+                        let q = safeNum(i.qty ?? i.quantity ?? 1);
+                        let p = safeNum(i.buy ?? i.purchasePrice ?? i.cost ?? i.price);
+                        let tot = (q * p) || safeNum(i.total);
+                        return {
+                            name: i.name || i.productName || 'صنف',
+                            qty: q,
+                            price: p,
+                            total: tot
+                        };
+                    });
+
+                    events.push({
+                        docId: d.id,
+                        type: 'invoice',
+                        timeMs,
+                        date: data.date || data.time || '-',
+                        paymentMethod: data.paymentMethod || data.type || 'شراء',
+                        items: parsedItems,
+                        total: totalAmt,
+                        paid: paidAmt,
+                        remaining: remAmt,
+                        debit: 0,
+                        credit: remAmt
+                    });
+                });
+
+                trSnap.forEach(d => {
+                    const tr = d.data();
+                    if (tr.isDeleted || tr.invoiceId || tr.supplierTransactionId) return;
+                    if (tr.partyId !== partyId && tr.supplierId !== partyId && normalizeName(tr.supplierName) !== normalizeName(partyName)) return;
+
+                    const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseDateToMs(tr.date || tr.time);
+                    const amt = Math.abs(safeNum(tr.amount || tr.total));
+
+                    events.push({
+                        docId: d.id,
+                        type: 'voucher',
+                        timeMs,
+                        date: tr.date || tr.time || '-',
+                        voucherType: 'سداد للمورد',
+                        method: tr.method || 'نقدى',
+                        note: tr.note || 'سداد دفعة للمورد',
+                        amt: amt,
+                        debit: amt,
+                        credit: 0
+                    });
+                });
+            }
+
+            events.sort((a, b) => a.timeMs - b.timeMs);
+
+            let baseBalance = safeNum(partyObj ? (partyObj.initialBalance || partyObj.openingBalance) : 0);
+            let previousBalance = baseBalance;
+            let filteredEvents = [];
+
+            events.forEach(ev => {
+                if (ev.timeMs < fromMs) {
+                    if (currentPartyType === 'customer') {
+                        previousBalance += (ev.debit - ev.credit);
+                    } else {
+                        previousBalance += (ev.credit - ev.debit);
+                    }
+                } else if (ev.timeMs <= toMs) {
+                    filteredEvents.push(ev);
+                }
+            });
+
+            let running = previousBalance;
+            let renderedCards = [];
+            currentExportRows = [];
+
+            if (fromMs > 0 || previousBalance !== 0) {
+                renderedCards.push({
+                    timeMs: 0,
+                    html: `
+                    <div class="statement-card-item prev-balance-card">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-dark"><i class="fas fa-history me-1 text-warning"></i> رصيد سابق مرحّل حتى تاريخ (${fromDateVal || 'البداية'})</span>
+                            <span class="num fw-bold text-dark">${fmt(previousBalance)} ج.م</span>
+                        </div>
+                    </div>`
+                });
+                currentExportRows.push({ date: fromDateVal || '-', desc: 'رصيد سابق مرحّل', items: '-', payDetails: '-', debit: previousBalance > 0 ? previousBalance : 0, credit: previousBalance < 0 ? Math.abs(previousBalance) : 0, balance: running });
+            }
+
+            filteredEvents.forEach(ev => {
+                let previousRunning = running;
+                
+                if (currentPartyType === 'customer') {
+                    running += (ev.debit - ev.credit);
+                } else {
+                    running += (ev.credit - ev.debit);
+                }
+
+                let balanceLabel = "";
+                if (currentPartyType === 'customer') {
+                    balanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
+                } else {
+                    balanceLabel = running >= 0 ? "الصافي له" : "الصافي عليه";
+                }
+
+                if (ev.type === 'invoice') {
+                    let itemsRowsHtml = (ev.items || []).map(i => `
+                        <tr>
+                            <td style="text-align:right;">${i.name}</td>
+                            <td class="num">${safeNum(i.qty)}</td>
+                            <td class="num">${safeNum(i.price).toFixed(1)}</td>
+                            <td class="num">${safeNum(i.total).toFixed(1)}</td>
+                        </tr>`).join('');
+
+                    const badgeTitle = currentPartyType === 'customer' ? 'فاتورة مبيعات' : 'فاتورة شراء / توريد';
+
+                    renderedCards.push({
+                        timeMs: ev.timeMs,
+                        html: `
+                        <div class="statement-card-item invoice-card clickable-card" onclick="openEditInvoice('${ev.docId}', '${currentPartyType}')" title="اضغط لتعديل الفاتورة">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge bg-dark" style="font-size:0.75rem; color:white; padding:3px 8px; border-radius:6px;">
+                                    <i class="fas fa-file-invoice me-1"></i> ${badgeTitle} <i class="fas fa-edit ms-1 text-warning"></i>
+                                </span>
+                                <span class="text-muted fw-bold num" style="font-size:0.75rem;"><i class="far fa-clock me-1"></i>${ev.date}</span>
+                            </div>
+                            
+                            <div class="invoice-stats-inline">
+                                <div class="stat-box">
+                                    <span class="stat-label">إجمالي الفاتورة</span>
+                                    <span class="stat-val num text-dark">${safeNum(ev.total).toFixed(2)}</span>
+                                </div>
+                                <div class="stat-box" style="border-right: 1px solid var(--line-color); border-left: 1px solid var(--line-color);">
+                                    <span class="stat-label">المسدد (${ev.paymentMethod})</span>
+                                    <span class="stat-val num text-success">${safeNum(ev.paid).toFixed(2)}</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="stat-label">المتبقي من الفاتورة</span>
+                                    <span class="stat-val num text-danger">${safeNum(ev.remaining).toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            ${ev.items && ev.items.length > 0 ? `
+                                <table class="statement-item-table">
+                                    <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+                                    <tbody>${itemsRowsHtml}</tbody>
+                                </table>
+                            ` : '<div class="text-muted text-center py-2" style="font-size:0.75rem;">بلا أصناف تفصيلية</div>'}
+
+                            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
+                                <span class="text-muted fw-bold"><i class="fas fa-history me-1 text-warning"></i> الحساب السابق: <span class="num text-dark">${Math.abs(previousRunning).toFixed(2)}</span></span>
+                                <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? (currentPartyType === 'customer' ? 'text-danger' : 'text-success') : 'text-dark'}">${Math.abs(running).toFixed(2)}</span></span>
+                            </div>
+                        </div>`
+                    });
+
+                    currentExportRows.push({
+                        date: ev.date,
+                        desc: `${badgeTitle} (${ev.total})`,
+                        items: (ev.items || []).map(i => `${i.name} (${i.qty}×${i.price})`).join('، '),
+                        payDetails: ev.paymentMethod,
+                        debit: ev.debit,
+                        credit: ev.credit,
+                        balance: running
+                    });
+
+                } else {
+                    const badgeVoucherTitle = currentPartyType === 'customer' ? (ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض') : 'سند سداد للمورد';
+                    const amtLabel = currentPartyType === 'customer' ? 'المبلغ المقبوض' : 'المبلغ المدفوع للمورد';
+
+                    renderedCards.push({
+                        timeMs: ev.timeMs,
+                        html: `
+                        <div class="statement-card-item voucher-card">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge" style="background:var(--purple); color:white; font-size:0.75rem; padding:3px 8px; border-radius:6px;"><i class="fas fa-hand-holding-usd me-1"></i> ${badgeVoucherTitle} (${ev.method})</span>
+                                <span class="text-muted fw-bold num" style="font-size:0.75rem;"><i class="far fa-clock me-1"></i>${ev.date}</span>
+                            </div>
+
+                            <div class="voucher-stats-inline">
+                                <div class="stat-box">
+                                    <span class="stat-label"><i class="fas fa-history me-1 text-warning"></i> الحساب السابق</span>
+                                    <span class="stat-val num text-dark">${Math.abs(previousRunning).toFixed(2)}</span>
+                                </div>
+                                <div class="stat-box" style="border-right: 1px dashed #d8b4fe; border-left: 1px dashed #d8b4fe;">
+                                    <span class="stat-label text-purple">${amtLabel}</span>
+                                    <span class="stat-val num text-primary">${safeNum(ev.amt).toFixed(2)}</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="stat-label">${balanceLabel}</span>
+                                    <span class="stat-val num ${running >= 0 ? (currentPartyType === 'customer' ? 'text-danger' : 'text-success') : 'text-dark'}">${Math.abs(running).toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            ${ev.note ? `<div class="text-muted small fw-bold mt-1" style="font-size:0.75rem;"><i class="fas fa-comment-alt me-1"></i> ${ev.note}</div>` : ''}
+                        </div>`
+                    });
+
+                    currentExportRows.push({
+                        date: ev.date,
+                        desc: `${badgeVoucherTitle} (${ev.amt})`,
+                        items: '-',
+                        payDetails: ev.method,
+                        debit: ev.debit,
+                        credit: ev.credit,
+                        balance: running
+                    });
+                }
+            });
+
+            if (filteredEvents.length === 0 && previousBalance === 0) {
+                cardsContainer.innerHTML = `<div class="text-center py-5 text-muted fw-bold"><i class="fas fa-folder-open fa-2x mb-2 d-block"></i>لا توجد حركات مسجلة لهذا الحساب في هذه الفترة</div>`;
+                return;
+            }
+
+            renderedCards.sort((a, b) => b.timeMs - a.timeMs);
+            let cardsHtml = renderedCards.map(c => c.html).join('');
+
+            let globalBalanceLabel = "";
+            if (currentPartyType === 'customer') {
+                globalBalanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
+            } else {
+                globalBalanceLabel = running >= 0 ? "الصافي له" : "الصافي عليه";
+            }
+
+            cardsContainer.innerHTML = `
+                <div class="statement-summary-header">
+                    <span>إجمالي الحركات: <span class="num">${filteredEvents.length}</span></span>
+                    <span>${globalBalanceLabel}: <span class="num" style="color:var(--germany-gold); font-size:1.1rem;">${Math.abs(running).toFixed(2)}</span> ج.م</span>
+                </div>
+                ${cardsHtml}`;
+
+        } catch (err) {
+            console.error("خطأ في جلب السجل:", err);
+            cardsContainer.innerHTML = `<div class="alert alert-danger text-center p-3 my-2 fw-bold">فشل تحميل كشف حساب السجل: ${err.message}</div>`;
+        }
+    };
+
+    window.exportToExcel = () => {
+        if (!currentExportRows || currentExportRows.length === 0) {
+            alert("لا توجد بيانات لتصديرها.");
+            return;
+        }
+        const partyName = document.getElementById('partyNameDisplay').innerText;
+        const wsData = [["التاريخ", "الحركة", "الأصناف", "طريقة السداد", "مستحق", "مسدد", "الرصيد"]];
+        currentExportRows.forEach(r => wsData.push([r.date, r.desc, r.items, r.payDetails, r.debit, r.credit, r.balance]));
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "كشف الحساب التفصيلي");
+        XLSX.writeFile(wb, `كشف_حساب_السجل_${partyName}.xlsx`);
+    };
+
+    document.getElementById('printDateDisplay').innerText = new Date().toLocaleDateString('ar-EG');
+    loadPartyList();
+</script>
+</body>
+</html>

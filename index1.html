@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>شركة الزيادى | لوحة التحكم</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#075E3D">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --brand: #0E8F5B;
+            --brand-mid: #12A06B;
+            --brand-dark: #075E3D;
+            --brand-tint: #E6F7EF;
+            --amber: #D97706;
+            --amber-tint: #FEF3C7;
+            --teal: #0E7C86;
+            --teal-tint: #E0F7FA;
+            --coral: #DC2626;
+            --coral-tint: #FEE2E2;
+            --violet: #7C3AED;
+            --violet-tint: #F3E8FF;
+            --emerald: #2D6A4F;
+            --emerald-tint: #E8F5E9;
+            --surface: #F3FAF7;
+            --card-bg: #FFFFFF;
+            --text-deep: #0F2A1E;
+            --text-mid: #5B6B63;
+            --text-faint: #9BAAA2;
+            --border-subtle: #E2EFE8;
+            --shadow-sm: 0 4px 12px rgba(7, 94, 61, 0.05);
+            --shadow-md: 0 6px 18px rgba(7, 94, 61, 0.08);
+            --shadow-lg: 0 12px 28px rgba(7, 94, 61, 0.12);
+            --radius-lg: 20px;
+            --radius-md: 16px;
+            --radius-sm: 12px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--surface);
+            color: var(--text-deep);
+            min-height: 100vh;
+            overflow-x: hidden;
+            width: 100%;
+            padding-bottom: 220px;
+        }
+
+        .header {
+            position: sticky; top: 0; z-index: 1000;
+            background: linear-gradient(135deg, var(--brand-dark) 0%, var(--brand) 100%);
+            padding: 0 16px;
+            height: 60px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: var(--shadow-md);
+        }
+        .header-logo { display: flex; align-items: center; gap: 10px; }
+
+        .logo-mark {
+            width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+            background: #ffffff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .logo-mark i { font-size: 20px; color: var(--brand); }
+
+        .logo-text { display: flex; flex-direction: column; line-height: 1.15; }
+        .logo-text .brand-name { font-family: 'Tajawal', sans-serif; font-size: 16px; font-weight: 800; color: #fff; }
+        .logo-text .brand-name span { color: #B9F5D8; }
+        .logo-text .sub { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,0.8); }
+
+        .btn-icon {
+            width: 40px; height: 40px; background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25); border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 17px; cursor: pointer;
+            transition: 0.2s ease;
+        }
+        .btn-icon:active { transform: scale(0.92); }
+
+        .btn-logout {
+            background: #ffffff; border: none;
+            color: var(--brand-dark); padding: 0 14px; height: 38px; border-radius: var(--radius-sm);
+            display: flex; align-items: center; gap: 6px;
+            font-size: 13px; font-weight: 800; cursor: pointer;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .drawer-overlay {
+            position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(3px);
+            z-index: 4000; opacity: 0; pointer-events: none; transition: 0.3s ease;
+        }
+        .drawer-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .drawer-menu {
+            position: fixed; top: 0; right: -280px; width: 280px; height: 100%;
+            background: #ffffff; z-index: 4001; box-shadow: -5px 0 25px rgba(0,0,0,0.15);
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; flex-direction: column;
+        }
+        .drawer-menu.active { right: 0; }
+
+        .drawer-header {
+            background: linear-gradient(135deg, var(--brand-dark), var(--brand));
+            color: #ffffff; padding: 16px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .drawer-title { font-family: 'Tajawal', sans-serif; font-size: 16px; font-weight: 800; }
+        .drawer-close {
+            background: rgba(255,255,255,0.2); border: none; color: #fff;
+            width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+
+        .drawer-body { padding: 12px; flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+        .drawer-link {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px;
+            color: var(--text-deep); text-decoration: none; font-weight: 700; font-size: 13px;
+        }
+        .drawer-link i { font-size: 16px; width: 20px; text-align: center; color: var(--brand); }
+        .drawer-link:hover, .drawer-link:active { background: var(--brand-tint); color: var(--brand-dark); }
+        .drawer-divider { height: 1px; background: var(--border-subtle); margin: 4px 0; }
+
+        .hero-panel {
+            margin: 12px 12px 0; border-radius: var(--radius-lg);
+            background: linear-gradient(150deg, var(--brand-dark) 0%, var(--brand) 65%, var(--brand-mid) 100%);
+            padding: 12px; box-shadow: var(--shadow-md);
+            display: none; /* مخفي افتراضياً لحين التأكد من الآدمن */
+        }
+
+        .floating-cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        
+        .floating-card {
+            background: #ffffff; border-radius: var(--radius-md); padding: 12px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); border: 1px solid rgba(255, 255, 255, 0.6);
+            text-decoration: none; color: var(--text-deep);
+        }
+        .card-info { display: flex; flex-direction: column; gap: 2px; }
+        .card-info .label { font-size: 11.5px; font-weight: 800; color: var(--text-mid); display: flex; align-items: center; gap: 4px; }
+        .card-info .amount { font-family: 'Tajawal', sans-serif; font-size: 15px; font-weight: 900; direction: ltr; text-align: right; }
+        .card-info .amount span { font-size: 10px; font-weight: 700; color: var(--text-mid); }
+        .card-badge { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .badge-cash { background: linear-gradient(135deg, var(--brand-tint), #d1fae5); color: var(--brand-dark); }
+        .badge-wallet { background: linear-gradient(135deg, var(--teal-tint), #cff4fc); color: var(--teal); }
+        .badge-stock { background: linear-gradient(135deg, var(--amber-tint), #fef3c7); color: var(--amber); }
+        .badge-debts { background: linear-gradient(135deg, var(--coral-tint), #fee2e2); color: var(--coral); }
+
+        .card-net-profit {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, #05482F, #032A1C);
+            color: #ffffff;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 14px;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            touch-action: pan-y;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+            min-height: 22px;
+        }
+
+        .card-net-profit .top-row { display: none; }
+
+        .drag-indicator {
+            width: 42px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 4px;
+            margin: 2px auto;
+        }
+
+        .history-panel {
+            max-height: 0; opacity: 0; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; flex-direction: column; gap: 8px; margin-top: 0;
+            pointer-events: none; overflow: hidden; width: 100%;
+        }
+
+        .card-net-profit.expanded {
+            padding: 14px 16px;
+            background: linear-gradient(135deg, #075E3D, #043824);
+            align-items: stretch;
+        }
+        .card-net-profit.expanded .top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+        .card-net-profit.expanded .card-info .label { 
+            color: #ffffff; 
+            font-size: 13.5px; 
+            font-weight: 800; 
+            font-family: 'Tajawal', sans-serif;
+        }
+        .card-net-profit.expanded .card-info .amount {
+            font-size: 20px; 
+            opacity: 1; 
+            height: auto; 
+            margin-top: 6px;
+            direction: ltr; 
+            text-align: right; 
+            font-weight: 900; 
+            font-family: 'Montserrat', sans-serif;
+        }
+        .badge-net-profit { 
+            background: rgba(255,255,255,0.12); color: #fff; 
+            transition: transform 0.3s ease;
+            width: 36px; height: 36px; border-radius: 10px; font-size: 15px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .card-net-profit.expanded .history-panel {
+            max-height: 280px; opacity: 1; margin-top: 14px; pointer-events: auto;
+        }
+        .card-net-profit.expanded .badge-net-profit i {
+            transform: rotate(180deg);
+        }
+
+        .history-item {
+            display: flex; justify-content: space-between; font-size: 13px; font-weight: 700;
+            padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.15);
+        }
+        .history-item:last-child { border-bottom: none; }
+        .trend-up { color: #4ade80; }
+        .trend-down { color: #f87171; }
+        .trend-flat { color: #cbd5e1; }
+
+        .section-block { padding: 14px 12px 0; width: 100%; }
+        .section-label { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; }
+        .section-label .heading { display: flex; align-items: center; gap: 8px; }
+        .section-label .mark { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; }
+        .section-label span.title { font-family: 'Tajawal', sans-serif; font-size: 15px; font-weight: 800; color: var(--brand-dark); }
+
+        .card-grid {
+            display: flex; flex-wrap: wrap; gap: 10px; width: 100%;
+        }
+        .grid-card {
+            background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);
+            padding: 12px 10px; text-decoration: none; display: flex; align-items: center; justify-content: flex-start;
+            gap: 10px; position: relative; box-shadow: var(--shadow-sm); min-height: 72px; flex: 1 1 calc(50% - 5px); transition: all 0.15s ease;
+        }
+        .grid-card:active { transform: scale(0.96); background: #fafafa; }
+
+        .card-icon-wrap {
+            width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            font-size: 20px; color: #fff; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+        }
+        .icon-gold     { background: linear-gradient(135deg, var(--amber), #b45f04); }
+        .icon-black    { background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark)); }
+        .icon-red      { background: linear-gradient(135deg, #ef4444, var(--coral)); }
+        .icon-teal     { background: linear-gradient(135deg, #14b8c4, var(--teal)); }
+        .icon-violet   { background: linear-gradient(135deg, #a78bfa, var(--violet)); }
+        .icon-emerald  { background: linear-gradient(135deg, #10b981, var(--emerald)); }
+
+        .card-label { font-size: 14px; font-weight: 800; color: var(--text-deep); text-align: right; line-height: 1.2; flex-grow: 1; }
+
+        .fab-stack { position: fixed; right: 14px; bottom: 150px; z-index: 2500; display: flex; flex-direction: column; gap: 10px; }
+        .fab-card { display: flex; align-items: center; gap: 8px; }
+        .fab-btn {
+            width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 19px; color: #fff; cursor: pointer; border: none; box-shadow: var(--shadow-lg); transition: 0.2s ease; flex-shrink: 0; position: relative;
+        }
+        .fab-btn.black-fab { background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark)); }
+        .fab-btn.gold-fab  { background: linear-gradient(135deg, var(--amber), #b45f04); }
+        .fab-card.open .fab-btn { transform: rotate(45deg); }
+        .fab-tray { display: flex; flex-direction: row; gap: 6px; opacity: 0; pointer-events: none; transform: translateX(10px); transition: 0.2s ease; }
+        .fab-card.open .fab-tray { opacity: 1; pointer-events: auto; transform: translateX(0); }
+        .fab-item { display: flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; }
+        .fab-item-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; flex-shrink: 0; box-shadow: var(--shadow-sm); position: relative; }
+        .fab-item-icon.black-icon { background: var(--brand-dark); }
+        .fab-item-icon.gold-icon  { background: var(--amber); color: #fff; }
+        .fab-item-label { background: #fff; border: 1px solid var(--border-subtle); border-radius: 14px; padding: 4px 10px; font-size: 11.5px; font-weight: 800; color: var(--text-deep); box-shadow: var(--shadow-sm); }
+
+        .fab-left-btn {
+            position: fixed; left: 14px; bottom: 150px; z-index: 2500 !important; width: 46px; height: 46px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark)); color: #ffffff !important; display: flex; align-items: center; justify-content: center;
+            font-size: 19px; box-shadow: var(--shadow-lg); border: 2px solid rgba(255, 255, 255, 0.4); cursor: pointer; outline: none; transition: 0.15s ease;
+        }
+        .fab-left-btn:active { transform: scale(0.9); }
+
+        .orders-count-badge {
+            position: absolute; top: -3px; right: -3px; background: var(--coral); color: #ffffff; border-radius: 50%;
+            width: 18px; height: 18px; font-size: 10px; font-weight: 900; display: none; align-items: center; justify-content: center;
+            border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(220, 38, 38, 0.4);
+        }
+
+        .bottom-nav-wrap { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 20px); max-width: 500px; z-index: 2000; }
+        .bottom-nav { background: var(--brand-dark); border-radius: 20px; padding: 6px 4px; display: flex; justify-content: space-around; align-items: center; box-shadow: var(--shadow-lg); }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; padding: 4px 2px; border-radius: 12px; transition: background 0.2s; position: relative; }
+        .nav-item i { font-size: 17px; color: rgba(255,255,255,0.7); }
+        .nav-item span { font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,0.7); white-space: nowrap; }
+        .nav-item.primary { background: rgba(255,255,255,0.18); }
+        .nav-item.primary i { color: #ffffff; }
+        .nav-item.primary span { color: #ffffff; }
+        .nav-item.highlight-pay i { color: #52B788; }
+        .nav-item.highlight-pay span { color: #B9F5D8; font-weight: 800; }
+
+        .toast-notification {
+            position: fixed; bottom: 80px; right: 50%; transform: translateX(50%) translateY(150px);
+            background: var(--brand-dark); color: #ffffff; padding: 8px 14px; border-radius: 30px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25); display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            z-index: 3000; opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: calc(100% - 28px); max-width: 350px; cursor: pointer; border: 1px solid rgba(255,255,255,0.2);
+        }
+        .toast-notification.show { transform: translateX(50%) translateY(0); opacity: 1; }
+        .toast-bell-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--amber), #b45f04); color: #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+        .toast-text { font-size: 12px; font-weight: 700; flex-grow: 1; text-align: right; line-height: 1.2; }
+        .toast-text span.gold-highlight { color: #B9F5D8; font-weight: 900; }
+        .toast-close { background: none; border: none; color: rgba(255, 255, 255, 0.6); cursor: pointer; font-size: 13px; padding: 2px; }
+    </style>
+</head>
+<body>
+
+<script>
+    (function checkLoginGuard() {
+        const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
+        const isLoggedIn = sessionStorage.getItem("isLoggedIn") || localStorage.getItem("isLoggedIn");
+        if (!loggedUser && isLoggedIn !== "true") {
+            window.location.replace("index.html");
+        }
+    })();
+</script>
+
+<header class="header">
+    <button class="btn-icon" id="btnMenu" type="button" aria-label="القائمة">
+        <i class="fas fa-bars"></i>
+    </button>
+    <div class="header-logo">
+        <div class="logo-mark"><i class="fa-solid fa-oil-can"></i></div>
+        <div class="logo-text">
+            <div class="brand-name">شركة <span>الزيادى</span></div>
+            <div class="sub">نظام إدارة المبيعات</div>
+        </div>
+    </div>
+    <button id="btnLogout" class="btn-logout">
+        <i class="fas fa-power-off"></i> خروج
+    </button>
+</header>
+
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<div class="drawer-menu" id="drawerMenu">
+    <div class="drawer-header">
+        <span class="drawer-title">قائمة النظام</span>
+        <button class="drawer-close" id="btnCloseDrawer"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="drawer-body">
+        <a href="mabiat-menu.html" class="drawer-link" data-perm="sales"><i class="fa-solid fa-cash-register"></i> المبيعات</a>
+        <a href="client-vouchers.html" class="drawer-link" data-perm="client_vouchers"><i class="fa-solid fa-hand-holding-usd"></i> سداد العملاء</a>
+        <a href="new-purchase-invoice.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-file-import"></i> المشتريات</a>
+        <a href="compare-prices.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-code-compare"></i> مقارنة الأسعار والطلبيات</a>
+        <a href="client_menu.html" class="drawer-link" data-perm="customers"><i class="fa-solid fa-users-gear"></i> العملاء</a>
+        <a href="supplier-management.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-truck-moving"></i> الموردين</a>
+        <a href="ai-image-generator.html" class="drawer-link" data-perm="ai_tools"><i class="fa-solid fa-wand-magic-sparkles"></i> ذكاء اصطناعي للصور</a>
+        <div class="drawer-divider"></div>
+        <a href="inventory-menu.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-boxes-packing"></i> المخزن</a>
+        <a href="car-audit.html" class="drawer-link" data-perm="sales"><i class="fa-solid fa-truck-ramp-box"></i> جرد حمولة العربية</a>
+        <a href="vouchers-hub.html?type=client" class="drawer-link" data-perm="vouchers"><i class="fa-solid fa-receipt"></i> سندات العملاء</a>
+        <a href="banknote.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-vault"></i> النقدية</a>
+        <a href="add-shortages.html" class="drawer-link" data-perm="shortages"><i class="fa-solid fa-store-slash"></i> النواقص</a>
+        <a href="salaries-advances.html" class="drawer-link" data-perm="salaries"><i class="fa-solid fa-hand-holding-dollar"></i> رواتب وسلف </a>
+        <div class="drawer-divider"></div>
+        <a href="reports.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-chart-pie"></i> التقارير</a>
+        <a href="quotation-history.html" class="drawer-link" data-perm="quotation"><i class="fa-solid fa-clipboard-list"></i> الجرد</a>
+        <a href="users-permissions.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-user-shield"></i> المستخدمين والصلاحيات</a>
+        <a href="user-monitor.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-users-viewfinder"></i> إدارة الجلسات</a>
+        <div class="drawer-divider"></div>
+        <a href="backup.html" class="drawer-link" data-perm="admin_only"><i class="fa-solid fa-database"></i> النسخ الاحتياطي</a>
+    </div>
+</div>
+
+<div class="hero-panel" id="heroPanel" data-perm="admin_only">
+    <div class="floating-cards-grid">
+        <a href="banknote.html" class="floating-card">
+            <div class="card-info">
+                <span class="label"><i class="fa-solid fa-vault" style="color:var(--brand);"></i> النقدية</span>
+                <div class="amount" id="statCashVal">0.00 <span>ج.م</span></div>
+            </div>
+            <div class="card-badge badge-cash">
+                <i class="fa-solid fa-money-bill-wave"></i>
+            </div>
+        </a>
+
+        <a href="banknote.html" class="floating-card">
+            <div class="card-info">
+                <span class="label"><i class="fa-solid fa-mobile-screen-button" style="color:var(--teal);"></i> المحفظة</span>
+                <div class="amount" id="statWalletVal">0.00 <span>ج.م</span></div>
+            </div>
+            <div class="card-badge badge-wallet">
+                <i class="fa-solid fa-wallet"></i>
+            </div>
+        </a>
+
+        <a href="inventory-menu.html" class="floating-card">
+            <div class="card-info">
+                <span class="label"><i class="fa-solid fa-boxes-stacked" style="color:var(--amber);"></i> قيمة البضاعة</span>
+                <div class="amount" id="statStockVal">0.00 <span>ج.م</span></div>
+            </div>
+            <div class="card-badge badge-stock">
+                <i class="fa-solid fa-cubes"></i>
+            </div>
+        </a>
+
+        <a href="client_menu.html" class="floating-card">
+            <div class="card-info">
+                <span class="label"><i class="fa-solid fa-users" style="color:var(--coral);"></i> صافي العملاء</span>
+                <div class="amount" id="statDebtsVal">0.00 <span>ج.م</span></div>
+            </div>
+            <div class="card-badge badge-debts">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+            </div>
+        </a>
+
+        <!-- كارت الصافي المخفي -->
+        <div class="floating-card card-net-profit" id="netProfitCard">
+            <div class="drag-indicator"></div>
+            <div class="top-row">
+                <div class="card-info">
+                    <span class="label">
+                        <i class="fa-solid fa-chart-line" id="profitIcon" style="color:#B9F5D8; margin-left: 6px;"></i> صافي الربح / الخسارة
+                    </span>
+                    <div class="amount" id="statNetProfitVal">
+                        0.00 <span>ج.م</span>
+                    </div>
+                </div>
+                <div class="card-badge badge-net-profit">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+            </div>
+            <div class="history-panel" id="netProfitHistoryPanel"></div>
+        </div>
+
+    </div>
+</div>
+
+<div class="section-block" id="groupSalesOps">
+    <div class="section-label">
+        <div class="heading">
+            <div class="mark" style="background:var(--brand);"><i class="fa-solid fa-bolt"></i></div>
+            <span class="title">المبيعات والعملاء</span>
+        </div>
+    </div>
+    <div class="card-grid" id="gridSalesOps">
+        <a href="mabiat-menu.html" class="grid-card" id="cardSales" data-perm="sales">
+            <div class="card-icon-wrap icon-black"><i class="fa-solid fa-cash-register"></i></div>
+            <span class="card-label">المبيعات</span>
+        </a>
+        <a href="client-vouchers.html" class="grid-card" id="cardClientPayment" data-perm="client_vouchers">
+            <div class="card-icon-wrap icon-emerald"><i class="fa-solid fa-hand-holding-usd"></i></div>
+            <span class="card-label">سداد العملاء</span>
+        </a>
+        <a href="client_menu.html" class="grid-card" id="cardClients" data-perm="customers">
+            <div class="card-icon-wrap icon-teal"><i class="fa-solid fa-users-gear"></i></div>
+            <span class="card-label">العملاء</span>
+        </a>
+        <a href="purchase-mgmt.html" class="grid-card" id="cardPurchases" data-perm="admin_only">
+            <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-file-import"></i></div>
+            <span class="card-label">المشتريات</span>
+        </a>
+        <a href="compare-prices.html" class="grid-card" id="cardComparePrices" data-perm="admin_only">
+            <div class="card-icon-wrap icon-emerald"><i class="fa-solid fa-code-compare"></i></div>
+            <span class="card-label">مقارنة الأسعار والطلبيات</span>
+        </a>
+        <a href="supplier-management.html" class="grid-card" id="cardSuppliers" data-perm="admin_only">
+            <div class="card-icon-wrap icon-red"><i class="fa-solid fa-truck-moving"></i></div>
+            <span class="card-label">الموردين</span>
+        </a>
+        <a href="ai-image-generator.html" class="grid-card" id="cardAiImages" data-perm="ai_tools">
+            <div class="card-icon-wrap icon-violet"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+            <span class="card-label">توليد صور بالذكاء الاصطناعي</span>
+        </a>
+    </div>
+</div>
+
+<div class="section-block" id="groupInventoryDocs">
+    <div class="section-label">
+        <div class="heading">
+            <div class="mark" style="background:var(--teal);"><i class="fa-solid fa-warehouse"></i></div>
+            <span class="title">المخزون والسندات</span>
+        </div>
+    </div>
+    <div class="card-grid" id="gridInventoryDocs">
+        <a href="car-audit.html" class="grid-card" id="cardCarAudit" data-perm="sales">
+            <div class="card-icon-wrap icon-emerald"><i class="fa-solid fa-truck-ramp-box"></i></div>
+            <span class="card-label">حمولة العربية</span>
+        </a>
+        <a href="vouchers-hub.html?type=client" class="grid-card" id="cardVouchers" data-perm="vouchers">
+            <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-receipt"></i></div>
+            <span class="card-label">سندات العملاء</span>
+        </a>
+        <a href="add-shortages.html" class="grid-card" id="cardShortages" data-perm="shortages">
+            <div class="card-icon-wrap icon-red"><i class="fa-solid fa-store-slash"></i></div>
+            <span class="card-label">النواقص</span>
+        </a>
+        <a href="salaries-advances.html" class="grid-card" id="cardSalaries" data-perm="salaries">
+            <div class="card-icon-wrap icon-violet"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+            <span class="card-label">رواتب وسلف</span>
+        </a>
+        <a href="inventory-menu.html" class="grid-card" id="cardInventory" data-perm="admin_only">
+            <div class="card-icon-wrap icon-black"><i class="fa-solid fa-boxes-packing"></i></div>
+            <span class="card-label">المخزن</span>
+        </a>
+        <a href="banknote.html" class="grid-card" id="cardBanknote" data-perm="admin_only">
+            <div class="card-icon-wrap icon-teal"><i class="fa-solid fa-vault"></i></div>
+            <span class="card-label">النقدية</span>
+        </a>
+    </div>
+</div>
+
+<div class="section-block" id="groupReports">
+    <div class="section-label">
+        <div class="heading">
+            <div class="mark" style="background:var(--violet);"><i class="fa-solid fa-chart-pie"></i></div>
+            <span class="title">الجرد والتقارير</span>
+        </div>
+    </div>
+    <div class="card-grid" id="gridReports">
+        <a href="quotation-history.html" class="grid-card" id="cardQuotation" data-perm="quotation">
+            <div class="card-icon-wrap icon-violet"><i class="fa-solid fa-clipboard-list"></i></div>
+            <span class="card-label">الجرد</span>
+        </a>
+        <a href="reports.html" class="grid-card" id="cardReports" data-perm="admin_only">
+            <div class="card-icon-wrap icon-violet"><i class="fa-solid fa-chart-pie"></i></div>
+            <span class="card-label">التقارير</span>
+        </a>
+        <a href="user-monitor.html" class="grid-card" id="cardAdminSessions" data-perm="admin_only">
+            <div class="card-icon-wrap icon-gold"><i class="fa-solid fa-users-viewfinder"></i></div>
+            <span class="card-label">إدارة الجلسات</span>
+        </a>
+        <a href="backup.html" class="grid-card" id="cardBackup" data-perm="admin_only">
+            <div class="card-icon-wrap icon-teal"><i class="fa-solid fa-database"></i></div>
+            <span class="card-label">النسخ الاحتياطي</span>
+        </a>
+    </div>
+</div>
+
+<button class="fab-left-btn" type="button" id="btnRequiredItems" onclick="navigateToRequiredItems(event)" ontouchstart="navigateToRequiredItems(event)" title="تجميع الأصناف المطلوبة">
+    <i class="fa-solid fa-boxes-stacked"></i>
+</button>
+
+<div class="fab-stack" id="fabStack">
+    <div class="fab-card" id="fabTop">
+        <button class="fab-btn black-fab" onclick="toggleFab(event,'fabTop')">
+            <i class="fa-solid fa-circle-plus"></i>
+            <span class="orders-count-badge" id="mainFabBadge">0</span>
+        </button>
+        <div class="fab-tray">
+            <a href="customer-orders.html" class="fab-item">
+                <div class="fab-item-icon black-icon"><i class="fa-solid fa-cart-plus"></i></div>
+                <span class="fab-item-label">طلب جديد</span>
+            </a>
+            <a href="all-orders.html" class="fab-item">
+                <div class="fab-item-icon black-icon">
+                    <i class="fa-solid fa-boxes-trucking"></i>
+                    <span class="orders-count-badge" id="allOrdersItemBadge">0</span>
+                </div>
+                <span class="fab-item-label">كل الطلبات</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="fab-card" id="fabBottom">
+        <button class="fab-btn gold-fab" onclick="toggleFab(event,'fabBottom')">
+            <i class="fa-solid fa-tags"></i>
+        </button>
+        <div class="fab-tray">
+            <a href="inventory.html" class="fab-item">
+                <div class="fab-item-icon gold-icon"><i class="fa-solid fa-tags"></i></div>
+                <span class="fab-item-label">الأصناف</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="bottom-nav-wrap">
+    <nav class="bottom-nav">
+        <a href="price-search.html" class="nav-item" id="navPriceSearch">
+            <i class="fa-solid fa-magnifying-glass-dollar"></i><span>استعلام سعر</span>
+        </a>
+        <a href="client-vouchers.html" class="nav-item highlight-pay" id="navClientPayment" data-perm="client_vouchers">
+            <i class="fa-solid fa-hand-holding-usd"></i><span>سداد العملاء</span>
+        </a>
+        <a href="sales-invoice.html" class="nav-item primary" id="navQuickSale">
+            <i class="fa-solid fa-bolt"></i><span>بيع سريع</span>
+        </a>
+        <a href="add-customer.html" class="nav-item" id="navAddCustomer">
+            <i class="fa-solid fa-user-plus"></i><span>إضافة عميل</span>
+        </a>
+        <a href="expenses.html" class="nav-item" id="navExpenses" data-perm="admin_only">
+            <i class="fa-solid fa-money-bill-trend-up"></i><span>قيد مصروف</span>
+        </a>
+    </nav>
+</div>
+
+<div class="toast-notification" id="orderToastNotification" onclick="window.location.href='all-orders.html'">
+    <button class="toast-close" onclick="event.stopPropagation(); dismissToast()"><i class="fas fa-times"></i></button>
+    <div class="toast-text" id="toastText">
+        لديك <span class="gold-highlight" id="toastCountText">0 طلبات معلقة</span> قيد التنفيذ.
+    </div>
+    <div class="toast-bell-icon"><i class="fas fa-bell"></i></div>
+</div>
+
+<script>
+    function navigateToRequiredItems(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        window.location.href = 'required-items-summary.html';
+    }
+</script>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const isLoggedIn = sessionStorage.getItem('isLoggedIn') || localStorage.getItem('isLoggedIn');
+    let userName = sessionStorage.getItem('username') || sessionStorage.getItem('user_name') || localStorage.getItem('username') || localStorage.getItem('currentUser');
+    let userRole = sessionStorage.getItem('role') || localStorage.getItem('role') || 'restricted';
+    let currentUserId = sessionStorage.getItem('userId') || localStorage.getItem('userId');
+    let authSessionToken = sessionStorage.getItem('authToken');
+
+    if (isLoggedIn !== 'true' && !userName) {
+        sessionStorage.clear();
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("username");
+        localStorage.removeItem("isLoggedIn");
+        window.location.href = "index.html";
+    }
+
+    if (!userName) userName = 'مستخدم';
+    if (!currentUserId) {
+        currentUserId = 'usr_' + userName.toLowerCase().replace(/\s+/g, '_');
+        sessionStorage.setItem('userId', currentUserId);
+    }
+    if (!authSessionToken) {
+        authSessionToken = 'tok_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        sessionStorage.setItem('authToken', authSessionToken);
+    }
+    sessionStorage.setItem('isLoggedIn', 'true');
+    sessionStorage.setItem('username', userName);
+    sessionStorage.setItem('role', userRole);
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    let db;
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+        });
+    } catch (e) {
+        db = getFirestore(app);
+    }
+
+    const netProfitCard = document.getElementById('netProfitCard');
+    let touchStartY = 0;
+    
+    netProfitCard.addEventListener('touchstart', e => {
+        touchStartY = e.touches[0].clientY;
+    }, {passive: true});
+    
+    netProfitCard.addEventListener('touchmove', e => {
+        let touchEndY = e.touches[0].clientY;
+        let deltaY = touchEndY - touchStartY;
+        if (deltaY > 20) {
+            netProfitCard.classList.add('expanded');
+        } else if (deltaY < -20) {
+            netProfitCard.classList.remove('expanded');
+        }
+    }, {passive: true});
+
+    netProfitCard.addEventListener('click', () => {
+        netProfitCard.classList.toggle('expanded');
+    });
+
+    function updateNetProfitHistory(netProfitVal) {
+        let history = JSON.parse(localStorage.getItem('netProfitHistory') || '[]');
+        const today = new Date().toLocaleDateString('en-CA'); 
+        
+        let todayIdx = history.findIndex(h => h.date === today);
+        if (todayIdx > -1) {
+            history[todayIdx].val = netProfitVal;
+        } else {
+            history.push({ date: today, val: netProfitVal });
+        }
+        
+        if (history.length > 7) history = history.slice(-7);
+        localStorage.setItem('netProfitHistory', JSON.stringify(history));
+
+        const historyPanel = document.getElementById('netProfitHistoryPanel');
+        if(!historyPanel) return;
+        historyPanel.innerHTML = '';
+        
+        for (let i = history.length - 1; i >= 0; i--) {
+            let item = history[i];
+            let prevItem = i > 0 ? history[i-1] : null;
+            let icon = '<i class="fa-solid fa-minus"></i>'; 
+            let colorClass = 'trend-flat';
+            
+            if (prevItem) {
+                if (item.val > prevItem.val) { 
+                    icon = '<i class="fa-solid fa-arrow-trend-up"></i>'; 
+                    colorClass = 'trend-up'; 
+                }
+                else if (item.val < prevItem.val) { 
+                    icon = '<i class="fa-solid fa-arrow-trend-down"></i>'; 
+                    colorClass = 'trend-down'; 
+                }
+            }
+            
+            let dObj = new Date(item.date);
+            let displayDate = dObj.toLocaleDateString('ar-EG', { weekday: 'long', month: 'short', day: 'numeric' });
+            
+            let valColor = item.val > 0 ? '#4ade80' : (item.val < 0 ? '#f87171' : '#cbd5e1');
+            let sign = item.val > 0 ? '+' : '';
+            
+            historyPanel.innerHTML += `
+                <div class="history-item">
+                    <span>${displayDate}</span>
+                    <span class="${colorClass}" style="display:flex; align-items:center; gap:8px; color: ${valColor}; direction: ltr; font-family: 'Montserrat', sans-serif;">
+                        ${sign}${item.val.toLocaleString('en-US', {minimumFractionDigits:2})} ${icon}
+                    </span>
+                </div>
+            `;
+        }
+    }
+
+    let heartbeatInterval = null;
+
+    async function initUserSession() {
+        const sessionDocRef = doc(db, "sessions", currentUserId);
+        
+        try {
+            await setDoc(sessionDocRef, {
+                userId: currentUserId,
+                userName: userName,
+                role: userRole,
+                authToken: authSessionToken,
+                loginTime: serverTimestamp(),
+                lastActive: serverTimestamp(),
+                status: 'active'
+            }, { merge: true });
+
+            await addDoc(collection(db, "session_logs"), {
+                userId: currentUserId,
+                userName: userName,
+                action: 'LOGIN',
+                timestamp: serverTimestamp()
+            });
+        } catch(e) {}
+
+        heartbeatInterval = setInterval(async () => {
+            try {
+                await updateDoc(sessionDocRef, {
+                    lastActive: serverTimestamp()
+                });
+            } catch(e) {}
+        }, 20000);
+
+        onSnapshot(sessionDocRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                if (data.status === 'terminated' || data.status === 'kicked') {
+                    alert('تم إنهاء الجلسة أو تعليق الحساب بواسطة الأدمن.');
+                    handleLogout();
+                }
+            }
+        });
+    }
+
+    function handleLogout() {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        const uid = currentUserId;
+
+        sessionStorage.clear();
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("username");
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("role");
+        localStorage.removeItem("userId");
+
+        window.location.replace("index.html");
+
+        try {
+            const sessionDocRef = doc(db, "sessions", uid);
+            updateDoc(sessionDocRef, {
+                status: 'logged_out',
+                logoutTime: serverTimestamp()
+            }).catch(err => console.warn("Session update err:", err));
+        } catch (err) {}
+    }
+
+    document.getElementById('btnLogout').addEventListener('click', (e) => {
+        e.preventDefault();
+        handleLogout();
+    });
+
+    initUserSession();
+
+    function num(v) {
+        if (v === null || v === undefined) return 0;
+        const cleaned = String(v).replace(/[^0-9.-]/g, '');
+        const n = parseFloat(cleaned);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function isCartonUnit(unitValue, isCartonFlag) {
+        if (isCartonFlag === true) return true;
+        if (!unitValue) return false;
+        const u = String(unitValue).trim().toLowerCase();
+        return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
+    }
+
+    function isWalletMethod(text) {
+        if (!text) return false;
+        const t = String(text).trim().toLowerCase();
+        return t.includes('محفظة') || t.includes('محفظه') || t.includes('wallet') || 
+               t.includes('فودافون') || t.includes('فوري') || t.includes('انستاباي') || t.includes('instapay');
+    }
+
+    function isDocDeleted(data) {
+        if (!data) return false;
+        return data.isDeleted === true || data.deleted === true || data.status === 'deleted' || data.isCancelled === true;
+    }
+
+    async function loadRealtimeDashboardCash() {
+        if (userRole !== 'admin') return;
+
+        try {
+            const initDoc = await getDoc(doc(db, 'settings', 'initial_balances'));
+            const initVals = initDoc.exists() ? initDoc.data() : { cash: 0, wallet: 0, inventory: 0, customers: 0, suppliers: 0 };
+            
+            const iCash = num(initVals.cash);
+            const iWallet = num(initVals.wallet);
+            const iInv = num(initVals.inventory);
+            const iCust = num(initVals.customers);
+            const iSup = num(initVals.suppliers);
+
+            const targetInitialNet = (iCash + iWallet + iInv + iCust) - iSup;
+            
+            const cutoffTime = initVals.archiveCutoffDate ? new Date(initVals.archiveCutoffDate).getTime() : 0;
+            const checkAfterCutoff = (data) => {
+                if (!cutoffTime) return true;
+                const docTime = data.createdAt?.toDate ? data.createdAt.toDate().getTime() : 
+                                (data.timestamp?.toDate ? data.timestamp.toDate().getTime() : 
+                                (data.date ? new Date(data.date).getTime() : 0));
+                return docTime >= cutoffTime;
+            };
+
+            const [
+                inventorySnap, invoicesSnap,
+                customersSnap, suppliersSnap, cashLogsSnap, expensesSnap, supplierTransSnap, transactionsSnap,
+                openingTransSnap
+            ] = await Promise.all([
+                getDocs(collection(db, 'inventory')),
+                getDocs(collection(db, 'invoices')),
+                getDocs(collection(db, 'customers')),
+                getDocs(collection(db, 'suppliers')),
+                getDocs(collection(db, 'cash_logs')),
+                getDocs(collection(db, 'expenses')),
+                getDocs(collection(db, 'supplier_transactions')),
+                getDocs(collection(db, 'transactions')),
+                getDocs(query(collection(db, 'inventory_transactions'), where("type", "==", "opening_balance")))
+            ]);
+
+            const deletedInvoicesSet = new Set();
+            const deletedExpensesSet = new Set();
+            invoicesSnap.forEach(d => { if (isDocDeleted(d.data())) deletedInvoicesSet.add(d.id); });
+            expensesSnap.forEach(d => { if (isDocDeleted(d.data())) deletedExpensesSet.add(d.id); });
+
+            let netCashFlow = 0, netWalletFlow = 0;
+
+            const factorsMap = new Map(), namesMap = new Map();
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                factorsMap.set(d.id, Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1));
+                if (data.name) namesMap.set(data.name.trim(), d.id);
+            });
+
+            const salesMap = new Map(), purchasesMap = new Map(), openingMap = new Map();
+            openingTransSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.productId) openingMap.set(data.productId, (openingMap.get(data.productId) || 0) + (Number(data.quantityPcs) || 0));
+            });
+
+            const custBalances = new Map();
+            customersSnap.forEach(docItem => {
+                if (!isDocDeleted(docItem.data())) custBalances.set(docItem.id, num(docItem.data().openingBalance || docItem.data().initialBalance || 0));
+            });
+
+            invoicesSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (isDocDeleted(data)) return;
+                
+                (data.items || []).forEach(item => {
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const pcs = (isCartonUnit(item.unit, item.isCarton) ? (factorsMap.get(id) || 1) : 1) * (Number(item.qty) || 0);
+                        salesMap.set(id, item.isReturn ? (salesMap.get(id) || 0) - pcs : (salesMap.get(id) || 0) + pcs);
+                    }
+                });
+
+                const cId = data.customerId || data.partyId;
+                if (cId && custBalances.has(cId)) {
+                    const rem = data.remaining !== undefined ? num(data.remaining) : (num(data.grandTotal || data.total) - (num(data.paid) || (num(data.cashAmount) + num(data.walletAmount))));
+                    custBalances.set(cId, data.type === 'مرتجع' || data.isReturn ? custBalances.get(cId) - rem : custBalances.get(cId) + rem);
+                }
+
+                if (checkAfterCutoff(data)) {
+                    const cAmt = num(data.cashAmount ?? data.cashPaid ?? data.paid);
+                    const wAmt = num(data.walletAmount ?? data.walletPaid);
+                    netCashFlow += cAmt; netWalletFlow += wAmt;
+                }
+            });
+
+            const transByParty = new Map(), supTransBySup = new Map();
+            supplierTransSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (isDocDeleted(data)) return;
+
+                (data.items || []).forEach(item => {
+                    const id = item.stockId || namesMap.get(item.name?.trim());
+                    if (id) {
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const pcs = (isCartonUnit(item.unitName || item.unit, item.isCarton) ? (factorsMap.get(id) || 1) : 1) * (isReturn ? Number(item.returnQty || item.qty) : Number(item.qty));
+                        purchasesMap.set(id, isReturn ? (purchasesMap.get(id) || 0) - pcs : (purchasesMap.get(id) || 0) + pcs);
+                    }
+                });
+
+                if (data.supplierId) {
+                    if (!supTransBySup.has(data.supplierId)) supTransBySup.set(data.supplierId, []);
+                    supTransBySup.get(data.supplierId).push({ id: docItem.id, ...data });
+                }
+
+                if (checkAfterCutoff(data)) {
+                    const cPaid = num(data.cashPaid); const wPaid = num(data.walletPaid);
+                    netCashFlow -= cPaid; netWalletFlow -= wPaid;
+                }
+            });
+
+            const processedMovements = new Set();
+            cashLogsSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (isDocDeleted(data) || !checkAfterCutoff(data) || data.invoiceId || data.expenseId || data.isExpense || data.type === 'مصروف' || data.category) return;
+                processedMovements.add(docItem.id);
+                const amt = num(data.amount);
+                const toWallet = isWalletMethod(data.method || data.paymentMethod) || isWalletMethod(data.note);
+                if (['in', 'قبض', 'إيراد', 'ايراد'].includes(data.type)) {
+                    if (toWallet) netWalletFlow += amt; else netCashFlow += amt;
+                } else if (['out', 'صرف'].includes(data.type)) {
+                    if (toWallet) netWalletFlow -= amt; else netCashFlow -= amt;
+                }
+            });
+
+            transactionsSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (isDocDeleted(data)) return;
+
+                if (data.partyId || data.supplierId) {
+                    const pId = data.partyId || data.supplierId;
+                    if (!transByParty.has(pId)) transByParty.set(pId, []);
+                    transByParty.get(pId).push({ id: docItem.id, ...data });
+                }
+                if (!data.isInvoicePayment && !data.invoiceId) {
+                    const cId = data.partyId || data.customerId;
+                    if (cId && custBalances.has(cId)) {
+                        const amt = num(data.amount || data.total);
+                        custBalances.set(cId, data.type === 'قبض' ? custBalances.get(cId) - amt : custBalances.get(cId) + amt);
+                    }
+                }
+
+                if (checkAfterCutoff(data) && !processedMovements.has(docItem.id) && !data.isInvoicePayment && !data.invoiceId && !data.expenseId && !data.isExpense && data.type !== 'مصروف' && !data.category) {
+                    processedMovements.add(docItem.id);
+                    const amt = num(data.amount || data.total);
+                    const toWallet = isWalletMethod(data.method || data.paymentMethod) || isWalletMethod(data.note);
+                    if (data.type === 'قبض') {
+                        if (toWallet) netWalletFlow += amt; else netCashFlow += amt;
+                    } else if (data.type === 'صرف') {
+                        if (toWallet) netWalletFlow -= amt; else netCashFlow -= amt;
+                    }
+                }
+            });
+
+            expensesSnap.forEach(docItem => {
+                const data = docItem.data();
+                if (isDocDeleted(data) || !checkAfterCutoff(data)) return;
+                const amt = Math.abs(num(data.amount || data.total));
+                if (isWalletMethod(data.paymentMethod || data.method) || isWalletMethod(data.note)) netWalletFlow -= amt;
+                else netCashFlow -= amt;
+            });
+
+            const currentCash = iCash + netCashFlow;
+            const currentWallet = iWallet + netWalletFlow;
+
+            let actualInv = 0;
+            inventorySnap.forEach(doc => {
+                const data = doc.data();
+                if (!isDocDeleted(data)) {
+                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                    let openingTotalPcs = data.openingTotalPcs != null ? Number(data.openingTotalPcs) : (data.openingQty != null ? Math.round(Number(data.openingQty) * factor) : (openingMap.get(doc.id) || 0));
+                    const realPcs = openingTotalPcs + (purchasesMap.get(doc.id) || 0) - (salesMap.get(doc.id) || 0);
+                    actualInv += realPcs * (Number(data.buy || data.cost || data.sell || 0) / factor);
+                }
+            });
+
+            let actualCust = 0;
+            custBalances.forEach(bal => { actualCust += bal; });
+
+            let actualSup = 0;
+            suppliersSnap.forEach(docItem => {
+                const sId = docItem.id, data = docItem.data();
+                if (isDocDeleted(data)) return;
+                let totalDebit = num(data.openingBalance), totalCredit = 0;
+                const processed = new Set();
+                (transByParty.get(sId) || []).forEach(d => {
+                    if (processed.has(d.id) || d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
+                    processed.add(d.id);
+                    if (d.type === "صرف" || d.type === "سداد") totalCredit += num(d.amount);
+                    else if (d.type === "قبض") totalDebit += num(d.amount);
+                });
+                (supTransBySup.get(sId) || []).forEach(d => {
+                    const totalAmt = num(d.total) || num(d.amount) || 0;
+                    if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
+                        totalDebit += totalAmt;
+                        const paidAmt = num(d.paid) || (num(d.cashPaid) + num(d.walletPaid)) || 0;
+                        if (paidAmt > 0) totalCredit += paidAmt;
+                    } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") totalCredit += totalAmt;
+                });
+                actualSup += (totalDebit - totalCredit);
+            });
+
+            const totalAssetsActual = currentCash + currentWallet + actualInv + actualCust;
+            const actualNetPosition = totalAssetsActual - actualSup;
+
+            const netProfitLoss = actualNetPosition - targetInitialNet;
+
+            const statCashValEl = document.getElementById('statCashVal');
+            if (statCashValEl) statCashValEl.innerHTML = `${currentCash.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
+
+            const statWalletValEl = document.getElementById('statWalletVal');
+            if (statWalletValEl) statWalletValEl.innerHTML = `${currentWallet.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
+
+            const statStockValEl = document.getElementById('statStockVal');
+            if (statStockValEl) statStockValEl.innerHTML = `${actualInv.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
+
+            const statDebtsValEl = document.getElementById('statDebtsVal');
+            if (statDebtsValEl) statDebtsValEl.innerHTML = `${actualCust.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span>ج.م</span>`;
+
+            const statNetProfitValEl = document.getElementById('statNetProfitVal');
+            const profitIcon = document.getElementById('profitIcon');
+            
+            if (statNetProfitValEl) {
+                let sign = netProfitLoss > 0 ? '+' : '';
+                let color = netProfitLoss > 0 ? '#4ade80' : (netProfitLoss < 0 ? '#f87171' : '#ffffff');
+                
+                statNetProfitValEl.style.color = color;
+                statNetProfitValEl.innerHTML = `${sign}${netProfitLoss.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span style="color: rgba(255,255,255,0.7); font-size: 12px; font-family: 'Cairo', sans-serif;">ج.م</span>`;
+                
+                if (profitIcon) {
+                    profitIcon.className = netProfitLoss >= 0 ? "fa-solid fa-arrow-trend-up" : "fa-solid fa-arrow-trend-down";
+                    profitIcon.style.color = color;
+                }
+            }
+            
+            updateNetProfitHistory(netProfitLoss);
+
+        } catch (err) {
+            console.error("خطأ في حساب البيانات:", err);
+        }
+    }
+
+    loadRealtimeDashboardCash();
+
+    let toastTimer = null;
+    let lastPendingCount = 0;
+
+    function playNotificationSound() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            
+            const playTone = (freq, start, duration) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime + start);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + start);
+                osc.stop(ctx.currentTime + start + duration);
+            };
+
+            playTone(587.33, 0, 0.15);
+            playTone(880, 0.18, 0.25);
+        } catch (e) { }
+    }
+
+    onSnapshot(collection(db, "orders"), (snapshot) => {
+        let pendingCount = 0;
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (!isDocDeleted(data) && data.status !== 'done') {
+                pendingCount++;
+            }
+        });
+        updateOrderAlerts(pendingCount);
+    }, (error) => {
+        console.warn("خطأ في جلب الطلبات:", error);
+    });
+
+    function updateOrderAlerts(count) {
+        const mainBadge = document.getElementById('mainFabBadge');
+        const itemBadge = document.getElementById('allOrdersItemBadge');
+        const toast = document.getElementById('orderToastNotification');
+        const toastCountTxt = document.getElementById('toastCountText');
+
+        if (count > 0) {
+            if (mainBadge) { mainBadge.textContent = count; mainBadge.style.display = 'flex'; }
+            if (itemBadge) { itemBadge.textContent = count; itemBadge.style.display = 'flex'; }
+            if (count > lastPendingCount) playNotificationSound();
+            lastPendingCount = count;
+            if (toastCountTxt) toastCountTxt.textContent = `${count} طلبات معلقة`;
+            if (toast) {
+                toast.classList.add('show');
+                if (toastTimer) clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => { dismissToast(); }, 8000);
+            }
+        } else {
+            lastPendingCount = 0;
+            if (mainBadge) mainBadge.style.display = 'none';
+            if (itemBadge) itemBadge.style.display = 'none';
+            dismissToast();
+        }
+    }
+
+    window.dismissToast = function() {
+        const toast = document.getElementById('orderToastNotification');
+        if (toast) toast.classList.remove('show');
+        if (toastTimer) clearTimeout(toastTimer);
+    };
+</script>
+
+<script>
+    const btnMenu = document.getElementById('btnMenu');
+    const drawerMenu = document.getElementById('drawerMenu');
+    const drawerOverlay = document.getElementById('drawerOverlay');
+    const btnCloseDrawer = document.getElementById('btnCloseDrawer');
+
+    function openDrawer() {
+        drawerMenu.classList.add('active');
+        drawerOverlay.classList.add('active');
+    }
+
+    function closeDrawer() {
+        drawerMenu.classList.remove('active');
+        drawerOverlay.classList.remove('active');
+    }
+
+    btnMenu.addEventListener('click', openDrawer);
+    btnCloseDrawer.addEventListener('click', closeDrawer);
+    drawerOverlay.addEventListener('click', closeDrawer);
+
+    function toggleFab(e, id) {
+        e.stopPropagation();
+        ['fabTop', 'fabBottom'].forEach(f => {
+            if (f !== id) document.getElementById(f).classList.remove('open');
+        });
+        document.getElementById(id).classList.toggle('open');
+    }
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.fab-card').forEach(el => el.classList.remove('open'));
+    });
+
+    // =========================================================
+    // نظام حماية وتقييد الصلاحيات المشدد
+    // =========================================================
+    function applyStrictSecurityPermissions() {
+        const role = sessionStorage.getItem('role') || localStorage.getItem('role') || 'employee';
+        const allowedNonAdminPermissions = ['sales', 'quotation', 'customers', 'client_vouchers', 'vouchers', 'shortages', 'salaries', 'ai_tools'];
+
+        // 1. فحص وتطبيق الصلاحيات على جميع العناصر التي تحتوي على data-perm
+        const elementsWithPerms = document.querySelectorAll('[data-perm]');
+        elementsWithPerms.forEach(el => {
+            const perm = el.getAttribute('data-perm');
+            
+            if (role === 'admin') {
+                if (perm === 'client_vouchers') {
+                    el.style.display = 'none';
+                } else {
+                    el.style.display = '';
+                }
+            } else {
+                // منع غير الأدمن من رؤية عناصر الأدمن أو العناصر غير المسموح بها
+                if (perm === 'admin_only' || !allowedNonAdminPermissions.includes(perm)) {
+                    el.style.display = 'none';
+                    el.remove(); // إزالة العنصر نهائياً من DOM للآمان
+                } else {
+                    el.style.display = '';
+                }
+            }
+        });
+
+        // 2. التحكم في ظهور الهيرو بانل الخاص بالأدمن
+        const heroPanel = document.getElementById('heroPanel');
+        if (heroPanel) {
+            if (role === 'admin') {
+                heroPanel.style.display = 'block';
+            } else {
+                heroPanel.style.display = 'none';
+                heroPanel.remove();
+            }
+        }
+
+        // 3. إخفاء المجموعات والأقسام التي تصبح فارغة تماماً بعد تطبيق الصلاحيات
+        const groupMap = {
+            groupSalesOps: ['cardSales', 'cardClientPayment', 'cardPurchases', 'cardComparePrices', 'cardClients', 'cardSuppliers', 'cardAiImages'],
+            groupInventoryDocs: ['cardCarAudit', 'cardInventory', 'cardVouchers', 'cardBanknote', 'cardShortages', 'cardSalaries'],
+            groupReports: ['cardReports', 'cardQuotation', 'cardAdminSessions', 'cardBackup']
+        };
+
+        Object.entries(groupMap).forEach(([groupId, cardIds]) => {
+            const groupEl = document.getElementById(groupId);
+            if (!groupEl) return;
+            const anyVisible = cardIds.some(cid => {
+                const card = document.getElementById(cid);
+                return card && card.style.display !== 'none';
+            });
+            groupEl.style.display = anyVisible ? '' : 'none';
+        });
+    }
+
+    // منع الضغط على أي رابط يخص الأدمن حماية إضافية للحدث
+    document.addEventListener('click', function (e) {
+        const role = sessionStorage.getItem('role') || localStorage.getItem('role') || 'employee';
+        if (role === 'admin') return;
+
+        const link = e.target.closest('a[data-perm="admin_only"], [data-perm="admin_only"] a');
+        if (link) {
+            e.preventDefault();
+            e.stopPropagation();
+            alert('عذراً، هذا القسم مخصص لمدير النظام (الأدمن) فقط.');
+        }
+    }, true);
+
+    // تنفيذ الفحص الأمني فور جاهزية DOM وقبل التحميل الكامل
+    document.addEventListener('DOMContentLoaded', applyStrictSecurityPermissions);
+    window.addEventListener('load', applyStrictSecurityPermissions);
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>

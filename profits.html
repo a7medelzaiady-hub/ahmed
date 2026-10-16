@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أرباح وإحصائيات الأصناف - شركة الزيادي</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-green: #0b6641;
+            --accent-green: #10b981;
+            --bg-light: #f8fafc;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            font-family: 'Cairo', sans-serif;
+            color: var(--text-dark);
+            margin: 0;
+            padding-bottom: 90px;
+            direction: rtl;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 15px rgba(11, 102, 65, 0.15);
+        }
+        .top-nav .nav-icon { cursor: pointer; font-size: 1.2rem; color: white; text-decoration: none; }
+
+        .filter-section { padding: 15px 15px 5px; }
+        .filter-card {
+            background: white;
+            border-radius: 16px;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+        }
+        .filter-row { display: flex; gap: 8px; }
+        .filter-row .form-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-bottom: 3px; }
+        .filter-row input[type="date"] {
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 6px 8px;
+            font-size: 0.8rem;
+            width: 100%;
+        }
+        .filter-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .btn-apply {
+            background: var(--primary-green);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            flex: 1;
+        }
+        .btn-clear {
+            background: #f1f5f9;
+            color: var(--text-muted);
+            border: none;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+
+        .analytics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px 15px 5px; }
+        .analytics-card {
+            background: white;
+            border-radius: 14px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+        }
+        .analytics-card.highlight-top { background: #f0fdf4; border-color: #bbf7d0; }
+        .analytics-card.highlight-low { background: #fff1f2; border-color: #fecdd3; }
+        .analytics-title { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); }
+        .analytics-val { font-size: 0.85rem; font-weight: 800; color: var(--text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .analytics-sub { font-size: 0.7rem; font-weight: 700; }
+
+        .sort-section { padding: 8px 15px 5px; display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; }
+        .sort-chip {
+            background: #e2e8f0;
+            color: var(--text-dark);
+            border-radius: 20px;
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+        }
+        .sort-chip.active { background: var(--primary-green); color: white; }
+
+        .search-section { padding: 8px 15px 5px; }
+        .search-wrapper { position: relative; }
+        .search-wrapper i { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-green); }
+        .search-input {
+            width: 100%;
+            padding: 10px 35px 10px 12px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .summary-strip {
+            margin: 10px 15px;
+            background: linear-gradient(135deg, var(--primary-green), #0a5234);
+            border-radius: 16px;
+            padding: 12px 16px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .summary-strip .label { font-size: 0.72rem; opacity: 0.85; }
+        .summary-strip .value { font-size: 1.1rem; font-weight: 800; }
+        .summary-strip .sub-val { font-size: 0.75rem; opacity: 0.9; margin-top: 2px; }
+
+        .item-card {
+            background: white;
+            border-radius: 18px;
+            margin: 0 15px 12px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        .item-title { font-size: 0.95rem; font-weight: 800; color: var(--text-dark); line-height: 1.2; }
+        .item-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+
+        .rank-badge { font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 8px; }
+        .badge-top { background: #dcfce7; color: #15803d; }
+        .badge-low { background: #ffe4e6; color: #be123c; }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .stat-box {
+            background: #f8fafc;
+            border: 1px solid #f1f5f9;
+            border-radius: 10px;
+            padding: 6px 4px;
+            text-align: center;
+        }
+        .stat-box .title { font-size: 0.62rem; color: var(--text-muted); font-weight: 700; }
+        .stat-box .stat-val { font-size: 0.78rem; font-weight: 800; color: var(--text-dark); margin-top: 1px; }
+
+        .progress-group { margin-bottom: 10px; }
+        .progress-item { margin-bottom: 5px; }
+        .progress-info { display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 700; margin-bottom: 2px; }
+        .progress-bar-bg { height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; border-radius: 10px; }
+
+        .profit-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: #f0fdf4;
+            border: 1px solid #dcfce7;
+            border-radius: 12px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+        }
+        .profit-box { display: flex; flex-direction: column; }
+        .profit-box .p-label { font-size: 0.65rem; color: #166534; font-weight: 700; }
+        .profit-box .p-val { font-size: 0.88rem; color: var(--primary-green); font-weight: 800; }
+        .profit-box .p-unit { font-size: 0.68rem; color: #15803d; font-weight: 700; }
+
+        .profit-box.current-buy {
+            background: #f0f9ff;
+            border-radius: 8px;
+            padding: 4px 6px;
+        }
+        .profit-box.current-buy .p-label { color: #0369a1; }
+        .profit-box.current-buy .p-val { color: #0284c7; }
+        .profit-box.current-buy .p-unit { color: #0369a1; }
+
+        .item-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed var(--border-color);
+        }
+
+        .btn-details {
+            background: white;
+            color: var(--primary-green);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 5px 12px;
+            font-weight: 700;
+            font-size: 0.78rem;
+        }
+
+        .bottom-summary {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: white;
+            padding: 12px 15px;
+            font-weight: 800;
+            font-size: 0.82rem;
+            display: flex;
+            justify-content: space-around;
+            border-top: 1px solid var(--border-color);
+            color: var(--primary-green);
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <div class="d-flex align-items-center gap-3">
+        <a href="index.html" class="nav-icon" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
+        <i class="fas fa-sync-alt nav-icon" onclick="forceRefreshData()" title="تحديث البيانات"></i>
+    </div>
+    <span class="fw-bold">إحصائيات وأرباح الأصناف</span>
+    <i class="fas fa-chevron-left nav-icon" onclick="history.back()" title="رجوع"></i>
+</div>
+
+<div class="filter-section">
+    <div class="filter-card">
+        <div class="filter-row">
+            <div style="flex:1">
+                <div class="form-label">من تاريخ</div>
+                <input type="date" id="fromDate">
+            </div>
+            <div style="flex:1">
+                <div class="form-label">إلى تاريخ</div>
+                <input type="date" id="toDate">
+            </div>
+        </div>
+        <div class="filter-actions">
+            <button class="btn-apply" onclick="renderItems()"><i class="fas fa-filter me-1"></i> فلترة</button>
+            <button class="btn-clear" onclick="clearFilter()">مسح</button>
+        </div>
+    </div>
+</div>
+
+<div class="analytics-grid">
+    <div class="analytics-card highlight-top">
+        <div class="analytics-title"><i class="fas fa-crown text-warning"></i> الأكثر تكراراً</div>
+        <div class="analytics-val" id="topSellerName">---</div>
+        <div class="analytics-sub text-success" id="topSellerQty">0 فاتورة</div>
+    </div>
+    <div class="analytics-card highlight-low">
+        <div class="analytics-title"><i class="fas fa-exclamation-triangle text-danger"></i> الأقل طلباً</div>
+        <div class="analytics-val" id="lowSellerName">---</div>
+        <div class="analytics-sub text-danger" id="lowSellerQty">0 فاتورة</div>
+    </div>
+</div>
+
+<div class="sort-section">
+    <button class="sort-chip active" id="sortProfitBtn" onclick="setSortMode('profit')"><i class="fas fa-coins me-1"></i> الأعلى ربحاً</button>
+    <button class="sort-chip" id="sortCountBtn" onclick="setSortMode('count')"><i class="fas fa-file-invoice me-1"></i> الأكثر تكراراً</button>
+    <button class="sort-chip" id="sortSlowBtn" onclick="setSortMode('slow')"><i class="fas fa-hourglass-half me-1"></i> الأقل طلباً</button>
+</div>
+
+<div class="search-section">
+    <div class="search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" class="search-input" placeholder="ابحث عن منتج أو باركود..." oninput="renderItems()">
+    </div>
+</div>
+
+<div class="summary-strip">
+    <div>
+        <div class="label">إجمالي الأرباح (متوسط التكلفة)</div>
+        <div class="value" id="grandTotalProfit">0.00 ج.م</div>
+        <div class="sub-val" id="grandTotalProfitCurrent">بالسعر الحالي: 0.00 ج.م</div>
+    </div>
+    <i class="fas fa-chart-line fa-lg"></i>
+</div>
+
+<div id="itemsContainer">
+    <div class="text-center text-muted mt-5 fw-bold">
+        <div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري التحميل...
+    </div>
+</div>
+
+<div class="bottom-summary">
+    <div><i class="fas fa-boxes me-1"></i> أصناف: <span id="totalCount">0</span></div>
+    <div><i class="fas fa-receipt me-1"></i> فواتير: <span id="totalInvoicesCount">0</span></div>
+    <div><i class="fas fa-calendar-alt me-1"></i> أيام بيع: <span id="totalActiveDays">0</span></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+      authDomain: "ahmedelzaiady.firebaseapp.com",
+      projectId: "ahmedelzaiady",
+      storageBucket: "ahmedelzaiady.firebasestorage.app",
+      messagingSenderId: "300306825071",
+      appId: "1:300306825071:web:0426ddde56280fa090329a",
+      measurementId: "G-WE04GK5XZZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+    });
+
+    function getDocDate(data) {
+        if (!data) return null;
+        if (data.timestamp && data.timestamp.toDate) return data.timestamp.toDate();
+        if (data.createdAt && data.createdAt.toDate) return data.createdAt.toDate();
+        if (data.date && data.date.toDate) return data.date.toDate();
+
+        const rawStr = data.timestamp || data.createdAt || data.date;
+        if (rawStr) {
+            const d = new Date(rawStr);
+            if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
+        }
+        return null;
+    }
+
+    function checkIsCarton(unitVal, unitNameVal, isCartonVal) {
+        if (isCartonVal === true) return true;
+        const u = String(unitVal || '').toLowerCase().trim();
+        const un = String(unitNameVal || '').toLowerCase().trim();
+        return u === 'box' || u === 'carton' || u.includes('كرتون') || u.includes('علب') || un.includes('كرتون') || un.includes('علب');
+    }
+
+    let productsMap = {}; 
+    let namesMap = {};
+    let saleLines = {}; 
+    let firstStockDateMap = {}; 
+    let currentSortMode = 'profit';
+
+    window.forceRefreshData = function() {
+        window.location.reload(true);
+    };
+
+    window.setSortMode = function(mode) {
+        currentSortMode = mode;
+        document.getElementById('sortProfitBtn').classList.toggle('active', mode === 'profit');
+        document.getElementById('sortCountBtn').classList.toggle('active', mode === 'count');
+        document.getElementById('sortSlowBtn').classList.toggle('active', mode === 'slow');
+        renderItems();
+    };
+
+    async function loadData() {
+        try {
+            const inventorySnap = await getDocs(collection(db, "inventory"));
+            inventorySnap.forEach(d => {
+                const data = d.data();
+                if (data.isDeleted) return;
+                
+                const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+                const rawBuy = Number(data.buy) || 0;
+                const currentBuyUnit = rawBuy > 0 ? (rawBuy / factor) : 0;
+
+                const rawSell = Number(data.sell || data.price || data.sellPrice) || 0;
+                const currentSellUnit = rawSell > 0 ? (rawSell / factor) : 0;
+
+                const currentStockPcs = (data.totalPcs !== undefined && data.totalPcs !== null)
+                    ? Number(data.totalPcs) || 0
+                    : (Number(data.qty) || 0) * factor;
+
+                const pObj = {
+                    id: d.id,
+                    name: data.name || 'بدون اسم',
+                    barcode: data.barcode || '---',
+                    factor,
+                    fallbackBuy: currentBuyUnit,
+                    currentBuy: currentBuyUnit,
+                    currentSell: currentSellUnit,
+                    currentStockPcs: currentStockPcs,
+                    raw: data
+                };
+                productsMap[d.id] = pObj;
+                if (data.name) namesMap[data.name.trim()] = d.id;
+            });
+
+            const [invoicesSnap, supplierSnap, openingSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "supplier_transactions")),
+                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+            ]);
+
+            let openingQtyMap = {};
+            let openingValueMap = {};
+            openingSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.isDeleted) return;
+                if (!data.productId) return;
+                const qty = Number(data.quantityPcs) || 0;
+                let value = (data.totalAmount !== undefined && data.totalAmount !== null) ? Number(data.totalAmount) || 0 : (Number(data.unitPrice) || 0) * qty;
+                openingQtyMap[data.productId] = (openingQtyMap[data.productId] || 0) + qty;
+                openingValueMap[data.productId] = (openingValueMap[data.productId] || 0) + value;
+            });
+
+            let events = {};
+            function pushEvent(id, ev) {
+                if (!events[id]) events[id] = [];
+                events[id].push(ev);
+
+                if (ev.type === 'purchase' && ev.date && ev.date.getFullYear() > 2000) {
+                    if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
+                        firstStockDateMap[id] = ev.date;
+                    }
+                }
+            }
+
+            Object.values(productsMap).forEach(p => {
+                let openingPcs = 0;
+                let openingPrice = p.currentBuy;
+
+                if (openingQtyMap[p.id]) {
+                    openingPcs = openingQtyMap[p.id];
+                    if (openingQtyMap[p.id] > 0 && openingValueMap[p.id] > 0) {
+                        openingPrice = openingValueMap[p.id] / openingQtyMap[p.id];
+                    }
+                } else if (p.raw && p.raw.openingTotalPcs !== undefined && p.raw.openingTotalPcs !== null) {
+                    openingPcs = Number(p.raw.openingTotalPcs);
+                } else if (p.raw && p.raw.openingQty !== undefined && p.raw.openingQty !== null) {
+                    openingPcs = Math.round(Number(p.raw.openingQty) * p.factor);
+                }
+
+                if (openingPcs) {
+                    let createDate = getDocDate(p.raw);
+                    pushEvent(p.id, { type: 'purchase', date: createDate, qty: openingPcs, price: openingPrice });
+                }
+            });
+
+            supplierSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.isDeleted) return;
+                
+                const date = getDocDate(data);
+                data.items?.forEach(item => {
+                    const id = item.stockId || namesMap[item.name?.trim()];
+                    if (!id || !productsMap[id]) return;
+                    const factor = Math.max(1, Number(productsMap[id].factor) || 1);
+                    
+                    let pcs = 0;
+                    const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
+                    const isReturn = item.isReturn === true || Number(item.returnQty) > 0 || data.type === "مرتجع شراء";
+                    const rawQty = isReturn ? (Number(item.returnQty || item.qty) || 0) : (Number(item.qty) || 0);
+
+                    if (isCarton) {
+                        pcs = rawQty * factor;
+                    } else {
+                        pcs = item.totalPcs !== undefined && item.totalPcs !== null ? Number(item.totalPcs) : rawQty;
+                    }
+
+                    let itemBuy = Number(item.buy || item.buyPrice || item.price) || 0;
+                    let buyPrice = isCarton ? (itemBuy / factor) : (itemBuy > 0 ? itemBuy : productsMap[id].currentBuy);
+
+                    if (isReturn) {
+                        // المرتجع يُسجل كحدث مستقل لتعديل المخزون دون خبط سعر الشراء كقيمة سالبة
+                        pushEvent(id, { type: 'return_purchase', date, qty: Math.abs(pcs), price: buyPrice });
+                    } else {
+                        pushEvent(id, { type: 'purchase', date, qty: Math.abs(pcs), price: buyPrice });
+                    }
+                });
+            });
+
+            invoicesSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.isDeleted) return;
+
+                const date = getDocDate(data);
+                const invoiceId = docSnap.id;
+                data.items?.forEach(item => {
+                    const id = item.stockId || namesMap[item.name?.trim()];
+                    if (!id || !productsMap[id]) return;
+                    
+                    const factor = Math.max(1, Number(productsMap[id].factor) || 1);
+                    let pcs = 0;
+                    const isCarton = checkIsCarton(item.unit, item.unitName, item.isCarton);
+                    const rawQty = Number(item.qty || item.quantity) || 0;
+
+                    if (isCarton) {
+                        pcs = rawQty * factor;
+                    } else {
+                        pcs = rawQty;
+                    }
+
+                    let unitSellPrice = Number(item.sell || item.price || item.sellPrice || item.unitPrice) || 0;
+                    let revenue = 0;
+                    const currentSellPrice = productsMap[id].currentSell || 0;
+
+                    if (item.totalPrice !== undefined && item.totalPrice !== null && Number(item.totalPrice) > 0) {
+                        revenue = Number(item.totalPrice);
+                    } else if (item.total !== undefined && item.total !== null && Number(item.total) > 0) {
+                        revenue = Number(item.total);
+                    } else if (unitSellPrice > 0) {
+                        revenue = unitSellPrice * rawQty;
+                    } else if (currentSellPrice > 0) {
+                        revenue = currentSellPrice * pcs;
+                    }
+
+                    if (item.isReturn) { pcs = -pcs; revenue = -revenue; }
+                    pushEvent(id, { type: 'sale', date, qty: pcs, revenue, invoiceId });
+                });
+            });
+
+            // حساب التكلفة المتحركة مع معالجة الرصيد بالسالب والتسلسل الزمني الصحيح
+            Object.keys(events).forEach(id => {
+                const list = events[id].slice().sort((a, b) => {
+                    const timeA = a.date ? a.date.getTime() : 0;
+                    const timeB = b.date ? b.date.getTime() : 0;
+                    return timeA - timeB;
+                });
+
+                let runQty = 0;
+                let runAvg = productsMap[id].currentBuy > 0 ? productsMap[id].currentBuy : 0;
+                saleLines[id] = [];
+                
+                let currentBuy = productsMap[id].currentBuy > 0 ? productsMap[id].currentBuy : 0;
+
+                list.forEach(ev => {
+                    if (ev.type === 'purchase') {
+                        if (ev.qty > 0 && ev.price > 0) {
+                            if (runQty <= 0) {
+                                // في حالة البيع بالسالب قبل الشراء، يبدأ المتوسط مباشرة من السعر الجديد
+                                runAvg = ev.price;
+                                runQty = ev.qty;
+                            } else {
+                                const newQty = runQty + ev.qty;
+                                runAvg = ((runQty * runAvg) + (ev.qty * ev.price)) / newQty;
+                                runQty = newQty;
+                            }
+                        } else {
+                            runQty += ev.qty;
+                        }
+                    } else if (ev.type === 'return_purchase') {
+                        runQty = Math.max(0, runQty - ev.qty);
+                    } else {
+                        // في حالة مبيعات
+                        let effectiveCostUnit = (runAvg > 0) ? runAvg : currentBuy;
+
+                        const costAvg = effectiveCostUnit * ev.qty;
+                        const profitAvg = ev.revenue - costAvg;
+
+                        const costCurrent = currentBuy * ev.qty;
+                        const profitCurrent = ev.revenue - costCurrent;
+
+                        runQty -= ev.qty;
+                        saleLines[id].push({ 
+                            date: ev.date, 
+                            qty: Number(ev.qty) || 0, 
+                            revenue: Number(ev.revenue) || 0, 
+                            costAvg: Number(costAvg) || 0, 
+                            profitAvg: Number(profitAvg) || 0, 
+                            costCurrent: Number(costCurrent) || 0, 
+                            profitCurrent: Number(profitCurrent) || 0,
+                            invoiceId: ev.invoiceId
+                        });
+
+                        if (ev.date && ev.date.getFullYear() > 2000) {
+                            if (!firstStockDateMap[id] || ev.date < firstStockDateMap[id]) {
+                                firstStockDateMap[id] = ev.date;
+                            }
+                        }
+                    }
+                });
+            });
+
+            renderItems();
+        } catch (e) {
+            console.error("خطأ في تجميع البيانات:", e);
+            document.getElementById('itemsContainer').innerHTML = '<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>';
+        }
+    }
+
+    window.clearFilter = function() {
+        document.getElementById('fromDate').value = '';
+        document.getElementById('toDate').value = '';
+        renderItems();
+    };
+
+    function formatSoldQuantityInCartons(pcs, factor) {
+        const safePcs = Number(pcs) || 0;
+        const safeFactor = Math.max(1, Number(factor) || 1);
+        if (safeFactor === 1) return `${safePcs} قطعة`;
+
+        const totalCartons = safePcs / safeFactor;
+        return Number.isInteger(totalCartons) ? `${totalCartons} كرتونة` : `${totalCartons.toFixed(1)} كرتونة`;
+    }
+
+    window.renderItems = function() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const fromVal = document.getElementById('fromDate').value;
+        const toVal = document.getElementById('toDate').value;
+        const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+        const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+
+        let profitAvgMap = {};
+        let profitCurrentMap = {};
+        let qtyByProduct = {};
+        let invoicesCountByProduct = {};
+        let activeDaysByProduct = {}; 
+
+        let globalUniqueInvoices = new Set();
+        let globalUniqueDays = new Set();
+
+        const today = new Date();
+
+        Object.keys(saleLines).forEach(productId => {
+            let productUniqueInvoices = new Set();
+            let productUniqueDays = new Set();
+
+            saleLines[productId].forEach(line => {
+                if (fromDate && (!line.date || line.date < fromDate)) return;
+                if (toDate && (!line.date || line.date > toDate)) return;
+                
+                profitAvgMap[productId] = (Number(profitAvgMap[productId]) || 0) + Number(line.profitAvg);
+                profitCurrentMap[productId] = (Number(profitCurrentMap[productId]) || 0) + Number(line.profitCurrent);
+                qtyByProduct[productId] = (Number(qtyByProduct[productId]) || 0) + Number(line.qty);
+                
+                if (line.invoiceId) {
+                    productUniqueInvoices.add(line.invoiceId);
+                    globalUniqueInvoices.add(line.invoiceId);
+                } else {
+                    invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + 1;
+                }
+
+                if (line.date && line.date.getTime() > 0) {
+                    const dayStr = line.date.toISOString().slice(0, 10);
+                    productUniqueDays.add(dayStr);
+                    globalUniqueDays.add(dayStr);
+                }
+            });
+
+            if (productUniqueInvoices.size > 0) {
+                invoicesCountByProduct[productId] = (invoicesCountByProduct[productId] || 0) + productUniqueInvoices.size;
+            }
+            activeDaysByProduct[productId] = productUniqueDays.size;
+        });
+
+        const totalPeriodInvoices = globalUniqueInvoices.size;
+        const totalPeriodDays = globalUniqueDays.size;
+
+        let list = Object.keys(productsMap).map(id => {
+            const factor = Math.max(1, Number(productsMap[id].factor) || 1);
+            const qtyPcs = Number(qtyByProduct[id]) || 0;
+            const daysActive = Number(activeDaysByProduct[id]) || 0;
+
+            let firstDate = firstStockDateMap[id];
+            let daysInStock = daysActive > 0 ? daysActive : 1;
+
+            if (firstDate && firstDate.getFullYear() > 2000) {
+                let diffTime = Math.abs(today - firstDate);
+                let calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                daysInStock = Math.max(daysActive, calculatedDays, 1);
+            }
+
+            return {
+                ...productsMap[id],
+                profitAvg: Number(profitAvgMap[id]) || 0,
+                profitCurrent: Number(profitCurrentMap[id]) || 0,
+                qtySold: qtyPcs,
+                invoiceCount: Number(invoicesCountByProduct[id]) || 0,
+                daysCount: daysActive,
+                daysInStock: daysInStock
+            };
+        });
+
+        list = list.filter(p => p.qtySold > 0);
+
+        if (term) {
+            list = list.filter(p => p.name.toLowerCase().includes(term) || String(p.barcode).includes(term));
+        }
+
+        let grandAvg = 0;
+        let grandCurrent = 0;
+        list.forEach(p => {
+            grandAvg += p.profitAvg;
+            grandCurrent += p.profitCurrent;
+        });
+
+        if (list.length > 0) {
+            const sortedByInvoicesDesc = [...list].sort((a, b) => b.invoiceCount - a.invoiceCount);
+            const topSeller = sortedByInvoicesDesc[0];
+            const lowSeller = sortedByInvoicesDesc[sortedByInvoicesDesc.length - 1];
+
+            const topPercentage = totalPeriodInvoices > 0 ? ((topSeller.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+            const lowPercentage = totalPeriodInvoices > 0 ? ((lowSeller.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+
+            document.getElementById('topSellerName').innerText = topSeller.name;
+            document.getElementById('topSellerQty').innerText = `${topSeller.invoiceCount}/${totalPeriodInvoices} (${topPercentage}%)`;
+
+            document.getElementById('lowSellerName').innerText = lowSeller.name;
+            document.getElementById('lowSellerQty').innerText = `${lowSeller.invoiceCount}/${totalPeriodInvoices} (${lowPercentage}%)`;
+        } else {
+            document.getElementById('topSellerName').innerText = '---';
+            document.getElementById('topSellerQty').innerText = '0 فاتورة';
+            document.getElementById('lowSellerName').innerText = '---';
+            document.getElementById('lowSellerQty').innerText = '0 فاتورة';
+        }
+
+        if (currentSortMode === 'profit') {
+            list.sort((a, b) => b.profitAvg - a.profitAvg);
+        } else if (currentSortMode === 'count') {
+            list.sort((a, b) => b.invoiceCount - a.invoiceCount);
+        } else if (currentSortMode === 'slow') {
+            list.sort((a, b) => a.invoiceCount - b.invoiceCount);
+        }
+
+        const container = document.getElementById('itemsContainer');
+        let html = '';
+
+        list.forEach((p, index) => {
+            const factor = Math.max(1, Number(p.factor) || 1);
+            const unitLabel = factor > 1 ? 'الكرتونة' : 'القطعة';
+
+            const unitProfitAvgCarton = p.qtySold > 0 ? ((p.profitAvg / p.qtySold) * factor) : 0;
+            const unitProfitCurrCarton = p.qtySold > 0 ? ((p.profitCurrent / p.qtySold) * factor) : 0;
+
+            const displaySoldQty = formatSoldQuantityInCartons(p.qtySold, factor);
+            const invoicePercentage = totalPeriodInvoices > 0 ? ((p.invoiceCount / totalPeriodInvoices) * 100).toFixed(1) : 0;
+            const daysPercentage = totalPeriodDays > 0 ? ((p.daysCount / totalPeriodDays) * 100).toFixed(1) : 0;
+
+            let badgeHtml = '';
+            if (currentSortMode === 'count' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-top">🏆 الأكثر تكراراً (#${index+1})</span>`;
+            } else if (currentSortMode === 'slow' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-low">⚠️ الأقل طلباً</span>`;
+            } else if (currentSortMode === 'profit' && index < 3) {
+                badgeHtml = `<span class="rank-badge badge-top">💰 الأعلى ربحاً (#${index+1})</span>`;
+            }
+
+            const safeStock = Number(p.currentStockPcs) || 0;
+
+            html += `
+                <div class="item-card">
+                    <div class="item-header">
+                        <div>
+                            <div class="item-title">${p.name}</div>
+                            <div class="item-sub">باركود: ${p.barcode} | معامل: ${factor}</div>
+                        </div>
+                        ${badgeHtml}
+                    </div>
+
+                    <div class="stat-grid">
+                        <div class="stat-box">
+                            <div class="title"><i class="fas fa-cubes text-success"></i> المبيعات</div>
+                            <div class="stat-val text-success">${displaySoldQty}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="title"><i class="fas fa-file-invoice text-primary"></i> الفواتير</div>
+                            <div class="stat-val text-primary">${p.invoiceCount}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="title"><i class="fas fa-calendar-alt text-warning"></i> أيام البيع</div>
+                            <div class="stat-val text-warning">${p.daysCount} يوم</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="title"><i class="fas fa-hourglass-start text-info"></i> بالمخزن</div>
+                            <div class="stat-val text-info">${p.daysInStock} يوم</div>
+                        </div>
+                    </div>
+
+                    <div class="progress-group">
+                        <div class="progress-item">
+                            <div class="progress-info">
+                                <span>التواجد بالفواتير</span>
+                                <span>${p.invoiceCount} من ${totalPeriodInvoices} (${invoicePercentage}%)</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" style="width: ${invoicePercentage}%; background: #0284c7;"></div>
+                            </div>
+                        </div>
+                        <div class="progress-item">
+                            <div class="progress-info">
+                                <span>الانتظام بالأيام</span>
+                                <span>${p.daysCount} من ${totalPeriodDays} يوم (${daysPercentage}%)</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" style="width: ${daysPercentage}%; background: #d97706;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="profit-container">
+                        <div class="profit-box">
+                            <span class="p-label">الربح بالمتوسط</span>
+                            <span class="p-val">${p.profitAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</span>
+                            <span class="p-unit">ربح ${unitLabel}: ${unitProfitAvgCarton.toFixed(2)}</span>
+                        </div>
+                        <div class="profit-box current-buy">
+                            <span class="p-label">بالسعر الحالي</span>
+                            <span class="p-val">${p.profitCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م</span>
+                            <span class="p-unit">ربح ${unitLabel}: ${unitProfitCurrCarton.toFixed(2)}</span>
+                        </div>
+                    </div>
+
+                    <div class="item-card-footer">
+                        <span class="text-muted" style="font-size:0.7rem;">الرصيد بالمخزن الآن: <b>${formatSoldQuantityInCartons(safeStock, factor)}</b></span>
+                        <button class="btn-details" onclick="goToDetails('${p.id}')">
+                            التفاصيل <i class="fas fa-chevron-left me-1"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (list.length === 0) {
+            html = `<div class="text-center text-muted mt-5 fw-bold"><i class="fas fa-search fa-2x mb-2"></i><br>لا توجد بيانات مطابقة للفلتر</div>`;
+        }
+
+        container.innerHTML = html;
+        document.getElementById('totalCount').innerText = list.length;
+        document.getElementById('totalInvoicesCount').innerText = totalPeriodInvoices;
+        document.getElementById('totalActiveDays').innerText = totalPeriodDays;
+        document.getElementById('grandTotalProfit').innerText = `${grandAvg.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+        document.getElementById('grandTotalProfitCurrent').innerText = `بالسعر الحالي: ${grandCurrent.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
+    };
+
+    window.goToDetails = function(id) {
+        const fromVal = document.getElementById('fromDate').value;
+        const toVal = document.getElementById('toDate').value;
+        let url = `profit-details.html?id=${id}`;
+        if (fromVal) url += `&from=${fromVal}`;
+        if (toVal) url += `&to=${toVal}`;
+        window.location.href = url;
+    };
+
+    loadData();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch((err) => console.log(err));
+}
+</script>
+</body>
+</html>

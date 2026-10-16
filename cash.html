@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<script src="auth-guard.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>دفتر النقدية والمحفظة - شركة الزيادي</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b5e3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root {
+    --primary: #0b5e3d;
+    --primary-gradient: linear-gradient(135deg, #064e3b, #0b5e3d, #14532d);
+    --wallet-primary: #4f46e5;
+    --wallet-gradient: linear-gradient(135deg, #3730a3, #4f46e5, #4338ca);
+    --bg-light: #f4f6f8;
+    --text-dark: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --white: #ffffff;
+    --danger: #ef4444;
+    --danger-light: #fee2e2;
+    --success: #10b981;
+    --success-light: #d1fae5;
+    --card-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05);
+    --radius-sm: 12px; --radius-md: 16px; --radius-lg: 24px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px; -webkit-font-smoothing:antialiased; }
+.app-container { max-width:560px; margin:0 auto; background:var(--bg-light); min-height:100vh; box-shadow:0 0 40px rgba(0,0,0,0.1); position:relative; }
+.num { font-family:'Montserrat','Cairo',sans-serif !important; font-weight:800; }
+.force-ltr { direction:ltr !important; display:inline-block; }
+
+.header-nav { background:var(--primary-gradient); color:#fff; padding:18px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:1000; border-radius:0 0 var(--radius-lg) var(--radius-lg); box-shadow:0 10px 25px rgba(6,78,59,0.2); transition: background 0.3s; }
+.header-nav.wallet-mode { background: var(--wallet-gradient); }
+.back-btn, .sync-btn { color:#fff; background:rgba(255,255,255,0.12); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none !important; border:none; }
+.header-title { text-align:center; }
+.header-title span { font-size:0.65rem; letter-spacing:1.5px; opacity:0.85; font-weight:800; color:#fcd34d; display:block; }
+.header-title h1 { font-size:1.1rem; font-weight:900; margin:3px 0 0; }
+
+.nav-tabs-custom { display:flex; background:#fff; margin:14px 16px 0; padding:4px; border-radius:var(--radius-md); box-shadow:var(--card-shadow); border:1px solid var(--border-color); }
+.tab-btn { flex:1; border:none; background:transparent; padding:10px; border-radius:var(--radius-sm); font-weight:800; font-size:0.85rem; color:var(--text-muted); transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px; }
+.tab-btn.active.cash-tab { background:var(--primary); color:#fff; }
+.tab-btn.active.wallet-tab { background:var(--wallet-primary); color:#fff; }
+
+.opening-card { background:linear-gradient(135deg,#0b5e3d,#148054); color:#fff; border-radius:var(--radius-lg); padding:18px; margin:16px; box-shadow:var(--card-shadow); display:flex; justify-content:space-between; align-items:center; transition: background 0.3s; }
+.opening-card.wallet-mode { background:linear-gradient(135deg,#4338ca,#6366f1); }
+.opening-card .lbl { font-size:0.75rem; font-weight:800; opacity:0.85; }
+.opening-card .val { font-size:1.4rem; font-weight:900; margin-top:2px; }
+.opening-card button { background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:10px; padding:8px 14px; font-weight:800; font-size:0.75rem; }
+
+.stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 16px; }
+.stat-card { background:#fff; border:1px solid rgba(0,0,0,0.04); border-radius:var(--radius-md); padding:12px 4px; text-align:center; box-shadow:var(--card-shadow); position:relative; }
+.stat-card::before { content:''; position:absolute; top:0; right:0; left:0; height:3px; border-radius:10px 10px 0 0; }
+.stat-card.in::before { background:var(--success); }
+.stat-card.out::before { background:var(--danger); }
+.stat-card.net::before { background:var(--primary); }
+.wallet-mode .stat-card.net::before { background:var(--wallet-primary); }
+.stat-val { font-size:0.9rem; font-weight:800; margin-top:3px; display:block; }
+.stat-label { font-size:0.68rem; color:var(--text-muted); font-weight:800; display:block; }
+
+.toolbar-box { display:flex; gap:8px; margin:0 16px 14px; flex-wrap:wrap; }
+.tbtn { flex:1; min-width:120px; display:inline-flex; align-items:center; justify-content:center; gap:6px; border:none; padding:11px; border-radius:var(--radius-sm); font-weight:800; font-size:0.8rem; color:#fff; }
+.tbtn-in { background:var(--success); }
+.tbtn-out { background:var(--danger); }
+.tbtn-excel { background:#0284c7; }
+
+.entry-card { background:#fff; border-radius:var(--radius-lg); margin:16px; padding:18px; box-shadow:var(--card-shadow); display:none; }
+.entry-card.show { display:block; }
+.label-custom { display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:6px; font-weight:800; }
+.input-field { width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:#f8fafc; font-weight:700; font-size:0.85rem; color:var(--text-dark); outline:none; }
+.input-field:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(11,94,61,0.08); background:#fff; }
+.input-group-custom { margin-bottom:14px; }
+.btn-save-entry { width:100%; border:none; padding:13px; border-radius:var(--radius-sm); font-weight:800; font-size:0.9rem; color:#fff; }
+
+.filter-row { display:flex; gap:8px; margin:0 16px 14px; }
+.filter-row input { flex:1; }
+
+.movement-item { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:14px; border-radius:var(--radius-md); margin:0 16px 12px; border:1px solid rgba(0,0,0,0.03); box-shadow:var(--card-shadow); position:relative; }
+.movement-item::before { content:''; position:absolute; top:0; bottom:0; right:0; width:4px; border-radius:0 var(--radius-md) var(--radius-md) 0; }
+.movement-item.in::before { background:var(--success); }
+.movement-item.out::before { background:var(--danger); }
+.mv-info { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; padding-right:8px; }
+.mv-note { font-weight:800; color:var(--text-dark); font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mv-meta { font-size:0.7rem; color:var(--text-muted); font-weight:700; }
+.mv-badge { font-size:0.65rem; padding:2px 7px; border-radius:6px; font-weight:800; display:inline-block; margin-top:3px; }
+.badge-in { background:var(--success-light); color:#065f46; }
+.badge-out { background:var(--danger-light); color:#991b1b; }
+.badge-provider { background:#eef2ff; color:var(--wallet-primary); margin-left:4px; }
+.mv-right { text-align:left; flex-shrink:0; }
+.mv-amount { font-weight:900; font-size:1rem; }
+.mv-balance { font-size:0.68rem; color:var(--text-muted); font-weight:700; margin-top:2px; }
+.mv-del { border:none; background:none; color:#cbd5e1; font-size:0.85rem; margin-right:8px; }
+
+.loading-wrapper { text-align:center; padding:60px 0; color:var(--primary); }
+.loading-wrapper p { font-weight:800; margin-top:12px; font-size:0.85rem; }
+.empty-msg { text-align:center; color:var(--text-muted); font-weight:800; padding:40px 10px; }
+</style>
+</head>
+<body>
+
+<div class="app-container" id="appContainer">
+    <div class="header-nav" id="headerNav">
+        <button class="sync-btn" onclick="init()" title="تحديث"><i class="fas fa-sync-alt"></i></button>
+        <div class="header-title">
+            <span>شركة الزيادي</span>
+            <h1 id="pageTitle">دفتر النقدية (الخزينة)</h1>
+        </div>
+        <a href="index1.html" class="back-btn"><i class="fas fa-home"></i></a>
+    </div>
+
+    <div class="nav-tabs-custom">
+        <button class="tab-btn active cash-tab" id="tabCash" onclick="switchTab('cash')">
+            <i class="fas fa-money-bill-wave"></i> الخزينة النقود
+        </button>
+        <button class="tab-btn wallet-tab" id="tabWallet" onclick="switchTab('wallet')">
+            <i class="fas fa-wallet"></i> المحفظة الإلكترونية
+        </button>
+    </div>
+
+    <div class="opening-card" id="openingCard">
+        <div>
+            <div class="lbl" id="openingLbl">الرصيد الافتتاحي للخزينة</div>
+            <div class="val num" id="openingBalanceDisplay">0.00</div>
+        </div>
+        <button onclick="editOpeningBalance()"><i class="fas fa-edit me-1"></i> تعديل</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card in">
+            <span class="stat-label">إجمالي الوارد</span>
+            <span class="stat-val text-success num force-ltr" id="totalIn">0.00</span>
+        </div>
+        <div class="stat-card out">
+            <span class="stat-label">إجمالي الصادر</span>
+            <span class="stat-val text-danger num force-ltr" id="totalOut">0.00</span>
+        </div>
+        <div class="stat-card net">
+            <span class="stat-label">الرصيد الحالي</span>
+            <span class="stat-val num force-ltr" id="currentBalance" style="color:var(--primary);">0.00</span>
+        </div>
+    </div>
+
+    <div class="toolbar-box">
+        <button class="tbtn tbtn-in" onclick="openEntryForm('in')"><i class="fas fa-plus-circle"></i> إضافة وارد</button>
+        <button class="tbtn tbtn-out" onclick="openEntryForm('out')"><i class="fas fa-minus-circle"></i> إضافة صادر</button>
+        <button class="tbtn tbtn-excel" onclick="exportToExcel()"><i class="fas fa-file-excel"></i> تصدير</button>
+    </div>
+
+    <div class="entry-card" id="entryCard">
+        <h6 class="fw-bold mb-3" id="entryCardTitle">إضافة حركة يدوية</h6>
+        <input type="hidden" id="entryType" value="in">
+
+        <div class="input-group-custom d-none" id="providerGroup">
+            <label class="label-custom">وسيلة المحفظة</label>
+            <select id="entryProvider" class="input-field">
+                <option value="Vodafone Cash">Vodafone Cash</option>
+                <option value="Instapay">Instapay</option>
+                <option value="RedotPay">RedotPay</option>
+                <option value="أخرى">محفظة أخرى</option>
+            </select>
+        </div>
+
+        <div class="input-group-custom">
+            <label class="label-custom">القيمة (ج.م)</label>
+            <input type="number" id="entryAmount" class="input-field num" placeholder="0.00" step="0.01">
+        </div>
+        <div class="input-group-custom">
+            <label class="label-custom">التاريخ</label>
+            <input type="date" id="entryDate" class="input-field num">
+        </div>
+        <div class="input-group-custom">
+            <label class="label-custom">البيان</label>
+            <textarea id="entryNote" class="input-field" rows="2" placeholder="سبب الحركة..."></textarea>
+        </div>
+        <button class="btn-save-entry" id="entrySaveBtn" onclick="saveManualEntry()">حفظ الحركة</button>
+    </div>
+
+    <div class="filter-row">
+        <input type="text" id="searchInput" class="input-field" placeholder="بحث بالبيان..." onkeyup="renderMovements()">
+        <input type="date" id="dateFilter" class="input-field" onchange="renderMovements()">
+    </div>
+
+    <div id="movementsList">
+        <div class="loading-wrapper">
+            <div class="spinner-border text-success" role="status" style="width:2rem; height:2rem;"></div>
+            <p>جاري تجميع حركات الخزينة...</p>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+    initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
+    collection, getDocs, addDoc, doc, getDoc, setDoc, deleteDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+    authDomain: "ahmedelzaiady.firebaseapp.com",
+    projectId: "ahmedelzaiady",
+    storageBucket: "ahmedelzaiady.firebasestorage.app",
+    messagingSenderId: "300306825071",
+    appId: "1:300306825071:web:0426ddde56280fa090329a",
+    measurementId: "G-WE04GK5XZZ"
+};
+
+const app = initializeApp(firebaseConfig);
+let db;
+try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) }); }
+catch (e) { db = getFirestore(app); }
+
+let currentTab = 'cash';
+let openingBalance = 0;
+let allMovements = [];
+
+function convertArabicDigits(str) {
+    const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+    return String(str || '').replace(/[٠-٩]/g, d => map[d]);
+}
+
+function toMillis(item) {
+    if (item.timestamp?.seconds) return item.timestamp.seconds * 1000;
+    if (item.date) {
+        const p = Date.parse(convertArabicDigits(item.date));
+        if (!isNaN(p)) return p;
+    }
+    return 0;
+}
+
+function getDateStr(item) {
+    if (item.date) {
+        let s = convertArabicDigits(item.date);
+        let m = s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+        if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+        m = s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+        if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+        if (s) return s;
+    }
+    if (item.timestamp?.seconds) return new Date(item.timestamp.seconds * 1000).toLocaleDateString('en-CA');
+    return '';
+}
+
+function fmt(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function isWalletPayment(methodStr) {
+    if (!methodStr) return false;
+    const m = String(methodStr).toLowerCase();
+    return m.includes('فودافون') || m.includes('vodafone') || m.includes('انستا') || m.includes('instapay') || m.includes('redot') || m.includes('محفظة') || m.includes('wallet');
+}
+
+/* ===== أسماء الموردين والعملاء بدل كلمة "جهة" ===== */
+async function loadCustomersMap() {
+    const map = {};
+    try {
+        const snap = await getDocs(collection(db, "customers"));
+        snap.forEach(d => { const x = d.data(); map[d.id] = x.name || x.customerName || ''; });
+    } catch (e) { console.warn("customers collection:", e); }
+    return map;
+}
+
+function resolveName(tr, suppliersMap, customersMap) {
+    const direct = tr.partyName || tr.customerName || tr.supplierName || tr.name;
+    if (direct && direct !== 'جهة') return direct;
+    return suppliersMap[tr.partyId] || customersMap[tr.partyId]
+        || suppliersMap[tr.supplierId] || customersMap[tr.customerId]
+        || suppliersMap[tr.customerId] || customersMap[tr.supplierId]
+        || 'جهة';
+}
+
+/* ===== منع التكرار ===== */
+const amtKey = (amt, date) => `${Math.round(Number(amt) * 100)}|${date}`;
+
+// سندات متطابقة (نفس النوع والجهة والمبلغ والتاريخ) خلال دقيقة = نسخة مكررة
+function makeMirrorChecker() {
+    const seen = {};
+    return function (sig, ms) {
+        const arr = seen[sig] || (seen[sig] = []);
+        const dup = arr.some(t => Math.abs(t - ms) <= 60000);
+        arr.push(ms);
+        return dup;
+    };
+}
+
+window.switchTab = function(tab) {
+    currentTab = tab;
+    document.getElementById('entryCard').classList.remove('show');
+
+    const nav = document.getElementById('headerNav');
+    const title = document.getElementById('pageTitle');
+    const opCard = document.getElementById('openingCard');
+    const opLbl = document.getElementById('openingLbl');
+    const tabCash = document.getElementById('tabCash');
+    const tabWallet = document.getElementById('tabWallet');
+    const providerGroup = document.getElementById('providerGroup');
+    const currentBalEl = document.getElementById('currentBalance');
+
+    if (tab === 'cash') {
+        nav.classList.remove('wallet-mode');
+        opCard.classList.remove('wallet-mode');
+        title.innerText = 'دفتر النقدية (الخزينة)';
+        opLbl.innerText = 'الرصيد الافتتاحي للخزينة';
+        tabCash.classList.add('active');
+        tabWallet.classList.remove('active');
+        providerGroup.classList.add('d-none');
+        currentBalEl.style.color = 'var(--primary)';
+    } else {
+        nav.classList.add('wallet-mode');
+        opCard.classList.add('wallet-mode');
+        title.innerText = 'محفظة المعاملات الإلكترونية';
+        opLbl.innerText = 'الرصيد الافتتاحي للمحفظة';
+        tabWallet.classList.add('active');
+        tabCash.classList.remove('active');
+        providerGroup.classList.remove('d-none');
+        currentBalEl.style.color = 'var(--wallet-primary)';
+    }
+    init();
+};
+
+window.init = async function () {
+    const listEl = document.getElementById('movementsList');
+    const spinColor = currentTab === 'cash' ? 'text-success' : 'text-primary';
+    listEl.innerHTML = `<div class="loading-wrapper"><div class="spinner-border ${spinColor}" role="status" style="width:2rem;height:2rem;"></div><p>جاري تجميع الحركات...</p></div>`;
+
+    try {
+        if (currentTab === 'cash') await loadCashData();
+        else await loadWalletData();
+    } catch (e) {
+        console.error(e);
+        listEl.innerHTML = `<div class="alert alert-danger text-center m-3">حدث خطأ أثناء تحميل البيانات!</div>`;
+    }
+};
+
+async function loadCashData() {
+    const [openingSnap, invSnap, transSnap, supTransSnap, expSnap, manualSnap, suppliersSnap, customersMap] = await Promise.all([
+        getDoc(doc(db, "cash_settings", "opening")),
+        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "transactions")),
+        getDocs(collection(db, "supplier_transactions")),
+        getDocs(collection(db, "expenses")),
+        getDocs(collection(db, "cash_manual_entries")),
+        getDocs(collection(db, "suppliers")),
+        loadCustomersMap()
+    ]);
+
+    openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
+    document.getElementById('openingBalanceDisplay').innerText = fmt(openingBalance);
+
+    const suppliersMap = {};
+    suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
+
+    const movements = [];
+    const purchaseKeys = new Set();
+
+    // مشتريات نقدية (تُحسب أولاً لاستخدامها في منع تكرار السندات)
+    supTransSnap.forEach(d => {
+        const data = d.data();
+        const method = data.paymentMethod || data.method || '';
+        if (isWalletPayment(method)) return;
+
+        const cashPaid = Number(data.cashPaid || 0);
+        if (cashPaid <= 0) return;
+        const supName = suppliersMap[data.supplierId] || 'مورد غير معروف';
+        const dateStr = getDateStr(data);
+        purchaseKeys.add(amtKey(cashPaid, dateStr));
+        if (data.type === 'مرتجع شراء') {
+            movements.push({
+                id: 'pret_' + d.id, direction: 'in', amount: cashPaid,
+                note: `مرتجع مشتريات نقدي - ${supName}`,
+                date: dateStr, timeMs: toMillis(data), source: 'purchase'
+            });
+        } else {
+            movements.push({
+                id: 'pout_' + d.id, direction: 'out', amount: cashPaid,
+                note: `مشتريات نقدية - ${supName}`,
+                date: dateStr, timeMs: toMillis(data), source: 'purchase'
+            });
+        }
+    });
+
+    // مبيعات نقدية (غير المحفظة)
+    invSnap.forEach(d => {
+        const data = d.data();
+        if (data.isDeleted) return;
+        const method = data.paymentMethod || data.method || 'نقدي';
+        if (isWalletPayment(method)) return;
+
+        const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+        if (cash > 0) {
+            movements.push({
+                id: 'inv_' + d.id, direction: 'in', amount: cash,
+                note: `مبيعات نقدية - ${data.customerName || 'عميل نقدي'}`,
+                date: getDateStr(data), timeMs: toMillis(data), source: 'sales'
+            });
+        }
+    });
+
+    // سندات قبض/صرف كاش
+    const isMirror = makeMirrorChecker();
+    transSnap.forEach(d => {
+        const tr = d.data();
+        if (tr.isDeleted) return;
+        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+        const method = tr.method || tr.paymentMethod || 'نقدى';
+        if (isWalletPayment(method)) return;
+
+        const isCash = (method === 'نقدى' || method === 'نقدي' || method === 'كاش');
+        const cashAmt = tr.cashPaid !== undefined ? Number(tr.cashPaid) : (isCash ? Number(tr.amount || tr.total || 0) : 0);
+        if (cashAmt <= 0) return;
+
+        const dateStr = getDateStr(tr);
+        const name = resolveName(tr, suppliersMap, customersMap);
+
+        // سند صرف لمورد مطابق لدفعة مسجلة في فاتورة المشتريات = تكرار
+        if (tr.type === 'صرف' && purchaseKeys.has(amtKey(cashAmt, dateStr)) && (!tr.partyId || suppliersMap[tr.partyId])) return;
+        // سند منسوخ مرتين
+        if (isMirror(`${tr.type}|${tr.partyId || name}|${cashAmt}|${dateStr}`, toMillis(tr))) return;
+
+        if (tr.type === 'قبض') {
+            movements.push({
+                id: 'trin_' + d.id, direction: 'in', amount: cashAmt,
+                note: `سند قبض - ${name}`,
+                date: dateStr, timeMs: toMillis(tr), source: 'voucher'
+            });
+        } else if (tr.type === 'صرف') {
+            movements.push({
+                id: 'trout_' + d.id, direction: 'out', amount: cashAmt,
+                note: `سند صرف - ${name}`,
+                date: dateStr, timeMs: toMillis(tr), source: 'voucher'
+            });
+        }
+    });
+
+    // مصروفات كاش
+    expSnap.forEach(d => {
+        const data = d.data();
+        if (data.paymentMethod !== 'نقدى' && data.paymentMethod !== 'نقدي') return;
+        const amt = Number(data.amount || 0);
+        if (amt <= 0) return;
+        movements.push({
+            id: 'exp_' + d.id, direction: 'out', amount: amt,
+            note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
+            date: getDateStr(data), timeMs: toMillis(data), source: 'expense'
+        });
+    });
+
+    // حركات يدوية للخزينة
+    manualSnap.forEach(d => {
+        const data = d.data();
+        const amt = Number(data.amount || 0);
+        if (amt <= 0) return;
+        movements.push({
+            id: 'man_' + d.id, direction: data.type, amount: amt,
+            note: data.note || (data.type === 'in' ? 'إيداع يدوي' : 'سحب يدوي'),
+            date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
+        });
+    });
+
+    sortAndSetMovements(movements);
+}
+
+async function loadWalletData() {
+    const [openingSnap, manualSnap, expSnap, transSnap, invSnap, supTransSnap, suppliersSnap, customersMap] = await Promise.all([
+        getDoc(doc(db, "wallet_settings", "opening")),
+        getDocs(collection(db, "wallet_entries")),
+        getDocs(collection(db, "expenses")),
+        getDocs(collection(db, "transactions")),
+        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "supplier_transactions")),
+        getDocs(collection(db, "suppliers")),
+        loadCustomersMap()
+    ]);
+
+    openingBalance = openingSnap.exists() ? Number(openingSnap.data().amount || 0) : 0;
+    document.getElementById('openingBalanceDisplay').innerText = fmt(openingBalance);
+
+    const suppliersMap = {};
+    suppliersSnap.forEach(d => { suppliersMap[d.id] = d.data().name || 'مورد'; });
+
+    const movements = [];
+    const purchaseKeys = new Set();
+
+    // 1. فواتير المبيعات المسددة عبر المحفظة
+    invSnap.forEach(d => {
+        const data = d.data();
+        if (data.isDeleted) return;
+        const method = data.paymentMethod || data.method || '';
+        const walletPaid = Number(data.walletAmount ?? (isWalletPayment(method) ? (data.cashAmount ?? data.cashPaid ?? data.paid) : 0)) || 0;
+
+        if (walletPaid > 0 || isWalletPayment(method)) {
+            const amt = walletPaid > 0 ? walletPaid : (Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0);
+            if (amt > 0) {
+                movements.push({
+                    id: 'inv_wal_' + d.id, direction: 'in', amount: amt,
+                    provider: method || 'محفظة إلكترونية',
+                    note: `مبيعات محفظة - ${data.customerName || 'عميل'}`,
+                    date: getDateStr(data), timeMs: toMillis(data)
+                });
+            }
+        }
+    });
+
+    // 2. فواتير المشتريات المسددة عبر المحفظة (تشمل الفواتير المختلطة)
+    supTransSnap.forEach(d => {
+        const data = d.data();
+        const method = data.paymentMethod || data.method || '';
+        const walletPart = Number(data.walletPaid || 0);
+        const paidAmt = walletPart > 0
+            ? walletPart
+            : (isWalletPayment(method) ? Number(data.cashPaid || data.paid || 0) : 0);
+        if (paidAmt <= 0) return;
+
+        const supName = suppliersMap[data.supplierId] || 'مورد';
+        const isReturn = data.type === 'مرتجع شراء';
+        const dateStr = getDateStr(data);
+        purchaseKeys.add(amtKey(paidAmt, dateStr));
+        movements.push({
+            id: 'sup_wal_' + d.id, direction: isReturn ? 'in' : 'out', amount: paidAmt,
+            provider: method || 'محفظة إلكترونية',
+            note: isReturn ? `مرتجع مشتريات محفظة - ${supName}` : `مشتريات محفظة - ${supName}`,
+            date: dateStr, timeMs: toMillis(data)
+        });
+    });
+
+    // 3. حركات محفظة يدوية
+    manualSnap.forEach(d => {
+        const data = d.data();
+        const amt = Number(data.amount || 0);
+        if (amt <= 0) return;
+        movements.push({
+            id: 'wal_' + d.id, direction: data.type, amount: amt,
+            provider: data.provider || 'محفظة إلكترونية',
+            note: data.note || (data.type === 'in' ? 'إيداع محفظة' : 'تحويل محفظة'),
+            date: getDateStr(data), timeMs: toMillis(data), source: 'manual', manualId: d.id
+        });
+    });
+
+    // 4. مصروفات عبر المحفظة
+    expSnap.forEach(d => {
+        const data = d.data();
+        if (!isWalletPayment(data.paymentMethod)) return;
+        const amt = Number(data.amount || 0);
+        if (amt <= 0) return;
+        movements.push({
+            id: 'exp_' + d.id, direction: 'out', amount: amt,
+            provider: data.paymentMethod,
+            note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
+            date: getDateStr(data), timeMs: toMillis(data)
+        });
+    });
+
+    // 5. سندات عبر المحفظة (بدون المرتبطة بفواتير + بدون المكررة)
+    const isMirror = makeMirrorChecker();
+    transSnap.forEach(d => {
+        const tr = d.data();
+        if (tr.isDeleted) return;
+        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+        const method = tr.method || tr.paymentMethod || '';
+        if (!isWalletPayment(method)) return;
+        const amt = Number(tr.amount || tr.total || 0);
+        if (amt <= 0) return;
+
+        const dateStr = getDateStr(tr);
+        const name = resolveName(tr, suppliersMap, customersMap);
+
+        // سند صرف لمورد مطابق لدفعة محفظة مسجلة في فاتورة المشتريات = تكرار
+        if (tr.type === 'صرف' && purchaseKeys.has(amtKey(amt, dateStr)) && (!tr.partyId || suppliersMap[tr.partyId])) return;
+        // سند منسوخ مرتين
+        if (isMirror(`${tr.type}|${tr.partyId || name}|${amt}|${dateStr}`, toMillis(tr))) return;
+
+        movements.push({
+            id: 'tr_' + d.id, direction: tr.type === 'قبض' ? 'in' : 'out', amount: amt,
+            provider: method,
+            note: `سند ${tr.type} - ${name}`,
+            date: dateStr, timeMs: toMillis(tr)
+        });
+    });
+
+    sortAndSetMovements(movements);
+}
+
+function sortAndSetMovements(movements) {
+    movements.sort((a, b) => a.timeMs - b.timeMs);
+    let running = openingBalance;
+    movements.forEach(m => {
+        running += (m.direction === 'in' ? m.amount : -m.amount);
+        m.balanceAfter = running;
+    });
+    allMovements = movements;
+    renderMovements();
+}
+
+window.renderMovements = function () {
+    const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+    const dateFilter = document.getElementById('dateFilter').value;
+
+    let list = [...allMovements].reverse();
+    if (search) list = list.filter(m => m.note.toLowerCase().includes(search) || (m.provider && m.provider.toLowerCase().includes(search)));
+    if (dateFilter) list = list.filter(m => m.date === dateFilter);
+
+    const totalIn = allMovements.filter(m => m.direction === 'in' && (!dateFilter || m.date === dateFilter)).reduce((s, m) => s + m.amount, 0);
+    const totalOut = allMovements.filter(m => m.direction === 'out' && (!dateFilter || m.date === dateFilter)).reduce((s, m) => s + m.amount, 0);
+    const currentBalance = openingBalance + allMovements.reduce((s, m) => s + (m.direction === 'in' ? m.amount : -m.amount), 0);
+
+    document.getElementById('totalIn').innerText = fmt(totalIn);
+    document.getElementById('totalOut').innerText = fmt(totalOut);
+    document.getElementById('currentBalance').innerText = fmt(currentBalance);
+
+    const container = document.getElementById('movementsList');
+    if (list.length === 0) {
+        container.innerHTML = `<div class="empty-msg"><i class="fas ${currentTab === 'cash' ? 'fa-inbox' : 'fa-wallet'} fa-2x mb-2 d-block text-secondary"></i>لا توجد حركات مطابقة</div>`;
+        return;
+    }
+
+    container.innerHTML = list.map(m => `
+        <div class="movement-item ${m.direction}">
+            <div class="mv-info">
+                <span class="mv-note">${m.note}</span>
+                <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${m.date || 'بلا تاريخ'}</span></span>
+                <div>
+                    <span class="mv-badge ${m.direction === 'in' ? 'badge-in' : 'badge-out'}">${m.direction === 'in' ? 'وارد' : 'صادر'}</span>
+                    ${m.provider ? `<span class="mv-badge badge-provider"><i class="fas fa-mobile-alt me-1"></i>${m.provider}</span>` : ''}
+                </div>
+            </div>
+            <div class="d-flex align-items-center">
+                <div class="mv-right">
+                    <div class="mv-amount ${m.direction === 'in' ? 'text-success' : 'text-danger'} num">${m.direction === 'in' ? '+' : '-'}${fmt(m.amount)}</div>
+                    <div class="mv-balance num">الرصيد: ${fmt(m.balanceAfter)}</div>
+                </div>
+                ${m.source === 'manual' ? `<button class="mv-del" onclick="deleteManualEntry('${m.manualId}')" title="حذف"><i class="fas fa-trash-alt"></i></button>` : ''}
+            </div>
+        </div>
+    `).join('');
+};
+
+window.editOpeningBalance = async function () {
+    const current = openingBalance;
+    const targetDoc = currentTab === 'cash' ? doc(db, "cash_settings", "opening") : doc(db, "wallet_settings", "opening");
+    const label = currentTab === 'cash' ? 'الخزينة' : 'المحفظة';
+    const val = prompt(`أدخل قيمة الرصيد الافتتاحي الجديد لـ ${label}:`, current);
+    if (val === null) return;
+    const num = parseFloat(val);
+    if (isNaN(num)) return alert("قيمة غير صحيحة");
+    try {
+        await setDoc(targetDoc, {
+            amount: num,
+            updatedAt: serverTimestamp(),
+            updatedBy: localStorage.getItem("username") || "أحمد محمود الزيادي"
+        }, { merge: true });
+        alert(`تم تحديث الرصيد الافتتاحي لـ ${label} بنجاح ✅`);
+        init();
+    } catch (e) { alert("خطأ: " + e.message); }
+};
+
+window.openEntryForm = function (type) {
+    const card = document.getElementById('entryCard');
+    document.getElementById('entryType').value = type;
+    document.getElementById('entryDate').valueAsDate = new Date();
+    const label = currentTab === 'cash' ? 'الخزينة' : 'المحفظة';
+    document.getElementById('entryCardTitle').innerText = type === 'in' ? `إضافة حركة وارد لـ ${label}` : `إضافة حركة صادر من ${label}`;
+    const btn = document.getElementById('entrySaveBtn');
+    btn.style.background = type === 'in' ? 'var(--success)' : 'var(--danger)';
+    card.classList.add('show');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+window.saveManualEntry = async function () {
+    const type = document.getElementById('entryType').value;
+    const amount = parseFloat(document.getElementById('entryAmount').value);
+    const date = document.getElementById('entryDate').value;
+    const note = document.getElementById('entryNote').value.trim();
+    const provider = document.getElementById('entryProvider').value;
+
+    if (!amount || amount <= 0) return alert("برجاء إدخال مبلغ صحيح");
+    if (!date) return alert("برجاء اختيار التاريخ");
+    if (!note) return alert("برجاء كتابة بيان للحركة");
+
+    try {
+        if (currentTab === 'cash') {
+            await addDoc(collection(db, "cash_manual_entries"), {
+                type, amount, date, note,
+                createdBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
+                timestamp: serverTimestamp()
+            });
+        } else {
+            await addDoc(collection(db, "wallet_entries"), {
+                type, provider, amount, date, note,
+                createdBy: localStorage.getItem("username") || "أحمد محمود الزيادي",
+                timestamp: serverTimestamp()
+            });
+        }
+        document.getElementById('entryAmount').value = '';
+        document.getElementById('entryNote').value = '';
+        document.getElementById('entryCard').classList.remove('show');
+        alert("تم حفظ الحركة بنجاح ✅");
+        init();
+    } catch (e) { alert("خطأ أثناء الحفظ: " + e.message); }
+};
+
+window.deleteManualEntry = async function (id) {
+    if (!confirm("هل تريد حذف هذه الحركة اليدوية؟")) return;
+    try {
+        const colName = currentTab === 'cash' ? "cash_manual_entries" : "wallet_entries";
+        await deleteDoc(doc(db, colName, id));
+        init();
+    } catch (e) { alert("خطأ أثناء الحذف: " + e.message); }
+};
+
+window.exportToExcel = function () {
+    if (allMovements.length === 0) return alert("لا توجد حركات لتصديرها");
+    const isWallet = currentTab === 'wallet';
+    const rows = isWallet
+        ? [["التاريخ", "الوسيلة", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]]
+        : [["التاريخ", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]];
+
+    [...allMovements].reverse().forEach(m => {
+        if (isWallet) {
+            rows.push([m.date, m.provider || 'محفظة', m.note, m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
+        } else {
+            rows.push([m.date, m.note, m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
+        }
+    });
+    rows.push([]);
+    rows.push(["الرصيد الافتتاحي", "", "", openingBalance, ""]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = (isWallet ? [15, 18, 40, 12, 14, 16] : [15, 40, 12, 14, 16]).map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    const sheetName = isWallet ? "دفتر المحفظة" : "دفتر النقدية";
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, `${sheetName}_${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+
+init();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => console.log("SW Registered Successfully"))
+    .catch((err) => console.log("SW Registration Failed", err));
+}
+</script>
+</body>
+</html>
