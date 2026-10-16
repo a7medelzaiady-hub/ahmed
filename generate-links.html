@@ -45,7 +45,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs } from "./firestore-offline.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -81,9 +81,14 @@
             html += `
             <div class="customer-row">
                 <span class="fw-bold">${c.name}</span>
-                <button class="btn btn-action" onclick="window.shareLink('${c.id}', '${c.name}')">
-                    <i class="fas fa-share-alt"></i> إرسال الرابط
-                </button>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-action" onclick="window.shareLink('${c.id}', '${c.name}')">
+                        <i class="fas fa-share-alt"></i> كشف الحساب
+                    </button>
+                    <button class="btn btn-action" style="background:#6b21a8" onclick="window.shareShop('${c.id}', '${c.name}')">
+                        <i class="fas fa-store"></i> المتجر
+                    </button>
+                </div>
             </div>`;
         });
         document.getElementById('resultsContainer').innerHTML = html || '<div class="text-center text-muted">لم يتم العثور على عميل بهذا الاسم</div>';
@@ -92,6 +97,13 @@
     window.shareLink = (id, name) => {
         const link = `https://ahmedelzaiady.web.app/customer-portal.html?cid=${id}`;
         const msg = encodeURIComponent(`أهلاً ${name}، يمكنك متابعة كشف حسابك هنا: ${link}`);
+        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+    };
+
+    // رابط المتجر الخاص بالتاجر (نفس مكان الموقع الحالي، فيشتغل على أي استضافة)
+    window.shareShop = (id, name) => {
+        const link = new URL('shop.html?cid=' + encodeURIComponent(id), location.href).href;
+        const msg = encodeURIComponent(`أهلاً ${name} 👋\nسجّل نواقص محلك من متجر الزيادي لزيوت السيارات، وشوف رصيدك وأسعارنا من هنا:\n${link}`);
         window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
     };
 
