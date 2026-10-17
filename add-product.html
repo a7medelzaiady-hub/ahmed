@@ -829,13 +829,14 @@ async function loadProducts() {
             return (a.name || '').localeCompare(b.name || '', 'ar');
         });
 
-        renderCatalog(inventoryList);
+        // تفعيل الفلترة مباشرة عند اكتمال التحميل
+        filterCatalog();
     } catch (e) {
         document.getElementById('catalogList').innerHTML = `<div class="loading-container text-danger fw-bold">تعذر تحميل القائمة.</div>`;
     }
 }
 
-// دالة الفلترة الصارمة والتعرف على قطع الغيار بناءً على حقل الفئة والكلمات المفتاحية
+// فحص حاسم للتمييز بين قطع الغيار والزيوت
 function isSparePart(item) {
     const cat = (item.category || '').trim().toLowerCase();
     
@@ -854,8 +855,8 @@ function renderCatalog(items) {
         container.innerHTML = `
             <div class="loading-container text-center">
                 <i class="fas fa-triangle-exclamation text-warning fa-2x mb-2"></i>
-                <p class="text-dark fw-bold m-0" style="font-size: 0.9rem;">تأكد من كتابة الاسم صحيح</p>
-                <small class="text-muted mt-1">لا توجد أصناف تطابق بحثك في هذا القسم</small>
+                <p class="text-dark fw-bold m-0" style="font-size: 0.9rem;">لا توجد أصناف هنا</p>
+                <small class="text-muted mt-1">لا توجد أصناف تطابق اختيارك في هذا القسم</small>
             </div>
         `;
         return;
@@ -917,7 +918,7 @@ window.filterCatalog = () => {
     const rawTerm = document.getElementById('catalogSearch').value.trim();
     const normalizedTerm = normalizeArabic(rawTerm);
     
-    // الفلترة الدقيقة بحسب التبويب المختار
+    // إجبار الفلترة حسب القسم المحدد أولاً وقبل كل شيء
     let categoryFiltered = inventoryList.filter(item => {
         const isPart = isSparePart(item);
         if (activeCategory === 'oils') return !isPart;
