@@ -973,16 +973,25 @@ window.filterCatalog = () => {
         return true;
     });
 
-    // 2. الفلترة المزدوجة حسب الشركة / الماركة المحددة
+    // 2. الفلترة المزدوجة المباشرة الذكية حسب اختيارك للشركة
     if (activeBrand !== 'all') {
         const normBrand = normalizeArabic(activeBrand);
         categoryFiltered = categoryFiltered.filter(item => {
+            const itemBrand = normalizeArabic(item.brand || '');
             const name = normalizeArabic(item.name || '');
             const cat = normalizeArabic(item.category || '');
+
+            // إذا قمت بتحديد الماركة/الشركة يدوياً في كارت المنتج
+            if (itemBrand && itemBrand === normBrand) {
+                return true;
+            }
+
+            // فحص كاحتياطي بالاسم أو الفئة
             if (activeBrand === 'شعبى') {
                 const knownBrands = ['موبيل', 'توتال', 'شيل', 'بترومين', 'التعاون', 'مصر'];
-                return !knownBrands.some(b => name.includes(normalizeArabic(b)) || cat.includes(normalizeArabic(b)));
+                return !knownBrands.some(b => name.includes(normalizeArabic(b)) || cat.includes(normalizeArabic(b)) || itemBrand.includes(normalizeArabic(b)));
             }
+
             return name.includes(normBrand) || cat.includes(normBrand);
         });
     }
