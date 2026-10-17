@@ -249,7 +249,7 @@
             border: 2px solid #e2e8f0;
             border-radius: 16px;
             padding: 8px 16px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 800;
             color: #475569;
             white-space: nowrap;
@@ -299,16 +299,23 @@
             box-shadow: 0 3px 8px rgba(217, 119, 6, 0.35);
         }
 
-        .admin-brand-select {
-            font-size: 0.72rem;
+        /* قوائم تحكم الأدمن (شركة وقسم) */
+        .admin-controls-row {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .admin-controls-row select {
+            flex: 1;
+            font-size: 0.68rem;
             font-weight: 800;
-            padding: 3px 6px;
-            border-radius: 8px;
+            padding: 2px;
+            border-radius: 6px;
             border: 1.5px solid #8b5cf6;
             background: #f3e8ff;
             color: #581c87;
-            width: 100%;
-            margin-bottom: 6px;
         }
 
         .search-container {
@@ -458,7 +465,7 @@
             text-align: center;
         }
 
-        /* شريط إرسال الطلب السفلي الفخم والأوضح للعميل */
+        /* شريط إرسال الطلب السفلي */
         .floating-cta-bar {
             position: fixed;
             bottom: 12px;
@@ -639,7 +646,7 @@
         <input type="text" id="clientNameInput" class="form-control form-control-md fw-bold shadow-sm focus-scroll" placeholder="أدخل اسم محلك هنا..." style="border-radius: 14px; border: 2px solid #cbd5e1; padding: 11px 14px; font-size: 0.95rem;">
     </div>
 
-    <!-- التبويبات الرئيسية (الزيوت - الفرامل - قطع الغيار) -->
+    <!-- التبويبات الرئيسية (الزيوت - التروس - الفرامل - قطع الغيار) -->
     <div class="category-tabs">
         <button class="cat-tab-btn active" id="tab_all" onclick="switchCategory('all')">
             <i class="fas fa-border-all"></i> الكل
@@ -647,11 +654,14 @@
         <button class="cat-tab-btn" id="tab_oils" onclick="switchCategory('oils')">
             <i class="fas fa-oil-can"></i> زيوت المحركات
         </button>
+        <button class="cat-tab-btn" id="tab_gears" onclick="switchCategory('gears')">
+            <i class="fas fa-cogs"></i> زيوت التروس
+        </button>
         <button class="cat-tab-btn" id="tab_brakes" onclick="switchCategory('brakes')">
-            <i class="fas fa-circle-stop"></i> زيوت ومستلزمات الفرامل
+            <i class="fas fa-circle-stop"></i> زيوت الفرامل
         </button>
         <button class="cat-tab-btn" id="tab_parts" onclick="switchCategory('parts')">
-            <i class="fas fa-gears"></i> قطع الغيار والاكسسوار
+            <i class="fas fa-gears"></i> قطع الغيار
         </button>
     </div>
 
@@ -683,7 +693,7 @@
 
 </div>
 
-<!-- شريط الطلب السفلي الأوضح والمطور -->
+<!-- شريط الطلب السفلي -->
 <div class="floating-cta-bar" id="cartBar">
     <div class="d-flex align-items-center gap-2">
         <span class="text-white-50 fw-bold" style="font-size: 0.8rem;">المختارة:</span>
@@ -916,15 +926,29 @@ window.switchBrand = (brand, el) => {
     filterCatalog();
 };
 
+// تحديث الشركة بواسطة الأدمن
 window.updateProductBrandDirect = async (productId, selectedBrand) => {
     try {
         await updateDoc(doc(db, "inventory", productId), { brand: selectedBrand });
         const item = inventoryList.find(i => i.id === productId);
         if (item) item.brand = selectedBrand;
-        showCenterAlert("تم نقل الصنف بنجاح ✅");
+        showCenterAlert("تم تعيين الشركة بنجاح ✅");
         filterCatalog();
     } catch(e) {
-        showCenterAlert("حدث خطأ أثناء حفظ التغيير!");
+        showCenterAlert("حدث خطأ أثناء التغيير!");
+    }
+};
+
+// تحديث قسم المنتج بواسطة الأدمن
+window.updateProductCategoryDirect = async (productId, selectedCat) => {
+    try {
+        await updateDoc(doc(db, "inventory", productId), { storeCategory: selectedCat });
+        const item = inventoryList.find(i => i.id === productId);
+        if (item) item.storeCategory = selectedCat;
+        showCenterAlert("تم نقل الصنف للقسم المختار بنجاح ✅");
+        filterCatalog();
+    } catch(e) {
+        showCenterAlert("حدث خطأ أثناء النقل!");
     }
 };
 
@@ -947,21 +971,27 @@ async function loadProducts() {
     }
 }
 
+// فحوصات الأقسام التلقائية في حالة عدم تحديد الأدمن لها
 function isBrakeItem(item) {
     const cat = (item.category || '').trim().toLowerCase();
     const name = (item.name || '').toLowerCase();
-    if (cat.includes('فرامل') || cat.includes('فرامله') || cat === 'brakes') return true;
-    const keywords = ['فرامل', 'باكم', 'باكمه', 'تيل فرامل', 'تيل', 'dot3', 'dot4', 'dot 3', 'dot 4', 'زيت فرامل', 'خزنة فرامل'];
-    return keywords.some(kw => name.includes(kw) || cat.includes(kw));
+    if (cat.includes('فرامل') || cat === 'brakes') return true;
+    return ['فرامل', 'باكم', 'dot3', 'dot4', 'dot 3', 'dot 4'].some(kw => name.includes(kw));
+}
+
+function isGearItem(item) {
+    const cat = (item.category || '').trim().toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    if (cat.includes('تروس') || cat.includes('فتيس') || cat === 'gears') return true;
+    return ['تروس', 'فتيس', 'gear', '90', '140', '80w'].some(kw => name.includes(kw) && !name.includes('محرك'));
 }
 
 function isSparePart(item) {
-    if (isBrakeItem(item)) return false;
+    if (isBrakeItem(item) || isGearItem(item)) return false;
     const cat = (item.category || '').trim().toLowerCase();
     if (cat.includes('قطع غيار') || cat.includes('قطع') || cat.includes('غيار') || cat === 'parts') return true;
     const name = (item.name || '').toLowerCase();
-    const keywords = ['سلك', 'أكور', 'اقور', 'لكور', 'اكس', 'أكس', 'فلتر', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'طلمبة', 'مساعد', 'خرطوم'];
-    return keywords.some(kw => name.includes(kw));
+    return ['سلك', 'أكور', 'اقور', 'لكور', 'اكس', 'أكس', 'فلتر', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'طلمبة', 'مساعد', 'خرطوم'].some(kw => name.includes(kw));
 }
 
 function renderCatalog(items) {
@@ -982,24 +1012,38 @@ function renderCatalog(items) {
         const cartonPrice = Number(p.sell || 0);
         const imgUrl = p.imageUrl || p.image || 'https://cdn-icons-png.flaticon.com/512/3076/3076962.png';
         const currentQty = cart[p.id]?.qty || 0;
-        const isPart = isSparePart(p) || isBrakeItem(p);
-
-        const primaryUnitName = isPart ? 'طقم / كرتونة' : 'كرتونة';
-        const secondaryUnitName = isPart ? 'قطعة / علبة' : 'علبة';
+        
+        // تحديد حالة المنتج (هل هو قطعة غيار/فرامل/تروس) لضبط التسميات
+        const isPart = p.storeCategory === 'parts' || (!p.storeCategory && isSparePart(p));
+        const primaryUnitName = isPart ? 'طقم/كرتونة' : 'كرتونة';
+        const secondaryUnitName = isPart ? 'قطعة/علبة' : 'علبة';
+        
         const currentBrand = p.brand || '';
+        const currentStoreCat = p.storeCategory || '';
 
-        const adminBrandControl = isAdmin ? `
-            <select class="admin-brand-select" onchange="updateProductBrandDirect('${p.id}', this.value)">
-                <option value="" ${!currentBrand ? 'selected' : ''}>⚙️ حدد الشركة...</option>
-                <option value="موبيل" ${currentBrand === 'موبيل' ? 'selected' : ''}>موبيل</option>
-                <option value="توتال" ${currentBrand === 'توتال' ? 'selected' : ''}>توتال</option>
-                <option value="شيل" ${currentBrand === 'شيل' ? 'selected' : ''}>شيل</option>
-                <option value="بترومين" ${currentBrand === 'بترومين' ? 'selected' : ''}>بترومين</option>
-                <option value="التعاون" ${currentBrand === 'التعاون' ? 'selected' : ''}>التعاون</option>
-                <option value="مصر" ${currentBrand === 'مصر' ? 'selected' : ''}>مصر للبترول</option>
-                <option value="شعبى" ${currentBrand === 'شعبى' ? 'selected' : ''}>زيوت شعبية</option>
-                <option value="أخرى" ${currentBrand === 'أخرى' ? 'selected' : ''}>شركات أخرى</option>
-            </select>
+        // قوائم تحكم الأدمن المزدوجة (تظهر للأدمن فقط)
+        const adminControls = isAdmin ? `
+            <div class="admin-controls-row">
+                <select onchange="updateProductBrandDirect('${p.id}', this.value)">
+                    <option value="" ${!currentBrand ? 'selected' : ''}>⚙️ الشركة..</option>
+                    <option value="موبيل" ${currentBrand === 'موبيل' ? 'selected' : ''}>موبيل</option>
+                    <option value="توتال" ${currentBrand === 'توتال' ? 'selected' : ''}>توتال</option>
+                    <option value="شيل" ${currentBrand === 'شيل' ? 'selected' : ''}>شيل</option>
+                    <option value="بترومين" ${currentBrand === 'بترومين' ? 'selected' : ''}>بترومين</option>
+                    <option value="التعاون" ${currentBrand === 'التعاون' ? 'selected' : ''}>التعاون</option>
+                    <option value="مصر" ${currentBrand === 'مصر' ? 'selected' : ''}>مصر للبترول</option>
+                    <option value="شعبى" ${currentBrand === 'شعبى' ? 'selected' : ''}>شعبي</option>
+                    <option value="أخرى" ${currentBrand === 'أخرى' ? 'selected' : ''}>أخرى</option>
+                </select>
+                
+                <select onchange="updateProductCategoryDirect('${p.id}', this.value)">
+                    <option value="" ${!currentStoreCat ? 'selected' : ''}>⚙️ القسم..</option>
+                    <option value="oils" ${currentStoreCat === 'oils' ? 'selected' : ''}>محركات</option>
+                    <option value="gears" ${currentStoreCat === 'gears' ? 'selected' : ''}>تروس</option>
+                    <option value="brakes" ${currentStoreCat === 'brakes' ? 'selected' : ''}>فرامل</option>
+                    <option value="parts" ${currentStoreCat === 'parts' ? 'selected' : ''}>قطع غيار</option>
+                </select>
+            </div>
         ` : '';
 
         return `
@@ -1010,7 +1054,7 @@ function renderCatalog(items) {
                     </div>
                     
                     <div class="card-details">
-                        ${adminBrandControl}
+                        ${adminControls}
 
                         <div class="product-title">${p.name}</div>
 
@@ -1050,16 +1094,27 @@ window.filterCatalog = () => {
     const rawTerm = document.getElementById('catalogSearch').value.trim();
     const normalizedTerm = normalizeArabic(rawTerm);
     
+    // 1. الفلترة حسب الأقسام
     let categoryFiltered = inventoryList.filter(item => {
+        // الاعتماد الأول على القسم المحدد يدوياً من الأدمن
+        if (item.storeCategory) {
+            if (activeCategory === 'all') return true;
+            return item.storeCategory === activeCategory;
+        }
+
+        // التعرف التلقائي في حال لم يحدد الأدمن القسم
         const isBrake = isBrakeItem(item);
+        const isGear = isGearItem(item);
         const isPart = isSparePart(item);
 
         if (activeCategory === 'brakes') return isBrake;
+        if (activeCategory === 'gears') return isGear;
         if (activeCategory === 'parts') return isPart;
-        if (activeCategory === 'oils') return !isBrake && !isPart;
+        if (activeCategory === 'oils') return !isBrake && !isGear && !isPart;
         return true;
     });
 
+    // 2. الفلترة حسب الشركة / الماركة
     if (activeBrand !== 'all') {
         const normBrand = normalizeArabic(activeBrand);
         categoryFiltered = categoryFiltered.filter(item => {
@@ -1083,6 +1138,7 @@ window.filterCatalog = () => {
         });
     }
 
+    // 3. الفلترة النصية للبحث
     if (!rawTerm) {
         renderCatalog(categoryFiltered);
         return;
