@@ -228,7 +228,7 @@
             border-radius: 10px;
         }
 
-        /* أزرار التبويب/الأقسام (زيوت - قطع غيار) */
+        /* أزرار التبويب/الأقسام (زيوت - فرامل - قطع غيار) */
         .category-tabs {
             display: flex;
             gap: 6px;
@@ -644,6 +644,9 @@
         <button class="cat-tab-btn" id="tab_oils" onclick="switchCategory('oils')">
             <i class="fas fa-oil-can"></i> زيوت المحركات
         </button>
+        <button class="cat-tab-btn" id="tab_brakes" onclick="switchCategory('brakes')">
+            <i class="fas fa-circle-stop"></i> زيوت ومستلزمات الفرامل
+        </button>
         <button class="cat-tab-btn" id="tab_parts" onclick="switchCategory('parts')">
             <i class="fas fa-gears"></i> قطع الغيار والاكسسوار
         </button>
@@ -659,6 +662,7 @@
         <div class="brand-chip" onclick="switchBrand('التعاون', this)">التعاون</div>
         <div class="brand-chip" onclick="switchBrand('مصر', this)">مصر للبترول</div>
         <div class="brand-chip" onclick="switchBrand('شعبى', this)">زيوت شعبية</div>
+        <div class="brand-chip" onclick="switchBrand('أخرى', this)">شركات أخرى</div>
     </div>
 
     <!-- البحث -->
@@ -886,11 +890,10 @@ window.updateProductBrandDirect = async (productId, selectedBrand) => {
             brand: selectedBrand
         });
         
-        // تحديث القائمة المجهزة في الذاكرة
         const item = inventoryList.find(i => i.id === productId);
         if (item) item.brand = selectedBrand;
         
-        showCenterAlert("تم نقل الصنف إلى شركة (" + selectedBrand + ") بنجاح ✅");
+        showCenterAlert("تم نقل الصنف بنجاح ✅");
         filterCatalog();
     } catch(e) {
         showCenterAlert("حدث خطأ أثناء حفظ التغيير!");
@@ -916,13 +919,24 @@ async function loadProducts() {
     }
 }
 
+// فحص المنتجات المتعلقة بالفرامل
+function isBrakeItem(item) {
+    const cat = (item.category || '').trim().toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    if (cat.includes('فرامل') || cat.includes('فرامله') || cat === 'brakes') return true;
+    const keywords = ['فرامل', 'باكم', 'باكمه', 'تيل فرامل', 'تيل', 'dot3', 'dot4', 'dot 3', 'dot 4', 'زيت فرامل', 'خزنة فرامل'];
+    return keywords.some(kw => name.includes(kw) || cat.includes(kw));
+}
+
+// فحص قطع الغيار
 function isSparePart(item) {
+    if (isBrakeItem(item)) return false; // يفصل الفرامل عن باقي قطع الغيار
     const cat = (item.category || '').trim().toLowerCase();
     if (cat.includes('قطع غيار') || cat.includes('قطع') || cat.includes('غيار') || cat === 'parts') {
         return true;
     }
     const name = (item.name || '').toLowerCase();
-    const keywords = ['سلك', 'أكور', 'اقور', 'لكور', 'اكس', 'أكس', 'فلتر', 'تيل', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'طلمبة', 'مساعد', 'خرطوم'];
+    const keywords = ['سلك', 'أكور', 'اقور', 'لكور', 'اكس', 'أكس', 'فلتر', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'طلمبة', 'مساعد', 'خرطوم'];
     return keywords.some(kw => name.includes(kw));
 }
 
@@ -944,14 +958,14 @@ function renderCatalog(items) {
         const cartonPrice = Number(p.sell || 0);
         const imgUrl = p.imageUrl || p.image || 'https://cdn-icons-png.flaticon.com/512/3076/3076962.png';
         const currentQty = cart[p.id]?.qty || 0;
-        const isPart = isSparePart(p);
+        const isPart = isSparePart(p) || isBrakeItem(p);
 
         const primaryUnitName = isPart ? 'طقم / كرتونة' : 'كرتونة';
-        const secondaryUnitName = isPart ? 'قطعة' : 'علبة';
+        const secondaryUnitName = isPart ? 'قطعة / علبة' : 'علبة';
 
         const currentBrand = p.brand || '';
 
-        // كود قائمة اختيار الشركة الحصري للأدمن
+        // كود التحكم للأدمن مع الشركات والخيارات الجديدة
         const adminBrandControl = isAdmin ? `
             <select class="admin-brand-select" onchange="updateProductBrandDirect('${p.id}', this.value)">
                 <option value="" ${!currentBrand ? 'selected' : ''}>⚙️ حدد الشركة...</option>
@@ -962,6 +976,7 @@ function renderCatalog(items) {
                 <option value="التعاون" ${currentBrand === 'التعاون' ? 'selected' : ''}>التعاون</option>
                 <option value="مصر" ${currentBrand === 'مصر' ? 'selected' : ''}>مصر للبترول</option>
                 <option value="شعبى" ${currentBrand === 'شعبى' ? 'selected' : ''}>زيوت شعبية</option>
+                <option value="أخرى" ${currentBrand === 'أخرى' ? 'selected' : ''}>شركات أخرى</option>
             </select>
         ` : '';
 
@@ -1013,15 +1028,18 @@ window.filterCatalog = () => {
     const rawTerm = document.getElementById('catalogSearch').value.trim();
     const normalizedTerm = normalizeArabic(rawTerm);
     
-    // 1. الفلترة حسب قسم الأجهزة الرئيسي (زيوت / قطع غيار)
+    // 1. الفلترة حسب الأقسام الرئيسية (زيوت / فرامل / قطع غيار)
     let categoryFiltered = inventoryList.filter(item => {
+        const isBrake = isBrakeItem(item);
         const isPart = isSparePart(item);
-        if (activeCategory === 'oils') return !isPart;
+
+        if (activeCategory === 'brakes') return isBrake;
         if (activeCategory === 'parts') return isPart;
+        if (activeCategory === 'oils') return !isBrake && !isPart;
         return true;
     });
 
-    // 2. الفلترة حسب اختيار الشركة
+    // 2. الفلترة حسب الشركات والماركات
     if (activeBrand !== 'all') {
         const normBrand = normalizeArabic(activeBrand);
         categoryFiltered = categoryFiltered.filter(item => {
@@ -1029,22 +1047,25 @@ window.filterCatalog = () => {
             const name = normalizeArabic(item.name || '');
             const cat = normalizeArabic(item.category || '');
 
-            // اعتماد تحديد الأدمن المباشر أولاً
             if (itemBrand) {
                 return itemBrand === normBrand;
             }
 
-            // فحص كاحتياطي بالاسم أو الفئة في حال لم يحدد الأدمن بعد
             if (activeBrand === 'شعبى') {
                 const knownBrands = ['موبيل', 'توتال', 'شيل', 'بترومين', 'التعاون', 'مصر'];
                 return !knownBrands.some(b => name.includes(normalizeArabic(b)) || cat.includes(normalizeArabic(b)));
+            }
+
+            if (activeBrand === 'أخرى') {
+                const mainBrands = ['موبيل', 'توتال', 'شيل', 'بترومين', 'التعاون', 'مصر', 'شعبى'];
+                return !mainBrands.some(b => name.includes(normalizeArabic(b)) || cat.includes(normalizeArabic(b)));
             }
 
             return name.includes(normBrand) || cat.includes(normBrand);
         });
     }
 
-    // 3. الفلترة حسب كلمة البحث النصية
+    // 3. الفلترة النصية للبحث
     if (!rawTerm) {
         renderCatalog(categoryFiltered);
         return;
