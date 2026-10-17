@@ -705,7 +705,7 @@ try {
 
 let inventoryList = [];
 let cart = {};
-let activeCategory = 'all'; // التبويب النشط الحالي
+let activeCategory = 'all';
 
 const COMMON_STOP_WORDS = ['جركن', 'علبة', 'زيت', 'زجاجة', 'جالون', 'جيلكن', 'كرتونة', 'نوع', 'قطعة'];
 
@@ -809,7 +809,6 @@ window.closeFullImg = () => {
     document.getElementById('fullImgModal').style.display = 'none';
 };
 
-// دالة التبديل بين الأقسام
 window.switchCategory = (cat) => {
     activeCategory = cat;
     document.querySelectorAll('.cat-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -830,17 +829,23 @@ async function loadProducts() {
             return (a.name || '').localeCompare(b.name || '', 'ar');
         });
 
-        renderCatalog(inventoryList);
+        // تفعيل الفلترة مباشرة عند اكتمال التحميل
+        filterCatalog();
     } catch (e) {
         document.getElementById('catalogList').innerHTML = `<div class="loading-container text-danger fw-bold">تعذر تحميل القائمة.</div>`;
     }
 }
 
-// التمييز التلقائي لقطع الغيار مقابل الزيوت
+// فحص حاسم للتمييز بين قطع الغيار والزيوت
 function isSparePart(item) {
-    if (item.category === 'parts' || item.type === 'parts' || item.isPart === true) return true;
+    const cat = (item.category || '').trim().toLowerCase();
+    
+    if (cat.includes('قطع غيار') || cat.includes('قطع') || cat.includes('غيار') || cat === 'parts') {
+        return true;
+    }
+    
     const name = (item.name || '').toLowerCase();
-    const keywords = ['سلك', 'أكور', 'اقور', 'لكور', 'فلتر', 'تيل', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'صاج', 'طلمبة', 'مساعد', 'ماكينة', 'خرطوم'];
+    const keywords = ['سلك', 'أكور', 'اقور', 'لكور', 'اكس', 'أكس', 'فلتر', 'تيل', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'طلمبة', 'مساعد', 'خرطوم'];
     return keywords.some(kw => name.includes(kw));
 }
 
@@ -850,8 +855,8 @@ function renderCatalog(items) {
         container.innerHTML = `
             <div class="loading-container text-center">
                 <i class="fas fa-triangle-exclamation text-warning fa-2x mb-2"></i>
-                <p class="text-dark fw-bold m-0" style="font-size: 0.9rem;">تأكد من كتابة الاسم صحيح</p>
-                <small class="text-muted mt-1">لا توجد أصناف تطابق بحثك في هذا القسم</small>
+                <p class="text-dark fw-bold m-0" style="font-size: 0.9rem;">لا توجد أصناف هنا</p>
+                <small class="text-muted mt-1">لا توجد أصناف تطابق اختيارك في هذا القسم</small>
             </div>
         `;
         return;
@@ -913,11 +918,12 @@ window.filterCatalog = () => {
     const rawTerm = document.getElementById('catalogSearch').value.trim();
     const normalizedTerm = normalizeArabic(rawTerm);
     
-    // فلترة أولاً حسب القسم النشط
+    // إجبار الفلترة حسب القسم المحدد أولاً وقبل كل شيء
     let categoryFiltered = inventoryList.filter(item => {
-        if (activeCategory === 'oils') return !isSparePart(item);
-        if (activeCategory === 'parts') return isSparePart(item);
-        return true; // قسم 'all'
+        const isPart = isSparePart(item);
+        if (activeCategory === 'oils') return !isPart;
+        if (activeCategory === 'parts') return isPart;
+        return true;
     });
 
     if (!rawTerm) {
@@ -932,13 +938,7 @@ window.filterCatalog = () => {
     let filtered = categoryFiltered.filter(item => {
         if (!item.name) return false;
         const normName = normalizeArabic(item.name);
-        return meaningfulWords.every(word => {
-            if (normName.includes(word)) return true;
-            const nameParts = normName.split(/\s+/);
-            const matchesPrefix = nameParts.some(part => part.startsWith(word));
-            if (matchesPrefix) return true;
-            return false;
-        });
+        return meaningfulWords.every(word => normName.includes(word));
     });
 
     renderCatalog(filtered);
