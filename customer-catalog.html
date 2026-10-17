@@ -294,6 +294,18 @@
             box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
         }
 
+        .admin-brand-select {
+            font-size: 0.7rem;
+            font-weight: 800;
+            padding: 2px 4px;
+            border-radius: 8px;
+            border: 1.5px solid #8b5cf6;
+            background: #f3e8ff;
+            color: #581c87;
+            width: 100%;
+            margin-bottom: 6px;
+        }
+
         .search-container {
             position: relative;
             z-index: 1010;
@@ -867,6 +879,24 @@ window.switchBrand = (brand, el) => {
     filterCatalog();
 };
 
+// دالة حصرية للأدمن لتغيير شركة المنتج مباشرة من شاشة المتجر
+window.updateProductBrandDirect = async (productId, selectedBrand) => {
+    try {
+        await updateDoc(doc(db, "inventory", productId), {
+            brand: selectedBrand
+        });
+        
+        // تحديث القائمة المجهزة في الذاكرة
+        const item = inventoryList.find(i => i.id === productId);
+        if (item) item.brand = selectedBrand;
+        
+        showCenterAlert("تم نقل الصنف إلى شركة (" + selectedBrand + ") بنجاح ✅");
+        filterCatalog();
+    } catch(e) {
+        showCenterAlert("حدث خطأ أثناء حفظ التغيير!");
+    }
+};
+
 async function loadProducts() {
     try {
         const snap = await getDocs(collection(db, 'inventory'));
@@ -919,6 +949,22 @@ function renderCatalog(items) {
         const primaryUnitName = isPart ? 'طقم / كرتونة' : 'كرتونة';
         const secondaryUnitName = isPart ? 'قطعة' : 'علبة';
 
+        const currentBrand = p.brand || '';
+
+        // كود قائمة اختيار الشركة الحصري للأدمن
+        const adminBrandControl = isAdmin ? `
+            <select class="admin-brand-select" onchange="updateProductBrandDirect('${p.id}', this.value)">
+                <option value="" ${!currentBrand ? 'selected' : ''}>⚙️ حدد الشركة...</option>
+                <option value="موبيل" ${currentBrand === 'موبيل' ? 'selected' : ''}>موبيل</option>
+                <option value="توتال" ${currentBrand === 'توتال' ? 'selected' : ''}>توتال</option>
+                <option value="شيل" ${currentBrand === 'شيل' ? 'selected' : ''}>شيل</option>
+                <option value="بترومين" ${currentBrand === 'بترومين' ? 'selected' : ''}>بترومين</option>
+                <option value="التعاون" ${currentBrand === 'التعاون' ? 'selected' : ''}>التعاون</option>
+                <option value="مصر" ${currentBrand === 'مصر' ? 'selected' : ''}>مصر للبترول</option>
+                <option value="شعبى" ${currentBrand === 'شعبى' ? 'selected' : ''}>زيوت شعبية</option>
+            </select>
+        ` : '';
+
         return `
             <div class="product-card-3d ${currentQty > 0 ? 'has-qty' : ''}" id="card_${p.id}">
                 <div>
@@ -927,6 +973,8 @@ function renderCatalog(items) {
                     </div>
                     
                     <div class="card-details">
+                        ${adminBrandControl}
+
                         <div class="product-title">${p.name}</div>
 
                         <div class="price-text">${cartonPrice > 0 ? cartonPrice.toFixed(0) + ' ج.م' : 'سعر عند التحميل'}</div>
@@ -973,7 +1021,7 @@ window.filterCatalog = () => {
         return true;
     });
 
-    // 2. الفلترة المزدوجة المباشرة الذكية حسب اختيارك للشركة
+    // 2. الفلترة حسب اختيار الشركة
     if (activeBrand !== 'all') {
         const normBrand = normalizeArabic(activeBrand);
         categoryFiltered = categoryFiltered.filter(item => {
@@ -981,15 +1029,15 @@ window.filterCatalog = () => {
             const name = normalizeArabic(item.name || '');
             const cat = normalizeArabic(item.category || '');
 
-            // إذا قمت بتحديد الماركة/الشركة يدوياً في كارت المنتج
-            if (itemBrand && itemBrand === normBrand) {
-                return true;
+            // اعتماد تحديد الأدمن المباشر أولاً
+            if (itemBrand) {
+                return itemBrand === normBrand;
             }
 
-            // فحص كاحتياطي بالاسم أو الفئة
+            // فحص كاحتياطي بالاسم أو الفئة في حال لم يحدد الأدمن بعد
             if (activeBrand === 'شعبى') {
                 const knownBrands = ['موبيل', 'توتال', 'شيل', 'بترومين', 'التعاون', 'مصر'];
-                return !knownBrands.some(b => name.includes(normalizeArabic(b)) || cat.includes(normalizeArabic(b)) || itemBrand.includes(normalizeArabic(b)));
+                return !knownBrands.some(b => name.includes(normalizeArabic(b)) || cat.includes(normalizeArabic(b)));
             }
 
             return name.includes(normBrand) || cat.includes(normBrand);
