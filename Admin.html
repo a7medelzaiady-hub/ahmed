@@ -30,7 +30,8 @@ body{font-family:Cairo,sans-serif;background:#f4f4f5;padding-bottom:40px}
 <div id="login" class="container text-center" style="max-width:380px;margin-top:20vh">
   <h4 class="fw-bold" style="color:var(--p)">لوحة تحكم الزيادي</h4>
   <p class="text-muted fw-bold" style="font-size:.85rem">للأدمن فقط</p>
-  <button class="btn-p w-100 py-2" id="gBtn">الدخول بحساب جوجل</button>
+  <input id="pin" type="password" inputmode="numeric" class="form-control text-center mb-2" placeholder="الرقم السري" style="border-radius:10px">
+  <button class="btn-p w-100 py-2" id="gBtn">دخول</button>
   <p class="text-danger fw-bold mt-3" id="lgErr"></p>
 </div>
 
@@ -62,11 +63,11 @@ body{font-family:Cairo,sans-serif;background:#f4f4f5;padding-bottom:40px}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {getFirestore,collection,getDocs,addDoc,doc,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-const ADMIN_EMAIL='a7medelzaiady@gmail.com'.toLowerCase();
+// غيّر الرقم السري هنا. ملحوظة: ده قفل بسيط للشاشة وليس حماية حقيقية للبيانات
+const ADMIN_PIN='3042014';
 const app=initializeApp({apiKey:"AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",authDomain:"ahmedelzaiady.firebaseapp.com",projectId:"ahmedelzaiady",storageBucket:"ahmedelzaiady.firebasestorage.app",messagingSenderId:"300306825071",appId:"1:300306825071:web:0426ddde56280fa090329a"});
-const db=getFirestore(app),auth=getAuth(app);
+const db=getFirestore(app);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const BRANDS=['موبيل','توتال','شيل','بترومين','التعاون','مصر','شعبى','أخرى'],BL={مصر:'مصر للبترول',شعبى:'زيوت شعبية',أخرى:'شركات أخرى'};
@@ -77,30 +78,19 @@ const toast=m=>{const t=$('toast');t.innerText=m;t.style.display='block';setTime
 const modal=h=>{$('mdlBody').innerHTML=h;mdl=mdl||new bootstrap.Modal($('mdl'));mdl.show()};
 const hide=()=>mdl&&mdl.hide();
 
-$('gBtn').onclick=async()=>{
-  $('lgErr').innerText='';const p=new GoogleAuthProvider();
-  try{await signInWithPopup(auth,p)}
-  catch(e){
-    if(['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code)){
-      try{await signInWithRedirect(auth,p);return}catch(e2){e=e2}
-    }
-    const M={'auth/unauthorized-domain':'الدومين غير مضاف في Authorized domains في Firebase.','auth/operation-not-allowed':'تسجيل الدخول بجوجل غير مفعّل في Firebase (Sign-in method).','auth/network-request-failed':'مشكلة في الاتصال بالإنترنت.'};
-    $('lgErr').innerText=(M[e.code]||'تعذر تسجيل الدخول بجوجل.')+' ('+(e.code||e.message)+')';
-  }
-};
-$('outBtn').onclick=()=>signOut(auth);
+$('gBtn').onclick=()=>{if($('pin').value===ADMIN_PIN){try{localStorage.setItem('adm_ok',ADMIN_PIN)}catch(e){}start()}else{$('lgErr').innerText='الرقم السري غير صحيح.'}};
+$('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('gBtn').click()});
+$('outBtn').onclick=()=>{try{localStorage.removeItem('adm_ok')}catch(e){}location.reload()};
 
-onAuthStateChanged(auth,async u=>{
-  unsubs.forEach(f=>f());unsubs=[];
-  if(u&&(u.email||'').toLowerCase()!==ADMIN_EMAIL){await signOut(auth);$('lgErr').innerText='هذا الحساب غير مصرح له.';return}
-  $('login').style.display=u?'none':'block';
-  $('app').style.display=u?'block':'none';
-  if(!u)return;
+async function start(){
+  $('login').style.display='none';$('app').style.display='block';
   unsubs.push(onSnapshot(doc(db,'store_analytics','general'),s=>$('stVis').innerText=s.data()?.totalVisits||0));
   unsubs.push(onSnapshot(collection(db,'store_presence'),s=>{let n=0;s.forEach(d=>{const x=d.data();if(x.lastSeen&&Date.now()-x.lastSeen.toMillis()<120000&&x.active!==false)n++});$('stOn').innerText=n}));
   unsubs.push(onSnapshot(query(collection(db,'orders'),orderBy('createdAt','desc'),limit(40)),s=>{orders=s.docs.map(d=>({id:d.id,...d.data()}));$('stOrd').innerText=orders.filter(o=>o.source==='pwa_store').length;if(tab==='orders')draw()}));
-  await Promise.all([loadItems(),loadBanners()]);draw();
-});
+  try{await Promise.all([loadItems(),loadBanners()])}catch(e){toast('تعذر تحميل البيانات')}
+  draw();
+}
+try{if(localStorage.getItem('adm_ok')===ADMIN_PIN)start()}catch(e){}
 
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;[...$('tabs').children].forEach(x=>x.classList.toggle('on',x===b));draw()};
 
