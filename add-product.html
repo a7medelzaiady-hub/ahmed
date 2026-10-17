@@ -236,7 +236,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDoc, getDocs, updateDoc, doc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDoc, getDocs, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -262,7 +262,7 @@
     let uploadedImageBase64 = "";
     window.isChanged = false;
 
-    // معالجة وضغط الصورة فور اختيارها
+    // معالجة وضغط الصورة فور اختيارها لتسريع التحميل والحفظ
     window.handleImageUpload = function(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -273,7 +273,7 @@
             img.src = e.target.result;
             img.onload = function() {
                 const canvas = document.createElement('canvas');
-                const maxDimension = 450; 
+                const maxDimension = 350; // أبعاد خفيفة جداً لسرعة التحميل
                 let width = img.width;
                 let height = img.height;
 
@@ -294,7 +294,7 @@
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
 
-                uploadedImageBase64 = canvas.toDataURL('image/jpeg', 0.65);
+                uploadedImageBase64 = canvas.toDataURL('image/jpeg', 0.55);
 
                 const imgElem = document.getElementById('imagePreview');
                 imgElem.src = uploadedImageBase64;
@@ -354,6 +354,7 @@
         } catch (e) { console.error("خطأ في التحميل:", e); }
     }
 
+    // تعديل ذكي ومباشر بدون لف وقراءة كامل الفواتير لضمان التحميل السريع جداً
     async function checkEdit() {
         const urlParams = new URLSearchParams(window.location.search);
         const editId = urlParams.get('edit');
@@ -364,6 +365,7 @@
             document.getElementById('saveBtn').innerHTML = '<i class="fas fa-sync me-2"></i> تحديث بيانات الصنف';
             document.getElementById('cancelEdit').style.display = 'block';
 
+            // جلب بيانات الصنف مباشرة بسرعة فائقة
             const docRef = doc(db, "inventory", editId);
             const docSnap = await getDoc(docRef);
 
@@ -371,59 +373,14 @@
                 const data = docSnap.data();
                 const factor = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
 
-                let foundOpeningTotalPcs = 0;
-                let foundOpeningQty = 0;
-
-                if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
-                    foundOpeningTotalPcs = Number(data.openingTotalPcs);
-                    foundOpeningQty = data.openingQty !== undefined ? Number(data.openingQty) : (foundOpeningTotalPcs / factor);
-                } else {
-                    try {
-                        const q = query(collection(db, "inventory_transactions"), where("productId", "==", editId), where("type", "==", "opening_balance"));
-                        const transSnap = await getDocs(q);
-                        if (!transSnap.empty) {
-                            foundOpeningTotalPcs = Number(transSnap.docs[0].data().quantityPcs) || 0;
-                            foundOpeningQty = foundOpeningTotalPcs / factor;
-                        }
-                    } catch(err) {}
-                }
+                const foundOpeningTotalPcs = Number(data.openingTotalPcs) || 0;
+                const foundOpeningQty = data.openingQty !== undefined ? Number(data.openingQty) : (foundOpeningTotalPcs / factor);
 
                 document.getElementById('pOpeningQty').value = foundOpeningQty;
                 document.getElementById('pOpeningTotalPcs').value = foundOpeningTotalPcs;
 
-                // تجميع المبيعات والمشتريات الحية للصنف لحساب الرصيد الحقيقي
-                let totalSalesPcs = 0;
-                let totalPurchasesPcs = 0;
-
-                const [invoicesSnap, supplierSnap] = await Promise.all([
-                    getDocs(collection(db, "invoices")),
-                    getDocs(collection(db, "supplier_transactions"))
-                ]);
-
-                invoicesSnap.forEach(d => {
-                    d.data().items?.forEach(item => {
-                        if (item.stockId === editId || item.name?.trim() === data.name?.trim()) {
-                            let pcs = Number(item.qty) || 0;
-                            if (item.unit === 'box' || item.isCarton) pcs *= factor;
-                            if (item.isReturn) totalSalesPcs -= pcs;
-                            else totalSalesPcs += pcs;
-                        }
-                    });
-                });
-
-                supplierSnap.forEach(d => {
-                    d.data().items?.forEach(item => {
-                        if (item.stockId === editId || item.name?.trim() === data.name?.trim()) {
-                            const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                            let rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                            let pcs = (item.unitName === 'كرتونة' || item.isCarton !== false) ? (rawQty * factor) : rawQty;
-                            if (isReturn) totalPurchasesPcs -= pcs;
-                            else totalPurchasesPcs += pcs;
-                        }
-                    });
-                });
-
-                calculatedLiveTotalPcs = (foundOpeningTotalPcs + totalPurchasesPcs) - totalSalesPcs;
+                // القراءة المباشرة للرصيد المحفوظ لضمان فتح الصفحة في أجزاء من الثانية
+                calculatedLiveTotalPcs = Number(data.totalPcs) || (Number(data.qty || 0) * factor);
                 const realCurrentCartons = (calculatedLiveTotalPcs / factor).toFixed(2);
 
                 document.getElementById('pName').value = data.name || '';
@@ -439,7 +396,6 @@
                 document.getElementById('pUnitName').value = data.unitName || '';
                 document.getElementById('pFactor').value = factor;
 
-                // عرض الصورة إذا كانت محفوظة مسبقاً
                 if (data.imageUrl || data.image) {
                     uploadedImageBase64 = data.imageUrl || data.image;
                     const imgElem = document.getElementById('imagePreview');
@@ -497,7 +453,7 @@
         try {
             if(id) {
                 await updateDoc(doc(db, "inventory", id), itemData);
-                alert("تم تحديث بيانات الصنف والصورة بنجاح ✅");
+                alert("تم تحديث بيانات الصنف بنجاح ✅");
             } else {
                 await addDoc(collection(db, "inventory"), { ...itemData, timestamp: serverTimestamp() });
                 alert("تم الحفظ بنجاح ✅");
