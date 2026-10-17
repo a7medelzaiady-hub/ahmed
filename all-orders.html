@@ -160,6 +160,7 @@ overflow: hidden;
 cursor: pointer;
 transition: all 0.2s ease;
 box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+position: relative;
 }
 .order-card:hover {
 border-color: var(--accent);
@@ -167,9 +168,10 @@ box-shadow: 0 4px 12px rgba(11,94,61,0.08);
 transform: translateY(-1px);
 }
 
-.order-card.status-done {
-border-color: #c3e6cb;
-opacity: 0.85;
+/* تمييز طلب المتجر أونلاين */
+.order-card.pwa-store-card {
+border: 2px solid #f59e0b !important;
+background: #fffdf5;
 }
 
 .card-header-row {
@@ -202,6 +204,9 @@ font-size: 0.75rem;
 font-weight: 800;
 flex-shrink: 0;
 }
+.customer-avatar.pwa-avatar {
+background: linear-gradient(135deg, #d97706, #f59e0b) !important;
+}
 
 .header-actions-wrap {
 display: flex;
@@ -233,6 +238,11 @@ border: 1px solid #fde68a;
 background: #f0fdf4;
 color: #16a34a;
 border: 1px solid #bbf7d0;
+}
+.status-pwa {
+background: #fef3c7;
+color: #b45309;
+border: 1px solid #fde68a;
 }
 
 .card-body-row {
@@ -484,6 +494,9 @@ max-width: 320px;
 </div>
 <div class="stat-chip" onclick="setFilter('pending', this)">
 <i class="fas fa-clock"></i> قيد التنفيذ <span class="chip-num" id="chipPending">0</span>
+</div>
+<div class="stat-chip" onclick="setFilter('pwa_store', this)" style="background:#fff8e1; border-color:#fde68a; color:#b45309;">
+<i class="fas fa-cart-shopping"></i> طلبات المتجر <span class="chip-num" id="chipPwaStore">0</span>
 </div>
 <div class="stat-chip" onclick="setFilter('done', this)">
 <i class="fas fa-check-circle"></i> تم الفوترة <span class="chip-num" id="chipDone">0</span>
@@ -809,15 +822,27 @@ async function init() {
 function updateChips() {
     const pending = allOrders.filter(o => o.status === 'pending').length;
     const done = allOrders.filter(o => o.status === 'done').length;
+    const pwaStoreCount = allOrders.filter(o => o.source === 'pwa_store').length;
+
     document.getElementById('chipAll').innerText = allOrders.length;
     document.getElementById('chipPending').innerText = pending;
     document.getElementById('chipDone').innerText = done;
+    if (document.getElementById('chipPwaStore')) {
+        document.getElementById('chipPwaStore').innerText = pwaStoreCount;
+    }
     document.getElementById('totalCountBadge').innerText = allOrders.length;
 }
 
 function triggerOrderNotification() {
+    const pwaOrdersCount = allOrders.filter(o => o.source === 'pwa_store' && o.status === 'pending').length;
     const pendingCount = allOrders.filter(o => o.status === 'pending').length;
-    if (pendingCount > 0) {
+    
+    if (pwaOrdersCount > 0) {
+        document.getElementById('toastMessageText').innerHTML = `وصلتك <span class="fw-bold text-warning">${pwaOrdersCount} طلبات جديدة من المتجر الإلكتروني 🛒</span> قيد الانتظار!`;
+        const toast = document.getElementById('orderToastNotification');
+        toast.classList.add('show');
+        setTimeout(() => { dismissToast(); }, 5000);
+    } else if (pendingCount > 0) {
         document.getElementById('toastMessageText').innerHTML = `لديك <span class="fw-bold text-warning">${pendingCount} طلبات معلقة</span> قيد التنفيذ.`;
         const toast = document.getElementById('orderToastNotification');
         toast.classList.add('show');
@@ -846,7 +871,12 @@ function renderOrders() {
     const term = document.getElementById('searchInput').value.trim().toLowerCase();
     let filtered = [...allOrders];
 
-    if (currentFilter !== 'all') { filtered = filtered.filter(o => o.status === currentFilter); }
+    if (currentFilter === 'pwa_store') {
+        filtered = filtered.filter(o => o.source === 'pwa_store');
+    } else if (currentFilter !== 'all') {
+        filtered = filtered.filter(o => o.status === currentFilter);
+    }
+
     if (term) {
         filtered = filtered.filter(o => o.customerName?.toLowerCase().includes(term) || o.supplierName?.toLowerCase().includes(term) || o.items?.some(i => i.name?.toLowerCase().includes(term)));
     }
@@ -895,8 +925,10 @@ function renderOrders() {
         summarySection.style.display = 'none';
     }
 
-    // --- ترتيب وإظهار الطلبيات ---
+    // --- ترتيب وإظهار الطلبيات (إعطاء الأولوية لطلبات المتجر الإلكتروني) ---
     filtered.sort((a, b) => {
+        if (a.source === 'pwa_store' && b.source !== 'pwa_store') return -1;
+        if (a.source !== 'pwa_store' && b.source === 'pwa_store') return 1;
         if (a.status === 'done' && b.status !== 'done') return 1;
         if (a.status !== 'done' && b.status === 'done') return -1;
         return calculateRemainingDays(a.date) - calculateRemainingDays(b.date);
@@ -905,8 +937,9 @@ function renderOrders() {
     let html = '';
     filtered.forEach(order => {
         const isDone = order.status === 'done';
+        const isPwa = order.source === 'pwa_store';
         const displayName = order.supplierName || order.customerName || '—';
-        const initials = displayName.charAt(0);
+        const initials = isPwa ? '<i class="fas fa-cart-shopping"></i>' : displayName.charAt(0);
         const total = num(order.total).toFixed(2);
         const daysRemaining = calculateRemainingDays(order.date);
 
@@ -937,16 +970,22 @@ function renderOrders() {
         ? `<div class="tap-hint"><i class="fas fa-arrow-left"></i> اضغط لتحويلها لفاتورة مبيعات</div>`
         : `<div class="tap-hint" style="background:#f0fdf4; border-color:#bbf7d0; color:#16a34a;"><i class="fas fa-check"></i> تم الفوترة</div>`;
 
+        // إشارة المتجر الإلكتروني المميزة
+        const pwaBadge = isPwa ? `<span class="status-badge status-pwa me-1"><i class="fas fa-store me-1"></i> متجر أونلاين</span>` : '';
+
         html += `
-        <div class="order-card ${isDone ? 'status-done':''}" onclick="onOrderClick('${order.id}')">
+        <div class="order-card ${isDone ? 'status-done':''} ${isPwa ? 'pwa-store-card':''}" onclick="onOrderClick('${order.id}')">
         <div class="card-header-row">
         <div class="customer-name">
-        <div class="customer-avatar">${initials}</div>
+        <div class="customer-avatar ${isPwa ? 'pwa-avatar':''}">${initials}</div>
         <span>${displayName}</span>
         </div>
         <div class="header-actions-wrap">
-        <span class="status-badge ${isDone?'status-done':'status-pending'}">${isDone?'تم الفوترة':'قيد التنفيذ'}</span>
-        <div class="buttons-group">
+        <div class="d-flex align-items-center gap-1">
+            ${pwaBadge}
+            <span class="status-badge ${isDone?'status-done':'status-pending'}">${isDone?'تم الفوترة':'قيد التنفيذ'}</span>
+        </div>
+        <div class="buttons-group mt-1">
         <button class="action-btn btn-view-items" onclick="event.stopPropagation(); toggleItemsDropdown('${order.id}', this)"><i class="fas fa-chevron-down"></i></button>
         <button class="action-btn btn-share" onclick="event.stopPropagation(); shareAsThermalInvoice('${order.id}')"><i class="fas fa-share-alt"></i></button>
         ${!isDone ? `<button class="action-btn btn-edit" onclick="event.stopPropagation(); editOrder('${order.id}')"><i class="fas fa-edit"></i></button>` : ''}
@@ -976,7 +1015,7 @@ function renderOrders() {
                 <td style="text-align:center;">${qty}</td>
                 <td style="text-align:left;">${itemTotal.toFixed(2)} ج.م</td>
                 <td style="text-align:center;">
-                    <button class="action-btn btn-share" style="width:24px; height:24px; font-size:0.65rem;" onclick="event.stopPropagation(); shareSingleItem('${order.id}', ${idx})" title="مشاركة الصنف">
+                    <button class="action-btn btn-share" style="width:24px; height:24px; font-size:0.65rem;" onclick="event.stopPropagation(); shareSingleItem('${order.id}',${idx})" title="مشاركة الصنف">
                         <i class="fas fa-share-alt"></i>
                     </button>
                 </td>
@@ -1034,7 +1073,6 @@ window.closeItemCustomersModal = () => {
     document.getElementById('itemCustomersModal').style.display = 'none';
 };
 
-// تصحيح نطاق الدوال لربطها بـ window مباشرة
 window.dismissToast = () => document.getElementById('orderToastNotification').classList.remove('show');
 
 window.setFilter = (filter, el) => {
