@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>الزيادي لزيوت السيارات - متجر الطلبات الذكي</title>
-    <!-- إعدادات PWA -->
+    <title>الزيادي لزيوت وقطع غيار السيارات - متجر الطلبات الذكي</title>
+
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#3b0764">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,7 +36,7 @@
 
         /* شريط إحصائيات الأدمن العائم */
         .admin-stats-bar {
-            display: none; /* يظهر للأدمن فقط */
+            display: none;
             background: #18181b;
             color: #ffffff;
             padding: 8px 12px;
@@ -226,6 +226,41 @@
             background: #6b21a8;
             width: 20px;
             border-radius: 10px;
+        }
+
+        /* أزرار التبويب/الأقسام (زيوت - قطع غيار) */
+        .category-tabs {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+            scrollbar-width: none;
+        }
+        .category-tabs::-webkit-scrollbar { display: none; }
+
+        .cat-tab-btn {
+            background: #ffffff;
+            border: 1.5px solid #e4e4e7;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: #52525b;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        }
+
+        .cat-tab-btn.active {
+            background: var(--primary-purple);
+            color: #ffffff;
+            border-color: var(--primary-purple);
+            box-shadow: 0 4px 10px rgba(59, 7, 100, 0.25);
         }
 
         .search-container {
@@ -487,7 +522,7 @@
         <i class="fas fa-shield-check text-success me-1"></i> متجر آمن
     </div>
     
-    <h4 class="brand-title">الزيادي لزيوت السيارات</h4>
+    <h4 class="brand-title">الزيادي لزيوت وقطع غيار السيارات</h4>
     <p class="m-0 text-white-50 mt-1" style="font-size: 0.75rem; font-weight: 700;">سجل نواقص محلك ليلاً لتجهيزها وتحميلها صباحاً</p>
 
     <div class="deadline-friendly-banner">
@@ -536,12 +571,12 @@
             <div class="banner-slide">
                 <div class="banner-card bg-gradient-dark">
                     <div class="banner-content">
-                        <h5>انسى حر الصيف 🚗</h5>
-                        <p>مع أفضل زيوت المحركات ومياه التبريد الأصلية</p>
-                        <button class="btn-banner-action" onclick="filterByKeyword('شيل')">تصفح العروض</button>
+                        <h5>قطع غيار واكسسوارات ⚙️</h5>
+                        <p>جميع أنواع الأكورات والمستلزمات الأصلية متوفرة الآن</p>
+                        <button class="btn-banner-action" onclick="switchCategory('parts')">تصفح قطع الغيار</button>
                     </div>
                     <div class="banner-img-box">
-                        <i class="fas fa-car-battery banner-icon"></i>
+                        <i class="fas fa-gears banner-icon"></i>
                     </div>
                 </div>
             </div>
@@ -558,9 +593,22 @@
         <input type="text" id="clientNameInput" class="form-control form-control-md fw-bold shadow-sm focus-scroll" placeholder="أدخل اسم محلك هنا..." style="border-radius: 12px; border: 1px solid #d4d4d8; padding: 10px 12px;">
     </div>
 
+    <!-- أقسام المتجر (تبويبات الاختيار) -->
+    <div class="category-tabs">
+        <button class="cat-tab-btn active" id="tab_all" onclick="switchCategory('all')">
+            <i class="fas fa-border-all"></i> الكل
+        </button>
+        <button class="cat-tab-btn" id="tab_oils" onclick="switchCategory('oils')">
+            <i class="fas fa-oil-can"></i> زيوت المحركات
+        </button>
+        <button class="cat-tab-btn" id="tab_parts" onclick="switchCategory('parts')">
+            <i class="fas fa-gears"></i> قطع الغيار والاكسسوار
+        </button>
+    </div>
+
     <!-- البحث -->
     <div class="mb-2 search-container">
-        <input type="text" id="catalogSearch" class="form-control form-control-sm fw-bold shadow-sm focus-scroll" placeholder="🔍 ابحث عن نوع زيت..." oninput="filterCatalog()" style="border-radius: 10px; border: 1px solid #a1a1aa; padding: 9px 12px; background: #ffffff;">
+        <input type="text" id="catalogSearch" class="form-control form-control-sm fw-bold shadow-sm focus-scroll" placeholder="🔍 ابحث عن اسم الصنف أو رقم الصنف..." oninput="filterCatalog()" style="border-radius: 10px; border: 1px solid #a1a1aa; padding: 9px 12px; background: #ffffff;">
     </div>
 
     <!-- قائمة الأصناف -->
@@ -657,35 +705,31 @@ try {
 
 let inventoryList = [];
 let cart = {};
-const COMMON_STOP_WORDS = ['جركن', 'علبة', 'زيت', 'زجاجة', 'جالون', 'جيلكن', 'كرتونة', 'نوع'];
+let activeCategory = 'all'; // التبويب النشط الحالي
 
-// المعرف الفريد للزائر لجلسة المتواجدين الآن
+const COMMON_STOP_WORDS = ['جركن', 'علبة', 'زيت', 'زجاجة', 'جالون', 'جيلكن', 'كرتونة', 'نوع', 'قطعة'];
+
 const sessionId = 'user_' + Math.random().toString(36).substring(2, 9);
 const urlParams = new URLSearchParams(window.location.search);
 const isAdmin = urlParams.get('admin') === 'true' || localStorage.getItem('isStoreAdmin') === 'true';
 
-// إظهار شريط الإحصائيات إذا كان المالك/الأدمن هو من يفتح الصفحة
 if (isAdmin) {
     localStorage.setItem('isStoreAdmin', 'true');
     document.getElementById('adminStatsBar').style.display = 'block';
 }
 
-// تسجبل وتحديث الوجود والزيارات في Firestore
 async function initAnalytics() {
     try {
         const statsRef = doc(db, 'store_analytics', 'general');
         await setDoc(statsRef, { totalVisits: increment(1) }, { merge: true });
 
-        // التواجد اللحظي
         const sessionRef = doc(db, 'store_presence', sessionId);
         await setDoc(sessionRef, { lastSeen: serverTimestamp() });
 
-        // تنظيف الجلسة عند مغادرة الصفحة
         window.addEventListener('beforeunload', () => {
             setDoc(sessionRef, { active: false }, { merge: true });
         });
 
-        // الاستماع لإحصائيات الأدمن المباشرة
         if (isAdmin) {
             onSnapshot(statsRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -693,13 +737,11 @@ async function initAnalytics() {
                 }
             });
 
-            // الاستماع للطلبات الواردة من المتجر
             const ordersQuery = query(collection(db, 'orders'), where('source', '==', 'pwa_store'));
             onSnapshot(ordersQuery, (snap) => {
                 document.getElementById('totalOrdersCount').innerText = snap.size;
             });
 
-            // المتواجدون الآن (خلال آخر دقيقتين)
             onSnapshot(collection(db, 'store_presence'), (snap) => {
                 const now = Date.now();
                 let activeCount = 0;
@@ -715,7 +757,6 @@ async function initAnalytics() {
     } catch(e) { console.log(e); }
 }
 
-// التعامل مع الكيبورد
 document.querySelectorAll('.focus-scroll').forEach(input => {
     input.addEventListener('focus', () => {
         document.body.classList.add('keyboard-open');
@@ -729,7 +770,6 @@ document.querySelectorAll('.focus-scroll').forEach(input => {
     });
 });
 
-// إعداد الكاروسيل
 let currentSlide = 0;
 const slides = document.querySelectorAll('.banner-slide');
 const dots = document.querySelectorAll('.dot');
@@ -769,6 +809,14 @@ window.closeFullImg = () => {
     document.getElementById('fullImgModal').style.display = 'none';
 };
 
+// دالة التبديل بين الأقسام
+window.switchCategory = (cat) => {
+    activeCategory = cat;
+    document.querySelectorAll('.cat-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`tab_${cat}`)?.classList.add('active');
+    filterCatalog();
+};
+
 async function loadProducts() {
     try {
         const snap = await getDocs(collection(db, 'inventory'));
@@ -788,6 +836,14 @@ async function loadProducts() {
     }
 }
 
+// التمييز التلقائي لقطع الغيار مقابل الزيوت
+function isSparePart(item) {
+    if (item.category === 'parts' || item.type === 'parts' || item.isPart === true) return true;
+    const name = (item.name || '').toLowerCase();
+    const keywords = ['سلك', 'أكور', 'اقور', 'لكور', 'فلتر', 'تيل', 'سير', 'بوجيه', 'كابل', 'جلبة', 'مسمار', 'صاج', 'طلمبة', 'مساعد', 'ماكينة', 'خرطوم'];
+    return keywords.some(kw => name.includes(kw));
+}
+
 function renderCatalog(items) {
     const container = document.getElementById('catalogList');
     if (!items.length) {
@@ -795,7 +851,7 @@ function renderCatalog(items) {
             <div class="loading-container text-center">
                 <i class="fas fa-triangle-exclamation text-warning fa-2x mb-2"></i>
                 <p class="text-dark fw-bold m-0" style="font-size: 0.9rem;">تأكد من كتابة الاسم صحيح</p>
-                <small class="text-muted mt-1">لا توجد أصناف تطابق بحثك</small>
+                <small class="text-muted mt-1">لا توجد أصناف تطابق بحثك في هذا القسم</small>
             </div>
         `;
         return;
@@ -806,6 +862,10 @@ function renderCatalog(items) {
         const cartonPrice = Number(p.sell || 0);
         const imgUrl = p.imageUrl || p.image || 'https://cdn-icons-png.flaticon.com/512/3076/3076962.png';
         const currentQty = cart[p.id]?.qty || 0;
+        const isPart = isSparePart(p);
+
+        const primaryUnitName = isPart ? 'طقم / كرتونة' : 'كرتونة';
+        const secondaryUnitName = isPart ? 'قطعة' : 'علبة';
 
         return `
             <div class="product-card-3d ${currentQty > 0 ? 'has-qty' : ''}" id="card_${p.id}">
@@ -820,8 +880,8 @@ function renderCatalog(items) {
                         <div class="price-text">${cartonPrice > 0 ? cartonPrice.toFixed(0) + ' ج.م' : 'سعر عند التحميل'}</div>
 
                         <div class="d-flex gap-1 w-100">
-                            <button class="unit-pill active" id="unit_box_${p.id}" onclick="selectUnit('${p.id}', 'box', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">كرتونة</button>
-                            <button class="unit-pill" id="unit_pcs_${p.id}" onclick="selectUnit('${p.id}', 'pcs', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">علبة</button>
+                            <button class="unit-pill active" id="unit_box_${p.id}" onclick="selectUnit('${p.id}', 'box', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">${primaryUnitName}</button>
+                            <button class="unit-pill" id="unit_pcs_${p.id}" onclick="selectUnit('${p.id}', 'pcs', '${p.name.replace(/'/g, "\\'")}', ${cartonPrice}, ${factor})">${secondaryUnitName}</button>
                         </div>
 
                         <div class="inline-qty-control">
@@ -853,8 +913,15 @@ window.filterCatalog = () => {
     const rawTerm = document.getElementById('catalogSearch').value.trim();
     const normalizedTerm = normalizeArabic(rawTerm);
     
+    // فلترة أولاً حسب القسم النشط
+    let categoryFiltered = inventoryList.filter(item => {
+        if (activeCategory === 'oils') return !isSparePart(item);
+        if (activeCategory === 'parts') return isSparePart(item);
+        return true; // قسم 'all'
+    });
+
     if (!rawTerm) {
-        renderCatalog(inventoryList);
+        renderCatalog(categoryFiltered);
         return;
     }
 
@@ -862,7 +929,7 @@ window.filterCatalog = () => {
     let meaningfulWords = searchWords.filter(word => !COMMON_STOP_WORDS.includes(word));
     if (meaningfulWords.length === 0) meaningfulWords = searchWords;
 
-    let filtered = inventoryList.filter(item => {
+    let filtered = categoryFiltered.filter(item => {
         if (!item.name) return false;
         const normName = normalizeArabic(item.name);
         return meaningfulWords.every(word => {
@@ -940,7 +1007,7 @@ window.openReviewModal = () => {
     const listHtml = items.map(item => {
         const itemTotal = item.qty * item.price;
         totalSum += itemTotal;
-        const unitText = item.unit === 'box' ? 'كرتونة' : 'علبة';
+        const unitText = item.unit === 'box' ? 'كرتونة/طقم' : 'علبة/قطعة';
 
         return `
             <div class="modal-item-row">
@@ -991,7 +1058,6 @@ window.confirmAndSendOrder = async () => {
     try {
         const total = items.reduce((sum, i) => sum + (i.qty * i.price), 0);
         
-        // إرسال الطلبية مع تمييز مصدرها pwa_store
         await addDoc(collection(db, 'orders'), {
             customerName: customerName,
             items: items,
@@ -999,7 +1065,7 @@ window.confirmAndSendOrder = async () => {
             date: new Date().toISOString().split('T')[0],
             createdAt: serverTimestamp(),
             status: 'pending',
-            source: 'pwa_store' // حقل التمييز لطلبات المتجر الإلكتروني
+            source: 'pwa_store'
         });
 
         closeReviewModal();
