@@ -20,7 +20,6 @@ button{font-family:inherit}
 .pill-info{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:5px 10px;margin-top:6px;font-size:.74rem;font-weight:700;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
 .pill-info a{color:#fff;text-decoration:none}
 body.kb .hero,body.kb #bnWrap{display:none}
-body.kb #cta{display:none}
 #bnWrap{overflow:hidden}
 #bnTrack{display:flex;transition:transform .4s}
 .bn{min-width:100%}
@@ -299,9 +298,8 @@ async function send(){
   const total=v.reduce((s,i)=>s+i.qty*i.price,0);
   try{
     await addDoc(collection(db,'orders'),{customerName:name,items:v,total,date:new Date().toISOString().split('T')[0],createdAt:serverTimestamp(),status:'pending',source:'pwa_store'});
-    const msg=`طلب جديد من: ${name}\n`+v.map(i=>`• ${i.name} × ${i.qty} ${i.unit==='box'?'كرتونة':'علبة'}`).join('\n')+`\nالإجمالي التقريبي: ${total.toFixed(0)} ج.م`;
     cart={};units={};save();summary();render();
-    openModal(`<div class="text-center"><h5 class="fw-bold">تم إرسال الطلبية ✅</h5><p class="fw-bold" style="color:var(--p)">سنتواصل معك لتأكيد التحميل. تقدر كمان تبعت نسخة على واتساب.</p><a class="btn btn-success w-100 fw-bold mb-2" target="_blank" href="https://wa.me/${WA}?text=${encodeURIComponent(msg)}">إرسال نسخة على واتساب</a><button class="btn-p w-100" data-act="close">تم</button></div>`);
+    openModal(`<div class="text-center"><h5 class="fw-bold">تم إرسال الطلبية ✅</h5><p class="fw-bold" style="color:var(--p)">سنتواصل معك فوراً لتأكيد التحميل.</p><button class="btn-p w-100" data-act="close">تم</button></div>`);
   }catch(e){b.disabled=false;b.innerText='تأكيد وإرسال 🚀';alertBox('حدث خطأ أثناء الإرسال، حاول مرة أخرى.')}
 }
 
@@ -314,6 +312,7 @@ $('clientName').addEventListener('input',save);
 document.querySelectorAll('.kbf').forEach(i=>{
   i.addEventListener('focus',()=>{document.body.classList.add('kb');setTimeout(()=>i.scrollIntoView({block:'start',behavior:'smooth'}),300)});
   i.addEventListener('blur',()=>document.body.classList.remove('kb'));
+  i.addEventListener('keydown',e=>{if(e.key==='Enter')i.blur()});
 });
 
 document.addEventListener('click',async e=>{
