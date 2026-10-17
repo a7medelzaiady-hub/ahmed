@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>لوحة التحكم - الزيادي</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--p:#3b0764;--g:linear-gradient(135deg,#3b0764,#6b21a8)}
+body{font-family:Cairo,sans-serif;background:#f4f4f5;padding-bottom:40px}
+.btn-p{background:var(--g);color:#fff;border:0;border-radius:10px;font-weight:800;padding:8px 14px}
+.top{background:var(--g);color:#fff;padding:12px 14px;border-radius:0 0 18px 18px}
+.stat{background:rgba(255,255,255,.14);border-radius:12px;padding:6px 4px;text-align:center;flex:1;font-size:.72rem;font-weight:700}
+.stat b{display:block;font-size:1.1rem}
+.tabs{display:flex;gap:6px;margin:12px 0}
+.tabs button{flex:1;border:1.5px solid #e4e4e7;background:#fff;border-radius:12px;padding:7px;font-weight:800;font-size:.82rem}
+.tabs button.on{background:var(--p);color:#fff;border-color:var(--p)}
+.row-a{background:#fff;border:1px solid #e4e4e7;border-radius:12px;padding:10px;margin-bottom:8px}
+.row-a.warn{border-color:#f59e0b}
+.row-a select{font-size:.78rem;font-weight:700;border-radius:8px}
+.toast-m{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#18181b;color:#fff;border-radius:10px;padding:8px 18px;font-weight:700;font-size:.85rem;display:none;z-index:9}
+.f label{font-size:.75rem;font-weight:800;margin-top:6px}
+.sw{display:flex;flex-direction:column;gap:2px}
+</style>
+</head>
+<body>
+
+<div id="login" class="container text-center" style="max-width:380px;margin-top:20vh">
+  <h4 class="fw-bold" style="color:var(--p)">لوحة تحكم الزيادي</h4>
+  <p class="text-muted fw-bold" style="font-size:.85rem">للأدمن فقط</p>
+  <button class="btn-p w-100 py-2" id="gBtn">الدخول بحساب جوجل</button>
+  <p class="text-danger fw-bold mt-3" id="lgErr"></p>
+</div>
+
+<div id="app" style="display:none">
+  <div class="top">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <b>لوحة التحكم</b>
+      <button class="btn btn-sm btn-light fw-bold" id="outBtn">خروج</button>
+    </div>
+    <div class="d-flex gap-2">
+      <div class="stat"><b id="stOn">1</b>متواجد الآن</div>
+      <div class="stat"><b id="stVis">0</b>الزيارات</div>
+      <div class="stat"><b id="stOrd">0</b>الطلبات</div>
+    </div>
+  </div>
+  <div class="container px-2">
+    <div class="tabs" id="tabs">
+      <button class="on" data-t="products">الأصناف</button>
+      <button data-t="banners">الإعلانات</button>
+      <button data-t="orders">الطلبات</button>
+    </div>
+    <div id="pane"></div>
+  </div>
+</div>
+
+<div class="modal fade" id="mdl"><div class="modal-dialog modal-dialog-centered"><div class="modal-content p-3" id="mdlBody" style="border-radius:18px"></div></div></div>
+<div class="toast-m" id="toast"></div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {getFirestore,collection,getDocs,addDoc,doc,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const ADMIN_EMAIL='ضع_إيميل_جوجل_بتاعك@gmail.com'.toLowerCase();
+const app=initializeApp({apiKey:"AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",authDomain:"ahmedelzaiady.firebaseapp.com",projectId:"ahmedelzaiady",storageBucket:"ahmedelzaiady.firebasestorage.app",messagingSenderId:"300306825071",appId:"1:300306825071:web:0426ddde56280fa090329a"});
+const db=getFirestore(app),auth=getAuth(app);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const BRANDS=['موبيل','توتال','شيل','بترومين','التعاون','مصر','شعبى','أخرى'];
+const CATS={oils:'محركات',gears:'تروس',brakes:'فرامل',parts:'قطع غيار'};
+let items=[],banners=[],orders=[],tab='products',unsubs=[],mdl;
+
+const toast=m=>{const t=$('toast');t.innerText=m;t.style.display='block';setTimeout(()=>t.style.display='none',1800)};
+const modal=h=>{$('mdlBody').innerHTML=h;mdl=mdl||new bootstrap.Modal($('mdl'));mdl.show()};
+const hide=()=>mdl&&mdl.hide();
+
+$('gBtn').onclick=async()=>{$('lgErr').innerText='';try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$('lgErr').innerText='تعذر تسجيل الدخول بجوجل.'}};
+$('outBtn').onclick=()=>signOut(auth);
+
+onAuthStateChanged(auth,async u=>{
+  unsubs.forEach(f=>f());unsubs=[];
+  if(u&&(u.email||'').toLowerCase()!==ADMIN_EMAIL){await signOut(auth);$('lgErr').innerText='هذا الحساب غير مصرح له.';return}
+  $('login').style.display=u?'none':'block';
+  $('app').style.display=u?'block':'none';
+  if(!u)return;
+  unsubs.push(onSnapshot(doc(db,'store_analytics','general'),s=>$('stVis').innerText=s.data()?.totalVisits||0));
+  unsubs.push(onSnapshot(collection(db,'store_presence'),s=>{let n=0;s.forEach(d=>{const x=d.data();if(x.lastSeen&&Date.now()-x.lastSeen.toMillis()<120000&&x.active!==false)n++});$('stOn').innerText=n}));
+  unsubs.push(onSnapshot(query(collection(db,'orders'),orderBy('createdAt','desc'),limit(40)),s=>{orders=s.docs.map(d=>({id:d.id,...d.data()}));$('stOrd').innerText=orders.filter(o=>o.source==='pwa_store').length;if(tab==='orders')draw()}));
+  await Promise.all([loadItems(),loadBanners()]);draw();
+});
+
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;[...$('tabs').children].forEach(x=>x.classList.toggle('on',x===b));draw()};
+
+async function loadItems(){const s=await getDocs(collection(db,'inventory'));items=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'))}
+async function loadBanners(){const s=await getDocs(collection(db,'banners'));banners=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0))}
+
+function draw(){
+  if(tab==='products')drawProducts();else if(tab==='banners')drawBanners();else drawOrders();
+}
+
+/* ---- الأصناف ---- */
+let q='',onlyMissing=false;
+function drawProducts(){
+  $('pane').innerHTML=`<div class="d-flex gap-2 mb-2"><input id="pq" class="form-control" placeholder="🔍 بحث في الأصناف" value="${esc(q)}" style="border-radius:10px">
+  <button class="btn ${onlyMissing?'btn-warning':'btn-outline-warning'} fw-bold text-nowrap" id="pm">غير مصنّف</button></div><div id="plist"></div>`;
+  $('pq').oninput=e=>{q=e.target.value;list()};
+  $('pm').onclick=()=>{onlyMissing=!onlyMissing;drawProducts()};
+  list();
+}
+function list(){
+  const t=q.trim().toLowerCase();
+  const r=items.filter(i=>(!t||(i.name||'').toLowerCase().includes(t))&&(!onlyMissing||!i.brand||!i.storeCategory)).slice(0,60);
+  $('plist').innerHTML=(r.map(i=>`<div class="row-a ${!i.brand||!i.storeCategory?'warn':''}">
+    <div class="fw-bold mb-1" style="font-size:.85rem">${esc(i.name)} <span class="text-muted" style="font-size:.72rem">${i.sell?i.sell+' ج.م':''}</span></div>
+    <div class="d-flex gap-2">
+      <select class="form-select form-select-sm" data-id="${i.id}" data-f="brand"><option value="">الشركة..</option>${BRANDS.map(b=>`<option ${i.brand===b?'selected':''}>${b}</option>`).join('')}</select>
+      <select class="form-select form-select-sm" data-id="${i.id}" data-f="storeCategory"><option value="">القسم..</option>${Object.entries(CATS).map(([k,l])=>`<option value="${k}" ${i.storeCategory===k?'selected':''}>${l}</option>`).join('')}</select>
+    </div></div>`).join('')||'<p class="text-center text-muted">لا توجد أصناف</p>')+(items.length>60?'<p class="text-center text-muted" style="font-size:.75rem">يعرض أول 60 نتيجة، استخدم البحث</p>':'');
+}
+$('pane').addEventListener('change',async e=>{
+  const s=e.target.closest('select[data-f]');if(!s)return;
+  try{await updateDoc(doc(db,'inventory',s.dataset.id),{[s.dataset.f]:s.value});items.find(x=>x.id===s.dataset.id)[s.dataset.f]=s.value;toast('تم الحفظ ✅');s.closest('.row-a').classList.toggle('warn',!!(s.closest('.row-a').querySelectorAll('select')[0].value===''||s.closest('.row-a').querySelectorAll('select')[1].value===''))}
+  catch(err){toast('تعذر الحفظ ❌')}
+});
+
+/* ---- الإعلانات ---- */
+function drawBanners(){
+  $('pane').innerHTML=banners.map((b,i)=>`<div class="row-a"><div class="d-flex justify-content-between align-items-center gap-2">
+    <div style="opacity:${b.active===false?.45:1}"><b style="font-size:.85rem">${esc(b.title)}</b><div class="text-muted" style="font-size:.72rem">${b.active===false?'مخفي':'ظاهر'}</div></div>
+    <div class="d-flex gap-1"><button class="btn btn-sm btn-light" data-b="up" data-id="${b.id}" ${i?'':'disabled'}>▲</button><button class="btn btn-sm btn-light" data-b="down" data-id="${b.id}" ${i<banners.length-1?'':'disabled'}>▼</button><button class="btn btn-sm btn-light" data-b="tog" data-id="${b.id}">👁</button><button class="btn btn-sm btn-light" data-b="edit" data-id="${b.id}">✏️</button><button class="btn btn-sm btn-outline-danger" data-b="del" data-id="${b.id}">🗑</button></div></div></div>`).join('')
+  +(banners.length?'':'<p class="text-center text-muted">لا توجد إعلانات (البانر مخفي عند العملاء)</p>')+'<button class="btn-p w-100 mt-2" data-b="edit" data-id="">+ إعلان جديد</button>';
+}
+function form(id){
+  const b=banners.find(x=>x.id===id)||{color:'purple',icon:'fa-oil-can',actionType:'none'};
+  const sel=(n,o,v)=>`<select id="${n}" class="form-select">${o.map(([k,l])=>`<option value="${k}" ${k===v?'selected':''}>${l}</option>`).join('')}</select>`;
+  modal(`<h6 class="fw-bold">${id?'تعديل':'إضافة'} إعلان</h6><div class="f">
+  <label>العنوان</label><input id="bT" class="form-control" value="${esc(b.title)}">
+  <label>النص</label><input id="bX" class="form-control" value="${esc(b.text)}">
+  <label>كلمة الزر (فارغة = بدون زر)</label><input id="bB" class="form-control" value="${esc(b.btnText)}">
+  <label>نوع الزر</label>${sel('bA',[['none','بدون زر'],['search','بحث'],['category','قسم'],['link','رابط']],b.actionType)}
+  <label>القيمة (كلمة بحث / oils,gears,brakes,parts / رابط https)</label><input id="bV" class="form-control" value="${esc(b.actionValue)}" dir="auto">
+  <label>الأيقونة</label>${sel('bI',[['fa-oil-can','زيت'],['fa-gears','قطع غيار'],['fa-fire','عرض'],['fa-truck','توصيل'],['fa-tag','خصم'],['fa-bullhorn','إعلان']],b.icon)}
+  <label>اللون</label>${sel('bC',[['purple','بنفسجي'],['dark','كحلي'],['orange','برتقالي'],['green','أخضر']],b.color)}</div>
+  <div class="d-flex gap-2 mt-3"><button class="btn btn-light flex-fill" data-bs-dismiss="modal">إلغاء</button><button class="btn-p flex-fill" id="bSave" data-id="${id||''}">حفظ</button></div>`);
+  $('bSave').onclick=async()=>{
+    const d={title:$('bT').value.trim(),text:$('bX').value.trim(),btnText:$('bB').value.trim(),actionType:$('bA').value,actionValue:$('bV').value.trim(),icon:$('bI').value,color:$('bC').value};
+    if(!d.title)return toast('اكتب عنوان الإعلان');
+    try{if(id)await updateDoc(doc(db,'banners',id),d);else await addDoc(collection(db,'banners'),{...d,active:true,order:banners.length});
+    await loadBanners();hide();drawBanners();toast('تم الحفظ ✅')}catch(e){toast('تعذر الحفظ ❌')}
+  };
+}
+async function reorder(id,dir){
+  const i=banners.findIndex(b=>b.id===id),j=i+dir;if(j<0||j>=banners.length)return;
+  [banners[i],banners[j]]=[banners[j],banners[i]];
+  await Promise.all(banners.map((b,k)=>updateDoc(doc(db,'banners',b.id),{order:k})));
+}
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-b]');if(!el)return;
+  const id=el.dataset.id,a=el.dataset.b;
+  try{
+    if(a==='edit')return form(id);
+    if(a==='del'){if(!confirm('حذف الإعلان؟'))return;await deleteDoc(doc(db,'banners',id))}
+    if(a==='tog'){const b=banners.find(x=>x.id===id);await updateDoc(doc(db,'banners',id),{active:b.active===false})}
+    if(a==='up')await reorder(id,-1);
+    if(a==='down')await reorder(id,1);
+    await loadBanners();drawBanners();
+  }catch(err){toast('تعذر التنفيذ ❌')}
+});
+
+/* ---- الطلبات ---- */
+function drawOrders(){
+  $('pane').innerHTML=orders.map(o=>`<div class="row-a"><div class="d-flex justify-content-between"><b>${esc(o.customerName)}</b><span class="fw-bold" style="color:var(--p)">${Number(o.total||0).toFixed(0)} ج.م</span></div>
+  <div class="text-muted mb-1" style="font-size:.72rem">${esc(o.date)} · ${o.status==='pending'?'جديد':esc(o.status)}</div>
+  <div style="font-size:.78rem">${(o.items||[]).map(i=>`• ${esc(i.name)} × ${esc(i.qty)} ${i.unit==='box'?'كرتونة':'علبة'}`).join('<br>')}</div></div>`).join('')||'<p class="text-center text-muted">لا توجد طلبات</p>';
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
