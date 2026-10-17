@@ -34,6 +34,38 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        /* شريط إحصائيات الأدمن العائم */
+        .admin-stats-bar {
+            display: none; /* يظهر للأدمن فقط */
+            background: #18181b;
+            color: #ffffff;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            border-bottom: 2px solid #8b5cf6;
+        }
+
+        .admin-stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .online-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
         /* Header */
         .hero-banner {
             background: var(--purple-gradient);
@@ -46,7 +78,6 @@
             transition: all 0.3s ease;
         }
 
-        /* عند فتح الكيبورد نقوم بتصغير الهيدر مؤقتاً لتوفير المساحة */
         body.keyboard-open .hero-banner,
         body.keyboard-open .banner-carousel-wrapper {
             display: none !important;
@@ -197,13 +228,11 @@
             border-radius: 10px;
         }
 
-        /* إلغاء الـ sticky عند فتح الكتابة لمنع التغطية */
         .search-container {
             position: relative;
             z-index: 1010;
         }
 
-        /* شبكة عرض الأصناف */
         .products-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -219,7 +248,6 @@
             min-height: 40vh;
         }
 
-        /* كارت الصنف */
         .product-card-3d {
             background: #ffffff;
             border-radius: 16px;
@@ -347,7 +375,6 @@
             text-align: center;
         }
 
-        /* شريط الطلب */
         .floating-cta-bar {
             position: fixed;
             bottom: 10px;
@@ -365,12 +392,10 @@
             transition: all 0.2s ease;
         }
 
-        /* إخفاء شريط الإرسال السفلي أثناء الكتابة لزيادة المساحة الظاهرة */
         body.keyboard-open .floating-cta-bar {
             display: none !important;
         }
 
-        /* المودالات */
         .review-modal-backdrop, .center-alert-backdrop, .full-img-backdrop {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -438,6 +463,24 @@
 </head>
 <body>
 
+<!-- شريط الإحصائيات الذكي للأدمن -->
+<div class="admin-stats-bar" id="adminStatsBar">
+    <div class="d-flex align-items-center justify-content-between">
+        <div class="admin-stat-item">
+            <span class="online-dot"></span>
+            <span>متواجد الآن: <b id="activeUsersCount">1</b></span>
+        </div>
+        <div class="admin-stat-item">
+            <i class="fas fa-eye text-warning"></i>
+            <span>الزيارات: <b id="totalVisitsCount">0</b></span>
+        </div>
+        <div class="admin-stat-item">
+            <i class="fas fa-cart-shopping text-info"></i>
+            <span>طلبات المتجر: <b id="totalOrdersCount">0</b></span>
+        </div>
+    </div>
+</div>
+
 <!-- الهيدر -->
 <div class="hero-banner" id="mainHeader">
     <div class="safe-badge">
@@ -474,7 +517,7 @@
 
 <div class="container px-2 mt-2">
 
-    <!-- قسم البانر المتحرك (Carousel) -->
+    <!-- البانر المتحرك -->
     <div class="banner-carousel-wrapper mb-2">
         <div class="banner-carousel" id="bannerCarousel">
             <div class="banner-slide">
@@ -591,7 +634,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, addDoc, doc, setDoc, updateDoc, increment, onSnapshot, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -614,10 +657,65 @@ try {
 
 let inventoryList = [];
 let cart = {};
-
 const COMMON_STOP_WORDS = ['جركن', 'علبة', 'زيت', 'زجاجة', 'جالون', 'جيلكن', 'كرتونة', 'نوع'];
 
-// كود التعامل مع الكيبورد لمنع التغطية
+// المعرف الفريد للزائر لجلسة المتواجدين الآن
+const sessionId = 'user_' + Math.random().toString(36).substring(2, 9);
+const urlParams = new URLSearchParams(window.location.search);
+const isAdmin = urlParams.get('admin') === 'true' || localStorage.getItem('isStoreAdmin') === 'true';
+
+// إظهار شريط الإحصائيات إذا كان المالك/الأدمن هو من يفتح الصفحة
+if (isAdmin) {
+    localStorage.setItem('isStoreAdmin', 'true');
+    document.getElementById('adminStatsBar').style.display = 'block';
+}
+
+// تسجبل وتحديث الوجود والزيارات في Firestore
+async function initAnalytics() {
+    try {
+        const statsRef = doc(db, 'store_analytics', 'general');
+        await setDoc(statsRef, { totalVisits: increment(1) }, { merge: true });
+
+        // التواجد اللحظي
+        const sessionRef = doc(db, 'store_presence', sessionId);
+        await setDoc(sessionRef, { lastSeen: serverTimestamp() });
+
+        // تنظيف الجلسة عند مغادرة الصفحة
+        window.addEventListener('beforeunload', () => {
+            setDoc(sessionRef, { active: false }, { merge: true });
+        });
+
+        // الاستماع لإحصائيات الأدمن المباشرة
+        if (isAdmin) {
+            onSnapshot(statsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    document.getElementById('totalVisitsCount').innerText = docSnap.data().totalVisits || 0;
+                }
+            });
+
+            // الاستماع للطلبات الواردة من المتجر
+            const ordersQuery = query(collection(db, 'orders'), where('source', '==', 'pwa_store'));
+            onSnapshot(ordersQuery, (snap) => {
+                document.getElementById('totalOrdersCount').innerText = snap.size;
+            });
+
+            // المتواجدون الآن (خلال آخر دقيقتين)
+            onSnapshot(collection(db, 'store_presence'), (snap) => {
+                const now = Date.now();
+                let activeCount = 0;
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (data.lastSeen && (now - data.lastSeen.toMillis()) < 120000 && data.active !== false) {
+                        activeCount++;
+                    }
+                });
+                document.getElementById('activeUsersCount').innerText = Math.max(1, activeCount);
+            });
+        }
+    } catch(e) { console.log(e); }
+}
+
+// التعامل مع الكيبورد
 document.querySelectorAll('.focus-scroll').forEach(input => {
     input.addEventListener('focus', () => {
         document.body.classList.add('keyboard-open');
@@ -892,13 +990,16 @@ window.confirmAndSendOrder = async () => {
 
     try {
         const total = items.reduce((sum, i) => sum + (i.qty * i.price), 0);
+        
+        // إرسال الطلبية مع تمييز مصدرها pwa_store
         await addDoc(collection(db, 'orders'), {
             customerName: customerName,
             items: items,
             total: total,
             date: new Date().toISOString().split('T')[0],
             createdAt: serverTimestamp(),
-            status: 'pending'
+            status: 'pending',
+            source: 'pwa_store' // حقل التمييز لطلبات المتجر الإلكتروني
         });
 
         closeReviewModal();
@@ -921,6 +1022,7 @@ window.closeCenterAlert = () => {
     document.getElementById('centerAlertModal').style.display = 'none';
 };
 
+initAnalytics();
 loadProducts();
 </script>
 </body>
