@@ -228,7 +228,7 @@
             border-radius: 10px;
         }
 
-        /* أزرار التبويب/الأقسام (زيوت - فرامل - قطع غيار) */
+        /* أزرار التبويب/الأقسام الرئيسية */
         .category-tabs {
             display: flex;
             gap: 6px;
@@ -263,7 +263,7 @@
             box-shadow: 0 4px 10px rgba(59, 7, 100, 0.25);
         }
 
-        /* أزرار الشركات والشرائط الفرعية */
+        /* أزرار الشركات والشرائط الفرعية التابعة لجميع الأقسام */
         .brand-chips-wrap {
             display: flex;
             gap: 6px;
@@ -652,7 +652,7 @@
         </button>
     </div>
 
-    <!-- قسم فلترة الشركات والماركات -->
+    <!-- قسم فلترة الشركات والماركات (متاح لجميع الأقسام) -->
     <div class="brand-chips-wrap" id="brandChipsWrap">
         <div class="brand-chip active" onclick="switchBrand('all', this)">كل الشركات</div>
         <div class="brand-chip" onclick="switchBrand('موبيل', this)">موبيل</div>
@@ -883,7 +883,6 @@ window.switchBrand = (brand, el) => {
     filterCatalog();
 };
 
-// دالة حصرية للأدمن لتغيير شركة المنتج مباشرة من شاشة المتجر
 window.updateProductBrandDirect = async (productId, selectedBrand) => {
     try {
         await updateDoc(doc(db, "inventory", productId), {
@@ -919,7 +918,7 @@ async function loadProducts() {
     }
 }
 
-// فحص المنتجات المتعلقة بالفرامل
+// فحص منتجات الفرامل
 function isBrakeItem(item) {
     const cat = (item.category || '').trim().toLowerCase();
     const name = (item.name || '').toLowerCase();
@@ -930,7 +929,7 @@ function isBrakeItem(item) {
 
 // فحص قطع الغيار
 function isSparePart(item) {
-    if (isBrakeItem(item)) return false; // يفصل الفرامل عن باقي قطع الغيار
+    if (isBrakeItem(item)) return false;
     const cat = (item.category || '').trim().toLowerCase();
     if (cat.includes('قطع غيار') || cat.includes('قطع') || cat.includes('غيار') || cat === 'parts') {
         return true;
@@ -965,7 +964,6 @@ function renderCatalog(items) {
 
         const currentBrand = p.brand || '';
 
-        // كود التحكم للأدمن مع الشركات والخيارات الجديدة
         const adminBrandControl = isAdmin ? `
             <select class="admin-brand-select" onchange="updateProductBrandDirect('${p.id}', this.value)">
                 <option value="" ${!currentBrand ? 'selected' : ''}>⚙️ حدد الشركة...</option>
@@ -1039,7 +1037,7 @@ window.filterCatalog = () => {
         return true;
     });
 
-    // 2. الفلترة حسب الشركات والماركات
+    // 2. الفلترة المزدوجة حسب الشركة / الماركة لجميع الأقسام
     if (activeBrand !== 'all') {
         const normBrand = normalizeArabic(activeBrand);
         categoryFiltered = categoryFiltered.filter(item => {
