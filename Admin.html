@@ -62,14 +62,14 @@ body{font-family:Cairo,sans-serif;background:#f4f4f5;padding-bottom:40px}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {getFirestore,collection,getDocs,addDoc,doc,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const ADMIN_EMAIL='a7medelzaiady@gmail.com'.toLowerCase();
 const app=initializeApp({apiKey:"AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",authDomain:"ahmedelzaiady.firebaseapp.com",projectId:"ahmedelzaiady",storageBucket:"ahmedelzaiady.firebasestorage.app",messagingSenderId:"300306825071",appId:"1:300306825071:web:0426ddde56280fa090329a"});
 const db=getFirestore(app),auth=getAuth(app);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const BRANDS=['موبيل','توتال','شيل','بترومين','التعاون','مصر','شعبى','شركات اخرى'];
+const BRANDS=['موبيل','توتال','شيل','بترومين','التعاون','مصر','شعبى','أخرى'],BL={مصر:'مصر للبترول',شعبى:'زيوت شعبية',أخرى:'شركات أخرى'};
 const CATS={oils:'زيوت محركات',gears:'تروس',brakes:'فرامل',parts:'قطع غيار'};
 let items=[],banners=[],orders=[],tab='products',unsubs=[],mdl;
 
@@ -77,7 +77,17 @@ const toast=m=>{const t=$('toast');t.innerText=m;t.style.display='block';setTime
 const modal=h=>{$('mdlBody').innerHTML=h;mdl=mdl||new bootstrap.Modal($('mdl'));mdl.show()};
 const hide=()=>mdl&&mdl.hide();
 
-$('gBtn').onclick=async()=>{$('lgErr').innerText='';try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$('lgErr').innerText='تعذر تسجيل الدخول بجوجل.'}};
+$('gBtn').onclick=async()=>{
+  $('lgErr').innerText='';const p=new GoogleAuthProvider();
+  try{await signInWithPopup(auth,p)}
+  catch(e){
+    if(['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code)){
+      try{await signInWithRedirect(auth,p);return}catch(e2){e=e2}
+    }
+    const M={'auth/unauthorized-domain':'الدومين غير مضاف في Authorized domains في Firebase.','auth/operation-not-allowed':'تسجيل الدخول بجوجل غير مفعّل في Firebase (Sign-in method).','auth/network-request-failed':'مشكلة في الاتصال بالإنترنت.'};
+    $('lgErr').innerText=(M[e.code]||'تعذر تسجيل الدخول بجوجل.')+' ('+(e.code||e.message)+')';
+  }
+};
 $('outBtn').onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
@@ -116,7 +126,7 @@ function list(){
   $('plist').innerHTML=(r.map(i=>`<div class="row-a ${!i.brand||!i.storeCategory?'warn':''}">
     <div class="fw-bold mb-1" style="font-size:.85rem">${esc(i.name)} <span class="text-muted" style="font-size:.72rem">${i.sell?i.sell+' ج.م':''}</span></div>
     <div class="d-flex gap-2">
-      <select class="form-select form-select-sm" data-id="${i.id}" data-f="brand"><option value="">الشركة..</option>${BRANDS.map(b=>`<option ${i.brand===b?'selected':''}>${b}</option>`).join('')}</select>
+      <select class="form-select form-select-sm" data-id="${i.id}" data-f="brand"><option value="">الشركة..</option>${BRANDS.map(b=>`<option value="${b}" ${i.brand===b?'selected':''}>${BL[b]||b}</option>`).join('')}</select>
       <select class="form-select form-select-sm" data-id="${i.id}" data-f="storeCategory"><option value="">القسم..</option>${Object.entries(CATS).map(([k,l])=>`<option value="${k}" ${i.storeCategory===k?'selected':''}>${l}</option>`).join('')}</select>
     </div></div>`).join('')||'<p class="text-center text-muted">لا توجد أصناف</p>')+(items.length>60?'<p class="text-center text-muted" style="font-size:.75rem">يعرض أول 60 نتيجة، استخدم البحث</p>':'');
 }
