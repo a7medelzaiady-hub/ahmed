@@ -64,7 +64,6 @@
         .price-text { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 0.84rem; color: var(--primary); }
         .badge-recommended { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 6px; border-radius: 16px; font-size: 0.64rem; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; line-height: 1; white-space: nowrap; }
         .badge-outdated { background: var(--amber-light); color: var(--amber); border: 1px solid #fde68a; padding: 2px 6px; border-radius: 16px; font-size: 0.64rem; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; line-height: 1; white-space: nowrap; }
-        .badge-diff-high { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 2px 6px; border-radius: 16px; font-size: 0.64rem; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; line-height: 1; white-space: nowrap; }
         .btn-add-order { background: var(--primary); color: white; border: none; padding: 6px 10px; border-radius: 10px; font-weight: 800; font-size: 0.72rem; transition: all 0.2s ease; white-space: nowrap; box-shadow: 0 2px 6px rgba(11, 102, 65, 0.12); flex-shrink: 0; }
         .btn-add-order:active { transform: scale(0.95); background: #0a5234; }
         .btn-add-custom-product { background: #f59e0b; color: #ffffff; border: none; padding: 10px 16px; border-radius: 14px; font-weight: 800; font-size: 0.82rem; box-shadow: 0 3px 10px rgba(245, 158, 11, 0.25); width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; transition: all 0.2s ease; }
@@ -76,8 +75,6 @@
         .hidden-price { letter-spacing: 2px; filter: blur(4px); user-select: none; }
         .original-name-hint { font-size: 0.66rem; color: var(--text-muted); font-weight: 700; display: block; }
 
-        /* قالب القسيمة: خارج الشاشة تماماً ولا يظهر للمستخدم أبداً.
-           يتم إظهاره فقط داخل النسخة المستنسخة (clone) التي يلتقطها html2canvas */
         #thermalReceiptContainer {
             position: fixed;
             left: -10000px;
@@ -312,7 +309,6 @@
     </div>
 </div>
 
-<!-- قالب القسيمة الحرارية (خارج الشاشة، للتصوير فقط) -->
 <div id="thermalReceiptContainer" aria-hidden="true">
     <div id="thermalReceiptTemplate">
         <div class="thermal-header">مطلوب</div>
@@ -368,15 +364,9 @@
     let pendingTargetUrl = null;
     let isSharing = false;
 
-    // ============================================================
-    // منطق الأسماء:
-    //   name / productName / originalName = الاسم الأصلي دايماً (هو اللي بيروح للفاتورة والمخزن)
-    //   displayName = الاسم اللي بيظهر للمورد (صورة / نص واتساب / السجل) — اختياري
-    // ============================================================
     function normalizeItemNames(item) {
         const current = item.name || item.productName || item.item_name || item.stockName || '';
         const orig = item.originalName || current;
-        // دعم البيانات القديمة: لو name كان معدّل و originalName مختلف عنه، يبقى المعدّل هو displayName
         const disp = item.displayName || (current && current !== orig ? current : '');
         item.originalName = orig;
         item.name = orig;
@@ -385,12 +375,10 @@
         return item;
     }
 
-    // الاسم الظاهر للمورد وفي الشاشة
     function shownName(item) {
         return item.displayName || item.name || item.productName || item.item_name || '';
     }
 
-    // ===== حفظ/استرجاع المسودة =====
     function saveDraftToStorage() {
         try {
             if (hasDraft()) localStorage.setItem(DRAFT_KEY, JSON.stringify(cartOrders));
@@ -691,15 +679,8 @@
 
                 list.sort((a,b) => a.price - b.price);
 
-                if (list.length > 1) {
-                    const cheapestPrice = list[0].price;
-                    const secondPrice = list[1].price;
-                    if ((secondPrice - cheapestPrice) > 50) {
-                        list[0].isPriceDiffTooHigh = true;
-                    }
-                }
-
-                let recommended = list.find(s => !s.isOlderThanMonth && !s.isPriceDiffTooHigh);
+                // تم إلغاء شرط فارق السعر الكبيرة (إلغاء isPriceDiffTooHigh)
+                let recommended = list.find(s => !s.isOlderThanMonth);
 
                 if (!recommended) {
                     let sortedByDate = [...list].sort((a,b) => a.daysOld - b.daysOld);
@@ -797,7 +778,6 @@
                                 <div class="supplier-row-header">
                                     <span class="fw-bold text-dark" style="font-size:0.82rem;">${sInfo.supplier}</span>${isRecommended ? '<span class="badge-recommended"><i class="fas fa-check-circle"></i> المرشح الأرخص والمستقر</span>' : ''}
                                     ${sInfo.isOlderThanMonth ? '<span class="badge-outdated"><i class="fas fa-clock"></i> سعر قديم (+30 يوم)</span>' : ''}
-                                    ${sInfo.isPriceDiffTooHigh ? '<span class="badge-diff-high"><i class="fas fa-exclamation-triangle"></i> فارق سعر أكبر من 50ج</span>' : ''}
                                 </div>
                                 <div class="price-details-box">
                                     <span>سعر الشراء:</span>
@@ -813,7 +793,6 @@
                     `;
                 }).join('')}
 
-                <!-- الزر الجديد لطلب الصنف من مورد جديد لأول مرة -->
                 <button class="btn w-100 mt-2 py-1" style="font-size:0.75rem; font-weight:800; background-color:#f1f5f9; color:#475569; border: 1px dashed #cbd5e1; border-radius: 8px;" onclick="openAddCustomProductModal('${escapeHtml(pName)}')">
                     <i class="fas fa-exchange-alt me-1"></i> شراء هذا الصنف من مورد آخر (أول مرة)
                 </button>
@@ -834,13 +813,15 @@
             return;
         }
 
-        let filteredProducts = Object.keys(productPricesMap).filter(pName => {
+        // جميع الأصناف المطابقة للبحث
+        let allMatchingProducts = Object.keys(productPricesMap).filter(pName => {
             if (!searchTerm) return true;
             const data = productPricesMap[pName];
             return pName.toLowerCase().includes(searchTerm) || data.allSuppliers.some(s => s.supplier.toLowerCase().includes(searchTerm));
         });
 
-        let reorderProducts = filteredProducts.filter(pName => {
+        // تحديد أصناف النواقص من ضمن الأصناف المطابقة
+        let reorderProducts = allMatchingProducts.filter(pName => {
             const stock = inventoryStockMap[pName] || { cartons: 0, pcs: 0, totalPcs: 0 };
             const sCount = salesCountMap[pName] || 0;
             return (sCount >= 3) && (stock.cartons <= 2);
@@ -857,6 +838,9 @@
         } else {
             reorderContainer.style.display = 'none';
         }
+
+        // استبعاد الأصناف الظاهرة في النواقص لمنع التكرار في القائمة العادية
+        let filteredProducts = allMatchingProducts.filter(pName => !reorderProducts.includes(pName));
 
         filteredProducts.sort((a, b) => {
             const stockA = inventoryStockMap[a] ? inventoryStockMap[a].totalPcs : 0;
@@ -878,7 +862,7 @@
                     <i class="fas fa-plus-circle fa-lg"></i> إضافة صنف غير موجود للطلبية: "<b>${searchTerm}</b>"
                 </button>
             `;
-        } else if (filteredProducts.length === 0) {
+        } else if (allMatchingProducts.length === 0) {
             html = `<div class="text-center text-muted py-5">لا توجد أصناف مطابقة للبحث</div>`;
         }
 
@@ -944,7 +928,7 @@
             const warningBody = `
                 <p class="mb-2 small">الصنف: <b>${productName}</b></p>
                 <div class="alert alert-warning py-2 small mb-2" style="font-size:0.75rem;">
-                    المورد المختار (<b>${selectedSupplier}</b>) غير مرشح تلقائياً نظراً لوجود فارق سعر أو مرور أكثر من شهر على آخر شراء منه.<br>
+                    المورد المختار (<b>${selectedSupplier}</b>) غير مرشح تلقائياً نظراً لمرور أكثر من شهر على آخر شراء منه.<br>
                     المورد المرشح والمعتمد حالياً: <b>${recSupplier.supplier}</b> بسعر (<b>${recSupplier.price.toFixed(2)} EGP</b>).
                 </div>
                 <p class="small text-muted mb-0" style="font-size:0.72rem;">كيف ترغب في توجيه هذه الطلبية؟</p>
@@ -976,7 +960,6 @@
     function executeAddToCart(productName, supplierName, price, unit, qtyToAdd = 1) {
         if (!cartOrders[supplierName]) cartOrders[supplierName] = [];
 
-        // المطابقة دايماً بالاسم الأصلي (name لا يتغير أبداً)
         const existingItem = cartOrders[supplierName].find(i => i.name === productName);
         if (existingItem) {
             existingItem.qty = Math.round((existingItem.qty + qtyToAdd) * 100) / 100;
@@ -1095,7 +1078,6 @@
         schedulePrewarm();
     };
 
-    // تجهيز أصناف الطلبية للحفظ في فايرستور: name = الأصلي، displayName = المعدّل للمورد
     function mapItemsForSave(items) {
         return items.map(i => {
             normalizeItemNames(i);
@@ -1158,7 +1140,6 @@
         }
     };
 
-    // تعديل الاسم الظاهر للمورد فقط. الاسم الأصلي (name) ما بيتغيرش أبداً.
     window.editProductNameDirect = function(supplierName, index) {
         const it = cartOrders[supplierName] && cartOrders[supplierName][index];
         if (!it) return;
@@ -1260,7 +1241,6 @@
         return job;
     }
 
-    // تأجيل تجهيز الصور المسبق (debounce 5 ثواني) علشان الضغط على + و - يبقى فوري
     let prewarmTimer = null;
     function schedulePrewarm() {
         clearTimeout(prewarmTimer);
@@ -1465,7 +1445,6 @@
             fetchedOrdersHistory = [];
             ordersSnap.forEach(docSnap => {
                 const o = { id: docSnap.id, ...docSnap.data() };
-                // توحيد الأسماء (يدعم الطلبيات القديمة): name = الأصلي، displayName = المعدّل
                 (o.items || []).forEach(i => normalizeItemNames(i));
                 fetchedOrdersHistory.push(o);
             });
@@ -1553,7 +1532,6 @@
                 btn.disabled = true;
             }
 
-            // أصناف الفاتورة: كل حقول الاسم = الاسم الأصلي، ومفيش أي أثر للاسم المعدّل
             const invoiceItems = (targetOrder.items || []).map(i => {
                 const orig = i.originalName || i.name || i.productName || i.item_name || i.stockName || '';
                 const itemQty = Number(i.qty) || 1;
@@ -1577,7 +1555,6 @@
                 };
             });
 
-            // تحديث الطلبية في فايرستور بالاسم الأصلي في كل حقول الاسم، والاسم المعدّل محفوظ في displayName للسجل فقط
             await updateDoc(doc(db, "purchase_orders", orderId), {
                 items: invoiceItems.map((it, idx) => ({
                     ...it,
