@@ -97,7 +97,7 @@ tfoot td { background: #ecf5ef; font-weight: 900; border-top: 2px solid #b6d5c4;
   <div class="tot"><small>إجمالي المبيعات</small><b id="sumSales" style="color:var(--b7)">0 ج</b></div>
   <div class="tot"><small>إجمالي المشتريات</small><b id="sumPurch" style="color:var(--a7)">0 ج</b></div>
   <div class="tot"><small>إجمالي المصروفات</small><b id="sumExp" style="color:var(--r7)">0 ج</b></div>
-  <div class="tot"><small>صافي الربح</small><b id="sumNet" style="color:var(--g7)">0 ج</b></div>
+  <div class="tot"><small id="netTitle">صافي الربح</small><b id="sumNet" style="color:var(--g7)">0 ج</b></div>
 </div>
 
 <div class="warn" id="warn"></div>
@@ -289,12 +289,23 @@ function render() {
   const net = TG - TE;
   document.getElementById("foot").innerHTML = dates.length ? `<tr><td>الإجمالي</td><td class="s">${f0(TS)}</td><td class="c">${f0(TC)}</td><td class="e">${f0(TE)}</td><td style="color:${net < 0 ? 'var(--r7)' : 'var(--g7)'}">${lbl(net)}</td></tr>` : "";
 
-  // Card summary update
+  // تحديث البطاقات العلوية وتغيير المسمى تلقائياً
   document.getElementById("sumSales").textContent = f0(TS);
   document.getElementById("sumPurch").textContent = f0(TC);
   document.getElementById("sumExp").textContent = f0(TE);
-  document.getElementById("sumNet").textContent = lbl(net);
-  document.getElementById("sumNet").style.color = net < 0 ? 'var(--r7)' : 'var(--g7)';
+
+  const netTitleEl = document.getElementById("netTitle");
+  const sumNetEl = document.getElementById("sumNet");
+
+  if (net < 0) {
+    netTitleEl.textContent = "صافي الخسارة";
+    sumNetEl.textContent = f0(Math.abs(net));
+    sumNetEl.style.color = 'var(--r7)';
+  } else {
+    netTitleEl.textContent = "صافي الربح";
+    sumNetEl.textContent = f0(net);
+    sumNetEl.style.color = 'var(--g7)';
+  }
 
   document.getElementById("printRange").textContent = `الفترة: من ${(from || "—").replace(/-/g, "/")} إلى ${(to || "—").replace(/-/g, "/")} — تاريخ الطباعة: ${new Date().toLocaleDateString("ar-EG")}`;
 
