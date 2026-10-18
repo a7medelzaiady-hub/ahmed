@@ -87,8 +87,8 @@ const PURCHASE_COLLECTIONS = ["supplier_transactions"]; // نفس مجموعة �
 
 const DAY_NAMES = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 
-let salesInv = [], purchBy = {}, expenses = [];
-const ready = {sales:false, purch:false, exp:false};
+let salesInv = [], purchBy = {}, expenses = [], factorMap = {}, buyMap = {};
+const ready = {sales:false, purch:false, exp:false, inv:false};
 
 function toEn(s){ if(!s) return ""; let r=s.toString(); "٠١٢٣٤٥٦٧٨٩".split("").forEach((d,i)=>r=r.split(d).join(i)); return r; }
 function parseDate(df,ts){
@@ -113,6 +113,22 @@ function salesTotal(inv){
     return q>0 ? s+q*p : s;
   },0);
 }
+// ربح البضاعة المباعة = (سعر بيع الأصناف) - (تكلفة شرائها من المخزون)، بدون المرتجع
+function goodsProfit(inv){
+  if(!Array.isArray(inv.items)) return 0;
+  let gp=0;
+  inv.items.forEach(it=>{
+    if(it.isReturn) return;
+    const name=(it.name||"").trim(), qty=Number(it.qty)||0, price=Number(it.price)||0;
+    if(!name || qty<=0) return;
+    const unit=(it.unitName||it.unit||"قطعة").toString().trim();
+    const factor=factorMap[name]||1, piece=buyMap[name]||0;
+    const cost = (unit==="box"||unit==="كرتونة") ? qty*piece*factor : qty*piece;
+    gp += qty*price - cost;
+  });
+  return gp;
+}
+
 // المبيعات = المبلغ المحصّل فعلياً من الفاتورة. لو الفاتورة مفيهاش أي حقل للمدفوع بنعتبرها مدفوعة بالكامل ونعدّها للتنبيه
 let noPaidFieldCount = 0;
 function salesPaid(inv){
@@ -136,16 +152,16 @@ function purchaseSigned(inv){
 }
 
 function render(){
-  if(!(ready.sales && ready.purch && ready.exp)) return;
+  if(!(ready.sales && ready.purch && ready.exp && ready.inv)) return;
   const from = document.getElementById("fromD").value;
   const to = document.getElementById("toD").value;
   const inRange = d => d && !(from && d<from) && !(to && d>to);
   const byDay = {}; noPaidFieldCount = 0;
-  const get = d => byDay[d] = byDay[d] || {sales:0,purch:0,exp:0,expItems:{}};
+  const get = d => byDay[d] = byDay[d] || {sales:0,purch:0,exp:0,gp:0,expItems:{}};
 
   salesInv.forEach(inv=>{
     const d=parseDate(inv.date, inv.timestamp);
-    if(inRange(d)) get(d).sales += salesPaid(inv);
+    if(inRange(d)){ const o=get(d); o.sales += salesPaid(inv); o.gp += goodsProfit(inv); }
   });
   Object.values(purchBy).flat().forEach(inv=>{
     const d=parseDate(inv.date, inv.timestamp||inv.createdAt);
@@ -160,22 +176,22 @@ function render(){
   });
 
   const dates = Object.keys(byDay).sort((a,b)=>b.localeCompare(a));
-  let TS=0,TC=0,TE=0, html="";
+  let TS=0,TC=0,TE=0,TG=0, html="";
   dates.forEach(d=>{
     const o=byDay[d];
-    const net=o.sales-o.purch-o.exp;
-    TS+=o.sales; TC+=o.purch; TE+=o.exp;
+    const net=o.gp-o.exp;
+    TS+=o.sales; TC+=o.purch; TE+=o.exp; TG+=o.gp;
     const dt=new Date(d+"T12:00:00");
     html += `<tr>
       <td>${DAY_NAMES[dt.getDay()]}<small>${d.replace(/-/g,'/')}</small></td>
       <td class="s">${f0(o.sales)}</td>
       <td class="c">${f0(o.purch)}</td>
       <td class="e">${f0(o.exp)}</td>
-      <td class="${net>=0?'win':'lose'}">${net<0?'-':''}${f0(Math.abs(net))}</td>
+      <td class="${net>=0?'win':'lose'}">${net<0?'-':''}${f0(Math.abs(net))}<small style="display:block;font-size:.62rem;font-weight:700;opacity:.8">ربح البضاعة ${f0(o.gp)}</small></td>
     </tr>`;
   });
   document.getElementById("days").innerHTML = html || '<tr><td colspan="5" class="empty">لا توجد حركة في هذه الفترة</td></tr>';
-  const net=TS-TC-TE;
+  const net=TG-TE;
   document.getElementById("foot").innerHTML = dates.length ? `<tr><td>الإجمالي</td><td>${f0(TS)}</td><td>${f0(TC)}</td><td>${f0(TE)}</td><td style="color:${net<0?'var(--r7)':'var(--g7)'}">${net<0?'-':''}${f0(Math.abs(net))}</td></tr>` : "";
 
   const w=document.getElementById("warn");
@@ -205,6 +221,15 @@ document.addEventListener("DOMContentLoaded",()=>{
       if(++purchLoaded>=PURCHASE_COLLECTIONS.length) ready.purch=true;
       render();
     },()=>{ purchBy[name]=[]; if(++purchLoaded>=PURCHASE_COLLECTIONS.length) ready.purch=true; render(); });
+  });
+  onSnapshot(collection(db,"inventory"),snap=>{
+    factorMap={}; buyMap={};
+    snap.forEach(d=>{
+      const i=d.data(); if(!i.name) return;
+      const n=i.name.trim(), fac=Number(i.unitFactor)||1;
+      factorMap[n]=fac; buyMap[n]=(Number(i.buy)||0)/fac;
+    });
+    ready.inv=true; render();
   });
   onSnapshot(collection(db,"expenses"),snap=>{
     expenses=[]; snap.forEach(d=>expenses.push(d.data()));
