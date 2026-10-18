@@ -83,7 +83,7 @@ catch(e){ db = getFirestore(app); }
 
 // اسم مجموعة فواتير الشراء في Firestore (الفواتير اللي بتتعمل من new-purchase-invoice.html)
 // لو اسمها مختلف عندك غيّره هنا فقط
-const PURCHASE_COLLECTIONS = ["purchase_invoices","purchases","purchaseInvoices","purchase_invoice","supplier_invoices"];
+const PURCHASE_COLLECTIONS = ["supplier_transactions"]; // نفس مجموعة سجل فواتير الشراء
 
 const DAY_NAMES = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 
@@ -113,18 +113,11 @@ function salesTotal(inv){
     return q>0 ? s+q*p : s;
   },0);
 }
-// إجمالي فاتورة الشراء: الحقل الجاهز إن وُجد، وإلا مجموع الأصناف
-function purchaseTotal(inv){
-  const direct = [inv.total, inv.totalAmount, inv.grandTotal, inv.netTotal, inv.amount]
-    .map(Number).find(v=>v>0);
-  if(direct) return direct;
-  if(Array.isArray(inv.items)){
-    return inv.items.reduce((s,it)=>{
-      const q=Number(it.qty)||0;
-      const p=Number(it.price ?? it.cost ?? it.buy ?? it.buyPrice)||0;
-      return s+q*p;
-    },0);
-  }
+// إجمالي فاتورة الشراء (نفس منطق سجل المشتريات): مرتجع الشراء بيتخصم
+function purchaseSigned(inv){
+  const amt = Number(inv.grossTotal) || Number(inv.total) || Number(inv.amount) || 0;
+  if(inv.type==="مرتجع شراء" || inv.type==="مرتجع") return -amt;
+  if(inv.type==="شراء" || inv.type==="فاتورة شراء" || !inv.type) return amt;
   return 0;
 }
 
@@ -142,7 +135,7 @@ function render(){
   });
   Object.values(purchBy).flat().forEach(inv=>{
     const d=parseDate(inv.date, inv.timestamp||inv.createdAt);
-    if(inRange(d)) get(d).purch += purchaseTotal(inv);
+    if(inRange(d)) get(d).purch += purchaseSigned(inv);
   });
   expenses.forEach(e=>{
     const d=parseDate(e.date, e.timestamp);
@@ -174,7 +167,7 @@ function render(){
   const w=document.getElementById("warn");
   if(Object.values(purchBy).flat().length===0){
     w.style.display="block";
-    w.textContent=`تنبيه: لم يتم العثور على فواتير شراء — راجع أسماء مجموعات الشراء في أعلى الكود (PURCHASE_COLLECTIONS).`;
+    w.textContent=`تنبيه: لا توجد فواتير شراء مسجلة في supplier_transactions.`;
   } else w.style.display="none";
 }
 
