@@ -113,12 +113,26 @@ function salesTotal(inv){
     return q>0 ? s+q*p : s;
   },0);
 }
-// إجمالي فاتورة الشراء (نفس منطق سجل المشتريات): مرتجع الشراء بيتخصم
+// المبيعات = المبلغ المحصّل فعلياً من الفاتورة. لو الفاتورة مفيهاش أي حقل للمدفوع بنعتبرها مدفوعة بالكامل ونعدّها للتنبيه
+let noPaidFieldCount = 0;
+function salesPaid(inv){
+  const num = v => (v===undefined||v===null||v==="") ? null : (Number(v)||0);
+  let paid = num(inv.totalPaid);
+  if(paid===null){
+    const c=num(inv.cashPaid), w=num(inv.walletPaid);
+    if(c!==null || w!==null) paid=(c||0)+(w||0);
+  }
+  if(paid===null) paid = num(inv.paidAmount) ?? num(inv.paid) ?? num(inv.amountPaid);
+  if(paid===null){ noPaidFieldCount++; return salesTotal(inv); }
+  return paid;
+}
+
+// المشتريات = المبلغ المسدد فعلياً من الفاتورة (نفس منطق سجل المشتريات)، وليس إجمالي الفاتورة
 function purchaseSigned(inv){
-  const amt = Number(inv.grossTotal) || Number(inv.total) || Number(inv.amount) || 0;
-  if(inv.type==="مرتجع شراء" || inv.type==="مرتجع") return -amt;
-  if(inv.type==="شراء" || inv.type==="فاتورة شراء" || !inv.type) return amt;
-  return 0;
+  if(inv.type==="مرتجع شراء" || inv.type==="مرتجع") return 0;
+  if(!(inv.type==="شراء" || inv.type==="فاتورة شراء" || !inv.type)) return 0;
+  const cash=Number(inv.cashPaid||0), wallet=Number(inv.walletPaid||0);
+  return inv.totalPaid!==undefined ? Number(inv.totalPaid)||0 : ((cash+wallet) || Number(inv.paidAmount) || 0);
 }
 
 function render(){
@@ -126,12 +140,12 @@ function render(){
   const from = document.getElementById("fromD").value;
   const to = document.getElementById("toD").value;
   const inRange = d => d && !(from && d<from) && !(to && d>to);
-  const byDay = {};
+  const byDay = {}; noPaidFieldCount = 0;
   const get = d => byDay[d] = byDay[d] || {sales:0,purch:0,exp:0,expItems:{}};
 
   salesInv.forEach(inv=>{
     const d=parseDate(inv.date, inv.timestamp);
-    if(inRange(d)) get(d).sales += salesTotal(inv);
+    if(inRange(d)) get(d).sales += salesPaid(inv);
   });
   Object.values(purchBy).flat().forEach(inv=>{
     const d=parseDate(inv.date, inv.timestamp||inv.createdAt);
@@ -165,10 +179,11 @@ function render(){
   document.getElementById("foot").innerHTML = dates.length ? `<tr><td>الإجمالي</td><td>${f0(TS)}</td><td>${f0(TC)}</td><td>${f0(TE)}</td><td style="color:${net<0?'var(--r7)':'var(--g7)'}">${net<0?'-':''}${f0(Math.abs(net))}</td></tr>` : "";
 
   const w=document.getElementById("warn");
-  if(Object.values(purchBy).flat().length===0){
-    w.style.display="block";
-    w.textContent=`تنبيه: لا توجد فواتير شراء مسجلة في supplier_transactions.`;
-  } else w.style.display="none";
+  const msgs=[];
+  if(Object.values(purchBy).flat().length===0) msgs.push("لا توجد فواتير شراء مسجلة في supplier_transactions.");
+  if(noPaidFieldCount>0) msgs.push(`${noPaidFieldCount} فاتورة بيع مفيهاش حقل للمبلغ المدفوع، اتحسبت بإجماليها.`);
+  w.style.display=msgs.length?"block":"none";
+  w.textContent="تنبيه: "+msgs.join(" ");
 }
 
 document.addEventListener("DOMContentLoaded",()=>{
