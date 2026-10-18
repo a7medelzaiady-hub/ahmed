@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<script src="auth-guard.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الحركة اليومية — الزيادي</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b5e3d">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+:root{--g8:#0b4e33;--g7:#0f6e48;--g6:#16a34a;--g1:#dcfce7;--g0:#f0fdf4;--a7:#b45309;--b7:#0369a1;--r7:#b91c1c;--r1:#fee2e2;--r0:#fef2f2;--s9:#0f172a;--s5:#64748b;--s1:#f1f5f9;--wh:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#e8edea;font-family:'Cairo',sans-serif;color:var(--s9);font-size:.85rem;padding-bottom:60px}
+.topbar{background:var(--g8);height:56px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar h1{font-size:.95rem;font-weight:800;color:#fff}
+.tb-btn{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;color:#fff;text-decoration:none}
+.bar{background:var(--wh);padding:10px 14px;display:flex;gap:8px;align-items:center;border-bottom:1px solid #d0ddd6;flex-wrap:wrap}
+.bar label{font-weight:800;font-size:.72rem;color:var(--s5)}
+.bar input{font-family:'Cairo';font-weight:700;border:1.5px solid #9fd3b5;background:var(--g0);border-radius:7px;padding:3px 6px;color:var(--g8)}
+.totals{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:10px}
+.tot{background:var(--wh);border:1px solid #dde8e2;border-radius:12px;padding:10px;text-align:center}
+.tot small{display:block;font-size:.65rem;font-weight:800;color:var(--s5)}
+.tot b{font-size:1rem;font-weight:900}
+.days{padding:0 10px;display:flex;flex-direction:column;gap:10px}
+.day{background:var(--wh);border-radius:12px;border:1px solid #d0ddd6;overflow:hidden;border-right:5px solid var(--g6)}
+.day.loss{border-right-color:var(--r7)}
+.day-h{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--g0);font-weight:900}
+.day.loss .day-h{background:var(--r0)}
+.day-h span{font-size:.7rem;color:var(--s5);font-weight:700}
+.row{display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #eef3f0;font-weight:700}
+.row.net{font-size:.95rem;font-weight:900;background:var(--g1);color:var(--g7)}
+.day.loss .row.net{background:var(--r1);color:var(--r7)}
+.s{color:var(--b7)}.c{color:var(--a7)}.e{color:var(--r7)}
+.empty{text-align:center;padding:40px;color:var(--s5);font-weight:700}
+</style>
+</head>
+<body>
+<nav class="topbar">
+  <h1><i class="fas fa-calendar-day"></i> الحركة اليومية — الزيادي</h1>
+  <a href="index.html" class="tb-btn"><i class="fas fa-home"></i></a>
+</nav>
+<div class="bar">
+  <label>من</label><input type="date" id="fromD">
+  <label>إلى</label><input type="date" id="toD">
+</div>
+<div class="totals">
+  <div class="tot"><small>إجمالي المبيعات</small><b class="s" id="tSales">—</b></div>
+  <div class="tot"><small>إجمالي المشتريات</small><b class="c" id="tCost">—</b></div>
+  <div class="tot"><small>إجمالي المصروفات</small><b class="e" id="tExp">—</b></div>
+  <div class="tot"><small>صافي الربح / الخسارة</small><b id="tNet">—</b></div>
+</div>
+<div class="days" id="days"><div class="empty">جاري تحميل البيانات…</div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey:"AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+  authDomain:"ahmedelzaiady.firebaseapp.com",
+  projectId:"ahmedelzaiady",
+  storageBucket:"ahmedelzaiady.firebasestorage.app",
+  messagingSenderId:"300306825071",
+  appId:"1:300306825071:web:0426ddde56280fa090329a"
+});
+let db;
+try { db = initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentSingleTabManager()})}); }
+catch(e){ db = getFirestore(app); }
+
+// نفس المصروفات الثابتة في صفحة التقرير الحالية
+const DAILY_EXPENSES = 250+250+60+60+60+100+350;
+const DAY_NAMES = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+
+let factorMap = {}, buyMap = {}, invoices = [], invReady = false;
+
+function toEn(s){ if(!s) return ""; let r=s.toString(); "٠١٢٣٤٥٦٧٨٩".split("").forEach((d,i)=>r=r.split(d).join(i)); return r; }
+function parseDate(df,ts){
+  if(df){
+    const s=toEn(df);
+    let m=s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    m=s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  if(ts?.seconds) return new Date(ts.seconds*1000).toISOString().slice(0,10);
+  return "";
+}
+const f0 = n => Math.round(n).toLocaleString('en-US') + " ج";
+
+function render(){
+  if(!invReady) return;
+  const from = document.getElementById("fromD").value;
+  const to = document.getElementById("toD").value;
+  const byDay = {};
+
+  invoices.forEach(inv=>{
+    const d = parseDate(inv.date, inv.timestamp);
+    if(!d || (from && d<from) || (to && d>to) || !Array.isArray(inv.items)) return;
+    inv.items.forEach(it=>{
+      if(it.isReturn) return;
+      const name=(it.name||"").trim();
+      const qty=Number(it.qty)||0, price=Number(it.price)||0;
+      if(!name || qty<=0) return;
+      const unit=(it.unitName||it.unit||"قطعة").toString().trim();
+      const factor=factorMap[name]||1;
+      const piece=buyMap[name]||0;
+      const isBox = unit==="box"||unit==="كرتونة";
+      byDay[d] = byDay[d] || {sales:0,cost:0};
+      byDay[d].sales += qty*price;
+      byDay[d].cost  += qty*(isBox ? piece*factor : piece);
+    });
+  });
+
+  const dates = Object.keys(byDay).sort((a,b)=>b.localeCompare(a));
+  let TS=0,TC=0,TE=0;
+  let html="";
+  dates.forEach(d=>{
+    const {sales,cost}=byDay[d];
+    const net = sales-cost-DAILY_EXPENSES;
+    TS+=sales; TC+=cost; TE+=DAILY_EXPENSES;
+    const dt = new Date(d+"T12:00:00");
+    html += `<div class="day ${net<0?'loss':''}">
+      <div class="day-h"><div>${DAY_NAMES[dt.getDay()]} <span>${d.replace(/-/g,'/')}</span></div>
+        <span>${net>=0?'ربح':'خسارة'}</span></div>
+      <div class="row"><span>بعنا بـ</span><span class="s">${f0(sales)}</span></div>
+      <div class="row"><span>اشترينا بـ</span><span class="c">${f0(cost)}</span></div>
+      <div class="row"><span>صرفنا</span><span class="e">${f0(DAILY_EXPENSES)}</span></div>
+      <div class="row net"><span>${net>=0?'المكسب':'الخسارة'}</span><span>${f0(Math.abs(net))}</span></div>
+    </div>`;
+  });
+  document.getElementById("days").innerHTML = html || '<div class="empty">لا توجد مبيعات في هذه الفترة</div>';
+  const net = TS-TC-TE;
+  document.getElementById("tSales").textContent = f0(TS);
+  document.getElementById("tCost").textContent = f0(TC);
+  document.getElementById("tExp").textContent = f0(TE);
+  const tn = document.getElementById("tNet");
+  tn.textContent = (net<0?"-":"") + f0(Math.abs(net));
+  tn.style.color = net<0 ? "var(--r7)" : "var(--g7)";
+}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  const t=new Date(), p=new Date(); p.setDate(p.getDate()-29);
+  const fmt=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  document.getElementById("toD").value=fmt(t);
+  document.getElementById("fromD").value=fmt(p);
+  document.getElementById("fromD").onchange=render;
+  document.getElementById("toD").onchange=render;
+
+  onSnapshot(collection(db,"inventory"),snap=>{
+    factorMap={}; buyMap={};
+    snap.forEach(d=>{
+      const i=d.data(); if(!i.name) return;
+      const n=i.name.trim(), fac=Number(i.unitFactor)||1;
+      factorMap[n]=fac; buyMap[n]=(Number(i.buy)||0)/fac;
+    });
+    render();
+  });
+  onSnapshot(collection(db,"invoices"),snap=>{
+    invoices=[];
+    snap.forEach(d=>{ const x=d.data(); if(x.isDeleted!==true) invoices.push(x); });
+    invReady=true; render();
+  });
+});
+</script>
+</body>
+</html>
