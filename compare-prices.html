@@ -640,7 +640,7 @@
                 if (inv.isDeleted || inv.type === "مرتجع شراء") return;
 
                 const supObj = suppliersBase[inv.supplierId] || { name: 'مورد غير معروف', phone: '' };
-                const supName = supObj.name;
+                const supName = supObj.name ? supObj.name.trim() : 'مورد غير معروف';
                 const invDate = inv.date || '---';
                 const items = inv.items || [];
 
@@ -652,7 +652,10 @@
                     if (!name || price <= 0) return;
                     if (!map[name]) map[name] = {};
 
-                    map[name][supName] = { price: price, unit: unit, date: invDate };
+                    // تحديث لحفظ أحدث فاتورة شراء بناءً على القرب من تاريخ اليوم
+                    if (!map[name][supName] || getDaysDifference(invDate) < getDaysDifference(map[name][supName].date)) {
+                        map[name][supName] = { price: price, unit: unit, date: invDate };
+                    }
                 });
             });
 
@@ -679,7 +682,7 @@
 
                 list.sort((a,b) => a.price - b.price);
 
-                // تم إلغاء شرط فارق السعر الكبيرة (إلغاء isPriceDiffTooHigh)
+                // اعتماد المورد الأحدث والأرخص بدون استبعاد بسبب فارق السعر
                 let recommended = list.find(s => !s.isOlderThanMonth);
 
                 if (!recommended) {
@@ -820,7 +823,7 @@
             return pName.toLowerCase().includes(searchTerm) || data.allSuppliers.some(s => s.supplier.toLowerCase().includes(searchTerm));
         });
 
-        // تحديد أصناف النواقص من ضمن الأصناف المطابقة
+        // الأصناف المنطبقة عليها شروط إعادة الطلب (نواقص)
         let reorderProducts = allMatchingProducts.filter(pName => {
             const stock = inventoryStockMap[pName] || { cartons: 0, pcs: 0, totalPcs: 0 };
             const sCount = salesCountMap[pName] || 0;
@@ -839,7 +842,7 @@
             reorderContainer.style.display = 'none';
         }
 
-        // استبعاد الأصناف الظاهرة في النواقص لمنع التكرار في القائمة العادية
+        // منع التكرار: استبعاد الأصناف المعروضة بالفعل في النواقص من القائمة العامة
         let filteredProducts = allMatchingProducts.filter(pName => !reorderProducts.includes(pName));
 
         filteredProducts.sort((a, b) => {
