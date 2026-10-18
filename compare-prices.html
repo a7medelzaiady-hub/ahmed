@@ -408,6 +408,29 @@
         } catch (e) {}
     }
 
+    // دالة لتحديث أسعار السلة الحالية تلقائياً لأحدث أسعار الشراء المسجلة بالقاعدة
+    function syncCartPricesWithLatest() {
+        let updatedAny = false;
+        Object.keys(cartOrders).forEach(supplierName => {
+            if (Array.isArray(cartOrders[supplierName])) {
+                cartOrders[supplierName].forEach(item => {
+                    const prodName = item.name;
+                    if (productPricesMap[prodName] && productPricesMap[prodName].allSuppliers) {
+                        const supplierInfo = productPricesMap[prodName].allSuppliers.find(s => s.supplier === supplierName);
+                        if (supplierInfo && supplierInfo.price > 0 && item.price !== supplierInfo.price) {
+                            item.price = supplierInfo.price;
+                            item.buy = supplierInfo.price;
+                            updatedAny = true;
+                        }
+                    }
+                });
+            }
+        });
+        if (updatedAny) {
+            saveDraftToStorage();
+        }
+    }
+
     function cleanModalBackdrops() {
         document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
         document.body.classList.remove('modal-open');
@@ -696,6 +719,9 @@
                 };
             });
 
+            // تحديث تلقائي لأسعار المسودة المقيدة في ذاكرة المتصفح لأحدث أسعار الشراء
+            syncCartPricesWithLatest();
+
             renderData();
 
         } catch (e) {
@@ -963,17 +989,26 @@
     function executeAddToCart(productName, supplierName, price, unit, qtyToAdd = 1) {
         if (!cartOrders[supplierName]) cartOrders[supplierName] = [];
 
+        // التأكد دائماً من أن السعر المضاف يعبر عن أحدث سعر شراء للمورد إذا كان متاحاً
+        let finalPrice = Number(price) || 0;
+        if (productPricesMap[productName] && productPricesMap[productName].allSuppliers) {
+            const sInfo = productPricesMap[productName].allSuppliers.find(s => s.supplier === supplierName);
+            if (sInfo && sInfo.price > 0) finalPrice = sInfo.price;
+        }
+
         const existingItem = cartOrders[supplierName].find(i => i.name === productName);
         if (existingItem) {
             existingItem.qty = Math.round((existingItem.qty + qtyToAdd) * 100) / 100;
+            existingItem.price = finalPrice;
+            existingItem.buy = finalPrice;
         } else {
             cartOrders[supplierName].push({
                 name: productName,
                 productName: productName,
                 originalName: productName,
                 displayName: '',
-                price: Number(price) || 0,
-                buy: Number(price) || 0,
+                price: finalPrice,
+                buy: finalPrice,
                 unit: unit,
                 qty: Math.round(qtyToAdd * 100) / 100
             });
@@ -999,6 +1034,9 @@
     }
 
     window.openOrderModal = function() {
+        // تحديث أسعار الأصناف في السلة المجهزة بأحدث أرقام من سجل الفواتير قبل الفتح
+        syncCartPricesWithLatest();
+
         const body = document.getElementById('orderModalBody');
         let html = '';
 
@@ -1439,7 +1477,7 @@
 
     window.openOrdersHistoryModal = async function() {
         const body = document.getElementById('ordersHistoryModalBody');
-        body.innerHTML = `<div class="text-center text-muted py-4 small"><div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل سجل الطلبيات...</div>`;
+        body.innerHTML = `<div class="text-center text-muted py-4 small"><div class="spinner-border spinner-border-sm text-success mb-2"></div><br>جاري تحميل سجل الطلبيات وتحديث أسعارها...</div>`;
 
         bootstrap.Modal.getOrCreateInstance(document.getElementById('ordersHistoryModal')).show();
 
@@ -1463,6 +1501,32 @@
             fetchedOrdersHistory.forEach(order => {
                 const orderDateStr = order.createdAt ? new Date(order.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : '---';
 
+                // فحص وتحديث أسعار الأصناف في سجل الطلبيات طبقاً لأحدث أسعار الشراء المسجلة بالداتابيز
+                let updatedOrderTotal = 0;
+                const itemsHtml = (order.items || []).map(item => {
+                    let currentPrice = Number(item.price || item.buy) || 0;
+                    const prodName = item.name;
+                    if (productPricesMap[prodName] && productPricesMap[prodName].allSuppliers) {
+                        const sInfo = productPricesMap[prodName].allSuppliers.find(s => s.supplier === order.supplierName);
+                        if (sInfo && sInfo.price > 0) {
+                            currentPrice = sInfo.price;
+                            item.price = sInfo.price;
+                            item.buy = sInfo.price;
+                        }
+                    }
+                    updatedOrderTotal += (item.qty * currentPrice);
+
+                    return `
+                        <div class="d-flex justify-content-between align-items-center border-bottom py-1 small fw-bold" style="font-size:0.75rem;">
+                            <span>${shownName(item)}</span>
+                            <div>
+                                <span class="text-muted me-2" style="font-size:0.68rem;">(${currentPrice.toFixed(2)} EGP)</span>
+                                <span class="text-success">(${item.qty}) ${item.unit}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
                 html += `
                     <div class="card mb-2 border-secondary" style="border-radius:12px;">
                         <div class="card-header bg-light d-flex justify-content-between align-items-center fw-bold py-1 px-2 small">
@@ -1470,14 +1534,12 @@
                             <span class="badge bg-success" style="font-size:0.65rem;">${order.status || 'مجهزة'}</span>
                         </div>
                         <div class="card-body p-2">
-                            <div class="text-muted mb-1" style="font-size:0.7rem;"><i class="far fa-clock me-1"></i> تاريخ الطلب: <b>${orderDateStr}</b></div>
+                            <div class="d-flex justify-content-between align-items-center text-muted mb-1" style="font-size:0.7rem;">
+                                <span><i class="far fa-clock me-1"></i> تاريخ الطلب: <b>${orderDateStr}</b></span>
+                                <span class="fw-bold text-dark">الإجمالي الحديث: <b class="text-success">${updatedOrderTotal.toFixed(2)} EGP</b></span>
+                            </div>
                             <div class="border rounded p-1 bg-light mb-2">
-                                ${(order.items || []).map(item => `
-                                    <div class="d-flex justify-content-between align-items-center border-bottom py-1 small fw-bold" style="font-size:0.75rem;">
-                                        <span>${shownName(item)}</span>
-                                        <span class="text-success">(${item.qty})${item.unit}</span>
-                                    </div>
-                                `).join('')}
+                                ${itemsHtml}
                             </div>
                             <div class="row g-1">
                                 <div class="col-6">
@@ -1538,7 +1600,13 @@
             const invoiceItems = (targetOrder.items || []).map(i => {
                 const orig = i.originalName || i.name || i.productName || i.item_name || i.stockName || '';
                 const itemQty = Number(i.qty) || 1;
-                const itemPrice = Number(i.price || i.buy) || 0;
+                
+                // استخدام أحدث سعر شراء للمورد إذا وجد بدلاً من السعر القديم
+                let itemPrice = Number(i.price || i.buy) || 0;
+                if (productPricesMap[orig] && productPricesMap[orig].allSuppliers) {
+                    const sInfo = productPricesMap[orig].allSuppliers.find(s => s.supplier === targetOrder.supplierName);
+                    if (sInfo && sInfo.price > 0) itemPrice = sInfo.price;
+                }
 
                 const clean = { ...i };
                 delete clean.displayName;
@@ -1613,11 +1681,19 @@
 
         (targetOrder.items || []).forEach(rawItem => {
             const item = normalizeItemNames({ ...rawItem });
-            const itemPrice = Number(item.price || item.buy) || 0;
+            
+            // استخدام أحدث سعر مسجل للمورد
+            let itemPrice = Number(item.price || item.buy) || 0;
+            if (productPricesMap[item.name] && productPricesMap[item.name].allSuppliers) {
+                const sInfo = productPricesMap[item.name].allSuppliers.find(s => s.supplier === supName);
+                if (sInfo && sInfo.price > 0) itemPrice = sInfo.price;
+            }
 
             const existing = cartOrders[supName].find(i => i.name === item.name);
             if (existing) {
                 existing.qty = Number(item.qty);
+                existing.price = itemPrice;
+                existing.buy = itemPrice;
                 if (item.displayName) existing.displayName = item.displayName;
             } else {
                 cartOrders[supName].push({
