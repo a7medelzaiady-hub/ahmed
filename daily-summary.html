@@ -45,6 +45,20 @@ td:first-child small{display:block;font-size:.65rem;color:var(--s5);font-weight:
 td.win{background:var(--g1);color:var(--g7);font-weight:900}
 td.lose{background:var(--r1);color:var(--r7);font-weight:900}
 tfoot td{background:#ecf5ef;font-weight:900;border-top:2px solid #b6d5c4}
+.print-head{display:none}
+@media print{
+  @page{size:A4;margin:12mm}
+  body{background:#fff;padding:0;font-size:12px}
+  .topbar,.bar,.warn{display:none!important}
+  .print-head{display:block;text-align:center;border-bottom:2px dashed #0b5e3d;padding-bottom:8px;margin-bottom:10px}
+  .print-head h2{color:#0b5e3d;font-size:18px;font-weight:900}
+  .print-head p{font-size:11px;color:#475569;font-weight:700;margin-top:3px}
+  .tbl{margin:0;border-radius:0;border:1px solid #94a3b8}
+  .tbl-in{overflow:visible}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  tr{page-break-inside:avoid}
+  thead{display:table-header-group}
+}
 .empty{text-align:center;padding:40px;color:var(--s5);font-weight:700}
 .warn{margin:8px 10px 0;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:7px 12px;font-size:.72rem;font-weight:800;display:none}
 </style>
@@ -52,13 +66,21 @@ tfoot td{background:#ecf5ef;font-weight:900;border-top:2px solid #b6d5c4}
 <body>
 <nav class="topbar">
   <h1><i class="fas fa-calendar-day"></i> الحركة اليومية — الزيادي</h1>
-  <a href="index.html" class="tb-btn"><i class="fas fa-home"></i></a>
+  <div style="display:flex;gap:7px">
+    <button class="tb-btn" onclick="window.print()" title="طباعة التقرير" style="border:none;cursor:pointer"><i class="fas fa-print"></i></button>
+    <a href="index.html" class="tb-btn"><i class="fas fa-home"></i></a>
+  </div>
 </nav>
 <div class="bar">
   <label>من</label><input type="date" id="fromD">
   <label>إلى</label><input type="date" id="toD">
 </div>
 <div class="warn" id="warn"></div>
+<div class="print-head">
+  <h2>الزيادي لزيوت السيارات</h2>
+  <p>تقرير الحركة اليومية: المبيعات والمشتريات والمصروفات وربح اليوم</p>
+  <p id="printRange"></p>
+</div>
 <div class="tbl"><div class="tbl-in"><table>
 <thead><tr><th>اليوم</th><th>المبيعات</th><th>المشتريات</th><th>المصروفات</th><th>ربح اليوم</th></tr></thead>
 <tbody id="days"><tr><td colspan="5" class="empty">جاري تحميل البيانات…</td></tr></tbody>
@@ -194,6 +216,8 @@ function render(){
   const net=TG-TE;
   document.getElementById("foot").innerHTML = dates.length ? `<tr><td>الإجمالي</td><td>${f0(TS)}</td><td>${f0(TC)}</td><td>${f0(TE)}</td><td style="color:${net<0?'var(--r7)':'var(--g7)'}">${net<0?'-':''}${f0(Math.abs(net))}</td></tr>` : "";
 
+  document.getElementById("printRange").textContent =
+    `الفترة: من ${(from||"—").replace(/-/g,"/")} إلى ${(to||"—").replace(/-/g,"/")} — تاريخ الطباعة: ${new Date().toLocaleDateString("ar-EG")}`;
   const w=document.getElementById("warn");
   const msgs=[];
   if(Object.values(purchBy).flat().length===0) msgs.push("لا توجد فواتير شراء مسجلة في supplier_transactions.");
