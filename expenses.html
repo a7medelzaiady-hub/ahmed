@@ -206,6 +206,37 @@
             display: none;
         }
 
+        /* تنسيق صندوق فلتر التاريخ */
+        .date-filter-box {
+            background: white;
+            margin: 0 16px 12px;
+            padding: 12px;
+            border-radius: var(--radius-md);
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--border-color);
+        }
+        .date-filter-title {
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .date-input-sm {
+            padding: 6px 8px;
+            font-size: 0.78rem;
+            border-radius: 8px;
+        }
+        .btn-filter-action {
+            padding: 6px 12px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            border-radius: 8px;
+            border: none;
+        }
+
         .toolbar-box {
             display: flex;
             gap: 6px;
@@ -455,6 +486,31 @@
         <!-- تبويب العرض والتصدير -->
         <div class="tab-pane fade" id="listContent">
             
+            <!-- فلتر التاريخ -->
+            <div class="date-filter-box">
+                <div class="date-filter-title">
+                    <i class="fas fa-filter"></i> تصفية بحسب الفترة الزمنية
+                </div>
+                <div class="row g-2 align-items-center">
+                    <div class="col-5">
+                        <label class="label-custom mb-1" style="font-size:0.7rem;">من تاريخ:</label>
+                        <input type="date" id="filterStartDate" class="input-field num date-input-sm">
+                    </div>
+                    <div class="col-5">
+                        <label class="label-custom mb-1" style="font-size:0.7rem;">إلى تاريخ:</label>
+                        <input type="date" id="filterEndDate" class="input-field num date-input-sm">
+                    </div>
+                    <div class="col-2 d-flex flex-column gap-1 pt-3">
+                        <button class="btn-filter-action bg-success text-white" onclick="applyDateFilter()" title="تطبيق الفلتر">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn-filter-action bg-secondary text-white" onclick="resetDateFilter()" title="إعادة ضبط">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="toolbar-box">
                 <button class="btn-excel" onclick="exportToExcel()">
                     <i class="fas fa-file-excel"></i> تصدير Excel
@@ -517,6 +573,8 @@
     let allExpenses = [];
     let currentEditId = null; 
     let selectedCategoryFilter = null;
+    let startDateFilter = null;
+    let endDateFilter = null;
 
     window.toggleOtherField = (val) => {
         document.getElementById('otherTypeDiv').style.display = (val === 'أخرى') ? 'block' : 'none';
@@ -641,6 +699,28 @@
         renderExpensesUI();
     };
 
+    /* دوال فلتر التاريخ الجديد */
+    window.applyDateFilter = () => {
+        const start = document.getElementById('filterStartDate').value;
+        const end = document.getElementById('filterEndDate').value;
+
+        if (!start && !end) {
+            return alert("يرجى اختيار تاريخ البدء أو تاريخ النهاية على الأقل");
+        }
+
+        startDateFilter = start || null;
+        endDateFilter = end || null;
+        renderExpensesUI();
+    };
+
+    window.resetDateFilter = () => {
+        document.getElementById('filterStartDate').value = '';
+        document.getElementById('filterEndDate').value = '';
+        startDateFilter = null;
+        endDateFilter = null;
+        renderExpensesUI();
+    };
+
     async function loadExpenses() {
         try {
             const q = query(collection(db, "expenses"), orderBy("date", "desc"));
@@ -667,6 +747,14 @@
         }
     }
 
+    function getFilteredExpensesByDate() {
+        return allExpenses.filter(exp => {
+            if (startDateFilter && exp.date < startDateFilter) return false;
+            if (endDateFilter && exp.date > endDateFilter) return false;
+            return true;
+        });
+    }
+
     function renderExpensesUI() {
         const expensesContainer = document.getElementById('expensesList');
         const summaryContainer = document.getElementById('summaryContainer');
@@ -675,17 +763,19 @@
         expensesContainer.innerHTML = '';
         summaryContainer.innerHTML = '';
 
-        if (allExpenses.length === 0) {
+        const dateFilteredList = getFilteredExpensesByDate();
+
+        if (dateFilteredList.length === 0) {
             overallPeriodBox.style.display = 'none';
-            expensesContainer.innerHTML = `<div class="text-center text-muted py-5 fw-bold" style="font-size:0.85rem;">لا توجد مصروفات مسجلة حتى الآن</div>`;
+            expensesContainer.innerHTML = `<div class="text-center text-muted py-5 fw-bold" style="font-size:0.85rem;">لا توجد مصروفات مسجلة في هذه الفترة</div>`;
             return;
         }
 
         let categoryTotals = {};
-        let minDate = allExpenses[0].date;
-        let maxDate = allExpenses[0].date;
+        let minDate = dateFilteredList[0].date;
+        let maxDate = dateFilteredList[0].date;
 
-        allExpenses.forEach(exp => {
+        dateFilteredList.forEach(exp => {
             categoryTotals[exp.type] = (categoryTotals[exp.type] || 0) + exp.amount;
             if (exp.date < minDate) minDate = exp.date;
             if (exp.date > maxDate) maxDate = exp.date;
@@ -701,6 +791,7 @@
             إجمالي المصروفات المسجلة خلال 
             <span class="num mx-1" style="font-size:0.95rem;">${totalDays}</span> 
             ${totalDays === 1 ? 'يوم واحد' : 'يوم'}
+            ${(startDateFilter || endDateFilter) ? ' (مفلتَر)' : ''}
         `;
 
         for (const [type, total] of Object.entries(categoryTotals)) {
@@ -721,8 +812,8 @@
         }
 
         const listToRender = selectedCategoryFilter 
-            ? allExpenses.filter(e => e.type === selectedCategoryFilter)
-            : allExpenses;
+            ? dateFilteredList.filter(e => e.type === selectedCategoryFilter)
+            : dateFilteredList;
 
         if (listToRender.length === 0) {
             expensesContainer.innerHTML = `<div class="text-center text-muted py-4 fw-bold" style="font-size:0.85rem;">لا توجد عناصر لهذا البند</div>`;
@@ -804,13 +895,14 @@
     };
 
     window.exportToExcel = () => {
-        if (allExpenses.length === 0) {
+        const dateFilteredList = getFilteredExpensesByDate();
+        if (dateFilteredList.length === 0) {
             return alert("لا توجد بيانات مصروفات لتصديرها حالياً!");
         }
 
         const dataToExport = selectedCategoryFilter
-            ? allExpenses.filter(e => e.type === selectedCategoryFilter)
-            : allExpenses;
+            ? dateFilteredList.filter(e => e.type === selectedCategoryFilter)
+            : dateFilteredList;
 
         const formattedData = dataToExport.map((exp) => ({
             "التاريخ": exp.date,
@@ -831,9 +923,10 @@
     };
 
     window.exportToPDF = (categoryFilter = null) => {
+        const dateFilteredList = getFilteredExpensesByDate();
         const targetData = categoryFilter 
-            ? allExpenses.filter(e => e.type === categoryFilter)
-            : (selectedCategoryFilter ? allExpenses.filter(e => e.type === selectedCategoryFilter) : allExpenses);
+            ? dateFilteredList.filter(e => e.type === categoryFilter)
+            : (selectedCategoryFilter ? dateFilteredList.filter(e => e.type === selectedCategoryFilter) : dateFilteredList);
 
         if (!targetData || targetData.length === 0) {
             return alert("لا توجد مصروفات مسجلة لتصديرها في هذا التقرير!");
@@ -842,6 +935,11 @@
         const totalAmt = targetData.reduce((sum, item) => sum + item.amount, 0);
         const filterTitle = categoryFilter || selectedCategoryFilter || "كافة المصروفات";
         const todayStr = new Date().toLocaleDateString('ar-EG');
+
+        let periodSubTitle = '';
+        if (startDateFilter || endDateFilter) {
+            periodSubTitle = `<p style="margin: 3px 0 0; font-size: 11px; color: #0b5e3d; font-weight: 800;">الفترة: من ${startDateFilter || 'البداية'} إلى ${endDateFilter || 'اليوم'}</p>`;
+        }
 
         let rowsHtml = '';
         targetData.forEach((item, index) => {
@@ -861,6 +959,7 @@
                 <div style="text-align: center; border-bottom: 2.5px dashed #0b5e3d; padding-bottom: 12px; margin-bottom: 15px;">
                     <h2 style="margin: 0; color: #0b5e3d; font-weight: 900; font-size: 22px;">شركة الزيادي لزيوت السيارات</h2>
                     <h4 style="margin: 6px 0 0; color: #334155; font-weight: 800; font-size: 16px;">تقرير تفصيلي بـ (${filterTitle})</h4>
+                    ${periodSubTitle}
                     <p style="margin: 5px 0 0; font-size: 12px; color: #64748b; font-weight: 800;">تاريخ الطباعة: ${todayStr}</p>
                 </div>
 
