@@ -35,6 +35,16 @@ body{background:#e8edea;font-family:'Cairo',sans-serif;color:var(--s9);font-size
 .det{padding:4px 12px 8px;font-size:.7rem;font-weight:700;color:var(--s5);display:flex;flex-wrap:wrap;gap:4px}
 .det i{font-style:normal;background:var(--r0);color:var(--r7);border:1px solid #fecaca;border-radius:6px;padding:1px 7px}
 .s{color:var(--b7)}.c{color:var(--a7)}.e{color:var(--r7)}
+.tbl{margin:0 10px;background:#fff;border:1px solid #d0ddd6;border-radius:12px;overflow:hidden}
+.tbl-in{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-weight:700;white-space:nowrap}
+th{background:var(--g8);color:#fff;padding:9px 8px;font-size:.74rem;text-align:center}
+td{padding:9px 8px;text-align:center;border-bottom:1px solid #eef3f0}
+td:first-child{text-align:right;background:var(--g0);font-weight:900}
+td:first-child small{display:block;font-size:.65rem;color:var(--s5);font-weight:700}
+td.win{background:var(--g1);color:var(--g7);font-weight:900}
+td.lose{background:var(--r1);color:var(--r7);font-weight:900}
+tfoot td{background:#ecf5ef;font-weight:900;border-top:2px solid #b6d5c4}
 .empty{text-align:center;padding:40px;color:var(--s5);font-weight:700}
 .warn{margin:8px 10px 0;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:7px 12px;font-size:.72rem;font-weight:800;display:none}
 </style>
@@ -49,13 +59,11 @@ body{background:#e8edea;font-family:'Cairo',sans-serif;color:var(--s9);font-size
   <label>إلى</label><input type="date" id="toD">
 </div>
 <div class="warn" id="warn"></div>
-<div class="totals">
-  <div class="tot"><small>إجمالي المبيعات</small><b class="s" id="tSales">—</b></div>
-  <div class="tot"><small>إجمالي المشتريات</small><b class="c" id="tCost">—</b></div>
-  <div class="tot"><small>إجمالي المصروفات</small><b class="e" id="tExp">—</b></div>
-  <div class="tot"><small>صافي الربح / الخسارة</small><b id="tNet">—</b></div>
-</div>
-<div class="days" id="days"><div class="empty">جاري تحميل البيانات…</div></div>
+<div class="tbl"><div class="tbl-in"><table>
+<thead><tr><th>اليوم</th><th>المبيعات</th><th>المشتريات</th><th>المصروفات</th><th>ربح اليوم</th></tr></thead>
+<tbody id="days"><tr><td colspan="5" class="empty">جاري تحميل البيانات…</td></tr></tbody>
+<tfoot id="foot"></tfoot>
+</table></div></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -75,11 +83,11 @@ catch(e){ db = getFirestore(app); }
 
 // اسم مجموعة فواتير الشراء في Firestore (الفواتير اللي بتتعمل من new-purchase-invoice.html)
 // لو اسمها مختلف عندك غيّره هنا فقط
-const PURCHASE_INVOICES_COLLECTION = "purchase_invoices";
+const PURCHASE_COLLECTIONS = ["purchase_invoices","purchases","purchaseInvoices","purchase_invoice","supplier_invoices"];
 
 const DAY_NAMES = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 
-let salesInv = [], purchInv = [], expenses = [];
+let salesInv = [], purchBy = {}, expenses = [];
 const ready = {sales:false, purch:false, exp:false};
 
 function toEn(s){ if(!s) return ""; let r=s.toString(); "٠١٢٣٤٥٦٧٨٩".split("").forEach((d,i)=>r=r.split(d).join(i)); return r; }
@@ -132,7 +140,7 @@ function render(){
     const d=parseDate(inv.date, inv.timestamp);
     if(inRange(d)) get(d).sales += salesTotal(inv);
   });
-  purchInv.forEach(inv=>{
+  Object.values(purchBy).flat().forEach(inv=>{
     const d=parseDate(inv.date, inv.timestamp||inv.createdAt);
     if(inRange(d)) get(d).purch += purchaseTotal(inv);
   });
@@ -151,29 +159,22 @@ function render(){
     const net=o.sales-o.purch-o.exp;
     TS+=o.sales; TC+=o.purch; TE+=o.exp;
     const dt=new Date(d+"T12:00:00");
-    const det=Object.entries(o.expItems).map(([k,v])=>`<i>${k}: ${f0(v)}</i>`).join("");
-    html += `<div class="day ${net<0?'loss':''}">
-      <div class="day-h"><div>${DAY_NAMES[dt.getDay()]} <span>${d.replace(/-/g,'/')}</span></div><span>${net>=0?'ربح':'خسارة'}</span></div>
-      <div class="row"><span>بعنا بـ</span><span class="s">${f0(o.sales)}</span></div>
-      <div class="row"><span>اشترينا بـ</span><span class="c">${f0(o.purch)}</span></div>
-      <div class="row"><span>صرفنا</span><span class="e">${f0(o.exp)}</span></div>
-      ${det?`<div class="det">${det}</div>`:''}
-      <div class="row net"><span>${net>=0?'المكسب':'الخسارة'}</span><span>${f0(Math.abs(net))}</span></div>
-    </div>`;
+    html += `<tr>
+      <td>${DAY_NAMES[dt.getDay()]}<small>${d.replace(/-/g,'/')}</small></td>
+      <td class="s">${f0(o.sales)}</td>
+      <td class="c">${f0(o.purch)}</td>
+      <td class="e">${f0(o.exp)}</td>
+      <td class="${net>=0?'win':'lose'}">${net<0?'-':''}${f0(Math.abs(net))}</td>
+    </tr>`;
   });
-  document.getElementById("days").innerHTML = html || '<div class="empty">لا توجد حركة في هذه الفترة</div>';
+  document.getElementById("days").innerHTML = html || '<tr><td colspan="5" class="empty">لا توجد حركة في هذه الفترة</td></tr>';
   const net=TS-TC-TE;
-  document.getElementById("tSales").textContent=f0(TS);
-  document.getElementById("tCost").textContent=f0(TC);
-  document.getElementById("tExp").textContent=f0(TE);
-  const tn=document.getElementById("tNet");
-  tn.textContent=(net<0?"-":"")+f0(Math.abs(net));
-  tn.style.color=net<0?"var(--r7)":"var(--g7)";
+  document.getElementById("foot").innerHTML = dates.length ? `<tr><td>الإجمالي</td><td>${f0(TS)}</td><td>${f0(TC)}</td><td>${f0(TE)}</td><td style="color:${net<0?'var(--r7)':'var(--g7)'}">${net<0?'-':''}${f0(Math.abs(net))}</td></tr>` : "";
 
   const w=document.getElementById("warn");
-  if(purchInv.length===0){
+  if(Object.values(purchBy).flat().length===0){
     w.style.display="block";
-    w.textContent=`تنبيه: لم يتم العثور على فواتير شراء في المجموعة "${PURCHASE_INVOICES_COLLECTION}" — راجع اسمها في أعلى الكود.`;
+    w.textContent=`تنبيه: لم يتم العثور على فواتير شراء — راجع أسماء مجموعات الشراء في أعلى الكود (PURCHASE_COLLECTIONS).`;
   } else w.style.display="none";
 }
 
@@ -189,10 +190,14 @@ document.addEventListener("DOMContentLoaded",()=>{
     salesInv=[]; snap.forEach(d=>{const x=d.data(); if(x.isDeleted!==true) salesInv.push(x);});
     ready.sales=true; render();
   });
-  onSnapshot(collection(db,PURCHASE_INVOICES_COLLECTION),snap=>{
-    purchInv=[]; snap.forEach(d=>{const x=d.data(); if(x.isDeleted!==true) purchInv.push(x);});
-    ready.purch=true; render();
-  },()=>{ ready.purch=true; render(); });
+  let purchLoaded=0;
+  PURCHASE_COLLECTIONS.forEach(name=>{
+    onSnapshot(collection(db,name),snap=>{
+      purchBy[name]=[]; snap.forEach(d=>{const x=d.data(); if(x.isDeleted!==true) purchBy[name].push(x);});
+      if(++purchLoaded>=PURCHASE_COLLECTIONS.length) ready.purch=true;
+      render();
+    },()=>{ purchBy[name]=[]; if(++purchLoaded>=PURCHASE_COLLECTIONS.length) ready.purch=true; render(); });
+  });
   onSnapshot(collection(db,"expenses"),snap=>{
     expenses=[]; snap.forEach(d=>expenses.push(d.data()));
     ready.exp=true; render();
