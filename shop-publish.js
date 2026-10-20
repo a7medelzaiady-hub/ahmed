@@ -162,8 +162,10 @@ export async function publishBalances(db, force = false) {
         const balance = round2(initial + (invoiceBal[d.id] || 0) + (transBal[d.id] || 0));
         const customPrices = customerPrices[d.id] || {};
         
-        const sig = name + "|" + balance + "|" + Object.keys(customPrices).length;
+        // التعديل هنا: استخدام JSON.stringify للتحقق من تغير الأسعار الفعلية
+        const sig = name + "|" + balance + "|" + JSON.stringify(customPrices);
         next[d.id] = sig;
+        
         if (!force && prev[d.id] === sig) continue;
         
         // رفع بيانات التاجر وبداخلها أسعاره المخصصة
