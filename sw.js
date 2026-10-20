@@ -5,8 +5,10 @@
 //   تشغيل، فيشتغل بعدها من غير نت (حتى لو الصفحة مفتوحة برابط فيه ?id=...).
 // - طلبات قاعدة البيانات نفسها (firestore.googleapis.com) مش بيتدخل فيها:
 //   مكتبة فايربيز بتتولاها (تخزين محلي + رفع تلقائي لما النت يرجع).
+// - ملفات الموقع نفسه (HTML/JS/CSS) بتتعرض من الكاش فورًا وبتتحدّث بالخلفية،
+//   فأي تعديل في ملف زي shop-publish.js بيوصل في الفتحة اللي بعدها.
 // =====================================================================
-const CACHE_NAME = "elzaiady-cache-v14";
+const CACHE_NAME = "elzaiady-cache-v15";
 
 const LOCAL_FILES = [
   "./",
@@ -262,11 +264,12 @@ self.addEventListener("fetch", event => {
   if (!/^https?:$/.test(url.protocol)) return;
   if (PASS_THROUGH_HOSTS.some(h => url.hostname === h || url.hostname.endsWith("." + h))) return;
 
+  const isSameOrigin = url.origin === self.location.origin;
   const isPage = request.mode === "navigate" || (request.headers.get("accept") || "").includes("text/html");
 
   // صفحات HTML: نعرض المخزّنة فورًا ونحدّثها بالخلفية. المطابقة بتتجاهل ?id=... عشان الصفحات
   // اللي بتفتح بمعاملات (customer-details.html?id=..) تشتغل أوفلاين.
-  if (isPage && url.origin === self.location.origin) {
+  if (isPage && isSameOrigin) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       const key = url.origin + url.pathname;
@@ -282,7 +285,24 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // باقي الملفات (JS/CSS/خطوط/صور): الكاش أولًا، ولو مش موجود نجيبه ونخزّنه
+  // ملفات الموقع نفسه (JS/CSS/صور/manifest): نعرض المخزّن فورًا ونحدّثه بالخلفية،
+  // عشان أي تعديل في ملف زي shop-publish.js يوصل من غير ما نغيّر رقم الكاش.
+  if (isSameOrigin) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request) || await cache.match(request, { ignoreSearch: true });
+      const network = fetch(request).then(res => {
+        if (res && res.ok) cache.put(request, res.clone());
+        return res;
+      }).catch(() => null);
+      if (cached) { event.waitUntil(network); return cached; }
+      const res = await network;
+      return res || Response.error();
+    })());
+    return;
+  }
+
+  // الملفات الخارجية (فايربيز/بوتستراب/خطوط/أيقونات): الكاش أولًا، ولو مش موجود نجيبه ونخزّنه
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(request);
