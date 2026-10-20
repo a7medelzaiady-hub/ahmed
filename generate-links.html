@@ -71,20 +71,6 @@
             transform: scale(0.96);
         }
 
-        .btn-whatsapp {
-            background: #25D366;
-            color: white !important;
-            font-weight: 800;
-            border-radius: 12px;
-            padding: 10px;
-            width: 100%;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
         .search-select-box {
             background: #fcfdfe;
             border: 2px solid #e2efe8;
@@ -99,15 +85,56 @@
             outline: none;
         }
 
-        .link-preview-box {
-            background: #f8fafc;
-            border: 1px dashed #cbd5e1;
-            border-radius: 12px;
-            padding: 10px;
-            font-size: 0.8rem;
-            word-break: break-all;
-            color: #475569;
+        /* تنسيقات قائمة العملاء الجديدة */
+        .customers-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #e2efe8;
+            border-radius: 14px;
+            background: #fcfdfe;
         }
+
+        .customer-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            border-bottom: 1px solid #e2efe8;
+            transition: background 0.2s;
+        }
+
+        .customer-item:last-child {
+            border-bottom: none;
+        }
+
+        .customer-item:hover {
+            background: #f1f8f5;
+        }
+
+        .customer-name {
+            font-weight: 700;
+            color: var(--brand-dark);
+            font-size: 0.95rem;
+        }
+
+        .btn-wa-small {
+            background: #25D366;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 3px 8px rgba(37, 211, 102, 0.2);
+        }
+        
+        .btn-wa-small:active {
+            transform: scale(0.95);
+        }
+
     </style>
 </head>
 <body>
@@ -132,7 +159,7 @@
 
         <div class="mt-3">
             <button class="btn-general-send" onclick="sendGeneralShopLink()">
-                <i class="fab fa-whatsapp fs-4"></i> إرسال الرابط لعميل جديد عبر الواتساب
+                <i class="fab fa-whatsapp fs-4"></i> إرسال الرابط لعميل جديد
             </button>
         </div>
     </div>
@@ -142,26 +169,16 @@
         <div class="d-flex align-items-center gap-2 mb-3">
             <span class="badge bg-success p-2 text-white" style="border-radius:10px;"><i class="fas fa-store fs-6"></i></span>
             <div>
-                <h6 class="fw-bold m-0" style="color:var(--brand-dark)">عميل مسجل في النظام</h6>
-                <small class="text-muted" style="font-size:0.75rem">إرسال رابط مخصص يعرض للعميل اسمه ورصيده الحالي</small>
+                <h6 class="fw-bold m-0" style="color:var(--brand-dark)">العملاء المسجلين</h6>
+                <small class="text-muted" style="font-size:0.75rem">إرسال رابط مخصص يعرض للعميل اسمه ورصيده</small>
             </div>
         </div>
 
-        <label class="fw-bold mb-1" style="font-size:0.85rem">اختر اسم العميل:</label>
-        <input type="text" id="customerSearch" class="search-select-box mb-2" placeholder="🔍 ابحث عن العميل بالاسم..." oninput="filterCustomerList()">
+        <input type="text" id="customerSearch" class="search-select-box mb-3" placeholder="🔍 ابحث عن العميل بالاسم..." oninput="filterCustomerList()">
         
-        <select id="customerSelect" class="form-select fw-bold mb-3" size="5" style="border-radius:14px; border:2px solid #e2efe8;" onchange="updateSelectedCustomerLink()">
-            <option value="">جاري تحميل العملاء...</option>
-        </select>
-
-        <div id="selectedCustomerBox" style="display:none;">
-            <label class="fw-bold mb-1" style="font-size:0.8rem">معاينة الرابط المخصص للعميل:</label>
-            <div class="link-preview-box mb-3" id="linkPreview">---</div>
-
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary fw-bold rounded-3 flex-grow-1" onclick="copyCustomerLink()"><i class="fas fa-copy me-1"></i> نسخ الرابط</button>
-                <button class="btn-whatsapp flex-grow-1" onclick="sendCustomShopLink()"><i class="fab fa-whatsapp fs-5"></i> إرسال بالواتساب</button>
-            </div>
+        <!-- قائمة العملاء بديلة للـ Select -->
+        <div id="customersListContainer" class="customers-container">
+            <div class="p-3 text-center text-muted fw-bold">جاري تحميل العملاء...</div>
         </div>
     </div>
 
@@ -197,72 +214,72 @@ window.sendGeneralShopLink = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
 };
 
-// 2. تحميل قايمة العملاء
+// 2. تحميل قائمة العملاء وعرضهم في الـ Div
 async function loadCustomers() {
     try {
         const snap = await getDocs(collection(db, "customers"));
         customersList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(c => !c.isDeleted && c.name);
         customersList.sort((a, b) => (a.name || "").localeCompare(b.name || "", "ar"));
-        renderCustomerSelect(customersList);
+        renderCustomerList(customersList);
     } catch (e) {
         console.error("خطأ في تحميل العملاء:", e);
+        document.getElementById("customersListContainer").innerHTML = `<div class="p-3 text-center text-danger fw-bold">حدث خطأ في تحميل العملاء</div>`;
     }
 }
 
-function renderCustomerSelect(list) {
-    const select = document.getElementById("customerSelect");
+function renderCustomerList(list) {
+    const container = document.getElementById("customersListContainer");
+    
     if (!list.length) {
-        select.innerHTML = `<option value="">لا يوجد عملاء مطابقين للبحث</option>`;
+        container.innerHTML = `<div class="p-3 text-center text-muted fw-bold">لا يوجد عملاء مطابقين للبحث</div>`;
         return;
     }
 
-    select.innerHTML = list.map(c => `<option value="${c.id}" data-phone="${c.phone || ''}">${c.name}</option>`).join('');
+    container.innerHTML = list.map(c => `
+        <div class="customer-item">
+            <div class="customer-name">${c.name}</div>
+            <button class="btn-wa-small" onclick="sendCustomShopLink('${c.id}')">
+                <i class="fab fa-whatsapp fs-6"></i> إرسال
+            </button>
+        </div>
+    `).join('');
 }
 
 window.filterCustomerList = () => {
     const term = document.getElementById("customerSearch").value.toLowerCase().trim();
     const filtered = customersList.filter(c => (c.name || "").toLowerCase().includes(term));
-    renderCustomerSelect(filtered);
+    renderCustomerList(filtered);
 };
 
-window.updateSelectedCustomerLink = () => {
-    const select = document.getElementById("customerSelect");
-    const cid = select.value;
-    if (!cid) return;
+// 3. دالة إرسال الرابط المخصص للعميل المختار
+window.sendCustomShopLink = (cid) => {
+    // جلب بيانات العميل من القائمة بناءً على الـ ID
+    const customer = customersList.find(c => c.id === cid);
+    if (!customer) return;
 
-    const fullUrl = `${BASE_STORE_URL}?cid=${cid}`;
-    document.getElementById("linkPreview").innerText = fullUrl;
-    document.getElementById("selectedCustomerBox").style.display = "block";
-};
-
-window.copyCustomerLink = () => {
-    const link = document.getElementById("linkPreview").innerText;
-    navigator.clipboard.writeText(link);
-    alert("تم نسخ رابط المتجر المخصص للعميل بنجاح!");
-};
-
-window.sendCustomShopLink = () => {
-    const select = document.getElementById("customerSelect");
-    const cid = select.value;
-    const selectedOption = select.options[select.selectedIndex];
-    const name = selectedOption.text;
-    const phone = selectedOption.getAttribute("data-phone") || "";
-
-    if (!cid) return;
+    const name = customer.name;
+    const phone = customer.phone || "";
 
     const fullUrl = `${BASE_STORE_URL}?cid=${cid}`;
     const message = `مرحباً *${name}* 🌸\nيمكنك تصفح منتجات ومخزون *الزيادي لزيوت السيارات* ومتابعة حسابك وإرسال طلبيتك مباشرة عبر رابطك الخاص:\n\n${fullUrl}\n\nنتشرف بخدمتك دائماً 🤝`;
 
+    // إذا لم يكن لديه رقم، سيتم فتح الواتساب بشكل عام لتختار أنت العميل
     let waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    if (phone) {
+    
+    // إذا كان لديه رقم هاتف مسجل
+    if (phone && phone.trim() !== "") {
         let cleanPhone = phone.replace(/[^0-9]/g, '');
-        if (cleanPhone.startsWith('01')) cleanPhone = '2' + cleanPhone;
+        // إضافة كود مصر إذا كان الرقم يبدأ بـ 01
+        if (cleanPhone.startsWith('01')) {
+            cleanPhone = '2' + cleanPhone;
+        }
         waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     }
 
     window.open(waUrl, '_blank');
 };
 
+// تشغيل جلب العملاء عند فتح الصفحة
 loadCustomers();
 </script>
 </body>
