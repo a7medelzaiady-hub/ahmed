@@ -113,9 +113,11 @@ export async function publishBalances(db, force = false) {
 
     // 1. معاملات الكرتونة لتوحيد السعر
     const factors = {};
+    const stockByName = {}; // احتياطي: لو بند الفاتورة مفيهوش معرّف الصنف نطابقه بالاسم
     invenSnap.forEach((d) => {
         const x = d.data();
         factors[d.id] = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
+        if (x.name) stockByName[normName(x.name)] = d.id;
     });
 
     // خريطة اسم العميل -> ID (للفواتير اللي من غير customerId)
@@ -150,13 +152,15 @@ export async function publishBalances(db, force = false) {
         if (!customerPrices[x._cid]) customerPrices[x._cid] = {};
         (x.items || []).forEach((item) => {
             if (item.isReturn) return;                       // المرتجع مش سعر شراء
-            const sid = item.stockId || item.id;
+            // نحاول المعرّف الأول، ولو مش موجود في المخزن نرجع للاسم
+            let sid = item.stockId || item.productId || item.itemId || item.id;
+            if (!sid || factors[sid] === undefined) sid = stockByName[normName(item.name || item.itemName)] || sid;
             if (!sid || customerPrices[x._cid][sid]) return; // اتسجل سعر أحدث قبل كده
 
             const factor = factors[sid] || Math.max(1, Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1);
             const u = String(item.unit || item.unitName || "").trim().toLowerCase();
             const isCarton = item.isCarton === true || ["box", "carton", "كرتونة", "كرتونه"].includes(u);
-            const price = Number(item.price) || 0;
+            const price = num(item.price ?? item.unitPrice ?? item.sellPrice ?? item.sell);
 
             // توحيد السعر ليكون سعر الكرتونة (زي ما المتجر بيعرض)
             const cartonPrice = isCarton ? price : price * factor;
@@ -206,7 +210,8 @@ export async function publishBalances(db, force = false) {
     state.balances = next;
     state.at = now;
     saveState(state);
-    return { customers: Object.keys(next).length, written };
+    const withPrices = Object.values(customerPrices).filter((p) => Object.keys(p).length > 0).length;
+    return { customers: Object.keys(next).length, written, invoicesLinked: allInvoices.length, customersWithPrices: withPrices };
 }
 
 export async function publishAll({ force = false } = {}) {
@@ -216,6 +221,9 @@ export async function publishAll({ force = false } = {}) {
     const bal = await publishBalances(db, force);
     return { catalog: cat, balances: bal, at: loadState().at };
 }
+
+// إتاحة النشر اليدوي من الكونسول: await publishShopAll({ force: true })
+if (typeof window !== "undefined") window.publishShopAll = publishAll;
 
 export async function autoPublish() {
     try {
