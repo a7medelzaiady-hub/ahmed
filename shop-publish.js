@@ -1,18 +1,16 @@
 // =====================================================================
 // shop-publish.js
 // ---------------------------------------------------------------------
-// بينشر للمتجر (shop.html) بيانات آمنة للعرض العام فقط:
-//   shop_catalog/meta + shop_catalog/c0,c1,...  : أسماء الأصناف وأسعار البيع وصور المخزن (من غير سعر الشراء)
-//   shop_accounts/{customerId}                  : اسم التاجر + رصيده الحالي
-// طلبات التجار نفسها بتتكتب مباشرة في جدول orders (status: pending, source: shop)
-// فبتظهر في all-orders وكشف التحميل وتتحوّل لفاتورة بالطريقة المعتادة.
+// بينشر للمتجر (shop.html) بيانات آمنة للعرض العام والخاص:
+//   shop_catalog/meta + c0,c1,... : أسماء الأصناف وأسعار البيع الافتراضية والصور
+//   shop_accounts/{customerId}    : اسم التاجر + رصيده الحالي + أسعاره الخاصة من فواتيره
 // =====================================================================
 import * as FS from "./firestore-offline.js";
 import { __getDb } from "./firestore-offline.js";
 
 const STATE_KEY = "elzaiady_shop_publish_state";
-const AUTO_EVERY_MS = 3 * 60 * 60 * 1000;   // النشر التلقائي كل 3 ساعات بحد أقصى
-const CHUNK_SIZE = 50;                       // تقسيم الكتالوج لـ 50 صنفاً في كل مستند لضمان عدم تجاوُز 1MB بسبب صور الـ Base64
+const AUTO_EVERY_MS = 3 * 60 * 60 * 1000;   // النشر التلقائي كل 3 ساعات
+const CHUNK_SIZE = 50;                      // تقسيم الكتالوج
 
 const num = (v) => {
     if (v === null || v === undefined) return 0;
@@ -32,9 +30,8 @@ async function waitForDb(ms = 6000) {
     return __getDb();
 }
 
-// ---------------- الكتالوج ----------------
+// ---------------- الكتالوج الأساسي ----------------
 export async function publishCatalog(db, force = false) {
-    // جلب الأصناف من مجموعة inventory حصرياً
     const snap = await FS.getDocs(FS.collection(db, "inventory"));
 
     const items = [];
@@ -47,12 +44,10 @@ export async function publishCatalog(db, force = false) {
         const factor = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
         const it = { id: d.id, n: name, s: sell, f: factor };
         
-        // قراءة الصورة المرفوعة في المخزن حصرياً من حقول imageUrl و image المحفوظة في inventory
         const img = String(x.imageUrl || x.image || "").trim();
         if (img && (img.startsWith("data:image/") || /^https?:\/\//.test(img))) {
             it.img = img;
         }
-        
         items.push(it);
     });
     items.sort((a, b) => a.n.localeCompare(b.n, "ar"));
@@ -65,7 +60,6 @@ export async function publishCatalog(db, force = false) {
     for (let i = 0; i < chunks; i++) {
         await FS.setDoc(FS.doc(db, "shop_catalog", "c" + i), { items: items.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE) });
     }
-    // حذف أجزاء قديمة زادت عن العدد الحالي
     for (let i = chunks; i < (state.chunks || 0); i++) { try { await FS.deleteDoc(FS.doc(db, "shop_catalog", "c" + i)); } catch (_) { /* ignore */ } }
     await FS.setDoc(FS.doc(db, "shop_catalog", "meta"), { count: items.length, chunks, updatedAt: Date.now() });
 
@@ -75,7 +69,7 @@ export async function publishCatalog(db, force = false) {
     return { items: items.length, skipped: false };
 }
 
-function hash(str) {   // هاش بسيط لاكتشاف التغيير
+function hash(str) {
     let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
     for (let i = 0; i < str.length; i++) {
         const ch = str.charCodeAt(i);
@@ -85,22 +79,62 @@ function hash(str) {   // هاش بسيط لاكتشاف التغيير
     return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
 }
 
-// ---------------- الأرصدة ----------------
-// نفس معادلة صفحة الطلبات: رصيد افتتاحي + باقي الفواتير + (صرف - قبض)
+// ---------------- الأرصدة والأسعار المخصصة ----------------
 export async function publishBalances(db, force = false) {
-    const [custSnap, invSnap, transSnap] = await Promise.all([
+    const [custSnap, invSnap, transSnap, invenSnap] = await Promise.all([
         FS.getDocs(FS.collection(db, "customers")),
         FS.getDocs(FS.collection(db, "invoices")),
-        FS.getDocs(FS.collection(db, "transactions"))
+        FS.getDocs(FS.collection(db, "transactions")),
+        FS.getDocs(FS.collection(db, "inventory"))
     ]);
 
+    // 1. جلب معاملات الكرتونة لحساب الأسعار
+    const factors = {};
+    invenSnap.forEach(d => {
+        factors[d.id] = Math.max(1, Number(d.data().unitFactor || d.data().pcsPerCarton || d.data().factor) || 1);
+    });
+
     const invoiceBal = {};
+    const transBal = {};
+    const customerPrices = {}; // { customerId: { stockId: cartonPrice } }
+
+    // 2. فرز الفواتير من الأحدث للأقدم لضمان أخذ "أحدث سعر" اشترى بيه التاجر
+    const allInvoices = [];
     invSnap.forEach((d) => {
         const x = d.data();
-        if (isDeleted(x) || !x.customerId) return;
-        invoiceBal[x.customerId] = (invoiceBal[x.customerId] || 0) + num(x.remaining);
+        if (!isDeleted(x) && x.customerId) allInvoices.push(x);
     });
-    const transBal = {};
+    
+    allInvoices.sort((a, b) => {
+        const ta = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.date || 0).getTime());
+        const tb = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.date || 0).getTime());
+        return tb - ta;
+    });
+
+    allInvoices.forEach((x) => {
+        // حساب المديونيات
+        invoiceBal[x.customerId] = (invoiceBal[x.customerId] || 0) + num(x.remaining);
+
+        // استخراج الأسعار المخصصة للتاجر من الفاتورة
+        if (!customerPrices[x.customerId]) customerPrices[x.customerId] = {};
+        (x.items || []).forEach(item => {
+            const sid = item.stockId;
+            // لو الصنف متسجلش لسه للتاجر ده (لأننا بنفرز من الأحدث للأقدم فهياخد أحدث سعر)
+            if (sid && !customerPrices[x.customerId][sid]) {
+                const factor = factors[sid] || 1;
+                const u = String(item.unit || item.unitName).trim().toLowerCase();
+                const isCarton = (item.isCarton === true) || ['box', 'carton', 'كرتونة', 'كرتونه'].includes(u);
+                const itemPrice = Number(item.price) || 0;
+                
+                // توحيد السعر ليكون سعر الكرتونة لتطابقه مع المتجر
+                const cartonPrice = isCarton ? itemPrice : itemPrice * factor;
+                if (cartonPrice > 0) {
+                    customerPrices[x.customerId][sid] = round2(cartonPrice);
+                }
+            }
+        });
+    });
+
     transSnap.forEach((d) => {
         const x = d.data();
         if (isDeleted(x)) return;
@@ -123,12 +157,17 @@ export async function publishBalances(db, force = false) {
         if (isDeleted(x)) continue;
         const name = String(x.name || "").trim();
         if (!name) continue;
+        
         const initial = num(x.initialBalance ?? x.balance ?? x.debt);
         const balance = round2(initial + (invoiceBal[d.id] || 0) + (transBal[d.id] || 0));
-        const sig = name + "|" + balance;
+        const customPrices = customerPrices[d.id] || {};
+        
+        const sig = name + "|" + balance + "|" + Object.keys(customPrices).length;
         next[d.id] = sig;
         if (!force && prev[d.id] === sig) continue;
-        batch.set(FS.doc(db, "shop_accounts", d.id), { name, balance, updatedAt: now });
+        
+        // رفع بيانات التاجر وبداخلها أسعاره المخصصة
+        batch.set(FS.doc(db, "shop_accounts", d.id), { name, balance, customPrices, updatedAt: now });
         inBatch++; written++;
         if (inBatch >= 400) { await batch.commit(); batch = FS.writeBatch(db); inBatch = 0; }
     }
@@ -148,7 +187,6 @@ export async function publishAll({ force = false } = {}) {
     return { catalog: cat, balances: bal, at: loadState().at };
 }
 
-// نشر تلقائي هادي (بيتنادى من الصفحات اللي المالك بيفتحها يومياً)
 export async function autoPublish() {
     try {
         if (!navigator.onLine) return;
