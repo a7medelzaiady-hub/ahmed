@@ -1,320 +1,265 @@
 // =====================================================================
-// sw.js — Service Worker (النسخة الأوفلاين الكاملة)
+// shop-publish.js
 // ---------------------------------------------------------------------
-// - يخزّن كل صفحات البرنامج + مكتبات فايربيز + بوتستراب/خطوط/أيقونات من أول
-//   تشغيل، فيشتغل بعدها من غير نت (حتى لو الصفحة مفتوحة برابط فيه ?id=...).
-// - طلبات قاعدة البيانات نفسها (firestore.googleapis.com) مش بيتدخل فيها:
-//   مكتبة فايربيز بتتولاها (تخزين محلي + رفع تلقائي لما النت يرجع).
-// - ملفات الموقع نفسه (HTML/JS/CSS) بتتعرض من الكاش فورًا وبتتحدّث بالخلفية،
-//   فأي تعديل في ملف زي shop-publish.js بيوصل في الفتحة اللي بعدها.
+// بينشر للمتجر (shop.html) بيانات آمنة للعرض العام والخاص:
+//   shop_catalog/meta + c0,c1,... : أسماء الأصناف وأسعار البيع الافتراضية والصور
+//   shop_accounts/{customerId}    : اسم التاجر + رصيده الحالي + أسعاره الخاصة من فواتيره
+//
+// الرصيد بيتحسب بنفس معادلة «كشف الحساب» في سجل المبيعات:
+//   الرصيد الافتتاحي + (إجمالي كل فاتورة - المسدد فيها) + سندات الصرف - سندات القبض
+//   (سندات سداد الفواتير بتتخطّى لأنها محسوبة جوه الفاتورة)
 // =====================================================================
-const CACHE_NAME = "elzaiady-cache-v15";
+import * as FS from "./firestore-offline.js";
+import { __getDb } from "./firestore-offline.js";
 
-const LOCAL_FILES = [
-  "./",
-  "./account-statement.html",
-  "./add-customer.html",
-  "./add-product.html",
-  "./add-shortages.html",
-  "./add-supplier.html",
-  "./admin.html",
-  "./ai-image-generator.html",
-  "./all-orders.html",
-  "./all-receipts.html",
-  "./allfile.html",
-  "./allfiles.html",
-  "./allfiles1.html",
-  "./archive-images.html",
-  "./auth-guard.js",
-  "./backup.html",
-  "./balances.html",
-  "./banknote.html",
-  "./car-audit.html",
-  "./cash-flow.html",
-  "./cash-register.html",
-  "./cash.html",
-  "./client-vouchers.html",
-  "./client_menu.html",
-  "./cloud-backup.js",
-  "./compare-prices.html",
-  "./compat-offline.js",
-  "./customer-details.html",
-  "./customer-installments.html",
-  "./customer-list.html",
-  "./customer-orders.html",
-  "./customer-payment.html",
-  "./customer-portal.html",
-  "./customer-statement.html",
-  "./customer-transactions-log.html",
-  "./customers-trash.html",
-  "./daily-sales-summary.html",
-  "./dashboard.html",
-  "./delete-all-customers.js",
-  "./edit-customer.html",
-  "./edit-supplier.html",
-  "./editablecells.html",
-  "./expenses.html",
-  "./firebase-compat-shim.js",
-  "./firebase-shim.js",
-  "./file-backup.js",
-  "./shop.html",
-  "./shop-admin.html",
-  "./shop-menu.html",
-  "./shop-card.js",
-  "./shop-publish.js",
-  "./firestore-offline.js",
-  "./general-ledger.html",
-  "./generate-links.html",
-  "./icon-192.jpg",
-  "./icon-512.png",
-  "./index.html",
-  "./index1.html",
-  "./index2.html",
-  "./index3.html",
-  "./initial-balances.html",
-  "./inventory-list.html",
-  "./inventory-menu.html",
-  "./inventory.html",
-  "./inventory2.html",
-  "./invoice-details.html",
-  "./item-car-report.html",
-  "./low_stock1.html",
-  "./mabiat-menu.html",
-  "./makhzan.html",
-  "./manifest.json",
-  "./mkhazen.html",
-  "./new-order.html",
-  "./new-purchase-invoice.html",
-  "./offline.html",
-  "./orders-home.html",
-  "./overdue-debts.html",
-  "./price-search.html",
-  "./product-details.html",
-  "./profit-details.html",
-  "./profit.html",
-  "./profits.html",
-  "./purchase-invoices-list.html",
-  "./purchase-mgmt.html",
-  "./purchase-orders-list.html",
-  "./purchase-return.html",
-  "./quotation-history.html",
-  "./quotation.html",
-  "./remaining-amounts.html",
-  "./reports.html",
-  "./reports1.html",
-  "./reports2.html",
-  "./reports3.html",
-  "./required-items-summary.html",
-  "./returns-list.html",
-  "./salaries-advances.html",
-  "./sales-history.html",
-  "./sales-invoice.html",
-  "./sales-return.html",
-  "./sales-returns-history.html",
-  "./sales_transactions.html",
-  "./sandok.html",
-  "./sandok1.html",
-  "./seed-users.js",
-  "./settings.html",
-  "./setup-accounting.html",
-  "./supabase-config.js",
-  "./supplier-debts.html",
-  "./supplier-details.html",
-  "./supplier-installments.html",
-  "./supplier-list.html",
-  "./supplier-management.html",
-  "./supplier-opening-balance.html",
-  "./supplier-payment.html",
-  "./supplier-statement.html",
-  "./tacnefat.html",
-  "./top-customers.html",
-  "./transactions-log.html",
-  "./trash.html",
-  "./trashi.html",
-  "./trashl.html",
-  "./update-inventory.html",
-  "./upload-supplier.html",
-  "./upload_customers.html",
-  "./upload_excel.html",
-  "./user-monitor.html",
-  "./users-permissions.html",
-  "./vodafonecash.html",
-  "./vouchers-hub.html",
-  "./vouchers.html",
-  "./whatsapp-campaigns.html"
-];
+const STATE_KEY = "elzaiady_shop_publish_state";
+const AUTO_EVERY_MS = 3 * 60 * 60 * 1000;   // النشر التلقائي كل 3 ساعات
+const CHUNK_SIZE = 50;                      // تقسيم الكتالوج
+const STATE_VERSION = 3;                    // غيّر الرقم ده لو عدّلت منطق الحساب عشان يتعمل نشر كامل
 
-// مكتبات خارجية لازم تتخزن عشان الصفحات تشتغل أوفلاين
-const CDN_FILES = [
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js",
-  "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
-  "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js",
-  "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js",
-  "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css",
-  "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js",
-  "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
-  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap",
-  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap",
-  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap",
-  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap"
-];
+const num = (v) => {
+    if (v === null || v === undefined) return 0;
+    const n = parseFloat(String(v).replace(/[^0-9.-]/g, ""));
+    return isNaN(n) ? 0 : n;
+};
+const round2 = (n) => Math.round(n * 100) / 100;
+const isDeleted = (d) => !!d && (d.isDeleted === true || d.deleted === true || d.status === "deleted" || d.isCancelled === true);
 
-// طلبات ما يصحّش نتدخل فيها (قاعدة البيانات / الدخول / الرفع / خدمات خارجية)
-const PASS_THROUGH_HOSTS = [
-  "firestore.googleapis.com", "firebasestorage.googleapis.com",
-  "identitytoolkit.googleapis.com", "securetoken.googleapis.com",
-  "www.googleapis.com", "api.minimax.chat", "supabase.co"
-];
+// توحيد الاسم (نفس منطق سجل المبيعات) لربط الحركات اللي من غير customerId
+const normName = (s) => String(s || "").trim().replace(/\s+/g, " ")
+    .replace(/[\u064B-\u0652]/g, "").replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي").replace(/ة/g, "ه").toLowerCase();
 
-// ---------- أدوات مساعدة ----------
-async function cacheOne(cache, url) {
-  try {
-    const res = await fetch(url);
-    if (res && (res.ok || res.type === "opaque")) { await cache.put(url, res.clone()); return res; }
-  } catch (e) { console.warn("تعذر تخزين:", url); }
-  return null;
-}
+// وقت الفاتورة بالمللي ثانية (يدعم Timestamp و {seconds} و date نصي)
+const tsMs = (x) => {
+    const t = x.timestamp || x.createdAt;
+    if (t && typeof t.toMillis === "function") return t.toMillis();
+    if (t && t.seconds) return t.seconds * 1000;
+    const d = new Date(x.date || 0).getTime();
+    return isNaN(d) ? 0 : d;
+};
 
-// يقرأ ملفات الـ ES module ويخزّن أي ملفات بتستوردها (فايربيز بيستورد ملفات تانية)
-async function cacheModuleGraph(cache, url, seen) {
-  if (seen.has(url)) return;
-  seen.add(url);
-  const res = await cacheOne(cache, url);
-  if (!res || res.type === "opaque") return;
-  let text = "";
-  try { text = await res.clone().text(); } catch (e) { return; }
-  const re = /(?:from|import)\s*["']((?:https?:\/\/|\.{1,2}\/)[^"']+\.js)["']/g;
-  let m;
-  while ((m = re.exec(text))) {
-    try { await cacheModuleGraph(cache, new URL(m[1], url).href, seen); } catch (e) { /* ignore */ }
-  }
-}
-
-// يقرأ ملفات CSS ويخزّن الخطوط/الصور المرتبطة بيها (Font Awesome + Google Fonts)
-async function cacheCssAssets(cache, url) {
-  try {
-    const res = await cache.match(url);
-    if (!res) return;
-    const text = await res.clone().text();
-    const re = /url\(\s*["']?([^"')]+)["']?\s*\)/g;
-    let m; const urls = new Set();
-    while ((m = re.exec(text))) {
-      if (m[1].startsWith("data:")) continue;
-      try { urls.add(new URL(m[1], url).href); } catch (e) { /* ignore */ }
+function loadState() {
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (_) { s = {}; }
+    // لو الإصدار اتغيّر نمسح بصمات الأرصدة عشان يتنشر كل شيء من جديد
+    if (s.version !== STATE_VERSION) {
+        s = { version: STATE_VERSION, catalogSig: s.catalogSig, chunks: s.chunks };
     }
-    await Promise.all([...urls].map(u => cacheOne(cache, u)));
-  } catch (e) { /* ignore */ }
+    return s;
+}
+function saveState(s) { try { s.version = STATE_VERSION; localStorage.setItem(STATE_KEY, JSON.stringify(s)); } catch (_) { /* ignore */ } }
+export function getPublishState() { return loadState(); }
+
+async function waitForDb(ms = 6000) {
+    const t0 = Date.now();
+    while (!__getDb() && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 200));
+    return __getDb();
 }
 
-// ---------- INSTALL ----------
-self.addEventListener("install", event => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await Promise.all(LOCAL_FILES.map(u => cacheOne(cache, u)));
-    const seen = new Set();
-    await Promise.all(CDN_FILES.map(u => /\.js$/.test(u) ? cacheModuleGraph(cache, u, seen) : cacheOne(cache, u)));
-    await Promise.all(CDN_FILES.filter(u => /\.css|fonts\.googleapis/.test(u)).map(u => cacheCssAssets(cache, u)));
-  })());
-  self.skipWaiting();
-});
+// ---------------- الكتالوج الأساسي ----------------
+export async function publishCatalog(db, force = false) {
+    const snap = await FS.getDocs(FS.collection(db, "inventory"));
 
-// ---------- ACTIVATE ----------
-// أول ما النسخة الجديدة تشتغل: امسح كل الكاش القديم (أي اسم غير الحالي) على الجهاز،
-// واطلب من الصفحات المفتوحة تتحدّث. الصفحات المخفية بتتحدّث فورًا، والظاهرة بنعرض فيها
-// زرار «تحديث» (عشان ما نقطعش على المستخدم وهو بيكتب فاتورة).
-self.addEventListener("activate", event => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    const old = keys.filter(k => k !== CACHE_NAME);
-    await Promise.all(old.map(k => caches.delete(k)));
-    await self.clients.claim();
-    if (old.length) {
-      const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      for (const c of wins) {
-        if (c.visibilityState === "hidden") { try { await c.navigate(c.url); } catch (e) { /* ignore */ } }
-        else c.postMessage({ type: "SW_UPDATED" });
-      }
+    const items = [];
+    snap.forEach((d) => {
+        const x = d.data();
+        if (isDeleted(x)) return;
+        const name = String(x.name || "").trim();
+        const sell = round2(num(x.sell));
+        if (!name || sell <= 0) return;
+        const factor = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
+        const it = { id: d.id, n: name, s: sell, f: factor };
+
+        const img = String(x.imageUrl || x.image || "").trim();
+        if (img && (img.startsWith("data:image/") || /^https?:\/\//.test(img))) {
+            it.img = img;
+        }
+        items.push(it);
+    });
+    items.sort((a, b) => a.n.localeCompare(b.n, "ar"));
+
+    const payload = JSON.stringify(items);
+    const state = loadState();
+    if (!force && state.catalogSig === payload.length + ":" + hash(payload)) return { items: items.length, skipped: true };
+
+    const chunks = Math.max(1, Math.ceil(items.length / CHUNK_SIZE));
+    for (let i = 0; i < chunks; i++) {
+        await FS.setDoc(FS.doc(db, "shop_catalog", "c" + i), { items: items.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE) });
     }
-  })());
-});
+    for (let i = chunks; i < (state.chunks || 0); i++) { try { await FS.deleteDoc(FS.doc(db, "shop_catalog", "c" + i)); } catch (_) { /* ignore */ } }
+    await FS.setDoc(FS.doc(db, "shop_catalog", "meta"), { count: items.length, chunks, updatedAt: Date.now() });
 
-// السماح للصفحة بطلب مسح كل الكاش يدويًا
-self.addEventListener("message", event => {
-  if (event.data && event.data.type === "CLEAR_CACHES") {
-    event.waitUntil(caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))));
-  }
-});
+    state.catalogSig = payload.length + ":" + hash(payload);
+    state.chunks = chunks;
+    saveState(state);
+    return { items: items.length, skipped: false };
+}
 
-// ---------- FETCH ----------
-self.addEventListener("fetch", event => {
-  const request = event.request;
-  if (request.method !== "GET") return;
+function hash(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
+}
 
-  let url;
-  try { url = new URL(request.url); } catch (e) { return; }
-  if (!/^https?:$/.test(url.protocol)) return;
-  if (PASS_THROUGH_HOSTS.some(h => url.hostname === h || url.hostname.endsWith("." + h))) return;
+// ---------------- الأرصدة والأسعار المخصصة ----------------
+// debugCid: (اختياري) ID عميل عشان ترجع تفاصيل حسابه للفحص
+export async function publishBalances(db, force = false, debugCid = null) {
+    const [custSnap, invSnap, transSnap, invenSnap] = await Promise.all([
+        FS.getDocs(FS.collection(db, "customers")),
+        FS.getDocs(FS.collection(db, "invoices")),
+        FS.getDocs(FS.collection(db, "transactions")),
+        FS.getDocs(FS.collection(db, "inventory"))
+    ]);
 
-  const isSameOrigin = url.origin === self.location.origin;
-  const isPage = request.mode === "navigate" || (request.headers.get("accept") || "").includes("text/html");
+    // 1. معاملات الكرتونة + خريطة اسم الصنف (احتياطي لمطابقة البنود)
+    const factors = {};
+    const stockByName = {};
+    invenSnap.forEach((d) => {
+        const x = d.data();
+        factors[d.id] = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
+        if (x.name) stockByName[normName(x.name)] = d.id;
+    });
 
-  // صفحات HTML: نعرض المخزّنة فورًا ونحدّثها بالخلفية. المطابقة بتتجاهل ?id=... عشان الصفحات
-  // اللي بتفتح بمعاملات (customer-details.html?id=..) تشتغل أوفلاين.
-  if (isPage && isSameOrigin) {
-    event.respondWith((async () => {
-      const cache = await caches.open(CACHE_NAME);
-      const key = url.origin + url.pathname;
-      const cached = await cache.match(key) || await cache.match(request, { ignoreSearch: true });
-      const network = fetch(request).then(res => {
-        if (res && res.ok) cache.put(key, res.clone());
-        return res;
-      }).catch(() => null);
-      if (cached) { event.waitUntil(network); return cached; }
-      const res = await network;
-      return res || (await cache.match("./offline.html")) || Response.error();
-    })());
-    return;
-  }
+    // خريطة اسم العميل -> ID (للحركات اللي من غير customerId)
+    const nameToId = {};
+    custSnap.docs.forEach((d) => {
+        const n = d.data().name;
+        if (n) nameToId[normName(n)] = d.id;
+    });
 
-  // ملفات الموقع نفسه (JS/CSS/صور/manifest): نعرض المخزّن فورًا ونحدّثه بالخلفية،
-  // عشان أي تعديل في ملف زي shop-publish.js يوصل من غير ما نغيّر رقم الكاش.
-  if (isSameOrigin) {
-    event.respondWith((async () => {
-      const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match(request) || await cache.match(request, { ignoreSearch: true });
-      const network = fetch(request).then(res => {
-        if (res && res.ok) cache.put(request, res.clone());
-        return res;
-      }).catch(() => null);
-      if (cached) { event.waitUntil(network); return cached; }
-      const res = await network;
-      return res || Response.error();
-    })());
-    return;
-  }
+    const invoiceBal = {};
+    const invCount = {};
+    const transBal = {};
+    const customerPrices = {}; // { customerId: { stockId: cartonPrice } }
 
-  // الملفات الخارجية (فايربيز/بوتستراب/خطوط/أيقونات): الكاش أولًا، ولو مش موجود نجيبه ونخزّنه
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(request);
-    if (cached) return cached;
+    // 2. تجميع الفواتير وربطها بالعميل (بالـ ID أو بالاسم)
+    const allInvoices = [];
+    invSnap.forEach((d) => {
+        const x = d.data();
+        if (isDeleted(x)) return;
+        const cid = x.customerId || nameToId[normName(x.customerName)];
+        if (!cid) return;
+        allInvoices.push({ ...x, _cid: cid });
+    });
+
+    // الأحدث أولاً: أول سعر نلاقيه للصنف هو آخر سعر اشترى بيه العميل
+    allInvoices.sort((a, b) => tsMs(b) - tsMs(a));
+
+    allInvoices.forEach((x) => {
+        // المديونية: إجمالي الفاتورة - المسدد (نفس كشف الحساب)
+        const cash = num(x.cashAmount ?? x.cashPaid ?? x.paid);
+        const wallet = num(x.walletAmount ?? x.walletPaid);
+        invoiceBal[x._cid] = (invoiceBal[x._cid] || 0) + (num(x.total) - (cash + wallet));
+        invCount[x._cid] = (invCount[x._cid] || 0) + 1;
+
+        // آخر سعر لكل صنف
+        if (!customerPrices[x._cid]) customerPrices[x._cid] = {};
+        (x.items || []).forEach((item) => {
+            if (item.isReturn) return;                       // المرتجع مش سعر شراء
+            let sid = item.stockId || item.productId || item.itemId || item.id;
+            if (!sid || factors[sid] === undefined) sid = stockByName[normName(item.name || item.itemName)] || sid;
+            if (!sid || customerPrices[x._cid][sid]) return; // اتسجل سعر أحدث قبل كده
+
+            const factor = factors[sid] || Math.max(1, Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1);
+            const u = String(item.unit || item.unitName || "").trim().toLowerCase();
+            const isCarton = item.isCarton === true || ["box", "carton", "كرتونة", "كرتونه"].includes(u);
+            const price = num(item.price ?? item.unitPrice ?? item.sellPrice ?? item.sell);
+
+            // توحيد السعر ليكون سعر الكرتونة (زي ما المتجر بيعرض)
+            const cartonPrice = isCarton ? price : price * factor;
+            if (cartonPrice > 0) customerPrices[x._cid][sid] = round2(cartonPrice);
+        });
+    });
+
+    // 3. السندات (نفس كشف الحساب: تخطّي سندات سداد الفواتير)
+    transSnap.forEach((d) => {
+        const x = d.data();
+        if (isDeleted(x)) return;
+        const isInvoicePayment = x.invoiceId || (x.note && String(x.note).includes("فاتورة"));
+        if (isInvoicePayment) return;
+        const cid = x.partyId || x.customerId || nameToId[normName(x.customerName || x.partyName)];
+        if (!cid) return;
+        const amt = Math.abs(num(x.amount ?? x.total));
+        let eff = 0;
+        if (x.type === "قبض") eff = -amt;
+        else if (x.type === "صرف") eff = amt;
+        transBal[cid] = (transBal[cid] || 0) + eff;
+    });
+
+    const state = loadState();
+    const prev = state.balances || {};
+    const next = {};
+    const now = Date.now();
+    let batch = FS.writeBatch(db), inBatch = 0, written = 0;
+    let debug = null;
+
+    for (const d of custSnap.docs) {
+        const x = d.data();
+        if (isDeleted(x)) continue;
+        const name = String(x.name || "").trim();
+        if (!name) continue;
+
+        const initial = num(x.initialBalance);
+        const balance = round2(initial + (invoiceBal[d.id] || 0) + (transBal[d.id] || 0));
+        const customPrices = customerPrices[d.id] || {};
+
+        if (debugCid && d.id === debugCid) {
+            debug = {
+                name, initial,
+                invoices: invCount[d.id] || 0,
+                invoiceDebt: round2(invoiceBal[d.id] || 0),
+                vouchersEffect: round2(transBal[d.id] || 0),
+                balance,
+                pricesCount: Object.keys(customPrices).length,
+                samplePrices: Object.entries(customPrices).slice(0, 5)
+            };
+        }
+
+        // البصمة بتشمل الأسعار الفعلية عشان أي تغيير في السعر يتنشر
+        const sig = name + "|" + balance + "|" + JSON.stringify(customPrices);
+        next[d.id] = sig;
+
+        if (!force && prev[d.id] === sig) continue;
+
+        batch.set(FS.doc(db, "shop_accounts", d.id), { name, balance, customPrices, updatedAt: now });
+        inBatch++; written++;
+        if (inBatch >= 400) { await batch.commit(); batch = FS.writeBatch(db); inBatch = 0; }
+    }
+    if (inBatch) await batch.commit();
+
+    state.balances = next;
+    state.at = now;
+    saveState(state);
+
+    const withPrices = Object.values(customerPrices).filter((p) => Object.keys(p).length > 0).length;
+    const out = { customers: Object.keys(next).length, written, invoicesLinked: allInvoices.length, customersWithPrices: withPrices };
+    if (debugCid) out.debug = debug || "ما لقيتش عميل بالـ ID ده";
+    return out;
+}
+
+export async function publishAll({ force = false, debugCid = null } = {}) {
+    const db = await waitForDb();
+    if (!db) throw new Error("قاعدة البيانات لسه ما اتهيّأتش.");
+    const cat = await publishCatalog(db, force);
+    const bal = await publishBalances(db, force, debugCid);
+    return { catalog: cat, balances: bal, at: loadState().at };
+}
+
+// إتاحة النشر اليدوي من الكونسول:
+//   await publishShopAll({ force: true, debugCid: "ID_العميل" })
+if (typeof window !== "undefined") window.publishShopAll = publishAll;
+
+export async function autoPublish() {
     try {
-      const res = await fetch(request);
-      if (res && (res.ok || res.type === "opaque")) cache.put(request, res.clone());
-      return res;
-    } catch (e) {
-      const fallback = await cache.match(request, { ignoreSearch: true });
-      if (fallback) return fallback;
-      throw e;
-    }
-  })());
-});
+        if (!navigator.onLine) return;
+        if (!localStorage.getItem("authGuard_token")) return;
+        const st = loadState();
+        if (st.at && Date.now() - st.at < AUTO_EVERY_MS) return;
+        await publishAll();
+    } catch (e) { console.warn("النشر التلقائي للمتجر:", e && e.message); }
+}
