@@ -122,7 +122,7 @@
         .table-headers div:first-child { text-align: right; }
 
         .item-card {
-            padding: 16px 20px;
+            padding: 16px 12px;
             background: white;
             border-radius: 20px;
             margin: 0 15px 12px;
@@ -140,7 +140,41 @@
         }
         .item-card.out-of-stock .item-price { color: var(--text-muted); }
 
-        .item-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 3px; color: var(--text-dark); line-height: 1.3;}
+        /* تعديلات عرض الصورة بجانب الاسم */
+        .item-name-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .item-thumb {
+            width: 45px;
+            height: 45px;
+            border-radius: 10px;
+            object-fit: cover;
+            background-color: #f8fafc;
+            border: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .item-thumb.placeholder {
+            object-fit: contain;
+            padding: 8px;
+            opacity: 0.4;
+        }
+        .item-info {
+            flex-grow: 1;
+            min-width: 0; /* لمنع خروج النص عن الإطار */
+        }
+
+        .item-name { 
+            font-weight: 800; 
+            font-size: 0.9rem; 
+            margin-bottom: 2px; 
+            color: var(--text-dark); 
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .item-barcode { font-size: 0.75rem; color: var(--text-muted); }
 
         .item-price { 
@@ -502,11 +536,19 @@
                 badgeClass += ' qty-low';
             }
 
+            // إعداد الصورة 
+            const imgSrc = item.imageUrl || item.image || "";
+            const validImg = imgSrc && (imgSrc.startsWith("data:image/") || /^https?:\/\//.test(imgSrc)) ? imgSrc : "https://cdn-icons-png.flaticon.com/512/3076/3076962.png";
+            const isPh = validImg === "https://cdn-icons-png.flaticon.com/512/3076/3076962.png";
+
             html += `
                 <div class="item-card grid-layout ${isZero ? 'out-of-stock' : ''}" onclick="goToDetails('${item.id}')">
-                    <div class="item-info">
-                        <div class="item-name">${item.name || 'بدون اسم'}</div>
-                        <div class="item-barcode">باركود: ${item.barcode || '---'}</div>
+                    <div class="item-name-wrapper">
+                        <img loading="lazy" class="item-thumb ${isPh ? 'placeholder' : ''}" src="${validImg}" alt="صورة ${item.name}">
+                        <div class="item-info">
+                            <div class="item-name">${item.name || 'بدون اسم'}</div>
+                            <div class="item-barcode">باركود: ${item.barcode || '---'}</div>
+                        </div>
                     </div>
                     <div class="item-price">
                         ${Number(item.sell || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
