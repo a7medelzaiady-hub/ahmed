@@ -11,6 +11,7 @@ import { __getDb } from "./firestore-offline.js";
 const STATE_KEY = "elzaiady_shop_publish_state";
 const AUTO_EVERY_MS = 3 * 60 * 60 * 1000;   // النشر التلقائي كل 3 ساعات
 const CHUNK_SIZE = 50;                      // تقسيم الكتالوج
+const STATE_VERSION = 2;                    // غيّر الرقم ده لو عدّلت منطق الحساب عشان يتعمل نشر كامل
 
 const num = (v) => {
     if (v === null || v === undefined) return 0;
@@ -20,8 +21,30 @@ const num = (v) => {
 const round2 = (n) => Math.round(n * 100) / 100;
 const isDeleted = (d) => !!d && (d.isDeleted === true || d.deleted === true || d.status === "deleted" || d.isCancelled === true);
 
-function loadState() { try { return JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (_) { return {}; } }
-function saveState(s) { try { localStorage.setItem(STATE_KEY, JSON.stringify(s)); } catch (_) { /* ignore */ } }
+// توحيد الاسم (نفس منطق سجل المبيعات) لربط الفواتير اللي من غير customerId
+const normName = (s) => String(s || "").trim().replace(/\s+/g, " ")
+    .replace(/[\u064B-\u0652]/g, "").replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي").replace(/ة/g, "ه").toLowerCase();
+
+// وقت الفاتورة بالمللي ثانية (يدعم Timestamp و {seconds} و date نصي)
+const tsMs = (x) => {
+    const t = x.timestamp || x.createdAt;
+    if (t && typeof t.toMillis === "function") return t.toMillis();
+    if (t && t.seconds) return t.seconds * 1000;
+    const d = new Date(x.date || 0).getTime();
+    return isNaN(d) ? 0 : d;
+};
+
+function loadState() {
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (_) { s = {}; }
+    // لو الإصدار اتغيّر نمسح بصمات الأرصدة عشان يتنشر كل شيء من جديد
+    if (s.version !== STATE_VERSION) {
+        s = { version: STATE_VERSION, catalogSig: s.catalogSig, chunks: s.chunks };
+    }
+    return s;
+}
+function saveState(s) { try { s.version = STATE_VERSION; localStorage.setItem(STATE_KEY, JSON.stringify(s)); } catch (_) { /* ignore */ } }
 export function getPublishState() { return loadState(); }
 
 async function waitForDb(ms = 6000) {
@@ -43,7 +66,7 @@ export async function publishCatalog(db, force = false) {
         if (!name || sell <= 0) return;
         const factor = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
         const it = { id: d.id, n: name, s: sell, f: factor };
-        
+
         const img = String(x.imageUrl || x.image || "").trim();
         if (img && (img.startsWith("data:image/") || /^https?:\/\//.test(img))) {
             it.img = img;
@@ -88,50 +111,56 @@ export async function publishBalances(db, force = false) {
         FS.getDocs(FS.collection(db, "inventory"))
     ]);
 
-    // 1. جلب معاملات الكرتونة لحساب الأسعار
+    // 1. معاملات الكرتونة لتوحيد السعر
     const factors = {};
-    invenSnap.forEach(d => {
-        factors[d.id] = Math.max(1, Number(d.data().unitFactor || d.data().pcsPerCarton || d.data().factor) || 1);
+    invenSnap.forEach((d) => {
+        const x = d.data();
+        factors[d.id] = Math.max(1, Number(x.unitFactor || x.pcsPerCarton || x.factor) || 1);
+    });
+
+    // خريطة اسم العميل -> ID (للفواتير اللي من غير customerId)
+    const nameToId = {};
+    custSnap.forEach((d) => {
+        const n = d.data().name;
+        if (n) nameToId[normName(n)] = d.id;
     });
 
     const invoiceBal = {};
     const transBal = {};
     const customerPrices = {}; // { customerId: { stockId: cartonPrice } }
 
-    // 2. فرز الفواتير من الأحدث للأقدم لضمان أخذ "أحدث سعر" اشترى بيه التاجر
+    // 2. تجميع الفواتير وربطها بالعميل (بالـ ID أو بالاسم)
     const allInvoices = [];
     invSnap.forEach((d) => {
         const x = d.data();
-        if (!isDeleted(x) && x.customerId) allInvoices.push(x);
+        if (isDeleted(x)) return;
+        const cid = x.customerId || nameToId[normName(x.customerName)];
+        if (!cid) return;
+        allInvoices.push({ ...x, _cid: cid });
     });
-    
-    allInvoices.sort((a, b) => {
-        const ta = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.date || 0).getTime());
-        const tb = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.date || 0).getTime());
-        return tb - ta;
-    });
+
+    // الأحدث أولاً: أول سعر نلاقيه للصنف هو آخر سعر اشترى بيه العميل
+    allInvoices.sort((a, b) => tsMs(b) - tsMs(a));
 
     allInvoices.forEach((x) => {
-        // حساب المديونيات
-        invoiceBal[x.customerId] = (invoiceBal[x.customerId] || 0) + num(x.remaining);
+        // المديونيات (زي ما كانت: بس للفواتير المربوطة بـ customerId)
+        if (x.customerId) invoiceBal[x.customerId] = (invoiceBal[x.customerId] || 0) + num(x.remaining);
 
-        // استخراج الأسعار المخصصة للتاجر من الفاتورة
-        if (!customerPrices[x.customerId]) customerPrices[x.customerId] = {};
-        (x.items || []).forEach(item => {
-            const sid = item.stockId;
-            // لو الصنف متسجلش لسه للتاجر ده (لأننا بنفرز من الأحدث للأقدم فهياخد أحدث سعر)
-            if (sid && !customerPrices[x.customerId][sid]) {
-                const factor = factors[sid] || 1;
-                const u = String(item.unit || item.unitName).trim().toLowerCase();
-                const isCarton = (item.isCarton === true) || ['box', 'carton', 'كرتونة', 'كرتونه'].includes(u);
-                const itemPrice = Number(item.price) || 0;
-                
-                // توحيد السعر ليكون سعر الكرتونة لتطابقه مع المتجر
-                const cartonPrice = isCarton ? itemPrice : itemPrice * factor;
-                if (cartonPrice > 0) {
-                    customerPrices[x.customerId][sid] = round2(cartonPrice);
-                }
-            }
+        // آخر سعر لكل صنف
+        if (!customerPrices[x._cid]) customerPrices[x._cid] = {};
+        (x.items || []).forEach((item) => {
+            if (item.isReturn) return;                       // المرتجع مش سعر شراء
+            const sid = item.stockId || item.id;
+            if (!sid || customerPrices[x._cid][sid]) return; // اتسجل سعر أحدث قبل كده
+
+            const factor = factors[sid] || Math.max(1, Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1);
+            const u = String(item.unit || item.unitName || "").trim().toLowerCase();
+            const isCarton = item.isCarton === true || ["box", "carton", "كرتونة", "كرتونه"].includes(u);
+            const price = Number(item.price) || 0;
+
+            // توحيد السعر ليكون سعر الكرتونة (زي ما المتجر بيعرض)
+            const cartonPrice = isCarton ? price : price * factor;
+            if (cartonPrice > 0) customerPrices[x._cid][sid] = round2(cartonPrice);
         });
     });
 
@@ -157,18 +186,17 @@ export async function publishBalances(db, force = false) {
         if (isDeleted(x)) continue;
         const name = String(x.name || "").trim();
         if (!name) continue;
-        
+
         const initial = num(x.initialBalance ?? x.balance ?? x.debt);
         const balance = round2(initial + (invoiceBal[d.id] || 0) + (transBal[d.id] || 0));
         const customPrices = customerPrices[d.id] || {};
-        
-        // التعديل هنا: استخدام JSON.stringify للتحقق من تغير الأسعار الفعلية
+
+        // البصمة بتشمل الأسعار الفعلية عشان أي تغيير في السعر يتنشر
         const sig = name + "|" + balance + "|" + JSON.stringify(customPrices);
         next[d.id] = sig;
-        
+
         if (!force && prev[d.id] === sig) continue;
-        
-        // رفع بيانات التاجر وبداخلها أسعاره المخصصة
+
         batch.set(FS.doc(db, "shop_accounts", d.id), { name, balance, customPrices, updatedAt: now });
         inBatch++; written++;
         if (inBatch >= 400) { await batch.commit(); batch = FS.writeBatch(db); inBatch = 0; }
