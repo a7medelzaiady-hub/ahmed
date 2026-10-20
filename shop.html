@@ -38,7 +38,7 @@
         .net-banner { display: none; background: #92400e; color: #fef3c7; text-align: center; font-weight: 700; font-size: .78rem; padding: 6px 10px; position: sticky; top: 0; z-index: 1100; }
         .search-container { position: sticky; top: 8px; z-index: 1010; }
 
-        /* ستايل الكروت الجديد */
+        /* ستايل الكروت الجديد (مطابق للكتالوج) */
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .full { grid-column: span 2; text-align: center; padding: 40px 10px; font-weight: 800; }
         .card { background: #fff; border-radius: 16px; border: 1px solid #e4e4e7; overflow: hidden; padding-bottom: 10px; position: relative; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-3d); }
@@ -49,7 +49,6 @@
         .card .im img.ph { object-fit: contain; padding: 36px; opacity: .5; }
         
         .badge-b { position: absolute; top: 8px; right: 8px; background: #f3e8ff; color: #581c87; font-size: .65rem; font-weight: 800; border-radius: 8px; padding: 2px 8px; z-index: 2; border: 1px solid #e9d5ff; }
-        .custom-price-badge { position: absolute; top: 8px; left: 8px; background: #ecfdf5; color: #047857; font-size: .65rem; font-weight: 800; border-radius: 8px; padding: 2px 6px; z-index: 2; border: 1px solid #a7f3d0; display: flex; align-items: center; gap: 3px; }
         
         .det { padding: 8px 10px 0; text-align: center; flex: 1; display: flex; flex-direction: column; }
         .ttl { font-weight: 800; font-size: .86rem; line-height: 1.35; min-height: 2.3em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: auto; }
@@ -117,7 +116,7 @@
         <div id="histBox" style="display:none;margin-top:8px"></div>
     </div>
 
-    <!-- كارت العملاء غير المسجلين -->
+    <!-- كارت العملاء غير المسجلين (لإدخال الاسم) -->
     <div class="account-card" id="guestNameCard" style="display:none">
         <label class="fw-bold mb-1" style="font-size:.82rem;color:#6b21a8"><i class="fas fa-store me-1"></i> اسم محلك أو اسمك الكريم:</label>
         <input type="text" id="guestNameInput" class="form-control fw-bold" placeholder="أدخل اسم محلك هنا لتأكيد الطلب..." style="border-radius:12px;border:2px solid #8b5cf6">
@@ -232,18 +231,7 @@ function alertBox(msg, title = "تنبيه", icon = "fa-circle-exclamation") {
 $("btnAlertOk").onclick = () => { $("alertModal").style.display = "none"; };
 
 function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (_) {} $("totalItemsCount").textContent = Object.keys(cart).length; }
-
-// ميزة الأسعار المخصصة (الذكية)
-const getCartonPrice = (p) => {
-    return (account && account.customPrices && account.customPrices[p.id]) ? account.customPrices[p.id] : p.s;
-};
-const unitPrice = (p, unit) => {
-    const basePrice = getCartonPrice(p);
-    return (unit === "pcs" ? round2(basePrice / p.f) : basePrice);
-};
-const isCustomPriced = (p) => {
-    return (account && account.customPrices && account.customPrices[p.id] !== undefined);
-};
+const unitPrice = (p, unit) => (unit === "pcs" ? round2(p.s / p.f) : p.s);
 
 function norm(t) {
     return String(t || "").toLowerCase().replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/[ى]/g, "ي").replace(/ؤ/g, "و").replace(/ئ/g, "ي").replace(/[\u064B-\u0652]/g, "");
@@ -278,9 +266,24 @@ async function loadCatalogFromFirestore() {
         const n = meta.data().chunks || 1;
         const parts = await Promise.all(Array.from({ length: n }, (_, i) => getDoc(doc(db, "shop_catalog", "c" + i))));
         items = parts.flatMap((s) => (s.exists() ? s.data().items || [] : []));
+
+        // تطبيق أسعار العميل المخصصة
+        if (account) {
+            const customerPrices = account.customPrices || {};
+            items = items.map(p => {
+                if (customerPrices[p.id]) {
+                    p.s = Number(customerPrices[p.id]); 
+                }
+                return p;
+            });
+        }
+
         byId = Object.fromEntries(items.map((p) => [p.id, p]));
+        
+        // تنظيف السلة من أي أصناف لم تعد موجودة
         for (const id of Object.keys(cart)) if (!byId[id]) delete cart[id];
         saveCart();
+        
         renderCatalog();
     } catch (err) {
         console.error(err);
@@ -321,15 +324,13 @@ function renderCatalog() {
     $("catalogList").innerHTML = list.map((p) => {
         const c = cart[p.id], unit = c ? c.unit : "box", qty = c ? c.qty : 0;
         
-        // تجهيز الصورة
+        // تجهيز الصورة والـ Placeholder
         const imgSrc = p.img || p.imageUrl || p.image || "";
         const validImg = imgSrc && (imgSrc.startsWith("data:image/") || /^https?:\/\//.test(imgSrc)) ? imgSrc : "https://cdn-icons-png.flaticon.com/512/3076/3076962.png";
         const isPh = validImg === "https://cdn-icons-png.flaticon.com/512/3076/3076962.png";
 
         // الشعار (Brand) إن وجد
         const brandBadge = p.b || p.brand ? `<span class="badge-b">${esc(p.b || p.brand)}</span>` : '';
-        // بادج السعر المخصص
-        const customPriceBadge = isCustomPriced(p) ? `<span class="custom-price-badge" title="سعر خاص بك بناءً على مشترياتك السابقة"><i class="fas fa-star"></i> سعر خاص</span>` : '';
 
         // أزرار الوحدات
         const unitsHtml = p.f > 1
@@ -338,7 +339,6 @@ function renderCatalog() {
 
         return `<div class="card ${qty > 0 ? "has" : ""}" id="card_${esc(p.id)}">
             ${brandBadge}
-            ${customPriceBadge}
             <div class="im" data-act="img" data-id="${esc(p.id)}">
               <img loading="lazy" class="${isPh ? 'ph' : ''}" src="${esc(validImg)}" alt="${esc(p.n)}">
             </div>
