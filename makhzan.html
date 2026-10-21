@@ -104,9 +104,10 @@
             cursor: pointer;
         }
 
+        /* تعديل التصميم الشبكي للتكيّف بصورة أفضل */
         .grid-layout {
             display: grid;
-            grid-template-columns: 2fr 1fr 0.6fr 0.6fr;
+            grid-template-columns: 2fr 1fr 1.2fr;
             gap: 10px;
             align-items: center;
         }
@@ -140,7 +141,6 @@
         }
         .item-card.out-of-stock .item-price { color: var(--text-muted); }
 
-        /* تعديلات عرض الصورة بجانب الاسم */
         .item-name-wrapper {
             display: flex;
             align-items: center;
@@ -162,7 +162,7 @@
         }
         .item-info {
             flex-grow: 1;
-            min-width: 0; /* لمنع خروج النص عن الإطار */
+            min-width: 0;
         }
 
         .item-name { 
@@ -184,17 +184,25 @@
             font-size: 1.05rem;
         }
 
+        /* تنسيق الكميات المستقلة والمركبة */
+        .qty-wrapper {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            align-items: center;
+        }
+
         .qty-badge {
             background: #f0fdf4;
             color: var(--primary-green);
-            padding: 5px 0;
+            padding: 6px 10px;
             border-radius: 10px;
             font-weight: 700;
             font-size: 0.9rem;
             text-align: center;
-            width: 100%;
-            display: inline-block;
+            min-width: 45px;
             border: 1px solid #dcfce7;
+            display: inline-block;
         }
         
         .qty-low { background: var(--danger-bg); color: var(--danger); border-color: #ffe4e6; }
@@ -280,8 +288,7 @@
 <div class="table-headers grid-layout">
     <div>المنتج والباركود</div>
     <div>السعر</div>
-    <div>كرتونة</div>
-    <div>جركن</div>
+    <div>الكمية / المخزون</div>
 </div>
 
 <div id="itemsContainer">
@@ -354,7 +361,7 @@
         try {
             localStorage.setItem(CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() }));
         } catch (e) {
-            console.warn('تعذر حفظ الكاش المحلي (ربما البيانات كبيرة جدًا)', e);
+            console.warn('تعذر حفظ الكاش المحلي', e);
         }
     }
 
@@ -388,7 +395,6 @@
             const purchasesMap = new Map();
             const openingMap = new Map();
 
-            // أرصدة بداية المدة
             transSnap.forEach(docSnap => {
                 const data = docSnap.data();
                 if (data.productId) {
@@ -397,11 +403,9 @@
                 }
             });
 
-            // حساب المبيعات بسرعة أداء عالية (مع استبعاد الفواتير المحذوفة والملغاة)
             invoicesSnap.forEach(docSnap => {
                 const invData = docSnap.data();
 
-                // 🛑 استبعاد الفاتورة إذا كانت محذوفة أو ملغاة لكي يعود رصيدها للمخزن تلقائياً
                 if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') {
                     return;
                 }
@@ -422,7 +426,6 @@
                 }
             });
 
-            // حساب المشتريات
             supplierSnap.forEach(docSnap => {
                 const items = docSnap.data().items || [];
                 for (let i = 0; i < items.length; i++) {
@@ -441,7 +444,6 @@
                 }
             });
 
-            // الاستماع المباشر للتغيرات في المخزون
             onSnapshot(collection(db, "inventory"), (snap) => {
                 const freshData = [];
                 snap.forEach(doc => {
@@ -522,9 +524,6 @@
             const isNegative = total < 0;
             const absTotal = Math.abs(total);
 
-            const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
-            const jerrycans = (absTotal % factor) * (isNegative ? -1 : 1);
-
             const isZero = total === 0;
             const minAllowed = (Number(item.min) || 0) * factor;
             const isLow = !isZero && (total <= minAllowed);
@@ -541,6 +540,24 @@
             const validImg = imgSrc && (imgSrc.startsWith("data:image/") || /^https?:\/\//.test(imgSrc)) ? imgSrc : "https://cdn-icons-png.flaticon.com/512/3076/3076962.png";
             const isPh = validImg === "https://cdn-icons-png.flaticon.com/512/3076/3076962.png";
 
+            // تخصيص خانات الكمية بناءً على المعامل (Factor)
+            let qtyHtml = '';
+            if (factor === 1) {
+                // منتج فردي/قطع غيار/جركن 20 (عرض خانة واحدة)
+                qtyHtml = `<div class="qty-wrapper"><div class="${badgeClass}">${total}</div></div>`;
+            } else {
+                // زيوت أو منتجات كرتونة (عرض خانتين: كرتونة وجركن/علبة)
+                const cartons = Math.floor(absTotal / factor) * (isNegative ? -1 : 1);
+                const remainder = (absTotal % factor) * (isNegative ? -1 : 1);
+
+                qtyHtml = `
+                    <div class="qty-wrapper">
+                        <div class="${badgeClass}" title="كرتونة">${cartons} ك</div>
+                        <div class="${badgeClass}" title="قطع/عبوات">${remainder}</div>
+                    </div>
+                `;
+            }
+
             html += `
                 <div class="item-card grid-layout ${isZero ? 'out-of-stock' : ''}" onclick="goToDetails('${item.id}')">
                     <div class="item-name-wrapper">
@@ -554,10 +571,7 @@
                         ${Number(item.sell || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
                     </div>
                     <div>
-                        <div class="${badgeClass}">${cartons}</div>
-                    </div>
-                    <div>
-                        <div class="${badgeClass}">${jerrycans}</div>
+                        ${qtyHtml}
                     </div>
                 </div>
             `;
