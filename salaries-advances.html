@@ -191,6 +191,8 @@
         .btn-coral:hover { filter: brightness(1.07); }
         .btn-violet { background: linear-gradient(135deg, #8b5cf6, var(--violet)); color: #fff; box-shadow: var(--shadow-sm); }
         .btn-violet:hover { filter: brightness(1.07); }
+        .btn-teal { background: linear-gradient(135deg, #0e7c86, #06565f); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-teal:hover { filter: brightness(1.07); }
         .btn-ghost { background: var(--brand-tint); color: var(--brand-dark); }
         .btn-ghost:hover { background: #d7f0e3; }
 
@@ -225,6 +227,7 @@
         .driver-nums .limit .v { color: var(--text-mid); font-size: 12px; }
         .driver-nums .deficit .v { color: var(--coral); }
         .driver-nums .absence .v { color: var(--violet); }
+        .driver-nums .nondeductible .v { color: var(--teal); }
         
         .driver-nums .accrual-status .v.due-pos { color: var(--brand); }
         .driver-nums .accrual-status .v.due-neg { color: var(--coral); }
@@ -292,6 +295,7 @@
         .icon-btn:hover { color: var(--brand-dark); border-color: var(--brand-mid); background: var(--brand-tint); }
         .icon-btn.danger-btn:hover { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
         .icon-btn.violet-btn:hover { color: var(--violet); border-color: var(--violet); background: var(--violet-tint); }
+        .icon-btn.teal-btn:hover { color: var(--teal); border-color: var(--teal); background: var(--teal-tint); }
 
         .advances-panel { border-top: 1px solid var(--border-subtle); padding: 14px 15px 16px; display: none; background: var(--surface); }
         .advances-panel.open { display: block; }
@@ -313,9 +317,14 @@
             border-color: #ddd6fe;
             background: #f5f3ff;
         }
+        .adv-item.is-nondeductible {
+            border-color: #b2ebf2;
+            background: #e0f7fa;
+        }
         .adv-item .info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .adv-item .amount { color: var(--coral); font-weight: 800; font-variant-numeric: tabular-nums; }
         .adv-item.is-absence .amount { color: var(--violet); }
+        .adv-item.is-nondeductible .amount { color: var(--teal); }
         .adv-item .date { color: var(--text-mid); font-size: 11px; font-variant-numeric: tabular-nums; }
         .adv-item .note { color: var(--text-mid); font-size: 11.5px; }
         
@@ -324,6 +333,7 @@
         }
         .badge-deficit { background: var(--coral-tint); color: var(--coral); border: 1px solid #f87171; }
         .badge-absence { background: var(--violet-tint); color: var(--violet); border: 1px solid #a78bfa; }
+        .badge-nondeductible { background: var(--teal-tint); color: var(--teal); border: 1px solid #4dd0e1; }
         .badge-exception { background: var(--amber-tint); color: var(--amber); }
 
         .adv-item button { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 13px; padding: 2px 6px; }
@@ -501,7 +511,8 @@
             if (!a.date || a.date.slice(0,7) !== ym) return false;
             if (type === 'absence') return a.isAbsence;
             if (type === 'deficit') return a.isDeficit;
-            return !a.isDeficit && !a.isAbsence;
+            if (type === 'nondeductible') return a.isNonDeductible;
+            return !a.isDeficit && !a.isAbsence && !a.isNonDeductible;
         }); 
     }
 
@@ -572,7 +583,7 @@
     onSnapshot(collection(db, ADVANCES_COL), (snap) => {
         advances = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         render();
-    }, (err) => console.error("خطأ في جلب السلف/العجز/الغياب:", err));
+    }, (err) => console.error("خطأ في جلب البيانات:", err));
 
     function render(){
         document.getElementById('monthLabel').textContent = monthLabel(currentMonth);
@@ -594,10 +605,12 @@
                 const advsMonth = itemsOfMonth(d.id, currentMonth, 'adv');
                 const deficitsMonth = itemsOfMonth(d.id, currentMonth, 'deficit');
                 const absencesMonth = itemsOfMonth(d.id, currentMonth, 'absence');
+                const nonDeductibleMonth = itemsOfMonth(d.id, currentMonth, 'nondeductible');
 
                 const advSum = advsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const deficitSum = deficitsMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const absenceSum = absencesMonth.reduce((s,a)=>s+Number(a.amount),0);
+                const nonDeductibleSum = nonDeductibleMonth.reduce((s,a)=>s+Number(a.amount),0);
 
                 const net = Number(d.baseSalary||0) - advSum - absenceSum - deficitSum;
 
@@ -649,6 +662,18 @@
                     </div>
                 `).join('') : `<div class="no-adv">لا يوجد أي غياب مسجل في هذا الشهر</div>`;
 
+                const nonDeductibleItemsHtml = nonDeductibleMonth.length ? nonDeductibleMonth.map(a => `
+                    <div class="adv-item is-nondeductible">
+                        <div class="info">
+                            <span class="badge-tag badge-nondeductible">لم تُخصم</span>
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        <button data-del-adv="${a.id}" title="حذف">✕</button>
+                    </div>
+                `).join('') : `<div class="no-adv">لا يوجد مصروفات غير مخصومة مسجلة في هذا الشهر</div>`;
+
                 return `
                 <div class="driver">
                     <div class="driver-top">
@@ -664,6 +689,7 @@
                             <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
                             <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
                             <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
+                            <div class="n nondeductible"><div class="k">مصروفات لم تخصم</div><div class="v">${fmt(nonDeductibleSum)}</div></div>
                             
                             <div class="n accrual-status">
                                 <div class="k">${accrual.netBalance >= 0 ? `متبقي له (يوم ${accrual.elapsedDays})` : `مطلوب منه (يوم ${accrual.elapsedDays})`}</div>
@@ -677,6 +703,7 @@
                             <button class="icon-btn" data-toggle="${d.id}" data-type="adv"><i class="fa-solid fa-plus"></i> سلفة</button>
                             <button class="icon-btn violet-btn" data-toggle="${d.id}" data-type="absence"><i class="fa-solid fa-user-slash"></i> غياب</button>
                             <button class="icon-btn danger-btn" data-toggle="${d.id}" data-type="deficit"><i class="fa-solid fa-triangle-exclamation"></i> العجز</button>
+                            <button class="icon-btn teal-btn" data-toggle="${d.id}" data-type="nondeductible"><i class="fa-solid fa-receipt"></i> مصروفات لم تخصم</button>
                             ${isAdmin ? `<button class="icon-btn danger-btn" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
                     </div>
@@ -726,6 +753,17 @@
                         </div>
                         <div class="adv-list">${deficitItemsHtml}</div>
                     </div>
+
+                    <div class="advances-panel ${activePanel === 'nondeductible' ? 'open' : ''}" style="background:#e0f7fa; border-top: 1px solid #80deea;">
+                        <h3 style="color: var(--teal);">تسجيل مصروفات/عهدة لم تخصم — ${monthLabel(currentMonth)}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="المبلغ" id="nonDeductibleAmount-${d.id}">
+                            <input type="date" id="nonDeductibleDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="البيان / سبب الصرف" id="nonDeductibleNote-${d.id}">
+                            <button class="btn btn-teal" data-add-nondeductible="${d.id}">تسجيل مصروفات</button>
+                        </div>
+                        <div class="adv-list">${nonDeductibleItemsHtml}</div>
+                    </div>
                 </div>`;
             }).join('');
         }
@@ -758,6 +796,9 @@
         });
         document.querySelectorAll('[data-add-absence]').forEach(btn => {
             btn.onclick = () => addAbsence(btn.getAttribute('data-add-absence'));
+        });
+        document.querySelectorAll('[data-add-nondeductible]').forEach(btn => {
+            btn.onclick = () => addNonDeductible(btn.getAttribute('data-add-nondeductible'));
         });
         document.querySelectorAll('[data-del-adv]').forEach(btn => {
             btn.onclick = () => {
@@ -815,7 +856,7 @@
         }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'adv');
         }catch(e){
             alert('تعذرت إضافة السلفة، حاول مرة أخرى');
@@ -833,7 +874,7 @@
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: true, isAbsence: false, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: true, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'deficit');
         }catch(e){
             alert('تعذر تسجيل العجز، حاول مرة أخرى');
@@ -851,10 +892,28 @@
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isAbsence: true, isDeficit: false, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isAbsence: true, isDeficit: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'absence');
         }catch(e){
             alert('تعذر تسجيل الغياب، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    window.addNonDeductible = async function(driverId){
+        const amountEl = document.getElementById(`nonDeductibleAmount-${driverId}`);
+        const dateEl = document.getElementById(`nonDeductibleDate-${driverId}`);
+        const noteEl = document.getElementById(`nonDeductibleNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isNonDeductible: true, isAbsence: false, isDeficit: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'nondeductible');
+        }catch(e){
+            alert('تعذر تسجيل المصروفات، حاول مرة أخرى');
             console.error(e);
         }
     };
@@ -884,8 +943,8 @@
         const { driverId, amount, date, note, limit, newTotal } = pendingAdvance;
         const excess = Math.round(newTotal - limit);
         try{
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, exception: true, createdAt: serverTimestamp() });
-            await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, isAbsence: false, exception: false, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, isNonDeductible: false, exception: true, createdAt: serverTimestamp() });
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
             openPanels.set(driverId, 'deficit');
         }catch(e){
             alert('تعذر تسجيل السلفة بالعجز');
