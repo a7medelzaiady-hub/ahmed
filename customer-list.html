@@ -705,7 +705,7 @@
     }).join('');
   };
 
-  /* دالة تحليل أداء العميل والتوصيات الذكية */
+  /* دالة تحليل أداء العميل والتوصيات الذكية (التمييز بين الكرتونة والجركن) */
   window.closeCustomerAnalytics = () => {
       document.getElementById('customerAnalyticsModal').style.display = 'none';
   };
@@ -715,8 +715,8 @@
       const body = document.getElementById('customerAnalyticsBody');
       const titleEl = document.getElementById('customerAnalyticsTitle');
 
-      titleEl.innerHTML = `<i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> تحليل أداء العميل: ${customerName}`;
-      body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-circle-notch fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري حساب المؤشرات وتوليد التقرير الذكي...</p></div>`;
+      titleEl.innerHTML = `<i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> تقرير تحليل أداء العميل: ${customerName}`;
+      body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-circle-notch fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري حساب المؤشرات وتدقيق كميات الكراتين والجراكن...</p></div>`;
       modal.style.display = 'flex';
 
       try {
@@ -730,7 +730,7 @@
           let totalSales = 0;
           let totalPaid = 0;
           let invoiceCount = 0;
-          let itemFreq = {};
+          let itemStats = {};
           let datesList = [];
 
           invSnap.forEach(d => {
@@ -755,7 +755,21 @@
               (data.items || []).forEach(item => {
                   const name = item.name || 'منتج غير مسمى';
                   const qty = Number(item.qty) || 0;
-                  itemFreq[name] = (itemFreq[name] || 0) + qty;
+                  const factor = Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1;
+                  const isCarton = (item.unit === 'box' || item.unit === 'carton' || item.unit === 'كرتونة' || item.unitName === 'كرتونة' || item.isCarton === true);
+
+                  if (!itemStats[name]) {
+                      itemStats[name] = { cartons: 0, pcs: 0, factor: factor, totalVolumeInPcs: 0 };
+                  }
+
+                  if (isCarton) {
+                      itemStats[name].cartons += qty;
+                      itemStats[name].totalVolumeInPcs += (qty * factor);
+                  } else {
+                      itemStats[name].pcs += qty;
+                      itemStats[name].totalVolumeInPcs += qty;
+                  }
+                  if (factor > 1) itemStats[name].factor = factor;
               });
           });
 
@@ -782,7 +796,6 @@
           const paymentRatio = (totalSales + baseBalance) > 0 ? ((totalPaid / (totalSales + baseBalance)) * 100) : 100;
           const avgInvoiceValue = invoiceCount > 0 ? (totalSales / invoiceCount) : 0;
 
-          // حساب معدل تكرار الشراء بالأيام
           let lastPurchaseDaysAgo = -1;
           if (datesList.length > 0) {
               datesList.sort((a, b) => b - a);
@@ -791,10 +804,10 @@
               lastPurchaseDaysAgo = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           }
 
-          // ترتيب المنتجات الأكثر شراءً
-          const topProducts = Object.entries(itemFreq).sort((a, b) => b[1] - a[1]).slice(0, 3);
+          const sortedProducts = Object.entries(itemStats)
+              .sort((a, b) => b[1].totalVolumeInPcs - a[1].totalVolumeInPcs)
+              .slice(0, 4);
 
-          // تصنيف العميل والتوصية
           let bannerClass = "normal";
           let badgeTag = "عميل متوازن";
           let recommendationText = "";
@@ -817,12 +830,29 @@
               recommendationText = "معدل الشراء والسداد في الحدود الطبيعية. يُنصح بمتابعة تحصيل الدفعات بانتظام مع كل فاتورة جديدة.";
           }
 
-          let topItemsHtml = topProducts.length > 0 ? topProducts.map(p => `
-              <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="font-size:0.75rem;">
-                  <span class="fw-bold"><i class="fas fa-oil-can me-1 text-warning"></i> ${p[0]}</span>
-                  <span class="num text-dark fw-bold">${p[1]} قطعة/كرتونة</span>
-              </div>
-          `).join('') : '<div class="text-muted text-center py-2" style="font-size:0.75rem;">لا توجد أصناف مبيعة مسجلة</div>';
+          let topItemsHtml = sortedProducts.length > 0 ? sortedProducts.map(([pName, pData]) => {
+              let factor = pData.factor || 1;
+              let totalPcs = pData.pcs;
+              let totalCartons = pData.cartons;
+
+              if (factor > 1 && totalPcs >= factor) {
+                  totalCartons += Math.floor(totalPcs / factor);
+                  totalPcs = totalPcs % factor;
+              }
+
+              let qtyParts = [];
+              if (totalCartons > 0) qtyParts.push(`<b>${totalCartons}</b> كرتونة`);
+              if (totalPcs > 0) qtyParts.push(`<b>${totalPcs}</b> جركن/قطعة`);
+
+              let qtyDisplay = qtyParts.length > 0 ? qtyParts.join(' + ') : '0';
+
+              return `
+                  <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="font-size:0.78rem;">
+                      <span class="fw-bold"><i class="fas fa-oil-can me-1" style="color:var(--germany-gold);"></i> ${pName}</span>
+                      <span class="num text-dark fw-bold bg-light px-2 py-1 rounded" style="border: 1px solid var(--line);">${qtyDisplay}</span>
+                  </div>
+              `;
+          }).join('') : '<div class="text-muted text-center py-2" style="font-size:0.75rem;">لا توجد أصناف مبيعة مسجلة</div>';
 
           body.innerHTML = `
               <div class="recommendation-banner ${bannerClass}">
@@ -862,7 +892,7 @@
 
               <div class="bg-white p-3 rounded border mb-2">
                   <h6 class="fw-bold mb-2" style="font-size:0.8rem; color:var(--germany-black);">
-                      <i class="fas fa-trophy me-1" style="color:var(--germany-gold);"></i> المنتجات الأكثر طلبًا وشراءً
+                      <i class="fas fa-boxes-stacked me-1" style="color:var(--germany-gold);"></i> المنتجات الأكثر طلباً (بالكرتونة والجركن)
                   </h6>
                   ${topItemsHtml}
               </div>
