@@ -1,1271 +1,1035 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>كشف حساب العملاء — الزيادي</title>
-    <!-- إعدادات التطبيق الهاتفي PWA -->
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>رواتب وسلف | شركة الزيادى</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0b5e3d">
+    <meta name="theme-color" content="#075E3D">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
 
-<!-- Google Fonts: Cairo & Montserrat -->
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<!-- Font Awesome 6 -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<!-- SheetJS للتصدير ومكتبة html2canvas للطباعة -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --brand: #0E8F5B;
+            --brand-mid: #12A06B;
+            --brand-dark: #075E3D;
+            --brand-tint: #E6F7EF;
 
-<style>
-  :root{
-    --germany-black: #000000;
-    --germany-gold: #FFCC00;
-    --italy-green: #178a4a;
-    --germany-red: #FF0000;
-    --purple: #5b21b6;
-    
-    --ink: #000000;
-    --paper: #f4f6f8;
-    --panel: #ffffff;
-    --line: #e5e9f0;
-    --mute: #5a677d;
-    
-    --owed: var(--germany-red);
-    --owed-bg: #fff1f1;
-    --credit: var(--italy-green);
-    --credit-bg: #eefaf2;
-    
-    --card-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    --hover-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    --radius-sm: 12px;
-    --radius-md: 16px;
-    --radius-lg: 24px;
-  }
-  
-  *{
-    box-sizing:border-box;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  body{
-    margin:0; background:#eceef1; color:var(--ink);
-    font-family:'Cairo', sans-serif; -webkit-font-smoothing:antialiased;
-    padding-bottom: 90px;
-    font-size: 0.95rem;
-  }
+            --amber: #D97706;
+            --amber-tint: #FEF3C7;
 
-  .app-container {
-    max-width: 500px;
-    margin: 0 auto;
-    background: var(--paper);
-    min-height: 100vh;
-    box-shadow: 0 0 30px rgba(0,0,0,0.15);
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .num { 
-    font-family: 'Montserrat', 'Cairo', sans-serif !important; 
-    font-weight: 800; 
-    text-align: center;
-  }
+            --teal: #0E7C86;
+            --teal-tint: #E0F7FA;
 
-  header{
-    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
-    color:#fff; 
-    padding: 24px 20px 65px; 
-    position:relative; 
-    overflow:hidden;
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); 
-    border-bottom: 4px solid var(--germany-red);
-  }
-  header::after{
-    content:""; position:absolute; inset:0;
-    background-image: radial-gradient(circle at 80% 10%, rgba(255, 204, 0, 0.15), transparent 60%);
-    pointer-events:none;
-  }
-  .top-row{ display:flex; align-items:center; justify-content:space-between; position:relative; z-index:1; }
-  
-  .icon-link{
-    color:#fff; background:rgba(255,255,255,.15);
-    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    text-decoration:none !important; font-size:.95rem; flex-shrink:0; transition:.2s ease;
-    border: 1px solid rgba(255,255,255,0.1);
-    outline: none;
-  }
-  .icon-link:active{ background:rgba(255,255,255,.3); transform: scale(0.9); }
-  
-  .brand{ text-align:center; }
-  .brand .eyebrow{ font-size:.65rem; letter-spacing:1.5px; text-transform:uppercase; opacity:.9; font-weight:800; color: var(--germany-gold); }
-  .brand h1{ font-size:1.15rem; font-weight:900; margin:3px 0 0; letter-spacing: -0.5px; color: #ffffff; }
+            --coral: #DC2626;
+            --coral-tint: #FEE2E2;
 
-  .search-wrap{ position:relative; z-index:1; margin-top:20px; display:flex; gap:10px; align-items:stretch; }
-  .search-box{
-    flex: 1;
-    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
-    border-radius:16px; padding:12px 16px; display:flex; align-items:center; gap:10px;
-    backdrop-filter: blur(8px);
-    transition: all 0.3s ease;
-  }
-  .search-box:focus-within {
-    background: rgba(255,255,255,0.2);
-    border-color: var(--germany-gold);
-  }
-  .search-box i{ opacity:.9; font-size:.9rem; color: var(--germany-gold); }
-  .search-box input{ background:transparent; border:none; outline:none; color:#fff; width:100%; font-family:'Cairo'; font-size:.9rem; font-weight: 600; }
-  .search-box input::placeholder{ color:rgba(255,255,255,.65); }
+            --violet: #7C3AED;
+            --violet-tint: #F3E8FF;
 
-  .danger-btn{
-    width:48px; flex-shrink:0; background:var(--germany-red); border:1px solid rgba(255,0,0,0.2);
-    color:#fff; font-size:1.05rem; border-radius:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
-    transition:.2s ease;
-    outline: none;
-  }
-  .danger-btn:active{ transform: scale(0.9); opacity:0.8; }
+            --surface: #F3FAF7;
+            --card-bg: #FFFFFF;
+            --text-deep: #0F2A1E;
+            --text-mid: #5B6B63;
+            --text-faint: #9BAAA2;
+            --border-subtle: #DFEFE7;
 
-  .stats{
-    position:relative; z-index:1; margin:-38px 16px 0; display:grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px;
-  }
-  .stat-card{
-    background:var(--panel); border-radius:var(--radius-md); padding:12px 4px;
-    box-shadow: var(--card-shadow); text-align:center;
-    position: relative; min-width:0;
-    border: 1px solid var(--line);
-  }
-  .stat-card::before {
-    content: ''; position: absolute; top: 0; right: 0; left: 0; height: 4px; border-radius: 10px 10px 0 0;
-  }
-  .stat-card.owed::before{ background-color: var(--owed); }
-  .stat-card.credit::before{ background-color: var(--credit); }
-  .stat-card.net::before{ background-color: var(--germany-black); }
-  
-  .stat-card .lbl{ font-size:.65rem; color:var(--mute); font-weight:800; display: block; }
-  .stat-card .val{ font-size:.9rem; margin-top:5px; font-weight:900; display: block; }
-  .stat-card.owed .val{ color:var(--owed); }
-  .stat-card.credit .val{ color:var(--credit); }
-  .stat-card.net .val{ color:var(--germany-black); }
-  .stat-card .cur{ font-size:.6rem; font-weight:800; color:var(--mute); margin-top: 2px;}
+            --shadow-sm: 0 4px 14px rgba(7, 94, 61, 0.07);
+            --shadow-md: 0 10px 26px rgba(7, 94, 61, 0.11);
+            --shadow-lg: 0 18px 38px rgba(7, 94, 61, 0.2);
 
-  .toolbar{
-    margin:20px 16px 10px; display:flex; gap:8px; align-items:center; justify-content:space-between;
-  }
-  .filter-pills{ display:flex; gap:6px; }
-  .pill{
-    border: 1px solid var(--line); background:#fff; color:var(--mute); font-size:.78rem; font-weight:800;
-    padding:8px 16px; border-radius:999px; cursor:pointer; transition:.2s ease;
-    outline: none;
-  }
-  .pill.active{ background:var(--germany-black); color:#fff; border-color:var(--germany-black); box-shadow: var(--card-shadow); }
-  .pill:active{ transform: scale(0.95); }
-  .count-tag{ font-size:.78rem; color:var(--germany-black); font-weight:800; }
+            --radius-lg: 24px;
+            --radius-md: 18px;
+            --radius-sm: 12px;
+        }
 
-  #customersContainer{ padding:6px 16px 0; }
-  .customer-card{
-    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg);
-    padding:16px; margin-bottom:14px; display:flex; flex-direction: column;
-    position: relative; transition:all 0.2s ease; box-shadow:var(--card-shadow);
-  }
-  .customer-card:hover {
-    box-shadow: var(--hover-shadow);
-    transform: translateY(-1px);
-  }
-  .customer-card::before {
-    content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 6px; 
-    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  }
-  .customer-card.has-debt::before{ background-color:var(--owed); }
-  .customer-card.is-credit::before{ background-color:var(--credit); }
-  .customer-card.is-zero::before{ background-color:var(--mute); }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
 
-  .row-main{ display:flex; gap:12px; align-items:center; }
-  
-  .avatar{
-    width:44px; height:44px; border-radius:14px; background:var(--owed-bg); color:var(--germany-black);
-    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:.95rem; flex-shrink:0;
-    border: 1px solid var(--line);
-  }
-  
-  .customer-info-box { flex: 1; min-width: 0; }
-  .customer-name{ font-weight:800; font-size:1rem; margin:0; color: var(--germany-black); }
-  .phone-sub{ font-size:.75rem; color:var(--mute); font-weight:700; display:block; margin-top:4px; }
-  
-  .balance-strip {
-    background: #f8fafc;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    padding: 12px;
-    margin: 12px 0 14px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .balance-label{ font-size:.78rem; color:var(--mute); font-weight:800; }
-  .balance-value{ font-weight:900; font-size:1.1rem; display: inline-flex; align-items: center; gap: 4px; }
-  
-  .text-debt{ color:var(--owed); }
-  .text-credit{ color:var(--credit); }
-  .text-zero{ color:var(--mute); }
-  
-  .tag{ font-size:.65rem; font-weight:800; padding:4px 10px; border-radius:8px; margin-right:8px; letter-spacing: 0.2px;}
-  .tag.debt{ background:var(--owed-bg); color:var(--owed); }
-  .tag.credit{ background:var(--credit-bg); color:var(--credit); }
-  .tag.zero{ background:#e2e8f0; color:var(--mute); }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--surface);
+            color: var(--text-deep);
+            min-height: 100vh;
+            overflow-x: hidden;
+            width: 100%;
+            padding-bottom: 60px;
+        }
 
-  .action-container{ 
-    display:grid; 
-    grid-template-columns: repeat(2, 1fr);
-    gap:8px; 
-    border-top: 1px solid var(--line);
-    padding-top: 12px;
-  }
-  .action-btn{
-    height: 38px; 
-    border-radius: var(--radius-sm); 
-    display:flex; 
-    align-items:center; 
-    justify-content:center;
-    gap: 6px;
-    text-decoration:none !important; 
-    font-size:.75rem; 
-    font-weight: 800;
-    transition:.15s; 
-    border:1px solid transparent;
-    cursor: pointer;
-  }
-  .action-btn:active{ transform:scale(0.95); }
-  
-  .btn-log{ background:#ffffff; color:var(--germany-black); border-color:var(--germany-black); }
-  .btn-info{ background:var(--germany-black); color:#ffffff; border-color:var(--germany-black); }
-  .btn-share-direct{ background:linear-gradient(135deg, #25d366, #128c7e); color:#ffffff; border-color:#128c7e; }
-  .btn-del{ background:var(--owed-bg); color:var(--owed); border-color:rgba(255, 0, 0, 0.15); }
-  .btn-analyze { background: #fffdf2; color: #854d0e; border-color: var(--germany-gold); grid-column: span 2; }
+        a:focus-visible, button:focus-visible {
+            outline: 2px solid var(--brand);
+            outline-offset: 2px;
+            border-radius: 8px;
+        }
 
-  .empty-state{ text-align:center; padding:60px 20px; color:var(--mute); }
-  .empty-state i{ font-size:2.5rem; opacity:.4; margin-bottom:12px; display:block; color: var(--germany-gold); }
+        /* Header */
+        .header {
+            position: sticky; top: 0; z-index: 1000;
+            background: linear-gradient(135deg, var(--brand-dark) 0%, var(--brand) 100%);
+            padding: 0 16px;
+            height: 64px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: var(--shadow-md);
+        }
+        .header-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-mark {
+            width: 40px; height: 40px; border-radius: 13px; flex-shrink: 0;
+            background: #ffffff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .logo-mark i { font-size: 18px; color: var(--brand); }
+        .logo-text { display: flex; flex-direction: column; line-height: 1.2; }
+        .logo-text .brand-name { font-family: 'Tajawal', sans-serif; font-size: 16px; font-weight: 800; color: #fff; letter-spacing: 0.2px; }
+        .logo-text .sub { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.75); }
+        .btn-icon {
+            width: 38px; height: 38px; background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25); border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 15px; cursor: pointer;
+            transition: background 0.2s ease, transform 0.15s ease;
+        }
+        .btn-icon:active { transform: scale(0.92); background: rgba(255,255,255,0.25); }
 
-  .statement-modal-overlay {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      z-index: 10500;
-      display: none;
-      align-items: flex-end;
-      justify-content: center;
-      backdrop-filter: blur(5px);
-  }
-  .statement-modal-box {
-      background: #ffffff;
-      width: 100%;
-      max-width: 500px;
-      height: 90vh;
-      border-radius: 24px 24px 0 0;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 -10px 40px rgba(0,0,0,0.3);
-      font-family: 'Cairo';
-      overflow: hidden;
-  }
-  .statement-modal-header {
-      padding: 14px 18px;
-      background: var(--germany-black);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 3px solid var(--germany-red);
-  }
-  .statement-modal-body {
-      padding: 12px;
-      overflow-y: auto;
-      flex: 1;
-      background: #f8fafc;
-  }
-  .statement-modal-footer {
-      padding: 12px 16px;
-      background: white;
-      border-top: 1px solid var(--line);
-      display: flex;
-      gap: 8px;
-  }
+        /* Hero */
+        .hero-panel {
+            margin: 16px;
+            border-radius: var(--radius-lg);
+            background: linear-gradient(150deg, var(--brand-dark) 0%, var(--brand) 65%, var(--brand-mid) 100%);
+            padding: 20px 16px 18px;
+            position: relative; overflow: hidden;
+            box-shadow: var(--shadow-lg);
+        }
+        .hero-panel::before {
+            content: ""; position: absolute; top: -60px; left: -40px;
+            width: 180px; height: 180px; border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+        }
+        .hero-panel::after {
+            content: ""; position: absolute; bottom: -70px; right: -50px;
+            width: 200px; height: 200px; border-radius: 50%;
+            background: rgba(255,255,255,0.06);
+        }
+        .hero-top {
+            position: relative; z-index: 1;
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+        }
+        .hero-eyebrow {
+            color: rgba(255,255,255,0.9); font-family: 'Tajawal', sans-serif;
+            font-size: 15px; font-weight: 800;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .hero-eyebrow i { color: #B9F5D8; }
+        .month-nav {
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22);
+            border-radius: 999px; padding: 5px 6px;
+        }
+        .month-nav button {
+            width: 28px; height: 28px; border-radius: 50%; border: none;
+            background: rgba(255,255,255,0.9); color: var(--brand-dark); font-size: 15px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .month-nav .label { color: #fff; font-weight: 700; font-size: 13px; min-width: 96px; text-align: center; font-variant-numeric: tabular-nums; }
 
-  .statement-card-item {
-      background: white;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 12px;
-      margin-bottom: 10px;
-      box-shadow: var(--card-shadow);
-  }
-  .statement-card-item.invoice-card { border-right: 4px solid var(--germany-black); }
-  .statement-card-item.voucher-card { border-right: 4px solid var(--purple); background: #fcfbfe; }
-  
-  .statement-item-table {
-      width: 100%;
-      margin-top: 8px;
-      font-size: 0.72rem;
-      border-collapse: collapse;
-  }
-  .statement-item-table th { background: #f1f5f9; padding: 4px 6px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center; }
-  .statement-item-table td { padding: 4px 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700; }
+        .stats-row {
+            position: relative; z-index: 1;
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px;
+        }
+        .stat-chip {
+            background: var(--card-bg); border-radius: var(--radius-md);
+            padding: 13px 10px; display: flex; flex-direction: column; gap: 9px;
+            box-shadow: 0 10px 22px rgba(5, 46, 30, 0.22);
+        }
+        .chip-icon {
+            width: 32px; height: 32px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; font-size: 14px;
+        }
+        .chip-icon.gold-bg { background: var(--amber-tint); color: var(--amber); }
+        .chip-icon.red-bg  { background: var(--coral-tint); color: var(--coral); }
+        .chip-icon.black-bg{ background: var(--brand-tint); color: var(--brand); }
+        .chip-num { font-family: 'Tajawal', sans-serif; font-size: 17px; font-weight: 900; color: var(--text-deep); font-variant-numeric: tabular-nums; }
+        .chip-label { font-size: 10px; color: var(--text-mid); font-weight: 700; }
 
-  .btn-share-full {
-      background: linear-gradient(135deg, #25d366, #128c7e);
-      color: #ffffff;
-      border: none;
-      border-radius: var(--radius-sm);
-      padding: 10px;
-      font-size: 0.8rem;
-      font-weight: 800;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      width: 100%;
-      box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
-  }
-  .btn-share-full:disabled{
-      opacity: 0.6;
-      cursor: not-allowed;
-  }
+        .section-block { padding: 4px 16px 0; }
+        .section-label { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; }
+        .section-label .mark {
+            width: 22px; height: 22px; border-radius: 7px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10.5px; color: #fff; background: var(--brand);
+        }
+        .section-label span.title { font-family: 'Tajawal', sans-serif; font-size: 13.5px; font-weight: 800; color: var(--brand-dark); }
 
-  .modal-overlay {
-    display: none;
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0,0,0,0.6);
-    z-index: 20000;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(4px);
-  }
-  .modal-box {
-    background: white;
-    width: 86%;
-    max-width: 340px;
-    border-radius: 14px;
-    padding: 20px 16px;
-    text-align: center;
-  }
+        /* Form card */
+        .form-card {
+            background: var(--card-bg); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md); padding: 16px; margin-bottom: 18px;
+            box-shadow: var(--shadow-sm);
+        }
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .field { flex: 1; min-width: 130px; }
+        .field label { display: block; font-size: 11px; color: var(--text-mid); font-weight: 700; margin-bottom: 5px; }
+        input, textarea {
+            width: 100%; background: var(--surface); border: 1px solid var(--border-subtle);
+            color: var(--text-deep); border-radius: 10px; padding: 10px 12px;
+            font-family: 'Cairo', sans-serif; font-size: 13.5px;
+        }
+        input:focus { outline: none; border-color: var(--brand); }
+        .btn {
+            border: none; border-radius: 10px; padding: 10px 18px;
+            font-family: 'Cairo', sans-serif; font-weight: 800; font-size: 13px;
+            cursor: pointer; transition: filter .15s, transform .1s; white-space: nowrap;
+        }
+        .btn:active { transform: scale(.96); }
+        .btn-brand { background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark)); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-brand:hover { filter: brightness(1.07); }
+        .btn-coral { background: linear-gradient(135deg, #ef4444, var(--coral)); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-coral:hover { filter: brightness(1.07); }
+        .btn-violet { background: linear-gradient(135deg, #8b5cf6, var(--violet)); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-violet:hover { filter: brightness(1.07); }
+        .btn-teal { background: linear-gradient(135deg, #0e7c86, #06565f); color: #fff; box-shadow: var(--shadow-sm); }
+        .btn-teal:hover { filter: brightness(1.07); }
+        .btn-ghost { background: var(--brand-tint); color: var(--brand-dark); }
+        .btn-ghost:hover { background: #d7f0e3; }
 
-  /* أنماط نافذة التحليل الذكي */
-  .analytics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
-  .analytics-kpi-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; }
-  .analytics-kpi-card .kpi-title { font-size: 0.7rem; color: var(--mute); font-weight: 700; }
-  .analytics-kpi-card .kpi-value { font-size: 0.95rem; font-weight: 900; margin-top: 2px; color: var(--germany-black); }
-  
-  .recommendation-banner {
-    border-radius: 14px; padding: 12px; margin-bottom: 12px; font-size: 0.78rem; font-weight: 800; line-height: 1.5;
-    display: flex; gap: 8px; align-items: flex-start;
-  }
-  .recommendation-banner.vip { background: #fefce8; border: 1px solid #fde047; color: #854d0e; }
-  .recommendation-banner.risk { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
-  .recommendation-banner.dormant { background: #f8fafc; border: 1px solid #cbd5e1; color: #475569; }
-  .recommendation-banner.normal { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
-</style>
+        /* Driver cards */
+        .empty {
+            text-align: center; padding: 46px 20px; color: var(--text-mid);
+            border: 1px dashed var(--border-subtle); border-radius: var(--radius-md);
+            font-size: 13px; background: var(--card-bg);
+        }
+        .driver {
+            background: var(--card-bg); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        .driver-top { display: flex; align-items: center; justify-content: space-between; padding: 14px 15px; gap: 12px; flex-wrap: wrap; }
+        .driver-id { display: flex; align-items: center; gap: 12px; }
+        .avatar {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark));
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; color: #fff; font-size: 15px; flex-shrink: 0;
+        }
+        .driver-name { font-weight: 800; font-size: 14.5px; color: var(--text-deep); }
+        .driver-phone { font-size: 11.5px; color: var(--text-mid); margin-top: 2px; }
+
+        .driver-nums { display: flex; gap: 12px; flex-wrap: wrap; }
+        .driver-nums .n { text-align: center; }
+        .driver-nums .n .k { font-size: 10px; color: var(--text-mid); font-weight: 700; margin-bottom: 3px; }
+        .driver-nums .n .v { font-weight: 800; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+        .driver-nums .net .v { color: var(--brand); }
+        .driver-nums .adv .v { color: var(--coral); }
+        .driver-nums .limit .v { color: var(--text-mid); font-size: 12px; }
+        .driver-nums .deficit .v { color: var(--coral); }
+        .driver-nums .absence .v { color: var(--violet); }
+        .driver-nums .nondeductible .v { color: var(--teal); }
+        
+        .driver-nums .accrual-status .v.due-pos { color: var(--brand); }
+        .driver-nums .accrual-status .v.due-neg { color: var(--coral); }
+
+        .accrual-box {
+            background: #f0fdf4;
+            border-top: 1px solid #bbf7d0;
+            border-bottom: 1px solid #bbf7d0;
+            padding: 10px 15px;
+            font-size: 12px;
+        }
+        .accrual-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 800;
+            color: var(--brand-dark);
+            margin-bottom: 6px;
+        }
+        .accrual-details {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--text-mid);
+            font-size: 11.5px;
+        }
+        .accrual-details b {
+            font-variant-numeric: tabular-nums;
+            color: var(--text-deep);
+        }
+
+        /* Exception modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(15,42,30,0.55);
+            z-index: 5000; display: none; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: #fff; border-radius: var(--radius-md); max-width: 380px; width: 100%;
+            padding: 20px; box-shadow: var(--shadow-lg);
+        }
+        .modal-box .modal-icon {
+            width: 46px; height: 46px; border-radius: 50%; background: var(--coral-tint); color: var(--coral);
+            display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px;
+        }
+        .modal-box h3 { font-size: 15px; font-weight: 800; color: var(--text-deep); margin-bottom: 10px; }
+        .modal-box .modal-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+        .modal-box .modal-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-mid); }
+        .modal-box .modal-row b { color: var(--text-deep); font-variant-numeric: tabular-nums; }
+        .modal-box .modal-row.excess b { color: var(--coral); }
+        .modal-actions { display: flex; gap: 8px; }
+        .modal-actions .btn { flex: 1; }
+        .btn-cancel { background: var(--surface); color: var(--text-mid); border: 1px solid var(--border-subtle); }
+        .btn-exception { background: linear-gradient(135deg, #ef4444, var(--coral)); color: #fff; }
+
+        .driver-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .icon-btn {
+            border-radius: 8px; border: 1px solid var(--border-subtle);
+            background: var(--surface); color: var(--text-mid); cursor: pointer;
+            display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700;
+            padding: 6px 9px; transition: all .15s; font-family: 'Cairo', sans-serif;
+        }
+        .icon-btn:hover { color: var(--brand-dark); border-color: var(--brand-mid); background: var(--brand-tint); }
+        .icon-btn.danger-btn:hover { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
+        .icon-btn.violet-btn:hover { color: var(--violet); border-color: var(--violet); background: var(--violet-tint); }
+        .icon-btn.teal-btn:hover { color: var(--teal); border-color: var(--teal); background: var(--teal-tint); }
+
+        .advances-panel { border-top: 1px solid var(--border-subtle); padding: 14px 15px 16px; display: none; background: var(--surface); }
+        .advances-panel.open { display: block; }
+        .advances-panel h3 { font-size: 11.5px; color: var(--text-mid); margin-bottom: 10px; font-weight: 700; }
+        .adv-form { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .adv-form input { flex: 1; min-width: 100px; }
+        .adv-list { display: flex; flex-direction: column; gap: 6px; }
+        
+        .adv-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--card-bg); border: 1px solid var(--border-subtle); border-radius: 99px;
+            padding: 8px 12px; font-size: 12.5px;
+        }
+        .adv-item.is-deficit {
+            border-color: #fca5a5;
+            background: #fff5f5;
+        }
+        .adv-item.is-absence {
+            border-color: #ddd6fe;
+            background: #f5f3ff;
+        }
+        .adv-item.is-nondeductible {
+            border-color: #b2ebf2;
+            background: #e0f7fa;
+        }
+        .adv-item .info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .adv-item .amount { color: var(--coral); font-weight: 800; font-variant-numeric: tabular-nums; }
+        .adv-item.is-absence .amount { color: var(--violet); }
+        .adv-item.is-nondeductible .amount { color: var(--teal); }
+        .adv-item .date { color: var(--text-mid); font-size: 11px; font-variant-numeric: tabular-nums; }
+        .adv-item .note { color: var(--text-mid); font-size: 11.5px; }
+        
+        .badge-tag {
+            padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800;
+        }
+        .badge-deficit { background: var(--coral-tint); color: var(--coral); border: 1px solid #f87171; }
+        .badge-absence { background: var(--violet-tint); color: var(--violet); border: 1px solid #a78bfa; }
+        .badge-nondeductible { background: var(--teal-tint); color: var(--teal); border: 1px solid #4dd0e1; }
+        .badge-exception { background: var(--amber-tint); color: var(--amber); }
+
+        .adv-item button { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+        .adv-item button:hover { color: var(--coral); }
+        .no-adv { font-size: 12px; color: var(--text-mid); padding: 6px 2px; }
+
+        .toolbar { display: flex; justify-content: flex-end; padding: 18px 16px 4px; }
+
+        @media print {
+            body { background: #fff !important; }
+            .header, .form-card, .toolbar, .month-nav button, .driver-actions, .adv-form { display: none !important; }
+            .advances-panel { display: block !important; }
+        }
+        @media (max-width: 560px) {
+            .stats-row { grid-template-columns: repeat(3, 1fr); }
+            .driver-top { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
 </head>
 <body>
 
-<div class="app-container">
-  <header>
-    <div class="top-row">
-      <a href="client_menu.html" class="icon-link" title="رجوع"><i class="fas fa-arrow-right"></i></a>
-      <div class="brand">
-        <span class="eyebrow">شركة الزيادي</span>
-        <h1>كشف حساب العملاء</h1>
-      </div>
-      <a href="index.html" class="icon-link" title="الصفحة الرئيسية"><i class="fas fa-home"></i></a>
-    </div>
-    <div class="search-wrap">
-      <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" id="searchInput" placeholder="ابحث بالإسم أو رقم الهاتف..." oninput="filterCustomers()">
-      </div>
-      <button class="danger-btn" id="deleteAllBtn" title="مسح كل العملاء"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  </header>
+<!-- حماية الصفحة: تسجيل الدخول -->
+<script>
+    (function checkLoginGuard() {
+        const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username");
+        const isLoggedIn = sessionStorage.getItem("isLoggedIn") || localStorage.getItem("isLoggedIn");
+        if (!loggedUser && isLoggedIn !== "true") {
+            window.location.replace("index1.html");
+        }
+    })();
+</script>
 
-  <div class="stats">
-    <div class="stat-card owed">
-      <span class="lbl">إجمالي عليه</span>
-      <span class="val num" id="totalOwed">0.00</span>
-      <span class="cur">ج.م</span>
-    </div>
-    <div class="stat-card credit">
-      <span class="lbl">إجمالي له</span>
-      <span class="val num" id="totalCredit">0.00</span>
-      <span class="cur">ج.م</span>
-    </div>
-    <div class="stat-card net">
-      <span class="lbl">الصافي</span>
-      <span class="val num" id="netBalance">0.00</span>
-      <span class="cur">ج.م</span>
-    </div>
-  </div>
-
-  <div class="toolbar">
-    <div class="filter-pills">
-      <button class="pill active" data-filter="all" onclick="setFilter('all')">الكل</button>
-      <button class="pill" data-filter="debt" onclick="setFilter('debt')">عليه</button>
-      <button class="pill" data-filter="credit" onclick="setFilter('credit')">له</button>
-    </div>
-    <span class="count-tag" id="countTag"></span>
-  </div>
-
-  <div id="customersContainer">
-    <div class="text-center py-5" id="initialLoader" style="text-align:center;padding:50px 0;">
-      <i class="fas fa-circle-notch fa-spin" style="font-size:1.8rem;color:#000000;"></i>
-      <p style="margin-top:10px;font-size:.85rem;font-weight:800;color:#7c8b82;">جاري تحميل كشف الحساب...</p>
-    </div>
-  </div>
-</div>
-
-<!-- النافذة المنبثقة التفصيلية لكشف حساب السجل -->
-<div id="customerStatementModal" class="statement-modal-overlay">
-    <div class="statement-modal-box">
-        <div class="statement-modal-header">
-            <h6 class="fw-bold mb-0" id="customerStatementTitle" style="font-size: 0.95rem; margin:0;">
-                <i class="fas fa-file-invoice-dollar me-1" style="color:var(--germany-gold);"></i> كشف حساب السجل
-            </h6>
-            <button class="icon-link" onclick="closeCustomerStatement()" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
+<header class="header">
+    <div class="header-logo">
+        <div class="logo-mark"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+        <div class="logo-text">
+            <div class="brand-name">رواتب وسلف</div>
+            <div class="sub">شركة الزيادى</div>
         </div>
-        <div class="statement-modal-body" id="customerStatementBody"></div>
-        <div class="statement-modal-footer" style="flex-direction: column;">
-            <button class="btn-share-full" id="shareStatementBtn" onclick="shareEntireStatement()"><i class="fas fa-share-nodes"></i> مشاركة كشف الحساب كاملاً</button>
-            <button class="action-btn btn-info" onclick="exportCustomerStatementExcel()" style="width:100%;"><i class="fas fa-file-excel me-1"></i> تصدير إكسيل Excel</button>
+    </div>
+    <button class="btn-icon" id="btnBack" type="button" aria-label="رجوع">
+        <i class="fas fa-arrow-right"></i>
+    </button>
+</header>
+
+<div class="hero-panel">
+    <div class="hero-top">
+        <div class="hero-eyebrow"><i class="fa-solid fa-truck-fast"></i> رواتب وسلف</div>
+        <div class="month-nav">
+            <button id="prevMonth" title="الشهر السابق">›</button>
+            <div class="label" id="monthLabel">—</div>
+            <button id="nextMonth" title="الشهر التالي">‹</button>
+        </div>
+    </div>
+    <div class="stats-row" id="statsRow" style="display: none;">
+        <div class="stat-chip">
+            <div class="chip-icon gold-bg"><i class="fa-solid fa-sack-dollar"></i></div>
+            <span class="chip-num" id="statSalary">٠</span>
+            <span class="chip-label">إجمالي الرواتب</span>
+        </div>
+        <div class="stat-chip">
+            <div class="chip-icon red-bg"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+            <span class="chip-num" id="statAdv">٠</span>
+            <span class="chip-label">إجمالي خصومات الشهر</span>
+        </div>
+        <div class="stat-chip">
+            <div class="chip-icon black-bg"><i class="fa-solid fa-scale-balanced"></i></div>
+            <span class="chip-num" id="statNet">٠</span>
+            <span class="chip-label">صافي المستحق النهائي</span>
         </div>
     </div>
 </div>
 
-<!-- نافذة التحليل الذكي للعميل -->
-<div id="customerAnalyticsModal" class="statement-modal-overlay">
-    <div class="statement-modal-box" style="height: 85vh;">
-        <div class="statement-modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a);">
-            <h6 class="fw-bold mb-0" id="customerAnalyticsTitle" style="font-size: 0.95rem; margin:0; color:#fff;">
-                <i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> تقرير تحليل أداء العميل
-            </h6>
-            <button class="icon-link" onclick="closeCustomerAnalytics()" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
+<div class="section-block" id="addDriverBlock" style="display: none;">
+    <div class="section-label">
+        <div class="mark"><i class="fa-solid fa-user-plus"></i></div>
+        <span class="title">إضافة سائق جديد</span>
+    </div>
+    <div class="form-card">
+        <div class="form-row">
+            <div class="field"><label>اسم السائق</label><input id="newName" placeholder="مثال: محمد عبدالله"></div>
+            <div class="field"><label>رقم التليفون (اختياري)</label><input id="newPhone" placeholder="01000000000"></div>
+            <div class="field"><label>الراتب الأساسي</label><input id="newSalary" type="number" placeholder="0" min="0"></div>
+            <button class="btn btn-brand" id="addDriverBtn">إضافة السائق</button>
         </div>
-        <div class="statement-modal-body" id="customerAnalyticsBody"></div>
     </div>
 </div>
 
-<!-- مودال شاشة التحميل للتجهيز الحراري -->
-<div class="modal-overlay" id="shareLoadingModal">
-  <div class="modal-box" style="max-width: 260px;">
-    <div class="spinner-border text-success mb-3" role="status" style="width: 2.5rem; height: 2.5rem; border-color: #128c7e; border-right-color: transparent;"></div>
-    <h6 class="fw-bold text-dark m-0" style="font-size: 0.8rem;">جاري إنشاء صورة كشف الحساب...</h6>
-  </div>
+<div class="section-block">
+    <div class="section-label">
+        <div class="mark"><i class="fa-solid fa-users"></i></div>
+        <span class="title" id="driversTitle">القائمة</span>
+    </div>
+    <div id="driversList">
+        <div class="empty">جاري تحميل البيانات…</div>
+    </div>
+</div>
+
+<div class="toolbar">
+    <button class="btn btn-ghost" id="printBtn"><i class="fa-solid fa-print"></i> طباعة / تصدير PDF</button>
+</div>
+
+<div class="modal-overlay" id="exceptionModal">
+    <div class="modal-box">
+        <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <h3>السلفة دي أكبر من الحد المسموح به</h3>
+        <div class="modal-rows" id="exceptionModalRows"></div>
+        <div class="modal-actions">
+            <button class="btn btn-cancel" id="modalCancelBtn">إلغاء</button>
+            <button class="btn btn-exception" id="modalExceptionBtn">استثناء وتسجيل مع العجز</button>
+        </div>
+    </div>
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import {
+        initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
+        collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, query, where, getDocs, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
-    authDomain: "ahmedelzaiady.firebaseapp.com",
-    projectId: "ahmedelzaiady",
-    storageBucket: "ahmedelzaiady.firebasestorage.app",
-    messagingSenderId: "300306825071",
-    appId: "1:300306825071:web:0426ddde56280fa090329a",
-    measurementId: "G-WE04GK5XZZ"
-  };
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a"
+    };
 
-  const app = initializeApp(firebaseConfig);
-  let db;
-  try {
-      db = initializeFirestore(app, {
-          localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
-      });
-  } catch (e) {
-      db = getFirestore(app);
-  }
-
-  let allCustomers = [];
-  let customersData = {};
-  let customersNameMap = {};
-  let currentFilter = 'all';
-
-  const fmt = (n) => Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  function normalizeName(str) {
-      return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
-  }
-
-  function convertToEnglishNumbers(str) {
-      if (!str) return "";
-      const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
-      let res = str.toString();
-      for (let i = 0; i < 10; i++) { res = res.replace(arabicNumbers[i], i); }
-      return res;
-  }
-
-  function parseArabicDateToMs(dateStr) {
-      if (!dateStr) return 0;
-      try {
-          let cleanStr = convertToEnglishNumbers(String(dateStr)).replace(/ص/g, 'AM').replace(/م/g, 'PM');
-          const parsed = Date.parse(cleanStr);
-          if (!isNaN(parsed)) return parsed;
-          const parts = cleanStr.match(/(\d+)/g);
-          if (parts && parts.length >= 3) {
-              let year = parseInt(parts[0]), month = parseInt(parts[1]) - 1, day = parseInt(parts[2]);
-              if (year < 1000) { day = parseInt(parts[0]); month = parseInt(parts[1]) - 1; year = parseInt(parts[2]); }
-              let hour = parts[3] ? parseInt(parts[3]) : 0, minute = parts[4] ? parseInt(parts[4]) : 0;
-              if (cleanStr.includes('PM') && hour < 12) hour += 12;
-              if (cleanStr.includes('AM') && hour === 12) hour = 0;
-              return new Date(year, month, day, hour, minute).getTime();
-          }
-      } catch (e) { } return 0;
-  }
-
-  function cleanDateString(dateStr) {
-      if (!dateStr) return "";
-      dateStr = convertToEnglishNumbers(dateStr);
-      const match = dateStr.match(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/) || dateStr.match(/\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/);
-      return match ? match[0] : dateStr;
-  }
-
-  function parseInvoiceDate(inv) {
-      let dateStr = "";
-      if (inv.date) { dateStr = cleanDateString(inv.date); }
-      else if (inv.timestamp?.seconds) { return new Date(inv.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
-      if (!dateStr) return "";
-      dateStr = convertToEnglishNumbers(dateStr);
-      let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-      if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-      m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-      if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-      return dateStr;
-  }
-
-  function parseVoucherDate(tr) {
-      if (!tr) return "";
-      if (tr.date) {
-          let dateStr = convertToEnglishNumbers(tr.date);
-          let m = dateStr.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-          if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-          m = dateStr.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-          if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-          if (dateStr) return dateStr;
-      }
-      if (tr.timestamp?.seconds) { return new Date(tr.timestamp.seconds * 1000).toLocaleDateString('en-CA'); }
-      return "";
-  }
-
-  function parseSignedNumber(val) {
-    if (val === null || val === undefined || val === '') return 0;
-    if (typeof val === 'number') return val;
-    let s = String(val).trim().replace(/,/g, '');
-    let negative = false;
-    if (s.startsWith('(') && s.endsWith(')')) { negative = true; s = s.slice(1, -1); }
-    if (s.endsWith('-')) { negative = true; s = s.slice(0, -1); }
-    if (s.startsWith('-')) { negative = true; s = s.slice(1); }
-    const n = parseFloat(s);
-    if (isNaN(n)) return 0;
-    return negative ? -n : n;
-  }
-
-  async function loadAllLedgerData() {
-    const debtMap = {}; 
-
-    const [invoicesSnap, transSnap] = await Promise.all([
-      getDocs(collection(db, "invoices")),
-      getDocs(collection(db, "transactions"))
-    ]);
-
-    invoicesSnap.forEach(d => {
-      const data = d.data();
-      if (data.isDeleted) return;
-      const cid = data.customerId;
-      if (!cid) return;
-      debtMap[cid] = (debtMap[cid] || 0) + parseSignedNumber(data.remaining);
-    });
-
-    transSnap.forEach(d => {
-      const tr = d.data();
-      if (tr.isDeleted) return;
-      const pid = tr.partyId || tr.customerId;
-      if (!pid) return;
-      let effect = 0;
-      const amt = parseSignedNumber(tr.amount);
-      if (tr.type === 'قبض') effect = -Math.abs(amt);
-      else if (tr.type === 'صرف') effect = Math.abs(amt);
-      debtMap[pid] = (debtMap[pid] || 0) + effect;
-    });
-
-    return debtMap;
-  }
-
-  async function loadCustomers() {
-    const container = document.getElementById('customersContainer');
+    const app = initializeApp(firebaseConfig);
+    let db;
     try {
-      const q = query(collection(db, "customers"), orderBy("name"));
-      const [custSnap, debtMap] = await Promise.all([getDocs(q), loadAllLedgerData()]);
+        db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }) });
+    } catch (e) {
+        db = getFirestore(app);
+    }
 
-      customersData = {};
-      customersNameMap = {};
+    const DRIVERS_COL = "drivers";
+    const ADVANCES_COL = "driverAdvances";
 
-      allCustomers = custSnap.docs.map(d => {
-        const data = d.data();
-        const initial = parseSignedNumber(data.initialBalance);
-        const ledgerEffect = debtMap[d.id] || 0;
-        
-        customersData[d.id] = { id: d.id, name: data.name, initialBalance: initial };
-        if (data.name) customersNameMap[normalizeName(data.name)] = d.id;
+    const ARABIC_MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+
+    let drivers = [];
+    let advances = [];
+    let currentMonth = new Date().toISOString().slice(0,7);
+    let openPanels = new Map();
+
+    const currentUser = (localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "").trim();
+    const userRole = (sessionStorage.getItem('role') || localStorage.getItem('role') || '').toLowerCase();
+    const isAdmin = userRole === 'admin';
+    const isFekry = currentUser.includes("فكري") || currentUser.toLowerCase().includes("fekry");
+
+    if (isAdmin) {
+        const addBlock = document.getElementById('addDriverBlock');
+        const statsRow = document.getElementById('statsRow');
+        if (addBlock) addBlock.style.display = 'block';
+        if (statsRow) statsRow.style.display = 'grid';
+    }
+
+    function fmt(n){
+        n = Math.round(Number(n) || 0);
+        return n.toLocaleString('en-US') + ' ج.م';
+    }
+    function escapeHtml(s){
+        return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function monthLabel(ym){
+        const [y,m] = ym.split('-').map(Number);
+        return ARABIC_MONTHS[m-1] + ' ' + y;
+    }
+    function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
+    function itemsOfMonth(driverId, ym, type){ 
+        return advancesOf(driverId).filter(a => {
+            if (!a.date || a.date.slice(0,7) !== ym) return false;
+            if (type === 'absence') return a.isAbsence;
+            if (type === 'deficit') return a.isDeficit;
+            if (type === 'nondeductible') return a.isNonDeductible;
+            return !a.isDeficit && !a.isAbsence && !a.isNonDeductible;
+        }); 
+    }
+
+    function calcAllowedLimit(baseSalary, dateStr){
+        const d = new Date(dateStr + 'T00:00:00');
+        const year = d.getFullYear(), month = d.getMonth();
+        const daysInMonth = new Date(year, month+1, 0).getDate();
+        const dailyRate = Number(baseSalary || 0) / daysInMonth;
+        const dayOfMonth = d.getDate();
+        return (dayOfMonth * dailyRate) + 2000;
+    }
+
+    function displayLimitForDriver(d){
+        const now = new Date();
+        const [vy, vm] = currentMonth.split('-').map(Number);
+        let refDateStr;
+        if (vy === now.getFullYear() && vm === (now.getMonth()+1)) {
+            refDateStr = now.toISOString().slice(0,10);
+        } else {
+            const daysInMonth = new Date(vy, vm, 0).getDate();
+            refDateStr = `${vy}-${String(vm).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+        }
+        return calcAllowedLimit(d.baseSalary, refDateStr);
+    }
+
+    function calcAccrualData(driver, ym) {
+        const now = new Date();
+        const [vy, vm] = ym.split('-').map(Number);
+        const daysInMonth = new Date(vy, vm, 0).getDate();
+        const dailyRate = Number(driver.baseSalary || 0) / daysInMonth;
+
+        let elapsedDays = 0;
+        if (vy < now.getFullYear() || (vy === now.getFullYear() && vm < (now.getMonth() + 1))) {
+            elapsedDays = daysInMonth;
+        } else if (vy === now.getFullYear() && vm === (now.getMonth() + 1)) {
+            elapsedDays = now.getDate();
+        } else {
+            elapsedDays = 0;
+        }
+
+        const earnedSoFar = elapsedDays * dailyRate;
+
+        const advSum = itemsOfMonth(driver.id, ym, 'adv').reduce((s, a) => s + Number(a.amount), 0);
+        const deficitSum = itemsOfMonth(driver.id, ym, 'deficit').reduce((s, a) => s + Number(a.amount), 0);
+        const absenceSum = itemsOfMonth(driver.id, ym, 'absence').reduce((s, a) => s + Number(a.amount), 0);
+        const totalDeductions = advSum + deficitSum + absenceSum;
+
+        const netBalance = earnedSoFar - totalDeductions;
 
         return {
-          id: d.id,
-          ...data,
-          realBalance: initial + ledgerEffect
+            daysInMonth,
+            elapsedDays,
+            dailyRate,
+            earnedSoFar,
+            totalDeductions,
+            netBalance
         };
-      });
-
-      allCustomers.sort((a, b) => b.realBalance - a.realBalance);
-
-      renderCustomers(allCustomers);
-      updateStats(allCustomers);
-
-    } catch (e) {
-      container.innerHTML = `<div style="color:#ff0000;text-align:center;padding:20px;font-weight:700;">خطأ: ${e.message}</div>`;
     }
-  }
 
-  function updateStats(list) {
-    let totalOwed = 0, totalCredit = 0;
-    list.forEach(c => {
-      if (c.realBalance > 0) totalOwed += c.realBalance;
-      else if (c.realBalance < 0) totalCredit += Math.abs(c.realBalance);
+    onSnapshot(collection(db, DRIVERS_COL), (snap) => {
+        drivers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        render();
+    }, (err) => {
+        console.error("خطأ في جلب البيانات:", err);
+        const listEl = document.getElementById('driversList');
+        if (listEl) listEl.innerHTML = `<div class="empty">تعذر تحميل البيانات، تأكد من الاتصال بالإنترنت</div>`;
     });
-    document.getElementById('totalOwed').textContent = fmt(totalOwed);
-    document.getElementById('totalCredit').textContent = fmt(totalCredit);
-    const net = totalOwed - totalCredit;
-    const netEl = document.getElementById('netBalance');
-    netEl.textContent = (net < 0 ? '-' : '') + fmt(net);
-  }
 
-  function balanceMeta(balance) {
-    if (balance > 0) return { cls: 'has-debt', txtCls: 'text-debt', tagCls: 'debt', tagTxt: 'عليه' };
-    if (balance < 0) return { cls: 'is-credit', txtCls: 'text-credit', tagCls: 'credit', tagTxt: 'له' };
-    return { cls: 'is-zero', txtCls: 'text-zero', tagCls: 'zero', tagTxt: 'خالص' };
-  }
+    onSnapshot(collection(db, ADVANCES_COL), (snap) => {
+        advances = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        render();
+    }, (err) => console.error("خطأ في جلب البيانات:", err));
 
-  function initials(name) {
-    if (!name) return '؟';
-    const parts = name.trim().split(' ');
-    return parts.length > 1 ? (parts[0][0] + parts[1][0]) : parts[0].slice(0, 2);
-  }
+    function render(){
+        const monthLabelEl = document.getElementById('monthLabel');
+        if (monthLabelEl) monthLabelEl.textContent = monthLabel(currentMonth);
 
-  window.renderCustomers = (list) => {
-    const container = document.getElementById('customersContainer');
-    document.getElementById('countTag').textContent = `${list.length} عميل`;
+        let displayDrivers = drivers;
+        if (isFekry) {
+            displayDrivers = drivers.filter(d => (d.name || '').includes('فكري'));
+        }
 
-    if (list.length === 0) {
-      container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد نتائج مطابقة</div>`;
-      return;
+        const titleEl = document.getElementById('driversTitle');
+        if (titleEl) titleEl.textContent = `القائمة (${displayDrivers.length})`;
+
+        let totalSalary = 0, totalAdv = 0, totalNet = 0;
+        const list = document.getElementById('driversList');
+        if (!list) return;
+
+        if(displayDrivers.length === 0){
+            list.innerHTML = `<div class="empty">لا يوجد بيانات متاحة لعرضها</div>`;
+        } else {
+            list.innerHTML = displayDrivers.map(d => {
+                const advsMonth = itemsOfMonth(d.id, currentMonth, 'adv');
+                const deficitsMonth = itemsOfMonth(d.id, currentMonth, 'deficit');
+                const absencesMonth = itemsOfMonth(d.id, currentMonth, 'absence');
+                const nonDeductibleMonth = itemsOfMonth(d.id, currentMonth, 'nondeductible');
+
+                const advSum = advsMonth.reduce((s,a)=>s+Number(a.amount),0);
+                const deficitSum = deficitsMonth.reduce((s,a)=>s+Number(a.amount),0);
+                const absenceSum = absencesMonth.reduce((s,a)=>s+Number(a.amount),0);
+                const nonDeductibleSum = nonDeductibleMonth.reduce((s,a)=>s+Number(a.amount),0);
+
+                const net = Number(d.baseSalary||0) - advSum - absenceSum - deficitSum;
+
+                totalSalary += Number(d.baseSalary||0);
+                totalAdv += (advSum + deficitSum + absenceSum);
+                totalNet += net;
+
+                const maxAdv = displayLimitForDriver(d);
+                const accrual = calcAccrualData(d, currentMonth);
+
+                if (isFekry && !openPanels.has(d.id)) openPanels.set(d.id, 'adv');
+                const activePanel = openPanels.get(d.id);
+
+                const initial = (d.name||'؟').trim().charAt(0);
+
+                const advItemsHtml = advsMonth.length ? advsMonth.map(a => `
+                    <div class="adv-item">
+                        <div class="info">
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.exception ? `<span class="badge-tag badge-exception">استثناء</span>` : ''}
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        ${isAdmin ? `<button data-del-adv="${a.id}" title="حذف">✕</button>` : ''}
+                    </div>
+                `).join('') : `<div class="no-adv">لا توجد سلف مسجلة في هذا الشهر</div>`;
+
+                const deficitItemsHtml = deficitsMonth.length ? deficitsMonth.map(a => `
+                    <div class="adv-item is-deficit">
+                        <div class="info">
+                            <span class="badge-tag badge-deficit">عجز</span>
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        ${isAdmin ? `<button data-del-adv="${a.id}" title="حذف">✕</button>` : ''}
+                    </div>
+                `).join('') : `<div class="no-adv">لا يوجد عجز مسجل في هذا الشهر</div>`;
+
+                const absenceItemsHtml = absencesMonth.length ? absencesMonth.map(a => `
+                    <div class="adv-item is-absence">
+                        <div class="info">
+                            <span class="badge-tag badge-absence">غياب</span>
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        ${isAdmin ? `<button data-del-adv="${a.id}" title="حذف">✕</button>` : ''}
+                    </div>
+                `).join('') : `<div class="no-adv">لا يوجد أي غياب مسجل في هذا الشهر</div>`;
+
+                const nonDeductibleItemsHtml = nonDeductibleMonth.length ? nonDeductibleMonth.map(a => `
+                    <div class="adv-item is-nondeductible">
+                        <div class="info">
+                            <span class="badge-tag badge-nondeductible">مصروف وعجز لن يخصم</span>
+                            <span class="amount">${fmt(a.amount)}</span>
+                            <span class="date">${a.date||''}</span>
+                            ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
+                        </div>
+                        ${isAdmin ? `<button data-del-adv="${a.id}" title="حذف">✕</button>` : ''}
+                    </div>
+                `).join('') : `<div class="no-adv">لا يوجد مصروف وعجز لن يخصم مسجل في هذا الشهر</div>`;
+
+                return `
+                <div class="driver">
+                    <div class="driver-top">
+                        <div class="driver-id">
+                            <div class="avatar">${initial}</div>
+                            <div>
+                                <div class="driver-name">${escapeHtml(d.name)}</div>
+                                ${d.phone ? `<div class="driver-phone">${escapeHtml(d.phone)}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="driver-nums">
+                            ${isAdmin ? `<div class="n"><div class="k">الراتب الأساسي</div><div class="v">${fmt(d.baseSalary)}</div></div>` : ''}
+                            <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
+                            <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
+                            <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
+                            <div class="n nondeductible"><div class="k">مصروف وعجز لن يخصم</div><div class="v">${fmt(nonDeductibleSum)}</div></div>
+                            
+                            <div class="n accrual-status">
+                                <div class="k">${accrual.netBalance >= 0 ? `متبقي له (يوم ${accrual.elapsedDays})` : `مطلوب منه (يوم ${accrual.elapsedDays})`}</div>
+                                <div class="v ${accrual.netBalance >= 0 ? 'due-pos' : 'due-neg'}">${fmt(Math.abs(accrual.netBalance))}</div>
+                            </div>
+
+                            ${isAdmin ? `<div class="n net"><div class="k">الصافي النهائي</div><div class="v">${fmt(net)}</div></div>` : ''}
+                            ${isAdmin ? `<div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>` : ''}
+                        </div>
+                        <div class="driver-actions">
+                            <button class="icon-btn" data-toggle="${d.id}" data-type="adv"><i class="fa-solid fa-plus"></i> سلفة</button>
+                            <button class="icon-btn violet-btn" data-toggle="${d.id}" data-type="absence"><i class="fa-solid fa-user-slash"></i> غياب</button>
+                            <button class="icon-btn danger-btn" data-toggle="${d.id}" data-type="deficit"><i class="fa-solid fa-triangle-exclamation"></i> العجز</button>
+                            <button class="icon-btn teal-btn" data-toggle="${d.id}" data-type="nondeductible"><i class="fa-solid fa-receipt"></i> مصروف وعجز لن يخصم</button>
+                            ${isAdmin ? `<button class="icon-btn danger-btn" data-del-driver="${d.id}"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        </div>
+                    </div>
+
+                    ${isAdmin ? `
+                    <div class="accrual-box">
+                        <div class="accrual-head">
+                            <span><i class="fa-solid fa-calculator"></i> تفاصيل العمل الفعلي (حتى يوم ${accrual.elapsedDays} من ${accrual.daysInMonth})</span>
+                        </div>
+                        <div class="accrual-details">
+                            <span>يومية العمل: <b>${fmt(accrual.dailyRate)}</b></span>
+                            <span>الاستحقاق الفعلي (${accrual.elapsedDays} يوم): <b>${fmt(accrual.earnedSoFar)}</b></span>
+                            <span>إجمالي الخصومات والسلف: <b>${fmt(accrual.totalDeductions)}</b></span>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
+                        <h3>تسجيل سلفة — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="مبلغ السلفة" id="advAmount-${d.id}">
+                            <input type="date" id="advDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="ملاحظة (اختياري)" id="advNote-${d.id}">
+                            <button class="btn btn-brand" data-add-adv="${d.id}">إضافة سلفة</button>
+                        </div>
+                        <div class="adv-list">${advItemsHtml}</div>
+                    </div>
+
+                    <div class="advances-panel ${activePanel === 'absence' ? 'open' : ''}" style="background:#faf5ff; border-top: 1px solid #ddd6fe;">
+                        <h3 style="color: var(--violet);">تسجيل أسبوع/أيام غياب — ${monthLabel(currentMonth)}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="قيمة الخصم أو اليومية" id="absenceAmount-${d.id}">
+                            <input type="date" id="absenceDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="ملاحظة (مثال: غياب بدون إذن)" id="absenceNote-${d.id}">
+                            <button class="btn btn-violet" data-add-absence="${d.id}">تسجيل غياب</button>
+                        </div>
+                        <div class="adv-list">${absenceItemsHtml}</div>
+                    </div>
+
+                    <div class="advances-panel ${activePanel === 'deficit' ? 'open' : ''}" style="background:#fff3f3; border-top: 1px solid #fca5a5;">
+                        <h3 style="color: var(--coral);">تسجيل عجز مالي مميز — ${monthLabel(currentMonth)}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="مبلغ العجز" id="deficitAmount-${d.id}">
+                            <input type="date" id="deficitDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="سبب/ملاحظة العجز (اختياري)" id="deficitNote-${d.id}">
+                            <button class="btn btn-coral" data-add-deficit="${d.id}">تسجيل عجز</button>
+                        </div>
+                        <div class="adv-list">${deficitItemsHtml}</div>
+                    </div>
+
+                    <div class="advances-panel ${activePanel === 'nondeductible' ? 'open' : ''}" style="background:#e0f7fa; border-top: 1px solid #80deea;">
+                        <h3 style="color: var(--teal);">تسجيل مصروف وعجز لن يخصم — ${monthLabel(currentMonth)}</h3>
+                        <div class="adv-form">
+                            <input type="number" min="0" placeholder="المبلغ" id="nonDeductibleAmount-${d.id}">
+                            <input type="date" id="nonDeductibleDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="text" placeholder="البيان / سبب الصرف" id="nonDeductibleNote-${d.id}">
+                            <button class="btn btn-teal" data-add-nondeductible="${d.id}">تسجيل مصروف وعجز لن يخصم</button>
+                        </div>
+                        <div class="adv-list">${nonDeductibleItemsHtml}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        const statSal = document.getElementById('statSalary');
+        const statAdvEl = document.getElementById('statAdv');
+        const statNetEl = document.getElementById('statNet');
+
+        if (statSal) statSal.textContent = fmt(totalSalary);
+        if (statAdvEl) statAdvEl.textContent = fmt(totalAdv);
+        if (statNetEl) statNetEl.textContent = fmt(totalNet);
+
+        bindDynamicEvents();
     }
 
-    container.innerHTML = list.map(cust => {
-      const balance = cust.realBalance;
-      const meta = balanceMeta(balance);
-      const safeName = (cust.name || '').replace(/'/g, "\\'");
-      return `
-        <div id="card-${cust.id}" class="customer-card ${meta.cls}">
-          <div class="row-main">
-            <div class="avatar">${initials(cust.name)}</div>
-            <div class="customer-info-box">
-              <h6 class="customer-name">${cust.name}</h6>
-              <small class="phone-sub"><i class="fas fa-phone-alt me-1"></i> ${cust.phone || 'بدون هاتف'}</small>
-            </div>
-          </div>
-          
-          <div class="balance-strip">
-            <span class="balance-label">صافي الرصيد الحالي</span>
-            <span class="balance-value ${meta.txtCls}">
-              <span class="num">${fmt(balance)}</span>
-              <small style="font-size:.7rem; font-weight: 800; margin-right: 2px;">ج.م</small>
-              <span class="tag ${meta.tagCls}">${meta.tagTxt}</span>
-            </span>
-          </div>
-          
-          <div class="action-container">
-            <button class="action-btn btn-log" onclick="openCustomerStatement('${cust.id}', '${safeName}')"><i class="fas fa-history"></i> كشف السجل</button>
-            <a href="customer-details.html?id=${cust.id}" class="action-btn btn-info"><i class="fas fa-user-tag"></i> كشف الحساب</a>
-            <button class="action-btn btn-share-direct" onclick="triggerDirectStatementShare('${cust.id}', '${safeName}')"><i class="fas fa-share-nodes"></i> مشاركة</button>
-            <button class="action-btn btn-del" onclick="deleteCustomer('${cust.id}', '${safeName}')"><i class="fas fa-trash-alt"></i> حذف</button>
-            <button class="action-btn btn-analyze" onclick="analyzeCustomerPerformance('${cust.id}', '${safeName}')"><i class="fas fa-chart-line"></i> تحليل الأداء وتوصيات الذكاء</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-  };
-
-  /* دالة تحليل أداء العميل والتوصيات الذكية (التمييز بين الكرتونة والجركن) */
-  window.closeCustomerAnalytics = () => {
-      document.getElementById('customerAnalyticsModal').style.display = 'none';
-  };
-
-  window.analyzeCustomerPerformance = async (customerId, customerName) => {
-      const modal = document.getElementById('customerAnalyticsModal');
-      const body = document.getElementById('customerAnalyticsBody');
-      const titleEl = document.getElementById('customerAnalyticsTitle');
-
-      titleEl.innerHTML = `<i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> تقرير تحليل أداء العميل: ${customerName}`;
-      body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-circle-notch fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري حساب المؤشرات وتدقيق كميات الكراتين والجراكن...</p></div>`;
-      modal.style.display = 'flex';
-
-      try {
-          const [invSnap, transSnap] = await Promise.all([
-              getDocs(collection(db, "invoices")),
-              getDocs(collection(db, "transactions"))
-          ]);
-
-          const targetKey = customerId || ("NAME_" + normalizeName(customerName));
-          
-          let totalSales = 0;
-          let totalPaid = 0;
-          let invoiceCount = 0;
-          let itemStats = {};
-          let datesList = [];
-
-          invSnap.forEach(d => {
-              const data = d.data();
-              if (data.isDeleted) return;
-              let key = data.customerId;
-              if (!key && data.customerName) key = customersNameMap[normalizeName(data.customerName)];
-              if (!key && data.customerName) key = "NAME_" + normalizeName(data.customerName);
-              if (!key || key !== targetKey) return;
-
-              invoiceCount++;
-              const tot = Number(data.total) || 0;
-              const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
-              const wallet = Number(data.walletAmount ?? data.walletPaid) || 0;
-
-              totalSales += tot;
-              totalPaid += (cash + wallet);
-
-              const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseArabicDateToMs(data.time || data.date);
-              if (timeMs) datesList.push(timeMs);
-
-              (data.items || []).forEach(item => {
-                  const name = item.name || 'منتج غير مسمى';
-                  const qty = Number(item.qty) || 0;
-                  const factor = Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1;
-                  const isCarton = (item.unit === 'box' || item.unit === 'carton' || item.unit === 'كرتونة' || item.unitName === 'كرتونة' || item.isCarton === true);
-
-                  if (!itemStats[name]) {
-                      itemStats[name] = { cartons: 0, pcs: 0, factor: factor, totalVolumeInPcs: 0 };
-                  }
-
-                  if (isCarton) {
-                      itemStats[name].cartons += qty;
-                      itemStats[name].totalVolumeInPcs += (qty * factor);
-                  } else {
-                      itemStats[name].pcs += qty;
-                      itemStats[name].totalVolumeInPcs += qty;
-                  }
-                  if (factor > 1) itemStats[name].factor = factor;
-              });
-          });
-
-          transSnap.forEach(d => {
-              const tr = d.data();
-              if (tr.isDeleted) return;
-              const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
-              if (isInvoicePayment) return;
-
-              let key = tr.partyId || tr.customerId;
-              let partyName = tr.customerName || tr.partyName;
-              if (!key && partyName) key = customersNameMap[normalizeName(partyName)];
-              if (!key && partyName) key = "NAME_" + normalizeName(partyName);
-              if (!key || key !== targetKey) return;
-
-              const amt = Math.abs(Number(tr.amount || tr.total || 0));
-              if (tr.type === 'قبض') totalPaid += amt;
-          });
-
-          let baseBalance = 0;
-          if (customerId && customersData[customerId]) baseBalance = Number(customersData[customerId].initialBalance || 0);
-
-          const netDebt = (totalSales + baseBalance) - totalPaid;
-          const paymentRatio = (totalSales + baseBalance) > 0 ? ((totalPaid / (totalSales + baseBalance)) * 100) : 100;
-          const avgInvoiceValue = invoiceCount > 0 ? (totalSales / invoiceCount) : 0;
-
-          let lastPurchaseDaysAgo = -1;
-          if (datesList.length > 0) {
-              datesList.sort((a, b) => b - a);
-              const latestDate = datesList[0];
-              const diffTime = Math.abs(Date.now() - latestDate);
-              lastPurchaseDaysAgo = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          }
-
-          const sortedProducts = Object.entries(itemStats)
-              .sort((a, b) => b[1].totalVolumeInPcs - a[1].totalVolumeInPcs)
-              .slice(0, 4);
-
-          let bannerClass = "normal";
-          let badgeTag = "عميل متوازن";
-          let recommendationText = "";
-
-          if (netDebt > 30000 && paymentRatio < 55) {
-              bannerClass = "risk";
-              badgeTag = "⚠️ عالي المخاطر";
-              recommendationText = "العميل لديه رصيد متبقي مرتفع ونسبة سداد ضعيفة. يُوصى بإيقاف البيع الآجل فوراً واشتراط سداد 50% على الأقل من المستحقات لتجديد الائتمان.";
-          } else if (paymentRatio >= 85 && totalSales > 20000) {
-              bannerClass = "vip";
-              badgeTag = "🌟 عميل ماسي / ممتاز";
-              recommendationText = "عميل ممتاز بنسبة سداد عالية ومسحوبات متميزة. يمكن منحه نسبة خصم تشجيعية أو أولوية في تسليم الطلبيات بزيوت السيارات.";
-          } else if (lastPurchaseDaysAgo > 30) {
-              bannerClass = "dormant";
-              badgeTag = "💤 عميل خامل";
-              recommendationText = `توقف العميل عن الشراء منذ أكثر من ${lastPurchaseDaysAgo} يوماً. يُفضل تواصل مندوب المبيعات معه لتقديم عروض خاصة وإعادة تنشيطه.`;
-          } else {
-              bannerClass = "normal";
-              badgeTag = "🔄 عميل نشط عادي";
-              recommendationText = "معدل الشراء والسداد في الحدود الطبيعية. يُنصح بمتابعة تحصيل الدفعات بانتظام مع كل فاتورة جديدة.";
-          }
-
-          let topItemsHtml = sortedProducts.length > 0 ? sortedProducts.map(([pName, pData]) => {
-              let factor = pData.factor || 1;
-              let totalPcs = pData.pcs;
-              let totalCartons = pData.cartons;
-
-              if (factor > 1 && totalPcs >= factor) {
-                  totalCartons += Math.floor(totalPcs / factor);
-                  totalPcs = totalPcs % factor;
-              }
-
-              let qtyParts = [];
-              if (totalCartons > 0) qtyParts.push(`<b>${totalCartons}</b> كرتونة`);
-              if (totalPcs > 0) qtyParts.push(`<b>${totalPcs}</b> جركن/قطعة`);
-
-              let qtyDisplay = qtyParts.length > 0 ? qtyParts.join(' + ') : '0';
-
-              return `
-                  <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="font-size:0.78rem;">
-                      <span class="fw-bold"><i class="fas fa-oil-can me-1" style="color:var(--germany-gold);"></i> ${pName}</span>
-                      <span class="num text-dark fw-bold bg-light px-2 py-1 rounded" style="border: 1px solid var(--line);">${qtyDisplay}</span>
-                  </div>
-              `;
-          }).join('') : '<div class="text-muted text-center py-2" style="font-size:0.75rem;">لا توجد أصناف مبيعة مسجلة</div>';
-
-          body.innerHTML = `
-              <div class="recommendation-banner ${bannerClass}">
-                  <i class="fas fa-lightbulb fa-lg mt-1"></i>
-                  <div>
-                      <div class="fw-bold mb-1" style="font-size:0.85rem;">التصنيف: ${badgeTag}</div>
-                      <div>${recommendationText}</div>
-                  </div>
-              </div>
-
-              <div class="analytics-grid">
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">إجمالي المشتريات</div>
-                      <div class="kpi-value num text-dark">${totalSales.toFixed(2)} <small style="font-size:0.6rem;">ج.م</small></div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">إجمالي المسدد</div>
-                      <div class="kpi-value num text-success">${totalPaid.toFixed(2)} <small style="font-size:0.6rem;">ج.م</small></div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">نسبة السداد</div>
-                      <div class="kpi-value num ${paymentRatio >= 75 ? 'text-success' : 'text-danger'}">${paymentRatio.toFixed(1)}%</div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">عدد الفواتير</div>
-                      <div class="kpi-value num text-dark">${invoiceCount} فاتورة</div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">متوسط الفاتورة</div>
-                      <div class="kpi-value num text-dark">${avgInvoiceValue.toFixed(2)} <small style="font-size:0.6rem;">ج.م</small></div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">آخر عملية شراء</div>
-                      <div class="kpi-value num text-dark">${lastPurchaseDaysAgo >= 0 ? lastPurchaseDaysAgo + ' يوم' : 'غير محدد'}</div>
-                  </div>
-              </div>
-
-              <div class="bg-white p-3 rounded border mb-2">
-                  <h6 class="fw-bold mb-2" style="font-size:0.8rem; color:var(--germany-black);">
-                      <i class="fas fa-boxes-stacked me-1" style="color:var(--germany-gold);"></i> المنتجات الأكثر طلباً (بالكرتونة والجركن)
-                  </h6>
-                  ${topItemsHtml}
-              </div>
-          `;
-
-      } catch (err) {
-          console.error("خطأ في تحليل الأداء:", err);
-          body.innerHTML = `<div class="alert alert-danger text-center p-3 my-2" style="border-radius:14px; font-weight:700;">تعذر تحليل الأداء: ${err.message}</div>`;
-      }
-  };
-
-  window.currentStatementRows = [];
-  window.currentStatementCustomerName = '';
-
-  window.closeCustomerStatement = () => {
-      document.getElementById('customerStatementModal').style.display = 'none';
-  };
-
-  window.triggerDirectStatementShare = async (customerId, customerName) => {
-      await openCustomerStatement(customerId, customerName);
-      setTimeout(() => {
-          shareEntireStatement();
-      }, 500);
-  };
-
-  window.openCustomerStatement = async (customerId, customerName) => {
-      const isCashCustomer = !customerId && (!customerName || customerName.trim() === '' || customerName.trim() === 'عميل نقدى');
-      if (isCashCustomer) {
-          alert("هذه فاتورة عميل نقدي عابر، ولا يوجد له كشف حساب متراكم.");
-          return;
-      }
-
-      const modal = document.getElementById('customerStatementModal');
-      const body = document.getElementById('customerStatementBody');
-      const titleEl = document.getElementById('customerStatementTitle');
-
-      titleEl.innerHTML = `<i class="fas fa-file-invoice-dollar me-1" style="color:var(--germany-gold);"></i> كشف حساب السجل: ${customerName || 'عميل'}`;
-      body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري جلب كافة الأصناف والحركات...</p></div>`;
-      modal.style.display = 'flex';
-
-      try {
-          const [invSnap, transSnap] = await Promise.all([
-              getDocs(collection(db, "invoices")),
-              getDocs(collection(db, "transactions"))
-          ]);
-
-          const targetKey = customerId || ("NAME_" + normalizeName(customerName));
-          let events = [];
-
-          invSnap.forEach(d => {
-              const data = d.data();
-              if (data.isDeleted) return;
-              let key = data.customerId;
-              if (!key && data.customerName) key = customersNameMap[normalizeName(data.customerName)];
-              if (!key && data.customerName) key = "NAME_" + normalizeName(data.customerName);
-              if (!key || key !== targetKey) return;
-
-              const calculatedCash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
-              const calculatedWallet = Number(data.walletAmount ?? data.walletPaid) || 0;
-              const total = Number(data.total) || 0;
-              const paid = calculatedCash + calculatedWallet;
-              const remaining = total - paid;
-              const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseArabicDateToMs(data.time || data.date);
-
-              events.push({
-                  type: 'invoice',
-                  timeMs,
-                  date: parseInvoiceDate(data),
-                  paymentMethod: data.paymentMethod || 'غير محدد',
-                  cashPaid: calculatedCash,
-                  walletPaid: calculatedWallet,
-                  items: data.items || [],
-                  total: total,
-                  debit: remaining,
-                  credit: 0
-              });
-          });
-
-          transSnap.forEach(d => {
-              const tr = d.data();
-              if (tr.isDeleted) return;
-              const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
-              if (isInvoicePayment) return;
-
-              let key = tr.partyId || tr.customerId;
-              let partyName = tr.customerName || tr.partyName;
-              if (!key && partyName) key = customersNameMap[normalizeName(partyName)];
-              if (!key && partyName) key = "NAME_" + normalizeName(partyName);
-              if (!key || key !== targetKey) return;
-
-              const amt = Math.abs(Number(tr.amount || tr.total || 0));
-              const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseArabicDateToMs(tr.date || tr.time);
-
-              events.push({
-                  type: 'voucher',
-                  timeMs,
-                  date: parseVoucherDate(tr),
-                  voucherType: tr.type,
-                  method: tr.method || 'نقدى',
-                  note: tr.note || '',
-                  amt: amt,
-                  debit: tr.type === 'صرف' ? amt : 0,
-                  credit: tr.type === 'قبض' ? amt : 0
-              });
-          });
-
-          events.sort((a, b) => a.timeMs - b.timeMs);
-
-          let baseBalance = 0;
-          if (customerId && customersData[customerId]) baseBalance = Number(customersData[customerId].initialBalance || 0);
-
-          let running = baseBalance;
-          window.currentStatementRows = [];
-          window.currentStatementCustomerName = customerName || 'عميل';
-
-          let renderedCards = [];
-
-          if (baseBalance !== 0) {
-              renderedCards.push({
-                  timeMs: 0,
-                  html: `
-                  <div class="statement-card-item bg-light">
-                      <div class="d-flex justify-content-between align-items-center">
-                          <span class="fw-bold text-secondary">رصيد افتتاحي سابق</span>
-                          <span class="num fw-bold text-dark">${baseBalance.toFixed(2)}</span>
-                      </div>
-                  </div>`
-              });
-              window.currentStatementRows.push({ date: '', desc: 'رصيد افتتاحي', items: '-', payDetails: '-', debit: '', credit: '', balance: baseBalance });
-          }
-
-          events.forEach(ev => {
-              running += ev.debit - ev.credit;
-
-              const remainingLabel = ev.debit >= 0 ? "المتبقي عليه من فاتورة اليوم" : "المتبقي له من فاتورة اليوم";
-              const balanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
-
-              if (ev.type === 'invoice') {
-                  let itemsRowsHtml = (ev.items || []).map(i => `
-                      <tr>
-                          <td style="text-align:right;">${i.name}</td>
-                          <td>${i.qty}</td>
-                          <td>${(Number(i.price)||0).toFixed(1)}</td>
-                          <td class="num">${((Number(i.qty)||0)*(Number(i.price)||0)).toFixed(1)}</td>
-                      </tr>`).join('');
-
-                  let payInfoHtml = [];
-                  if (ev.cashPaid > 0) payInfoHtml.push(`كاش: <b>${ev.cashPaid.toFixed(2)}</b>`);
-                  if (ev.walletPaid > 0) payInfoHtml.push(`محفظة: <b>${ev.walletPaid.toFixed(2)}</b>`);
-
-                  renderedCards.push({
-                      timeMs: ev.timeMs,
-                      html: `
-                      <div class="statement-card-item invoice-card">
-                          <div class="d-flex justify-content-between align-items-center mb-1">
-                              <span class="badge bg-dark" style="font-size:0.75rem; color:white; padding:2px 8px; border-radius:6px;"><i class="fas fa-file-invoice me-1"></i> فاتورة مبيعات</span>
-                              <span class="text-muted fw-bold" style="font-size:0.72rem;"><i class="far fa-clock"></i> ${ev.date || '-'}</span>
-                          </div>
-                          
-                          <div class="d-flex justify-content-between align-items-center my-2 p-2 bg-light rounded" style="font-size:0.8rem;">
-                              <span>إجمالي الفاتورة: <b class="num">${ev.total.toFixed(2)}</b></span>
-                              <span>طريقة السداد: <b class="text-primary">${ev.paymentMethod}</b></span>
-                          </div>
-
-                          ${payInfoHtml.length > 0 ? `<div class="text-muted mb-2" style="font-size:0.73rem;">مدفوعات الفاتورة: ${payInfoHtml.join(' | ')}</div>` : ''}
-
-                          ${ev.items && ev.items.length > 0 ? `
-                              <table class="statement-item-table">
-                                  <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
-                                  <tbody>${itemsRowsHtml}</tbody>
-                              </table>
-                          ` : '<div class="text-muted text-center py-1" style="font-size:0.72rem;">بلا أصناف تفصيلية</div>'}
-
-                          <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
-                              <span class="${ev.debit >= 0 ? 'text-danger' : 'text-success'} fw-bold">${remainingLabel}: <span class="num">${Math.abs(ev.debit).toFixed(2)}</span></span>
-                              <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${Math.abs(running).toFixed(2)}</span></span>
-                          </div>
-                      </div>`
-                  });
-
-              } else {
-                  renderedCards.push({
-                      timeMs: ev.timeMs,
-                      html: `
-                      <div class="statement-card-item voucher-card">
-                          <div class="d-flex justify-content-between align-items-center mb-1">
-                              <span class="badge" style="background:var(--purple); color:white; font-size:0.75rem; padding:2px 8px; border-radius:6px;"><i class="fas fa-hand-holding-usd me-1"></i> ${ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض'} (${ev.method})</span>
-                              <span class="text-muted fw-bold" style="font-size:0.72rem;"><i class="far fa-clock"></i> ${ev.date || '-'}</span>
-                          </div>
-                          ${ev.note ? `<div class="text-dark my-1 fw-bold" style="font-size:0.78rem;"><i class="fas fa-comment-alt me-1 text-muted"></i> ${ev.note}</div>` : ''}
-                          
-                          <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="font-size:0.78rem;">
-                              <span class="text-success fw-bold">المبلغ المستلم: <span class="num">${ev.credit.toFixed(2)}</span></span>
-                              <span class="fw-bold">${balanceLabel}: <span class="num ${running >= 0 ? 'text-danger' : 'text-success'}">${Math.abs(running).toFixed(2)}</span></span>
-                          </div>
-                      </div>`
-                  });
-              }
-
-              window.currentStatementRows.push({ 
-                  date: ev.date, 
-                  desc: ev.type === 'invoice' ? `فاتورة (${ev.total})` : `سند قبض (${ev.amt})`, 
-                  items: ev.type === 'invoice' ? (ev.items || []).map(i => `${i.name} (${i.qty}×${i.price})`).join(' ، ') : '-',
-                  payDetails: ev.type === 'invoice' ? `${ev.paymentMethod} (كاش: ${ev.cashPaid} | محفظة: ${ev.walletPaid})` : ev.method,
-                  debit: ev.debit || '', 
-                  credit: ev.credit || '', 
-                  balance: running 
-              });
-          });
-
-          if (events.length === 0 && baseBalance === 0) {
-              body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-folder-open fa-2x mb-2"></i><p class="fw-bold mb-0">لا توجد حركات تسديد أو فواتير لهذا العميل.</p></div>`;
-              return;
-          }
-
-          renderedCards.sort((a, b) => b.timeMs - a.timeMs);
-          let cardsHtml = renderedCards.map(c => c.html).join('');
-
-          const globalBalanceLabel = running >= 0 ? "الصافي عليه" : "الصافي له";
-
-          body.innerHTML = `
-              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-white border" style="font-size:0.8rem; font-weight:800;">
-                  <span>إجمالي الحركات: ${events.length}</span>
-                  <span>${globalBalanceLabel}: <span class="num" style="color:${running >= 0 ? 'var(--germany-red)' : '#16a34a'}; font-size:1rem;">${Math.abs(running).toFixed(2)}</span></span>
-              </div>
-              ${cardsHtml}`;
-
-      } catch (err) {
-          console.error("خطأ في تجهيز كشف الحساب:", err);
-          body.innerHTML = `<div class="alert alert-danger text-center p-3 my-2" style="border-radius:14px; font-weight:700;">تعذر تحميل كشف الحساب: ${err.message}</div>`;
-      }
-  };
-
-  /* دالة تصوير كشف الحساب بالكامل */
-  window.shareEntireStatement = function() {
-      const statementBody = document.getElementById('customerStatementBody');
-      if (!statementBody || !statementBody.children.length) {
-          alert("لا يوجد كشف حساب متاح لمشاركته حالياً.");
-          return;
-      }
-
-      const loadingModal = document.getElementById('shareLoadingModal');
-      const shareBtn = document.getElementById('shareStatementBtn');
-      if (shareBtn) shareBtn.disabled = true;
-      loadingModal.style.display = 'flex';
-
-      const finish = () => {
-          loadingModal.style.display = 'none';
-          if (shareBtn) shareBtn.disabled = false;
-      };
-
-      html2canvas(statementBody, {
-          scale: 2,
-          backgroundColor: "#ffffff",
-          useCORS: true,
-          allowTaint: false,
-          scrollX: 0,
-          scrollY: 0
-      }).then(canvas => {
-          canvas.toBlob((blob) => {
-              if (!blob) {
-                  finish();
-                  alert("تعذر إنشاء الصورة (فشل تحويل الكشف إلى صورة). حاول مرة أخرى.");
-                  return;
-              }
-
-              const fileName = `كشف_حساب_${window.currentStatementCustomerName || 'عميل'}.png`;
-              const file = new File([blob], fileName, { type: 'image/png' });
-
-              const downloadBlob = () => {
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.download = fileName;
-                  link.href = url;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  setTimeout(() => URL.revokeObjectURL(url), 2000);
-              };
-
-              if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                  navigator.share({
-                      files: [file],
-                      title: `كشف حساب - ${window.currentStatementCustomerName || 'عميل'}`,
-                      text: `كشف الحساب الخاص بـ ${window.currentStatementCustomerName || 'العميل'} - شركة الزيادي`
-                  }).then(() => {
-                      finish();
-                  }).catch(err => {
-                      finish();
-                      if (err && err.name === 'AbortError') return;
-                      console.log('تعذرت المشاركة، سيتم تنزيل الصورة مباشرة:', err);
-                      downloadBlob();
-                  });
-              } else {
-                  finish();
-                  downloadBlob();
-              }
-          }, 'image/png');
-      }).catch(err => {
-          finish();
-          console.error(err);
-          alert("حدث خطأ أثناء إنشاء الصورة: " + err.message);
-      });
-  };
-
-  window.exportCustomerStatementExcel = () => {
-      if (!window.currentStatementRows || window.currentStatementRows.length === 0) {
-          alert("لا توجد بيانات لتصديرها بعد.");
-          return;
-      }
-      try {
-          const wsData = [["التاريخ", "الحركة", "الأصناف", "طريقة السداد", "مستحق", "مسدد", "الرصيد"]];
-          window.currentStatementRows.forEach(r => wsData.push([r.date, r.desc, r.items, r.payDetails, r.debit, r.credit, r.balance]));
-          const ws = XLSX.utils.aoa_to_sheet(wsData);
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, "كشف حساب تفصيلي");
-          XLSX.writeFile(wb, `كشف_حساب_السجل_${window.currentStatementCustomerName}.xlsx`);
-      } catch (err) {
-          console.error("خطأ في تصدير كشف الحساب:", err);
-          alert("تعذر تصدير الملف: " + err.message);
-      }
-  };
-
-  function applyFilters() {
-    const term = document.getElementById('searchInput').value.toLowerCase();
-    let filtered = allCustomers.filter(c =>
-      (c.name && c.name.toLowerCase().includes(term)) ||
-      (c.phone && c.phone.includes(term))
-    );
-    if (currentFilter === 'debt') filtered = filtered.filter(c => c.realBalance > 0);
-    if (currentFilter === 'credit') filtered = filtered.filter(c => c.realBalance < 0);
-    filtered.sort((a, b) => b.realBalance - a.realBalance);
-    renderCustomers(filtered);
-    updateStats(filtered);
-  }
-
-  window.filterCustomers = applyFilters;
-
-  window.setFilter = (f) => {
-    currentFilter = f;
-    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.filter === f));
-    applyFilters();
-  };
-
-  window.deleteCustomer = async (id, name) => {
-    if (!confirm(`هل أنت متأكد من مسح العميل "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
-    try {
-      await deleteDoc(doc(db, 'customers', id));
-      allCustomers = allCustomers.filter(c => c.id !== id);
-      applyFilters();
-    } catch (err) {
-      alert('خطأ أثناء المسح: ' + err.message);
+    function bindDynamicEvents(){
+        document.querySelectorAll('[data-toggle]').forEach(btn => {
+            btn.onclick = () => {
+                const id = btn.getAttribute('data-toggle');
+                const type = btn.getAttribute('data-type');
+                if(openPanels.get(id) === type) {
+                    openPanels.delete(id);
+                } else {
+                    openPanels.set(id, type);
+                }
+                render();
+            };
+        });
+        document.querySelectorAll('[data-add-adv]').forEach(btn => {
+            btn.onclick = () => addAdvance(btn.getAttribute('data-add-adv'));
+        });
+        document.querySelectorAll('[data-add-deficit]').forEach(btn => {
+            btn.onclick = () => addDeficit(btn.getAttribute('data-add-deficit'));
+        });
+        document.querySelectorAll('[data-add-absence]').forEach(btn => {
+            btn.onclick = () => addAbsence(btn.getAttribute('data-add-absence'));
+        });
+        document.querySelectorAll('[data-add-nondeductible]').forEach(btn => {
+            btn.onclick = () => addNonDeductible(btn.getAttribute('data-add-nondeductible'));
+        });
+
+        if (isAdmin) {
+            document.querySelectorAll('[data-del-adv]').forEach(btn => {
+                btn.onclick = () => {
+                    const advId = btn.getAttribute('data-del-adv');
+                    deleteAdvance(advId);
+                };
+            });
+            document.querySelectorAll('[data-del-driver]').forEach(btn => {
+                btn.onclick = () => deleteDriver(btn.getAttribute('data-del-driver'));
+            });
+        }
     }
-  };
 
-  document.getElementById('deleteAllBtn').addEventListener('click', async () => {
-    if (allCustomers.length === 0) return;
-    const sure1 = confirm(`سيتم مسح ${allCustomers.length} عميل نهائياً من قاعدة البيانات. هل أنت متأكد؟`);
-    if (!sure1) return;
-    const sure2 = confirm('تأكيد أخير: هذا الإجراء لا يمكن التراجع عنه. متابعة؟');
-    if (!sure2) return;
-
-    try {
-      await Promise.all(allCustomers.map(c => deleteDoc(doc(db, 'customers', c.id))));
-      allCustomers = [];
-      applyFilters();
-    } catch (err) {
-      alert('خطأ أثناء مسح العملاء: ' + err.message);
+    const addDriverBtn = document.getElementById('addDriverBtn');
+    if (addDriverBtn) {
+        addDriverBtn.addEventListener('click', async () => {
+            if (!isAdmin) {
+                alert("عذراً، هذه الصلاحية للمدير فقط");
+                return;
+            }
+            const name = document.getElementById('newName').value.trim();
+            const phone = document.getElementById('newPhone').value.trim();
+            const baseSalary = Number(document.getElementById('newSalary').value) || 0;
+            if(!name){ document.getElementById('newName').focus(); return; }
+            try{
+                await addDoc(collection(db, DRIVERS_COL), { name, phone, baseSalary, createdAt: serverTimestamp() });
+                document.getElementById('newName').value = '';
+                document.getElementById('newPhone').value = '';
+                document.getElementById('newSalary').value = '';
+            }catch(e){
+                alert('تعذرت الإضافة، حاول مرة أخرى');
+                console.error(e);
+            }
+        });
     }
-  });
 
-  loadCustomers();
+    let pendingAdvance = null;
+
+    window.addAdvance = async function(driverId){
+        const amountEl = document.getElementById(`advAmount-${driverId}`);
+        const dateEl = document.getElementById(`advDate-${driverId}`);
+        const noteEl = document.getElementById(`advNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        const driver = drivers.find(d => d.id === driverId);
+        if(!driver) return;
+
+        const monthOfDate = date.slice(0,7);
+        const existingMonthTotal = itemsOfMonth(driverId, monthOfDate, 'adv').reduce((s,a)=>s+Number(a.amount),0);
+        const newTotal = existingMonthTotal + amount;
+        const limit = calcAllowedLimit(driver.baseSalary, date);
+
+        if(newTotal > limit){
+            pendingAdvance = { driverId, amount, date, note, limit, newTotal, existingMonthTotal };
+            openExceptionModal(driver, pendingAdvance);
+            return;
+        }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'adv');
+        }catch(e){
+            alert('تعذرت إضافة السلفة، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    window.addDeficit = async function(driverId){
+        const amountEl = document.getElementById(`deficitAmount-${driverId}`);
+        const dateEl = document.getElementById(`deficitDate-${driverId}`);
+        const noteEl = document.getElementById(`deficitNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: true, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'deficit');
+        }catch(e){
+            alert('تعذر تسجيل العجز، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    window.addAbsence = async function(driverId){
+        const amountEl = document.getElementById(`absenceAmount-${driverId}`);
+        const dateEl = document.getElementById(`absenceDate-${driverId}`);
+        const noteEl = document.getElementById(`absenceNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isAbsence: true, isDeficit: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'absence');
+        }catch(e){
+            alert('تعذر تسجيل الغياب، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    window.addNonDeductible = async function(driverId){
+        const amountEl = document.getElementById(`nonDeductibleAmount-${driverId}`);
+        const dateEl = document.getElementById(`nonDeductibleDate-${driverId}`);
+        const noteEl = document.getElementById(`nonDeductibleNote-${driverId}`);
+        const amount = Number(amountEl.value);
+        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const note = noteEl.value.trim();
+        if(!amount || amount <= 0){ amountEl.focus(); return; }
+
+        try{
+            await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isNonDeductible: true, isAbsence: false, isDeficit: false, exception: false, createdAt: serverTimestamp() });
+            openPanels.set(driverId, 'nondeductible');
+        }catch(e){
+            alert('تعذر تسجيل المصروفات والعجز، حاول مرة أخرى');
+            console.error(e);
+        }
+    };
+
+    function openExceptionModal(driver, p){
+        const excess = p.newTotal - p.limit;
+        document.getElementById('exceptionModalRows').innerHTML = `
+            <div class="modal-row"><span>الاسم</span><b>${escapeHtml(driver.name)}</b></div>
+            <div class="modal-row"><span>الحد المسموح به بتاريخ ${p.date}</span><b>${fmt(p.limit)}</b></div>
+            <div class="modal-row"><span>سلف الشهر الحالية</span><b>${fmt(p.existingMonthTotal)}</b></div>
+            <div class="modal-row"><span>السلفة الجديدة</span><b>${fmt(p.amount)}</b></div>
+            <div class="modal-row"><span>الإجمالي بعد الإضافة</span><b>${fmt(p.newTotal)}</b></div>
+            <div class="modal-row excess"><span>مقدار التجاوز (سيتسجل كعجز تلقائياً)</span><b>${fmt(excess)}</b></div>
+        `;
+        document.getElementById('exceptionModal').classList.add('open');
+    }
+
+    function closeExceptionModal(){
+        document.getElementById('exceptionModal').classList.remove('open');
+        pendingAdvance = null;
+    }
+
+    const modalCancelBtn = document.getElementById('modalCancelBtn');
+    if (modalCancelBtn) modalCancelBtn.addEventListener('click', closeExceptionModal);
+
+    const modalExceptionBtn = document.getElementById('modalExceptionBtn');
+    if (modalExceptionBtn) {
+        modalExceptionBtn.addEventListener('click', async () => {
+            if(!pendingAdvance) return;
+            const { driverId, amount, date, note, limit, newTotal } = pendingAdvance;
+            const excess = Math.round(newTotal - limit);
+            try{
+                await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, isNonDeductible: false, exception: true, createdAt: serverTimestamp() });
+                await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
+                openPanels.set(driverId, 'deficit');
+            }catch(e){
+                alert('تعذر تسجيل السلفة بالعجز');
+                console.error(e);
+            }
+            closeExceptionModal();
+        });
+    }
+
+    async function deleteAdvance(advId){
+        if (!isAdmin) {
+            alert('عذراً، ليس لديك صلاحية الحذف أو التعديل');
+            return;
+        }
+        try{ await deleteDoc(doc(db, ADVANCES_COL, advId)); }
+        catch(e){ alert('تعذر الحذف'); console.error(e); }
+    }
+
+    async function deleteDriver(driverId){
+        if (!isAdmin) {
+            alert('عذراً، ليس لديك صلاحية الحذف أو التعديل');
+            return;
+        }
+        const driver = drivers.find(d => d.id === driverId);
+        if(!confirm(`هل تريد الحذف وكل البيانات الخاصة به؟`)) return;
+        try{
+            const q = query(collection(db, ADVANCES_COL), where("driverId", "==", driverId));
+            const snap = await getDocs(q);
+            await Promise.all(snap.docs.map(d => deleteDoc(doc(db, ADVANCES_COL, d.id))));
+            await deleteDoc(doc(db, DRIVERS_COL, driverId));
+        }catch(e){
+            alert('تعذر الحذف');
+            console.error(e);
+        }
+    }
+
+    const prevBtn = document.getElementById('prevMonth');
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            const [y,m] = currentMonth.split('-').map(Number);
+            currentMonth = new Date(y, m-2, 1).toISOString().slice(0,7);
+            render();
+        });
+    }
+
+    const nextBtn = document.getElementById('nextMonth');
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            const [y,m] = currentMonth.split('-').map(Number);
+            currentMonth = new Date(y, m, 1).toISOString().slice(0,7);
+            render();
+        });
+    }
+
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+        printBtn.addEventListener('click', () => window.print());
+    }
+
+    const btnBack = document.getElementById('btnBack');
+    if (btnBack) {
+        btnBack.addEventListener('click', () => {
+            if (document.referrer) { history.back(); } else { window.location.href = 'index.html'; }
+        });
+    }
 </script>
+
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js")
