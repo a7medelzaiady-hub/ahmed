@@ -157,7 +157,7 @@
   .pill{
     border: 1px solid var(--line); background:#fff; color:var(--mute); font-size:.78rem; font-weight:800;
     padding:8px 16px; border-radius:999px; cursor:pointer; transition:.2s ease;
-    outline: none;
+    outline: none; font-family:'Cairo', sans-serif; white-space: nowrap;
   }
   .pill.active{ background:var(--germany-black); color:#fff; border-color:var(--germany-black); box-shadow: var(--card-shadow); }
   .pill:active{ transform: scale(0.95); }
@@ -235,6 +235,7 @@
     transition:.15s; 
     border:1px solid transparent;
     cursor: pointer;
+    font-family:'Cairo', sans-serif;
   }
   .action-btn:active{ transform:scale(0.95); }
   
@@ -242,7 +243,7 @@
   .btn-info{ background:var(--germany-black); color:#ffffff; border-color:var(--germany-black); }
   .btn-share-direct{ background:linear-gradient(135deg, #25d366, #128c7e); color:#ffffff; border-color:#128c7e; }
   .btn-del{ background:var(--owed-bg); color:var(--owed); border-color:rgba(255, 0, 0, 0.15); }
-  .btn-analyze { background: #fffdf2; color: #854d0e; border-color: var(--germany-gold); grid-column: span 2; }
+  .btn-analysis{ grid-column: span 2; background:var(--germany-gold); color:#000000; border-color:var(--germany-gold); }
 
   .empty-state{ text-align:center; padding:60px 20px; color:var(--mute); }
   .empty-state i{ font-size:2.5rem; opacity:.4; margin-bottom:12px; display:block; color: var(--germany-gold); }
@@ -352,21 +353,6 @@
     padding: 20px 16px;
     text-align: center;
   }
-
-  /* أنماط نافذة التحليل الذكي */
-  .analytics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
-  .analytics-kpi-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; }
-  .analytics-kpi-card .kpi-title { font-size: 0.7rem; color: var(--mute); font-weight: 700; }
-  .analytics-kpi-card .kpi-value { font-size: 0.95rem; font-weight: 900; margin-top: 2px; color: var(--germany-black); }
-  
-  .recommendation-banner {
-    border-radius: 14px; padding: 12px; margin-bottom: 12px; font-size: 0.78rem; font-weight: 800; line-height: 1.5;
-    display: flex; gap: 8px; align-items: flex-start;
-  }
-  .recommendation-banner.vip { background: #fefce8; border: 1px solid #fde047; color: #854d0e; }
-  .recommendation-banner.risk { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
-  .recommendation-banner.dormant { background: #f8fafc; border: 1px solid #cbd5e1; color: #475569; }
-  .recommendation-banner.normal { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
 </style>
 </head>
 <body>
@@ -386,6 +372,7 @@
         <i class="fas fa-search"></i>
         <input type="text" id="searchInput" placeholder="ابحث بالإسم أو رقم الهاتف..." oninput="filterCustomers()">
       </div>
+      <button class="danger-btn" style="background:var(--germany-gold); color:#000; border-color:var(--germany-gold);" onclick="openAllCustomersAnalysis()" title="ترتيب وتحليل كل العملاء"><i class="fas fa-ranking-star"></i></button>
       <button class="danger-btn" id="deleteAllBtn" title="مسح كل العملاء"><i class="fas fa-trash-alt"></i></button>
     </div>
   </header>
@@ -442,17 +429,31 @@
     </div>
 </div>
 
-<!-- نافذة التحليل الذكي للعميل -->
-<div id="customerAnalyticsModal" class="statement-modal-overlay">
-    <div class="statement-modal-box" style="height: 85vh;">
-        <div class="statement-modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a);">
-            <h6 class="fw-bold mb-0" id="customerAnalyticsTitle" style="font-size: 0.95rem; margin:0; color:#fff;">
-                <i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> تقرير تحليل أداء العميل
-            </h6>
-            <button class="icon-link" onclick="closeCustomerAnalytics()" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="statement-modal-body" id="customerAnalyticsBody"></div>
+<!-- نافذة تحليل عميل واحد -->
+<div id="customerAnalysisModal" class="statement-modal-overlay">
+  <div class="statement-modal-box">
+    <div class="statement-modal-header">
+      <h6 id="customerAnalysisTitle" style="font-size:0.95rem; margin:0;"><i class="fas fa-chart-line" style="color:var(--germany-gold);"></i> تحليل العميل</h6>
+      <button class="icon-link" onclick="document.getElementById('customerAnalysisModal').style.display='none'" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
     </div>
+    <div class="statement-modal-body" id="customerAnalysisBody"></div>
+  </div>
+</div>
+
+<!-- نافذة ترتيب وتحليل كل العملاء -->
+<div id="allAnalysisModal" class="statement-modal-overlay">
+  <div class="statement-modal-box">
+    <div class="statement-modal-header">
+      <h6 style="font-size:0.95rem; margin:0;"><i class="fas fa-ranking-star" style="color:var(--germany-gold);"></i> ترتيب وتحليل العملاء</h6>
+      <button class="icon-link" onclick="document.getElementById('allAnalysisModal').style.display='none'" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="display:flex; gap:6px; padding:10px 12px 0; background:#f8fafc; overflow-x:auto;">
+      <button class="pill active" data-rank="top" onclick="switchRank('top')">الأفضل مبيعاً</button>
+      <button class="pill" data-rank="late" onclick="switchRank('late')">متأخرين سداد</button>
+      <button class="pill" data-rank="idle" onclick="switchRank('idle')">الخاملين</button>
+    </div>
+    <div class="statement-modal-body" id="allAnalysisBody"></div>
+  </div>
 </div>
 
 <!-- مودال شاشة التحميل للتجهيز الحراري -->
@@ -698,210 +699,11 @@
             <a href="customer-details.html?id=${cust.id}" class="action-btn btn-info"><i class="fas fa-user-tag"></i> كشف الحساب</a>
             <button class="action-btn btn-share-direct" onclick="triggerDirectStatementShare('${cust.id}', '${safeName}')"><i class="fas fa-share-nodes"></i> مشاركة</button>
             <button class="action-btn btn-del" onclick="deleteCustomer('${cust.id}', '${safeName}')"><i class="fas fa-trash-alt"></i> حذف</button>
-            <button class="action-btn btn-analyze" onclick="analyzeCustomerPerformance('${cust.id}', '${safeName}')"><i class="fas fa-chart-line"></i> تحليل الأداء وتوصيات الذكاء</button>
+            <button class="action-btn btn-analysis" onclick="openCustomerAnalysis('${cust.id}', '${safeName}')"><i class="fas fa-chart-line"></i> تحليل أداء العميل</button>
           </div>
         </div>
       `;
     }).join('');
-  };
-
-  /* دالة تحليل أداء العميل والتوصيات الذكية (التمييز بين الكرتونة والجركن) */
-  window.closeCustomerAnalytics = () => {
-      document.getElementById('customerAnalyticsModal').style.display = 'none';
-  };
-
-  window.analyzeCustomerPerformance = async (customerId, customerName) => {
-      const modal = document.getElementById('customerAnalyticsModal');
-      const body = document.getElementById('customerAnalyticsBody');
-      const titleEl = document.getElementById('customerAnalyticsTitle');
-
-      titleEl.innerHTML = `<i class="fas fa-chart-line me-1" style="color:var(--germany-gold);"></i> تقرير تحليل أداء العميل: ${customerName}`;
-      body.innerHTML = `<div class="empty-state py-4"><i class="fas fa-circle-notch fa-spin fa-2x"></i><p class="mt-3 fw-bold">جاري حساب المؤشرات وتدقيق كميات الكراتين والجراكن...</p></div>`;
-      modal.style.display = 'flex';
-
-      try {
-          const [invSnap, transSnap] = await Promise.all([
-              getDocs(collection(db, "invoices")),
-              getDocs(collection(db, "transactions"))
-          ]);
-
-          const targetKey = customerId || ("NAME_" + normalizeName(customerName));
-          
-          let totalSales = 0;
-          let totalPaid = 0;
-          let invoiceCount = 0;
-          let itemStats = {};
-          let datesList = [];
-
-          invSnap.forEach(d => {
-              const data = d.data();
-              if (data.isDeleted) return;
-              let key = data.customerId;
-              if (!key && data.customerName) key = customersNameMap[normalizeName(data.customerName)];
-              if (!key && data.customerName) key = "NAME_" + normalizeName(data.customerName);
-              if (!key || key !== targetKey) return;
-
-              invoiceCount++;
-              const tot = Number(data.total) || 0;
-              const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
-              const wallet = Number(data.walletAmount ?? data.walletPaid) || 0;
-
-              totalSales += tot;
-              totalPaid += (cash + wallet);
-
-              const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseArabicDateToMs(data.time || data.date);
-              if (timeMs) datesList.push(timeMs);
-
-              (data.items || []).forEach(item => {
-                  const name = item.name || 'منتج غير مسمى';
-                  const qty = Number(item.qty) || 0;
-                  const factor = Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1;
-                  const isCarton = (item.unit === 'box' || item.unit === 'carton' || item.unit === 'كرتونة' || item.unitName === 'كرتونة' || item.isCarton === true);
-
-                  if (!itemStats[name]) {
-                      itemStats[name] = { cartons: 0, pcs: 0, factor: factor, totalVolumeInPcs: 0 };
-                  }
-
-                  if (isCarton) {
-                      itemStats[name].cartons += qty;
-                      itemStats[name].totalVolumeInPcs += (qty * factor);
-                  } else {
-                      itemStats[name].pcs += qty;
-                      itemStats[name].totalVolumeInPcs += qty;
-                  }
-                  if (factor > 1) itemStats[name].factor = factor;
-              });
-          });
-
-          transSnap.forEach(d => {
-              const tr = d.data();
-              if (tr.isDeleted) return;
-              const isInvoicePayment = tr.invoiceId || (tr.note && tr.note.includes('فاتورة'));
-              if (isInvoicePayment) return;
-
-              let key = tr.partyId || tr.customerId;
-              let partyName = tr.customerName || tr.partyName;
-              if (!key && partyName) key = customersNameMap[normalizeName(partyName)];
-              if (!key && partyName) key = "NAME_" + normalizeName(partyName);
-              if (!key || key !== targetKey) return;
-
-              const amt = Math.abs(Number(tr.amount || tr.total || 0));
-              if (tr.type === 'قبض') totalPaid += amt;
-          });
-
-          let baseBalance = 0;
-          if (customerId && customersData[customerId]) baseBalance = Number(customersData[customerId].initialBalance || 0);
-
-          const netDebt = (totalSales + baseBalance) - totalPaid;
-          const paymentRatio = (totalSales + baseBalance) > 0 ? ((totalPaid / (totalSales + baseBalance)) * 100) : 100;
-          const avgInvoiceValue = invoiceCount > 0 ? (totalSales / invoiceCount) : 0;
-
-          let lastPurchaseDaysAgo = -1;
-          if (datesList.length > 0) {
-              datesList.sort((a, b) => b - a);
-              const latestDate = datesList[0];
-              const diffTime = Math.abs(Date.now() - latestDate);
-              lastPurchaseDaysAgo = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          }
-
-          const sortedProducts = Object.entries(itemStats)
-              .sort((a, b) => b[1].totalVolumeInPcs - a[1].totalVolumeInPcs)
-              .slice(0, 4);
-
-          let bannerClass = "normal";
-          let badgeTag = "عميل متوازن";
-          let recommendationText = "";
-
-          if (netDebt > 30000 && paymentRatio < 55) {
-              bannerClass = "risk";
-              badgeTag = "⚠️ عالي المخاطر";
-              recommendationText = "العميل لديه رصيد متبقي مرتفع ونسبة سداد ضعيفة. يُوصى بإيقاف البيع الآجل فوراً واشتراط سداد 50% على الأقل من المستحقات لتجديد الائتمان.";
-          } else if (paymentRatio >= 85 && totalSales > 20000) {
-              bannerClass = "vip";
-              badgeTag = "🌟 عميل ماسي / ممتاز";
-              recommendationText = "عميل ممتاز بنسبة سداد عالية ومسحوبات متميزة. يمكن منحه نسبة خصم تشجيعية أو أولوية في تسليم الطلبيات بزيوت السيارات.";
-          } else if (lastPurchaseDaysAgo > 30) {
-              bannerClass = "dormant";
-              badgeTag = "💤 عميل خامل";
-              recommendationText = `توقف العميل عن الشراء منذ أكثر من ${lastPurchaseDaysAgo} يوماً. يُفضل تواصل مندوب المبيعات معه لتقديم عروض خاصة وإعادة تنشيطه.`;
-          } else {
-              bannerClass = "normal";
-              badgeTag = "🔄 عميل نشط عادي";
-              recommendationText = "معدل الشراء والسداد في الحدود الطبيعية. يُنصح بمتابعة تحصيل الدفعات بانتظام مع كل فاتورة جديدة.";
-          }
-
-          let topItemsHtml = sortedProducts.length > 0 ? sortedProducts.map(([pName, pData]) => {
-              let factor = pData.factor || 1;
-              let totalPcs = pData.pcs;
-              let totalCartons = pData.cartons;
-
-              if (factor > 1 && totalPcs >= factor) {
-                  totalCartons += Math.floor(totalPcs / factor);
-                  totalPcs = totalPcs % factor;
-              }
-
-              let qtyParts = [];
-              if (totalCartons > 0) qtyParts.push(`<b>${totalCartons}</b> كرتونة`);
-              if (totalPcs > 0) qtyParts.push(`<b>${totalPcs}</b> جركن/قطعة`);
-
-              let qtyDisplay = qtyParts.length > 0 ? qtyParts.join(' + ') : '0';
-
-              return `
-                  <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="font-size:0.78rem;">
-                      <span class="fw-bold"><i class="fas fa-oil-can me-1" style="color:var(--germany-gold);"></i> ${pName}</span>
-                      <span class="num text-dark fw-bold bg-light px-2 py-1 rounded" style="border: 1px solid var(--line);">${qtyDisplay}</span>
-                  </div>
-              `;
-          }).join('') : '<div class="text-muted text-center py-2" style="font-size:0.75rem;">لا توجد أصناف مبيعة مسجلة</div>';
-
-          body.innerHTML = `
-              <div class="recommendation-banner ${bannerClass}">
-                  <i class="fas fa-lightbulb fa-lg mt-1"></i>
-                  <div>
-                      <div class="fw-bold mb-1" style="font-size:0.85rem;">التصنيف: ${badgeTag}</div>
-                      <div>${recommendationText}</div>
-                  </div>
-              </div>
-
-              <div class="analytics-grid">
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">إجمالي المشتريات</div>
-                      <div class="kpi-value num text-dark">${totalSales.toFixed(2)} <small style="font-size:0.6rem;">ج.م</small></div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">إجمالي المسدد</div>
-                      <div class="kpi-value num text-success">${totalPaid.toFixed(2)} <small style="font-size:0.6rem;">ج.م</small></div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">نسبة السداد</div>
-                      <div class="kpi-value num ${paymentRatio >= 75 ? 'text-success' : 'text-danger'}">${paymentRatio.toFixed(1)}%</div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">عدد الفواتير</div>
-                      <div class="kpi-value num text-dark">${invoiceCount} فاتورة</div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">متوسط الفاتورة</div>
-                      <div class="kpi-value num text-dark">${avgInvoiceValue.toFixed(2)} <small style="font-size:0.6rem;">ج.م</small></div>
-                  </div>
-                  <div class="analytics-kpi-card">
-                      <div class="kpi-title">آخر عملية شراء</div>
-                      <div class="kpi-value num text-dark">${lastPurchaseDaysAgo >= 0 ? lastPurchaseDaysAgo + ' يوم' : 'غير محدد'}</div>
-                  </div>
-              </div>
-
-              <div class="bg-white p-3 rounded border mb-2">
-                  <h6 class="fw-bold mb-2" style="font-size:0.8rem; color:var(--germany-black);">
-                      <i class="fas fa-boxes-stacked me-1" style="color:var(--germany-gold);"></i> المنتجات الأكثر طلباً (بالكرتونة والجركن)
-                  </h6>
-                  ${topItemsHtml}
-              </div>
-          `;
-
-      } catch (err) {
-          console.error("خطأ في تحليل الأداء:", err);
-          body.innerHTML = `<div class="alert alert-danger text-center p-3 my-2" style="border-radius:14px; font-weight:700;">تعذر تحليل الأداء: ${err.message}</div>`;
-      }
   };
 
   window.currentStatementRows = [];
@@ -1126,7 +928,7 @@
       }
   };
 
-  /* دالة تصوير كشف الحساب بالكامل */
+  /* دالة تصوير كشف الحساب بالكامل دفعة واحدة الموثوقة، مع معالجة كل حالات الفشل */
   window.shareEntireStatement = function() {
       const statementBody = document.getElementById('customerStatementBody');
       if (!statementBody || !statementBody.children.length) {
@@ -1182,6 +984,7 @@
                       finish();
                   }).catch(err => {
                       finish();
+                      // المستخدم لغى المشاركة بنفسه، لا داعي لتنزيل الملف أو إظهار خطأ
                       if (err && err.name === 'AbortError') return;
                       console.log('تعذرت المشاركة، سيتم تنزيل الصورة مباشرة:', err);
                       downloadBlob();
@@ -1233,7 +1036,7 @@
 
   window.setFilter = (f) => {
     currentFilter = f;
-    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.filter === f));
+    document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.toggle('active', p.dataset.filter === f));
     applyFilters();
   };
 
@@ -1263,6 +1066,261 @@
       alert('خطأ أثناء مسح العملاء: ' + err.message);
     }
   });
+
+  /* ================= تحليل أداء عميل واحد ================= */
+  window.openCustomerAnalysis = async (customerId, customerName) => {
+    const modal = document.getElementById('customerAnalysisModal');
+    const body = document.getElementById('customerAnalysisBody');
+    document.getElementById('customerAnalysisTitle').innerHTML =
+      '<i class="fas fa-chart-line" style="color:var(--germany-gold);"></i> تحليل: ' + (customerName || 'عميل');
+    body.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i>جاري تحليل البيانات...</div>';
+    modal.style.display = 'flex';
+
+    try {
+      const [invSnap, transSnap] = await Promise.all([
+        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "transactions"))
+      ]);
+
+      const matchKey = (id, name) => {
+        let key = id;
+        if (!key && name) key = customersNameMap[normalizeName(name)];
+        if (!key && name) key = "NAME_" + normalizeName(name);
+        return key;
+      };
+
+      let invoices = [];
+      let vouchersCollected = 0;
+      const itemsMap = {};
+
+      invSnap.forEach(d => {
+        const data = d.data();
+        if (data.isDeleted) return;
+        if (matchKey(data.customerId, data.customerName) !== customerId) return;
+
+        const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+        const wallet = Number(data.walletAmount ?? data.walletPaid) || 0;
+        const total = Number(data.total) || 0;
+        const timeMs = data.timestamp?.seconds ? data.timestamp.seconds * 1000 : parseArabicDateToMs(data.time || data.date);
+        invoices.push({ timeMs, total, paid: cash + wallet });
+
+        (data.items || []).forEach(i => {
+          if (i.isReturn) return;
+          const n = i.name || 'غير معروف';
+          if (!itemsMap[n]) itemsMap[n] = { qty: 0, value: 0 };
+          itemsMap[n].qty += Number(i.qty) || 0;
+          itemsMap[n].value += (Number(i.qty) || 0) * (Number(i.price) || 0);
+        });
+      });
+
+      transSnap.forEach(d => {
+        const tr = d.data();
+        if (tr.isDeleted) return;
+        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+        const key = matchKey(tr.partyId || tr.customerId, tr.customerName || tr.partyName);
+        if (key !== customerId) return;
+        const amt = Math.abs(Number(tr.amount || tr.total || 0));
+        if (tr.type === 'قبض') vouchersCollected += amt;
+        else if (tr.type === 'صرف') vouchersCollected -= amt;
+      });
+
+      if (invoices.length === 0) {
+        body.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد فواتير لهذا العميل للتحليل.</div>';
+        return;
+      }
+
+      invoices.sort((a, b) => a.timeMs - b.timeMs);
+
+      const count = invoices.length;
+      const totalSales = invoices.reduce((s, i) => s + i.total, 0);
+      const paidOnInvoices = invoices.reduce((s, i) => s + i.paid, 0);
+      const collected = paidOnInvoices + vouchersCollected;
+      const avgInvoice = totalSales / count;
+      const collectionRate = totalSales > 0 ? Math.min(100, (collected / totalSales) * 100) : 100;
+
+      const lastMs = invoices[count - 1].timeMs;
+      const firstMs = invoices[0].timeMs;
+      const daysSince = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
+      let avgGap = null;
+      if (count > 1 && lastMs && firstMs) avgGap = Math.round((lastMs - firstMs) / 86400000 / (count - 1));
+
+      const cust = allCustomers.find(c => c.id === customerId);
+      const balance = cust ? cust.realBalance : 0;
+
+      // آخر 6 شهور
+      const months = [];
+      const now = new Date();
+      for (let k = 5; k >= 0; k--) {
+        const dt = new Date(now.getFullYear(), now.getMonth() - k, 1);
+        months.push({ y: dt.getFullYear(), m: dt.getMonth(), label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), sum: 0 });
+      }
+      invoices.forEach(inv => {
+        if (!inv.timeMs) return;
+        const dt = new Date(inv.timeMs);
+        const slot = months.find(x => x.y === dt.getFullYear() && x.m === dt.getMonth());
+        if (slot) slot.sum += inv.total;
+      });
+      const maxMonth = Math.max(...months.map(x => x.sum), 1);
+      const barsHtml = months.map(x =>
+        '<div style="flex:1; text-align:center;">' +
+          '<div style="height:70px; display:flex; align-items:flex-end; justify-content:center;">' +
+            '<div style="width:70%; height:' + Math.max(3, (x.sum / maxMonth) * 70) + 'px; background:#000; border-radius:4px 4px 0 0;"></div>' +
+          '</div>' +
+          '<div style="font-size:.6rem; font-weight:800; color:#5a677d;">' + x.label + '</div>' +
+          '<div class="num" style="font-size:.6rem;">' + Math.round(x.sum) + '</div>' +
+        '</div>').join('');
+
+      // أكتر الأصناف
+      const topItems = Object.entries(itemsMap).sort((a, b) => b[1].value - a[1].value).slice(0, 5);
+      const itemsHtml = topItems.map(([n, v]) =>
+        '<tr><td style="text-align:right;">' + n + '</td><td>' + v.qty + '</td><td class="num">' + v.value.toFixed(0) + '</td></tr>').join('');
+
+      // التقييم
+      let rating = { txt: 'جيد', color: '#178a4a', bg: '#eefaf2', note: 'عميل منتظم.' };
+      const inactive = daysSince !== null && daysSince > Math.max(60, (avgGap || 30) * 2.5);
+      if (inactive) rating = { txt: 'خامل', color: '#b45309', bg: '#fffbeb', note: 'مبقاش بيشتري بنفس معدله، يستاهل تواصل.' };
+      else if (balance > 0 && collectionRate < 50) rating = { txt: 'متأخر في السداد', color: '#FF0000', bg: '#fff1f1', note: 'نسبة التحصيل ضعيفة والرصيد عليه كبير.' };
+      else if (collectionRate >= 90 && !inactive) rating = { txt: 'ممتاز', color: '#178a4a', bg: '#eefaf2', note: 'بيشتري بانتظام وبيسدد.' };
+
+      const box = (lbl, val, color) =>
+        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px 4px; text-align:center;">' +
+        '<div style="font-size:.65rem; color:#5a677d; font-weight:800;">' + lbl + '</div>' +
+        '<div class="num" style="font-size:.9rem; margin-top:4px; color:' + (color || '#000') + ';">' + val + '</div></div>';
+
+      body.innerHTML =
+        '<div style="background:' + rating.bg + '; border:1px solid ' + rating.color + '; border-radius:14px; padding:12px; text-align:center; margin-bottom:10px;">' +
+          '<div style="font-weight:900; font-size:1.1rem; color:' + rating.color + ';">' + rating.txt + '</div>' +
+          '<div style="font-size:.75rem; font-weight:700; margin-top:2px;">' + rating.note + '</div>' +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">' +
+          box('عدد الفواتير', count) +
+          box('إجمالي المبيعات', fmt(totalSales)) +
+          box('متوسط الفاتورة', fmt(avgInvoice)) +
+          box('نسبة التحصيل', collectionRate.toFixed(0) + '%', collectionRate < 50 ? '#FF0000' : '#178a4a') +
+          box('آخر شراء', daysSince !== null ? 'من ' + daysSince + ' يوم' : '-') +
+          box('بيشتري كل', avgGap !== null ? avgGap + ' يوم' : '-') +
+        '</div>' +
+        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; font-weight:800; font-size:.85rem;">' +
+          '<span>الرصيد الحالي</span>' +
+          '<span class="num" style="color:' + (balance > 0 ? '#FF0000' : balance < 0 ? '#178a4a' : '#5a677d') + ';">' + fmt(balance) + ' ' + (balance > 0 ? 'عليه' : balance < 0 ? 'له' : 'خالص') + '</span>' +
+        '</div>' +
+        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px;">' +
+          '<div style="font-weight:900; font-size:.8rem; margin-bottom:6px;">مبيعات آخر 6 شهور</div>' +
+          '<div style="display:flex; gap:4px;">' + barsHtml + '</div>' +
+        '</div>' +
+        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px;">' +
+          '<div style="font-weight:900; font-size:.8rem; margin-bottom:6px;">أكتر الأصناف شراءً</div>' +
+          '<table class="statement-item-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
+        '</div>';
+
+    } catch (err) {
+      console.error(err);
+      body.innerHTML = '<div style="color:#f00; text-align:center; padding:20px; font-weight:700;">تعذر التحليل: ' + err.message + '</div>';
+    }
+  };
+
+  /* ================= ترتيب وتحليل كل العملاء ================= */
+  window._rankData = [];
+
+  window.openAllCustomersAnalysis = async () => {
+    const modal = document.getElementById('allAnalysisModal');
+    const body = document.getElementById('allAnalysisBody');
+    body.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i>جاري تحليل كل العملاء...</div>';
+    modal.style.display = 'flex';
+
+    try {
+      const [invSnap, transSnap] = await Promise.all([
+        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "transactions"))
+      ]);
+
+      const matchKey = (id, name) => {
+        let key = id;
+        if (!key && name) key = customersNameMap[normalizeName(name)];
+        return key;
+      };
+
+      const stats = {};
+      const get = (id) => stats[id] || (stats[id] = { count: 0, sales: 0, paid: 0, vouchers: 0, times: [] });
+
+      invSnap.forEach(d => {
+        const data = d.data();
+        if (data.isDeleted) return;
+        const key = matchKey(data.customerId, data.customerName);
+        if (!key) return;
+        const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+        const wallet = Number(data.walletAmount ?? data.walletPaid) || 0;
+        const s = get(key);
+        s.count++;
+        s.sales += Number(data.total) || 0;
+        s.paid += cash + wallet;
+        const t = data.timestamp?.seconds ? data.timestamp.seconds * 1000 : parseArabicDateToMs(data.time || data.date);
+        if (t) s.times.push(t);
+      });
+
+      transSnap.forEach(d => {
+        const tr = d.data();
+        if (tr.isDeleted) return;
+        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+        const key = matchKey(tr.partyId || tr.customerId, tr.customerName || tr.partyName);
+        if (!key) return;
+        const amt = Math.abs(Number(tr.amount || tr.total || 0));
+        if (tr.type === 'قبض') get(key).vouchers += amt;
+        else if (tr.type === 'صرف') get(key).vouchers -= amt;
+      });
+
+      const now = Date.now();
+      window._rankData = allCustomers.filter(c => stats[c.id]).map(c => {
+        const s = stats[c.id];
+        s.times.sort((a, b) => a - b);
+        const last = s.times.length ? s.times[s.times.length - 1] : 0;
+        const first = s.times.length ? s.times[0] : 0;
+        const daysSince = last ? Math.floor((now - last) / 86400000) : null;
+        const avgGap = s.count > 1 && last && first ? Math.round((last - first) / 86400000 / (s.count - 1)) : null;
+        const rate = s.sales > 0 ? Math.min(100, ((s.paid + s.vouchers) / s.sales) * 100) : 100;
+        const idle = daysSince !== null && daysSince > Math.max(60, (avgGap || 30) * 2.5);
+        return { id: c.id, name: c.name, balance: c.realBalance, count: s.count, sales: s.sales, rate, daysSince, idle };
+      });
+
+      switchRank('top');
+    } catch (err) {
+      console.error(err);
+      body.innerHTML = '<div style="color:#f00; text-align:center; padding:20px; font-weight:700;">تعذر التحليل: ' + err.message + '</div>';
+    }
+  };
+
+  window.switchRank = (tab) => {
+    document.querySelectorAll('[data-rank]').forEach(p => p.classList.toggle('active', p.dataset.rank === tab));
+    const body = document.getElementById('allAnalysisBody');
+    let list = [...window._rankData];
+    let sub;
+
+    if (tab === 'top') {
+      list.sort((a, b) => b.sales - a.sales);
+      sub = c => 'مبيعات: <b class="num">' + fmt(c.sales) + '</b> | فواتير: ' + c.count;
+    } else if (tab === 'late') {
+      list = list.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance);
+      sub = c => 'عليه: <b class="num" style="color:#FF0000;">' + fmt(c.balance) + '</b> | تحصيل: ' + c.rate.toFixed(0) + '%';
+    } else {
+      list = list.filter(c => c.idle).sort((a, b) => b.daysSince - a.daysSince);
+      sub = c => 'آخر شراء من <b class="num">' + c.daysSince + '</b> يوم | مبيعاته: ' + fmt(c.sales);
+    }
+
+    if (list.length === 0) {
+      body.innerHTML = '<div class="empty-state"><i class="fas fa-circle-check"></i>لا يوجد عملاء في هذه القائمة.</div>';
+      return;
+    }
+
+    body.innerHTML = list.slice(0, 50).map((c, i) =>
+      '<div class="statement-card-item" style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="document.getElementById(\'allAnalysisModal\').style.display=\'none\'; openCustomerAnalysis(\'' + c.id + '\', \'' + (c.name || '').replace(/'/g, "\\'") + '\')">' +
+        '<div class="num" style="width:28px; height:28px; border-radius:50%; background:' + (i < 3 && tab === 'top' ? '#FFCC00' : '#e2e8f0') + '; display:flex; align-items:center; justify-content:center; font-size:.75rem; flex-shrink:0;">' + (i + 1) + '</div>' +
+        '<div style="flex:1; min-width:0;">' +
+          '<div style="font-weight:800; font-size:.9rem;">' + c.name + '</div>' +
+          '<div style="font-size:.72rem; color:#5a677d; font-weight:700; margin-top:2px;">' + sub(c) + '</div>' +
+        '</div>' +
+        '<i class="fas fa-chevron-left" style="color:#cbd5e1;"></i>' +
+      '</div>').join('');
+  };
 
   loadCustomers();
 </script>
