@@ -1247,11 +1247,38 @@
         stockSnap.forEach(d => { invMap[d.id] = d.data(); });
       } catch (e) { console.warn('تعذر تحميل المخزن:', e); }
 
-      const pickCost = (o) => {
-        if (!o) return 0;
-        const v = o.cost ?? o.costPrice ?? o.buyPrice ?? o.purchasePrice ?? o.unitCost ?? o.buyingPrice ?? o.priceBuy;
-        return Number(v) || 0;
-      };
+      // خريطة الأصناف بالاسم (للفواتير اللي مفيهاش stockId)
+      const invByName = {};
+      Object.entries(invMap).forEach(([id, st]) => { if (st.name) invByName[String(st.name).trim()] = st; });
+
+      // متوسط تكلفة القطعة من كل فواتير الشراء (متوسط مرجح بالكمية)
+      const avgAcc = {}; // key -> { pcs, value }
+      try {
+        const purSnap = await getDocs(collection(db, "supplier_transactions"));
+        purSnap.forEach(d => {
+          const pd = d.data();
+          if (pd.isDeleted) return;
+          if (!(pd.type === "شراء" || pd.type === "فاتورة شراء" || !pd.type)) return;
+          (pd.items || []).forEach(it => {
+            if (it.isReturn || Number(it.returnQty) > 0) return;
+            const st = invMap[it.stockId || it.id] || invByName[String(it.name || '').trim()];
+            const key = (it.stockId || it.id) && invMap[it.stockId || it.id] ? (it.stockId || it.id) : (st ? Object.keys(invMap).find(k => invMap[k] === st) : null);
+            if (!key) return;
+            const fac = Math.max(1, Number(it.unitFactor || st.unitFactor || st.factor || st.pcsPerCarton) || 1);
+            const qty = Number(it.qty) || 0;
+            const isCtn = (it.unit === 'box' || it.unit === 'carton' || it.unitName === 'كرتونة' || it.isCarton === true);
+            const pcs = Number(it.totalPieces) || (isCtn ? qty * fac : qty);
+            const perPiece = Number(it.baseCartonPrice) > 0 ? Number(it.baseCartonPrice) / fac : (Number(it.buy) || 0) / (isCtn ? fac : 1);
+            if (pcs <= 0 || perPiece <= 0) return;
+            if (!avgAcc[key]) avgAcc[key] = { pcs: 0, value: 0 };
+            avgAcc[key].pcs += pcs;
+            avgAcc[key].value += pcs * perPiece;
+          });
+        });
+      } catch (e) { console.warn('تعذر تحميل فواتير الشراء:', e); }
+      const avgCostPerPiece = (key) => (avgAcc[key] && avgAcc[key].pcs > 0) ? avgAcc[key].value / avgAcc[key].pcs : 0;
+      const keyByName = {};
+      Object.entries(invMap).forEach(([id, st]) => { if (st.name) keyByName[String(st.name).trim()] = id; });
 
       const stats = {};
       const get = (id) => stats[id] || (stats[id] = { count: 0, sales: 0, paid: 0, vouchers: 0, times: [], profit: 0, missing: 0 });
@@ -1273,14 +1300,16 @@
         (data.items || []).forEach(i => {
           const qty = Number(i.qty) || 0;
           const price = Number(i.price) || 0;
-          let cost = pickCost(i);
-          if (!cost) {
-            const stock = invMap[i.stockId || i.id];
-            cost = pickCost(stock);
-            const isCarton = (i.unit === 'box' || i.unit === 'carton' || i.unit === 'كرتونة' || i.unitName === 'كرتونة' || i.isCarton === true);
-            const factor = Number(i.unitFactor || i.pcsPerCarton || i.factor) || 1;
-            if (cost && isCarton) cost = cost * factor;
-          }
+          // التكلفة: متوسط مرجح من فواتير الشراء، وlast buy كاحتياطي
+          const stock = invMap[i.stockId || i.id] || invByName[String(i.name || '').trim()];
+          const isCarton = (i.unit === 'box' || i.unit === 'carton' || i.unit === 'كرتونة' || i.unit === 'كرتونه' || i.unitName === 'كرتونة' || i.isCarton === true);
+          const factor = Math.max(1, Number((stock && (stock.unitFactor || stock.factor || stock.pcsPerCarton)) || i.unitFactor || i.pcsPerCarton || i.factor) || 1);
+          const stockKey = (i.stockId || i.id) && invMap[i.stockId || i.id] ? (i.stockId || i.id) : keyByName[String(i.name || '').trim()];
+          const avgPiece = stockKey ? avgCostPerPiece(stockKey) : 0;
+          let cost = 0;
+          if (avgPiece > 0) cost = isCarton ? avgPiece * factor : avgPiece;            // المتوسط من المشتريات
+          else if (stock && Number(stock.buy) > 0) cost = isCarton ? Number(stock.buy) : Number(stock.buy) / factor; // احتياطي: آخر سعر شراء
+          else cost = Number(i.cost ?? i.costPrice) || 0;
           if (!cost) { s.missing++; return; }
           const line = (price - cost) * qty;
           invProfit += i.isReturn ? -line : line;
