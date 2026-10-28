@@ -1240,8 +1240,21 @@
         return key;
       };
 
+      // تحميل المخزن لمعرفة سعر التكلفة
+      const invMap = {};
+      try {
+        const stockSnap = await getDocs(collection(db, "inventory"));
+        stockSnap.forEach(d => { invMap[d.id] = d.data(); });
+      } catch (e) { console.warn('تعذر تحميل المخزن:', e); }
+
+      const pickCost = (o) => {
+        if (!o) return 0;
+        const v = o.cost ?? o.costPrice ?? o.buyPrice ?? o.purchasePrice ?? o.unitCost ?? o.buyingPrice ?? o.priceBuy;
+        return Number(v) || 0;
+      };
+
       const stats = {};
-      const get = (id) => stats[id] || (stats[id] = { count: 0, sales: 0, paid: 0, vouchers: 0, times: [] });
+      const get = (id) => stats[id] || (stats[id] = { count: 0, sales: 0, paid: 0, vouchers: 0, times: [], profit: 0, missing: 0 });
 
       invSnap.forEach(d => {
         const data = d.data();
@@ -1254,6 +1267,25 @@
         s.count++;
         s.sales += Number(data.total) || 0;
         s.paid += cash + wallet;
+
+        // حساب الربح: (سعر البيع - التكلفة) × الكمية، والمرتجع بيتخصم، وبعدين الخصم
+        let invProfit = 0;
+        (data.items || []).forEach(i => {
+          const qty = Number(i.qty) || 0;
+          const price = Number(i.price) || 0;
+          let cost = pickCost(i);
+          if (!cost) {
+            const stock = invMap[i.stockId || i.id];
+            cost = pickCost(stock);
+            const isCarton = (i.unit === 'box' || i.unit === 'carton' || i.unit === 'كرتونة' || i.unitName === 'كرتونة' || i.isCarton === true);
+            const factor = Number(i.unitFactor || i.pcsPerCarton || i.factor) || 1;
+            if (cost && isCarton) cost = cost * factor;
+          }
+          if (!cost) { s.missing++; return; }
+          const line = (price - cost) * qty;
+          invProfit += i.isReturn ? -line : line;
+        });
+        s.profit += invProfit - (Number(data.discount) || 0);
         const t = data.timestamp?.seconds ? data.timestamp.seconds * 1000 : parseArabicDateToMs(data.time || data.date);
         if (t) s.times.push(t);
       });
@@ -1279,7 +1311,7 @@
         const avgGap = s.count > 1 && last && first ? Math.round((last - first) / 86400000 / (s.count - 1)) : null;
         const rate = s.sales > 0 ? Math.min(100, ((s.paid + s.vouchers) / s.sales) * 100) : 100;
         const idle = daysSince !== null && daysSince > Math.max(60, (avgGap || 30) * 2.5);
-        return { id: c.id, name: c.name, balance: c.realBalance, count: s.count, sales: s.sales, rate, daysSince, idle };
+        return { id: c.id, name: c.name, balance: c.realBalance, count: s.count, sales: s.sales, rate, daysSince, idle, profit: s.profit, missing: s.missing };
       });
 
       switchRank('top');
@@ -1317,6 +1349,10 @@
         '<div style="flex:1; min-width:0;">' +
           '<div style="font-weight:800; font-size:.9rem;">' + c.name + '</div>' +
           '<div style="font-size:.72rem; color:#5a677d; font-weight:700; margin-top:2px;">' + sub(c) + '</div>' +
+        '</div>' +
+        '<div style="text-align:center; flex-shrink:0; padding:0 4px;">' +
+          '<div style="font-size:.6rem; color:#5a677d; font-weight:800;">إجمالي الربح' + (c.missing ? ' *' : '') + '</div>' +
+          '<div class="num" style="font-size:.85rem; color:' + (c.profit >= 0 ? '#178a4a' : '#FF0000') + ';">' + (c.profit < 0 ? '-' : '') + fmt(c.profit) + '</div>' +
         '</div>' +
         '<i class="fas fa-chevron-left" style="color:#cbd5e1;"></i>' +
       '</div>').join('');
