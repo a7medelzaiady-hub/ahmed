@@ -1175,12 +1175,67 @@
       const itemsHtml = topItems.map(([n, v]) =>
         '<tr><td style="text-align:right;">' + n + '</td><td>' + v.qty + '</td><td class="num">' + v.value.toFixed(0) + '</td></tr>').join('');
 
-      // التقييم
-      let rating = { txt: 'جيد', color: '#178a4a', bg: '#eefaf2', note: 'عميل منتظم.' };
+      // ===== تقييمين منفصلين: الشراء، والسداد =====
+      const gapBase = avgGap ? Math.max(avgGap, 15) : 45;
+      const recencyRatio = daysSince !== null ? daysSince / gapBase : 99;
       const inactive = daysSince !== null && daysSince > Math.max(60, (avgGap || 30) * 2.5);
-      if (inactive) rating = { txt: 'خامل', color: '#b45309', bg: '#fffbeb', note: 'مبقاش بيشتري بنفس معدله، يستاهل تواصل.' };
-      else if (balance > 0 && collectionRate < 50) rating = { txt: 'متأخر في السداد', color: '#FF0000', bg: '#fff1f1', note: 'نسبة التحصيل ضعيفة والرصيد عليه كبير.' };
-      else if (collectionRate >= 90 && !inactive) rating = { txt: 'ممتاز', color: '#178a4a', bg: '#eefaf2', note: 'بيشتري بانتظام وبيسدد.' };
+
+      // --- تقييم الشراء: النشاط + التكرار + الاتجاه + الاستمرارية ---
+      const recencyPts = recencyRatio <= 1 ? 35 : recencyRatio <= 2 ? 22 : recencyRatio <= 3 ? 10 : 0;
+      const freqPts = Math.min(25, count * 5);
+      const recent3 = months.slice(3).reduce((a, x) => a + x.sum, 0);
+      const prev3 = months.slice(0, 3).reduce((a, x) => a + x.sum, 0);
+      let trendPts = 0, trendTxt = '';
+      if (recent3 === 0 && prev3 === 0) { trendPts = 0; trendTxt = 'مفيش مشتريات في آخر 6 شهور'; }
+      else if (prev3 === 0) { trendPts = 20; trendTxt = 'مشترياته بتزيد'; }
+      else if (recent3 >= prev3) { trendPts = 20; trendTxt = 'مشترياته ثابتة أو بتزيد'; }
+      else if (recent3 >= prev3 * 0.5) { trendPts = 10; trendTxt = 'مشترياته قلّت'; }
+      else { trendPts = 0; trendTxt = 'مشترياته قلّت بشكل كبير'; }
+      const activeMonths = months.filter(x => x.sum > 0).length;
+      const consistPts = Math.round((activeMonths / 6) * 20);
+      const buyScore = Math.round(recencyPts + freqPts + trendPts + consistPts);
+
+      const buyReasons = [];
+      if (count < 3) buyReasons.push('فواتيره قليلة (' + count + ')، التقييم مبدئي');
+      buyReasons.push(daysSince !== null ? 'آخر شراء من ' + daysSince + ' يوم' : 'بدون تاريخ شراء');
+      if (avgGap) buyReasons.push('بيشتري كل ' + avgGap + ' يوم');
+      buyReasons.push(trendTxt);
+      buyReasons.push('اشترى في ' + activeMonths + ' من آخر 6 شهور');
+
+      let buyRating;
+      if (inactive && buyScore < 80) buyRating = { txt: 'خامل', color: '#b45309', bg: '#fffbeb' };
+      else if (count < 3) buyRating = { txt: 'عميل جديد', color: '#5b21b6', bg: '#f5f3ff' };
+      else if (buyScore >= 80) buyRating = { txt: 'ممتاز', color: '#178a4a', bg: '#eefaf2' };
+      else if (buyScore >= 60) buyRating = { txt: 'جيد', color: '#1d4ed8', bg: '#eff6ff' };
+      else if (buyScore >= 40) buyRating = { txt: 'متوسط', color: '#b45309', bg: '#fffbeb' };
+      else buyRating = { txt: 'ضعيف', color: '#FF0000', bg: '#fff1f1' };
+      buyRating.score = buyScore; buyRating.reasons = buyReasons;
+
+      // --- تقييم السداد: نسبة التحصيل + حجم الدين نسبةً لمبيعاته ---
+      const debtRatio = (balance > 0 && totalSales > 0) ? Math.min(1, balance / totalSales) : 0;
+      const payScore = Math.round(Math.min(60, collectionRate * 0.6) + 40 * (1 - debtRatio));
+
+      const payReasons = [];
+      payReasons.push('سدد ' + collectionRate.toFixed(0) + '% من مبيعاته');
+      if (balance > 0) payReasons.push('عليه ' + fmt(balance) + ' (' + (debtRatio * 100).toFixed(0) + '% من مبيعاته)');
+      else if (balance < 0) payReasons.push('له عندنا ' + fmt(balance));
+      else payReasons.push('حسابه خالص');
+      if (count < 2) payReasons.push('فاتورة واحدة بس، مبدئي');
+
+      let payRating;
+      if (payScore >= 85) payRating = { txt: 'ممتاز', color: '#178a4a', bg: '#eefaf2' };
+      else if (payScore >= 65) payRating = { txt: 'جيد', color: '#1d4ed8', bg: '#eff6ff' };
+      else if (payScore >= 40) payRating = { txt: 'يحتاج متابعة', color: '#b45309', bg: '#fffbeb' };
+      else payRating = { txt: 'ضعيف - خطر', color: '#FF0000', bg: '#fff1f1' };
+      payRating.score = payScore; payRating.reasons = payReasons;
+
+      const ratingCard = (title, r) =>
+        '<div style="background:' + r.bg + '; border:1px solid ' + r.color + '; border-radius:14px; padding:10px 8px; text-align:center;">' +
+          '<div style="font-size:.68rem; font-weight:800; color:#5a677d;">' + title + '</div>' +
+          '<div style="font-weight:900; font-size:1rem; color:' + r.color + '; margin-top:2px;">' + r.txt + '</div>' +
+          '<div class="num" style="font-size:.75rem; margin-top:2px;">' + r.score + ' / 100</div>' +
+          '<div style="font-size:.65rem; font-weight:700; margin-top:6px; line-height:1.6; text-align:right;">• ' + r.reasons.join('<br>• ') + '</div>' +
+        '</div>';
 
       const box = (lbl, val, color) =>
         '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px 4px; text-align:center;">' +
@@ -1188,9 +1243,8 @@
         '<div class="num" style="font-size:.9rem; margin-top:4px; color:' + (color || '#000') + ';">' + val + '</div></div>';
 
       body.innerHTML =
-        '<div style="background:' + rating.bg + '; border:1px solid ' + rating.color + '; border-radius:14px; padding:12px; text-align:center; margin-bottom:10px;">' +
-          '<div style="font-weight:900; font-size:1.1rem; color:' + rating.color + ';">' + rating.txt + '</div>' +
-          '<div style="font-size:.75rem; font-weight:700; margin-top:2px;">' + rating.note + '</div>' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">' +
+          ratingCard('تقييم الشراء', buyRating) + ratingCard('تقييم السداد', payRating) +
         '</div>' +
         '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">' +
           box('عدد الفواتير', count) +
