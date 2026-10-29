@@ -456,6 +456,17 @@
   </div>
 </div>
 
+<!-- نافذة تفاصيل أرباح الفواتير -->
+<div id="profitDetailModal" class="statement-modal-overlay">
+  <div class="statement-modal-box">
+    <div class="statement-modal-header">
+      <h6 id="profitDetailTitle" style="font-size:0.95rem; margin:0;"></h6>
+      <button class="icon-link" onclick="document.getElementById('profitDetailModal').style.display='none'" style="width:30px; height:30px; background:rgba(255,255,255,0.2); border:none; color:white;"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="statement-modal-body" id="profitDetailBody"></div>
+  </div>
+</div>
+
 <!-- مودال شاشة التحميل للتجهيز الحراري -->
 <div class="modal-overlay" id="shareLoadingModal">
   <div class="modal-box" style="max-width: 260px;">
@@ -1091,11 +1102,11 @@
     const mk=(id,name)=>id||customersNameMap[normalizeName(name)];
     iS.forEach(d=>{ const x=d.data(); if(x.isDeleted) return; const k=mk(x.customerId,x.customerName); if(!k) return;
       const paid=(Number(x.cashAmount??x.cashPaid??x.paid)||0)+(Number(x.walletAmount??x.walletPaid)||0);
-      let pr=0, miss=0; const o=get(k).items;
+      let pr=0, miss=0; const o=get(k).items; const lines=[];
       (x.items||[]).forEach(i=>{ const q=Number(i.qty)||0, p=Number(i.price)||0;
         if(!i.isReturn){ const n=i.name||'غير معروف'; (o[n]=o[n]||{q:0,v:0}); o[n].q+=q; o[n].v+=q*p; itemTotals[n]=(itemTotals[n]||0)+q*p; }
-        const c=costOf(i); if(!c){ miss++; return; } pr+=(i.isReturn?-1:1)*(p-c)*q; });
-      get(k).invs.push({t:x.timestamp?.seconds?x.timestamp.seconds*1000:parseArabicDateToMs(x.time||x.date), total:Number(x.total)||0, paid, profit:pr-(Number(x.discount)||0), miss}); });
+        const c=costOf(i); lines.push({n:i.name||'غير معروف',q,p,c,u:isCtn(i)?'كرتونة':'قطعة',ret:!!i.isReturn,pr:c?(i.isReturn?-1:1)*(p-c)*q:null}); if(!c){ miss++; return; } pr+=(i.isReturn?-1:1)*(p-c)*q; });
+      get(k).invs.push({t:x.timestamp?.seconds?x.timestamp.seconds*1000:parseArabicDateToMs(x.time||x.date), total:Number(x.total)||0, paid, profit:pr-(Number(x.discount)||0), miss, id:d.id, disc:Number(x.discount)||0, lines}); });
     tS.forEach(d=>{ const t=d.data(); if(t.isDeleted||t.invoiceId||(t.note&&t.note.includes('فاتورة'))) return; const k=mk(t.partyId||t.customerId,t.customerName||t.partyName); if(!k) return;
       const a=Math.abs(Number(t.amount||t.total||0)); get(k).vouch+=t.type==='قبض'?a:t.type==='صرف'?-a:0; });
     const now=Date.now(), D=86400000, rows=[];
@@ -1149,7 +1160,11 @@
       // مؤشرات
       const chg = r.p90 > 0 ? (r.s90 - r.p90) / r.p90 * 100 : null;
       const late = r.gap && r.days > r.gap ? r.days - r.gap : 0;
-      const limit = r.sales / Math.max(1, (now - r.first) / (30*D));
+      const span = Math.max(1, (now - r.first) / D), avgInv = r.sales / r.n;
+      const payF = ps>=85 ? 1 : ps>=65 ? 0.7 : ps>=40 ? 0.35 : 0;
+      let limit = Math.min(avgInv * 1.5, r.sales / span * 15) * payF;
+      if (r.n < 3) limit = Math.min(limit, avgInv * 0.5);
+      limit = Math.round(limit / 100) * 100;
       const mg = r.sales > 0 ? r.profit / r.sales * 100 : 0;
       const cross = Object.entries(E.itemTotals).sort((a,b)=>b[1]-a[1]).slice(0,8).filter(([n])=>!r.items[n]).slice(0,3).map(x=>x[0]);
 
@@ -1185,16 +1200,48 @@
         '</div>' +
         '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">' +
           box('عدد الفواتير', r.n) + box('إجمالي المبيعات', fmt(r.sales)) + box('متوسط الفاتورة', fmt(r.sales/r.n)) +
-          box('آخر شراء', r.days!==null ? 'من '+r.days+' يوم' : '-', late>0?'#b45309':'#000') + box('بيشتري كل', r.gap!==null ? r.gap+' يوم' : '-') + box('الربح' + (r.miss?' *':''), fmt(r.profit) + (r.profit<0?'-':''), r.profit>=0?'#178a4a':'#FF0000') +
+          box('آخر شراء', r.days!==null ? 'من '+r.days+' يوم' : '-', late>0?'#b45309':'#000') + box('بيشتري كل', r.gap!==null ? r.gap+' يوم' : '-') + box('الربح' + (r.miss?' *':'') + ' ›', fmt(r.profit) + (r.profit<0?'-':''), r.profit>=0?'#178a4a':'#FF0000').replace('<div style="background:#fff;', '<div onclick="openProfitDetails(\'' + customerId + '\', \'' + (customerName||'').replace(/'/g, "\\'") + '\')" style="cursor:pointer; background:#fff;') +
         '</div>' +
         sec('أعمار الدين (الرصيد المستحق)', '<div style="display:flex; gap:6px;">' + agedBox('0-30',r.age[0],'#178a4a') + agedBox('31-60',r.age[1],'#b45309') + agedBox('61-90',r.age[2],'#FF0000') + agedBox('+90',r.age[3],'#FF0000') + '</div>' +
-          '<div style="font-size:.7rem; font-weight:700; margin-top:6px; color:#5a677d;">الحد الائتماني المقترح: <b class="num">' + fmt(limit) + '</b> (متوسط مبيعاته الشهرية)</div>') +
+          '<div style="font-size:.7rem; font-weight:700; margin-top:6px; color:#5a677d;">الحد الائتماني المقترح: <b class="num">' + fmt(limit) + '</b> ' + (limit===0 ? ' - بيع كاش فقط' : '') + '<br>الأقل من: 1.5 × متوسط الفاتورة، أو مبيعات 15 يوم، × معامل السداد (' + payF + ')</div>') +
         sec('توصيات', rec.map(x => '<div style="font-size:.75rem; font-weight:700; line-height:1.7; padding:3px 0;">' + x[0] + ' ' + x[1] + '</div>').join('')) +
         sec('مبيعات آخر 6 شهور', '<div style="display:flex; gap:4px;">' + bars + '</div>') +
         sec('أكتر الأصناف شراءً', '<table class="statement-item-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody>' + top + '</tbody></table>');
     } catch (err) {
       console.error(err);
       body.innerHTML = '<div style="color:#f00; text-align:center; padding:20px; font-weight:700;">تعذر التحليل: ' + err.message + '</div>';
+    }
+  };
+
+  /* ================= تفاصيل أرباح كل فاتورة ================= */
+  window.openProfitDetails = async (customerId, customerName) => {
+    const modal = document.getElementById('profitDetailModal'), body = document.getElementById('profitDetailBody');
+    document.getElementById('profitDetailTitle').innerHTML = '<i class="fas fa-coins" style="color:var(--germany-gold);"></i> أرباح فواتير: ' + (customerName || 'عميل');
+    body.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i>جاري حساب الأرباح...</div>';
+    modal.style.display = 'flex';
+    try {
+      const E = await buildEngine(), r = E.byId[customerId];
+      if (!r) { body.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد فواتير.</div>'; return; }
+      const mg = r.sales > 0 ? r.profit / r.sales * 100 : 0;
+      const cards = [...r.invs].sort((a, b) => b.t - a.t).map(v => {
+        const m = v.total > 0 ? v.profit / v.total * 100 : 0, col = v.profit >= 0 ? '#178a4a' : '#FF0000';
+        const rows = (v.lines || []).map(l => '<tr><td style="text-align:right;">' + l.n + (l.ret ? ' (مرتجع)' : '') + '</td><td>' + l.q + ' ' + l.u + '</td><td class="num">' + l.p.toFixed(1) + '</td><td class="num">' + (l.c ? l.c.toFixed(1) : '؟') + '</td><td class="num" style="color:' + (l.pr !== null && l.pr < 0 ? '#FF0000' : '#178a4a') + ';">' + (l.pr !== null ? l.pr.toFixed(1) : '-') + '</td></tr>').join('');
+        return '<div class="statement-card-item" style="padding:0; overflow:hidden;">' +
+          '<div onclick="var n=this.nextElementSibling; n.style.display = n.style.display===\'none\' ? \'block\' : \'none\';" style="padding:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">' +
+            '<div><div style="font-weight:800; font-size:.85rem;">' + (v.t ? new Date(v.t).toLocaleDateString('en-CA') : 'بلا تاريخ') + '</div>' +
+            '<div style="font-size:.7rem; color:#5a677d; font-weight:700;">إجمالي الفاتورة: <b class="num">' + fmt(v.total) + '</b>' + (v.disc ? ' • خصم ' + fmt(v.disc) : '') + '</div></div>' +
+            '<div style="text-align:center;"><div class="num" style="color:' + col + ';">' + (v.profit < 0 ? '-' : '') + fmt(v.profit) + (v.miss ? ' *' : '') + '</div><div style="font-size:.65rem; color:#5a677d; font-weight:800;">هامش ' + m.toFixed(0) + '% ›</div></div>' +
+          '</div>' +
+          '<div style="display:none; padding:0 12px 12px;"><table class="statement-item-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>البيع</th><th>التكلفة</th><th>الربح</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      }).join('');
+      body.innerHTML =
+        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; font-weight:800; font-size:.8rem;">' +
+          '<span>إجمالي الربح: <span class="num" style="color:' + (r.profit >= 0 ? '#178a4a' : '#FF0000') + ';">' + (r.profit < 0 ? '-' : '') + fmt(r.profit) + '</span></span>' +
+          '<span>الهامش: <span class="num">' + mg.toFixed(1) + '%</span></span><span>' + r.n + ' فاتورة</span></div>' +
+        '<div style="font-size:.68rem; color:#5a677d; font-weight:700; margin-bottom:8px;">اضغط على أي فاتورة لعرض ربح كل صنف. (*) = فيه صنف مالوش تكلفة مسجلة.</div>' + cards;
+    } catch (err) {
+      console.error(err);
+      body.innerHTML = '<div style="color:#f00; text-align:center; padding:20px; font-weight:700;">تعذر التحميل: ' + err.message + '</div>';
     }
   };
 
@@ -1322,6 +1369,8 @@
         return { id: c.id, name: c.name, balance: c.realBalance, count: s.count, sales: s.sales, rate, daysSince, idle, profit: s.profit, missing: s.missing };
       });
 
+      const E2 = await buildEngine();
+      window._rankData.forEach(x => { const e = E2.byId[x.id]; if (e) { x.profit = e.profit; x.missing = e.miss; } });
       switchRank('top');
     } catch (err) {
       console.error(err);
@@ -1358,7 +1407,7 @@
           '<div style="font-weight:800; font-size:.9rem;">' + c.name + '</div>' +
           '<div style="font-size:.72rem; color:#5a677d; font-weight:700; margin-top:2px;">' + sub(c) + '</div>' +
         '</div>' +
-        '<div style="text-align:center; flex-shrink:0; padding:0 4px;">' +
+        '<div onclick="event.stopPropagation(); openProfitDetails(\'' + c.id + '\', \'' + (c.name || '').replace(/'/g, "\\'") + '\')" style="text-align:center; flex-shrink:0; padding:6px 10px; background:#eefaf2; border:1px solid #bfe5cd; border-radius:10px; cursor:pointer;">' +
           '<div style="font-size:.6rem; color:#5a677d; font-weight:800;">إجمالي الربح' + (c.missing ? ' *' : '') + '</div>' +
           '<div class="num" style="font-size:.85rem; color:' + (c.profit >= 0 ? '#178a4a' : '#FF0000') + ';">' + (c.profit < 0 ? '-' : '') + fmt(c.profit) + '</div>' +
         '</div>' +
