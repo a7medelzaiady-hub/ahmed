@@ -1067,6 +1067,56 @@
     }
   });
 
+  /* ================= محرك التحليل (RFM + أعمار الديون + الربحية) ================= */
+  let _eng = null, _engAt = 0;
+  const isCtn = (i) => i.unit==='box'||i.unit==='carton'||i.unit==='كرتونة'||i.unit==='كرتونه'||i.unitName==='كرتونة'||i.isCarton===true;
+  const pctRank = (arr, v) => { let lo=0, eq=0; arr.forEach(x=>{ if(x<v) lo++; else if(x===v) eq++; }); return (lo+eq/2)/arr.length; };
+  const to5 = (p) => Math.min(5, Math.max(1, Math.ceil(p*5)));
+
+  async function buildEngine() {
+    if (_eng && Date.now()-_engAt < 300000) return _eng;
+    const [iS,tS,sS,pS] = await Promise.all(["invoices","transactions","inventory","supplier_transactions"].map(c=>getDocs(collection(db,c))));
+    const stock={}, byName={};
+    sS.forEach(d=>{ stock[d.id]=d.data(); if(d.data().name) byName[String(d.data().name).trim()]=d.id; });
+    const keyOf = (i)=> stock[i.stockId||i.id] ? (i.stockId||i.id) : byName[String(i.name||'').trim()];
+    const acc={};
+    pS.forEach(d=>{ const p=d.data(); if(p.isDeleted||!(p.type==="شراء"||p.type==="فاتورة شراء"||!p.type)) return;
+      (p.items||[]).forEach(it=>{ if(it.isReturn||Number(it.returnQty)>0) return; const k=keyOf(it); if(!k) return; const st=stock[k];
+        const f=Math.max(1,Number(it.unitFactor||st.unitFactor||st.factor||st.pcsPerCarton)||1), q=Number(it.qty)||0, c=isCtn(it);
+        const pcs=Number(it.totalPieces)||(c?q*f:q), pp=Number(it.baseCartonPrice)>0?it.baseCartonPrice/f:(Number(it.buy)||0)/(c?f:1);
+        if(pcs>0&&pp>0){ (acc[k]=acc[k]||{p:0,v:0}).p+=pcs; acc[k].v+=pcs*pp; } }); });
+    const costOf=(i)=>{ const k=keyOf(i); if(!k) return Number(i.cost??i.costPrice)||0; const st=stock[k], f=Math.max(1,Number(st.unitFactor||st.factor||st.pcsPerCarton||i.unitFactor)||1), c=isCtn(i);
+      const a=acc[k]&&acc[k].p>0?acc[k].v/acc[k].p:0; if(a>0) return c?a*f:a; const b=Number(st.buy)||0; return b>0?(c?b:b/f):0; };
+    const C={}, itemTotals={}; const get=(k)=>C[k]||(C[k]={invs:[],vouch:0,items:{}});
+    const mk=(id,name)=>id||customersNameMap[normalizeName(name)];
+    iS.forEach(d=>{ const x=d.data(); if(x.isDeleted) return; const k=mk(x.customerId,x.customerName); if(!k) return;
+      const paid=(Number(x.cashAmount??x.cashPaid??x.paid)||0)+(Number(x.walletAmount??x.walletPaid)||0);
+      let pr=0, miss=0; const o=get(k).items;
+      (x.items||[]).forEach(i=>{ const q=Number(i.qty)||0, p=Number(i.price)||0;
+        if(!i.isReturn){ const n=i.name||'غير معروف'; (o[n]=o[n]||{q:0,v:0}); o[n].q+=q; o[n].v+=q*p; itemTotals[n]=(itemTotals[n]||0)+q*p; }
+        const c=costOf(i); if(!c){ miss++; return; } pr+=(i.isReturn?-1:1)*(p-c)*q; });
+      get(k).invs.push({t:x.timestamp?.seconds?x.timestamp.seconds*1000:parseArabicDateToMs(x.time||x.date), total:Number(x.total)||0, paid, profit:pr-(Number(x.discount)||0), miss}); });
+    tS.forEach(d=>{ const t=d.data(); if(t.isDeleted||t.invoiceId||(t.note&&t.note.includes('فاتورة'))) return; const k=mk(t.partyId||t.customerId,t.customerName||t.partyName); if(!k) return;
+      const a=Math.abs(Number(t.amount||t.total||0)); get(k).vouch+=t.type==='قبض'?a:t.type==='صرف'?-a:0; });
+    const now=Date.now(), D=86400000, rows=[];
+    allCustomers.forEach(cu=>{ const c=C[cu.id]; if(!c||!c.invs.length) return; const v=c.invs.sort((a,b)=>a.t-b.t);
+      const n=v.length, sales=v.reduce((s,i)=>s+i.total,0), paid=v.reduce((s,i)=>s+i.paid,0)+c.vouch, first=v[0].t, last=v[n-1].t;
+      const days=last?Math.floor((now-last)/D):null, gap=n>1&&last&&first?Math.round((last-first)/D/(n-1)):null;
+      const s90=v.filter(i=>i.t>now-90*D).reduce((s,i)=>s+i.total,0), p90=v.filter(i=>i.t<=now-90*D&&i.t>now-180*D).reduce((s,i)=>s+i.total,0);
+      const bal=cu.realBalance; let rem=Math.max(bal,0); const age=[0,0,0,0];
+      for(let j=n-1;j>=0&&rem>0;j--){ const take=Math.min(rem,v[j].total), ad=(now-v[j].t)/D; age[ad<=30?0:ad<=60?1:ad<=90?2:3]+=take; rem-=take; }
+      age[3]+=rem;
+      rows.push({id:cu.id,name:cu.name,n,sales,rate:sales>0?Math.min(100,paid/sales*100):100,first,last,days,gap,s90,p90,bal,age,
+        profit:v.reduce((s,i)=>s+i.profit,0),miss:v.reduce((s,i)=>s+i.miss,0),items:c.items,invs:v}); });
+    const R=rows.map(r=>-(r.days??9999)), F=rows.map(r=>r.n), M=rows.map(r=>r.sales);
+    const tot=rows.reduce((s,r)=>s+r.sales,0); let cum=0;
+    [...rows].sort((a,b)=>b.sales-a.sales).forEach(r=>{ r.abc=cum<tot*0.8?'A':cum<tot*0.95?'B':'C'; cum+=r.sales; });
+    rows.forEach(r=>{ r.r=to5(pctRank(R,-(r.days??9999))); r.f=to5(pctRank(F,r.n)); r.m=to5(pctRank(M,r.sales)); });
+    const tp=rows.reduce((s,r)=>s+r.profit,0);
+    _eng={rows,byId:Object.fromEntries(rows.map(r=>[r.id,r])),itemTotals,avgMargin:tot>0?tp/tot*100:0};
+    _engAt=Date.now(); return _eng;
+  }
+
   /* ================= تحليل أداء عميل واحد ================= */
   window.openCustomerAnalysis = async (customerId, customerName) => {
     const modal = document.getElementById('customerAnalysisModal');
@@ -1075,198 +1125,73 @@
       '<i class="fas fa-chart-line" style="color:var(--germany-gold);"></i> تحليل: ' + (customerName || 'عميل');
     body.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i>جاري تحليل البيانات...</div>';
     modal.style.display = 'flex';
-
     try {
-      const [invSnap, transSnap] = await Promise.all([
-        getDocs(collection(db, "invoices")),
-        getDocs(collection(db, "transactions"))
-      ]);
+      const E = await buildEngine(), r = E.byId[customerId];
+      if (!r) { body.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد فواتير لهذا العميل للتحليل.</div>'; return; }
+      const now = Date.now(), D = 86400000;
 
-      const matchKey = (id, name) => {
-        let key = id;
-        if (!key && name) key = customersNameMap[normalizeName(name)];
-        if (!key && name) key = "NAME_" + normalizeName(name);
-        return key;
-      };
+      // تصنيف العميل (RFM نسبةً لباقي العملاء)
+      const inactive = r.days !== null && r.days > Math.max(60, (r.gap || 30) * 2.5);
+      let seg;
+      if (r.n < 3) seg = { t:'عميل جديد', c:'#5b21b6', b:'#f5f3ff' };
+      else if (r.r>=4 && r.f>=4 && r.m>=4) seg = { t:'عميل مميز', c:'#178a4a', b:'#eefaf2' };
+      else if (r.r>=3 && r.f>=3) seg = { t:'عميل وفي', c:'#1d4ed8', b:'#eff6ff' };
+      else if (inactive || r.r<=1) seg = { t:'نائم / مفقود', c:'#FF0000', b:'#fff1f1' };
+      else if (r.r<=2 && (r.f>=3 || r.m>=3)) seg = { t:'معرّض للفقد', c:'#b45309', b:'#fffbeb' };
+      else seg = { t:'عميل عادي', c:'#5a677d', b:'#f1f5f9' };
 
-      let invoices = [];
-      let vouchersCollected = 0;
-      const itemsMap = {};
+      // تقييم السداد: تحصيل + حجم الدين + نسبة الدين المتأخر (+60 يوم)
+      const out = Math.max(r.bal, 0), old = r.age[2] + r.age[3];
+      const oldShare = out > 0 ? old / out : 0, debtRatio = r.sales > 0 ? Math.min(1, out / r.sales) : 0;
+      const ps = Math.round(Math.min(50, r.rate*0.5) + 20*(1-debtRatio) + 30*(1-oldShare));
+      const pay = ps>=85 ? {t:'ممتاز',c:'#178a4a',b:'#eefaf2'} : ps>=65 ? {t:'جيد',c:'#1d4ed8',b:'#eff6ff'} : ps>=40 ? {t:'يحتاج متابعة',c:'#b45309',b:'#fffbeb'} : {t:'ضعيف - خطر',c:'#FF0000',b:'#fff1f1'};
 
-      invSnap.forEach(d => {
-        const data = d.data();
-        if (data.isDeleted) return;
-        if (matchKey(data.customerId, data.customerName) !== customerId) return;
+      // مؤشرات
+      const chg = r.p90 > 0 ? (r.s90 - r.p90) / r.p90 * 100 : null;
+      const late = r.gap && r.days > r.gap ? r.days - r.gap : 0;
+      const limit = r.sales / Math.max(1, (now - r.first) / (30*D));
+      const mg = r.sales > 0 ? r.profit / r.sales * 100 : 0;
+      const cross = Object.entries(E.itemTotals).sort((a,b)=>b[1]-a[1]).slice(0,8).filter(([n])=>!r.items[n]).slice(0,3).map(x=>x[0]);
 
-        const cash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
-        const wallet = Number(data.walletAmount ?? data.walletPaid) || 0;
-        const total = Number(data.total) || 0;
-        const timeMs = data.timestamp?.seconds ? data.timestamp.seconds * 1000 : parseArabicDateToMs(data.time || data.date);
-        invoices.push({ timeMs, total, paid: cash + wallet });
+      // توصيات
+      const rec = [];
+      if (late > 0 && r.n >= 3) rec.push(['📞','تأخر ' + late + ' يوم عن موعد شرائه المعتاد (كل ' + r.gap + ' يوم)، تواصل معه.']);
+      if (old > 0) rec.push(['💰','عليه ' + fmt(old) + ' متأخر أكتر من 60 يوم، حصّله قبل أي بيع آجل جديد.']);
+      if (r.n >= 2 && out > limit) rec.push(['⛔','رصيده أعلى من الحد الائتماني المقترح (' + fmt(limit) + ')، الأفضل البيع الكاش لحد السداد.']);
+      if (chg !== null && chg <= -30) rec.push(['📉','مشترياته نزلت ' + Math.abs(chg).toFixed(0) + '% عن آخر 90 يوم قبلها، اعرف السبب.']);
+      if (r.sales > 0 && mg < E.avgMargin - 5) rec.push(['🏷️','هامش ربحه ' + mg.toFixed(0) + '% أقل من متوسط الشركة ' + E.avgMargin.toFixed(0) + '%، راجع الأسعار أو الخصومات.']);
+      if (seg.t === 'عميل مميز') rec.push(['⭐','حافظ عليه: أولوية في التوريد وعروض خاصة.']);
+      if (cross.length) rec.push(['🛒','اعرض عليه: ' + cross.join('، ') + ' (من أكتر الأصناف مبيعاً ومشتراهاش).']);
+      if (!rec.length) rec.push(['✅','لا توجد ملاحظات حرجة حالياً.']);
 
-        (data.items || []).forEach(i => {
-          if (i.isReturn) return;
-          const n = i.name || 'غير معروف';
-          if (!itemsMap[n]) itemsMap[n] = { qty: 0, value: 0 };
-          itemsMap[n].qty += Number(i.qty) || 0;
-          itemsMap[n].value += (Number(i.qty) || 0) * (Number(i.price) || 0);
-        });
-      });
-
-      transSnap.forEach(d => {
-        const tr = d.data();
-        if (tr.isDeleted) return;
-        if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
-        const key = matchKey(tr.partyId || tr.customerId, tr.customerName || tr.partyName);
-        if (key !== customerId) return;
-        const amt = Math.abs(Number(tr.amount || tr.total || 0));
-        if (tr.type === 'قبض') vouchersCollected += amt;
-        else if (tr.type === 'صرف') vouchersCollected -= amt;
-      });
-
-      if (invoices.length === 0) {
-        body.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد فواتير لهذا العميل للتحليل.</div>';
-        return;
-      }
-
-      invoices.sort((a, b) => a.timeMs - b.timeMs);
-
-      const count = invoices.length;
-      const totalSales = invoices.reduce((s, i) => s + i.total, 0);
-      const paidOnInvoices = invoices.reduce((s, i) => s + i.paid, 0);
-      const collected = paidOnInvoices + vouchersCollected;
-      const avgInvoice = totalSales / count;
-      const collectionRate = totalSales > 0 ? Math.min(100, (collected / totalSales) * 100) : 100;
-
-      const lastMs = invoices[count - 1].timeMs;
-      const firstMs = invoices[0].timeMs;
-      const daysSince = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
-      let avgGap = null;
-      if (count > 1 && lastMs && firstMs) avgGap = Math.round((lastMs - firstMs) / 86400000 / (count - 1));
-
-      const cust = allCustomers.find(c => c.id === customerId);
-      const balance = cust ? cust.realBalance : 0;
-
-      // آخر 6 شهور
+      // مبيعات آخر 6 شهور + أكتر الأصناف
       const months = [];
-      const now = new Date();
-      for (let k = 5; k >= 0; k--) {
-        const dt = new Date(now.getFullYear(), now.getMonth() - k, 1);
-        months.push({ y: dt.getFullYear(), m: dt.getMonth(), label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), sum: 0 });
-      }
-      invoices.forEach(inv => {
-        if (!inv.timeMs) return;
-        const dt = new Date(inv.timeMs);
-        const slot = months.find(x => x.y === dt.getFullYear() && x.m === dt.getMonth());
-        if (slot) slot.sum += inv.total;
-      });
-      const maxMonth = Math.max(...months.map(x => x.sum), 1);
-      const barsHtml = months.map(x =>
-        '<div style="flex:1; text-align:center;">' +
-          '<div style="height:70px; display:flex; align-items:flex-end; justify-content:center;">' +
-            '<div style="width:70%; height:' + Math.max(3, (x.sum / maxMonth) * 70) + 'px; background:#000; border-radius:4px 4px 0 0;"></div>' +
-          '</div>' +
-          '<div style="font-size:.6rem; font-weight:800; color:#5a677d;">' + x.label + '</div>' +
-          '<div class="num" style="font-size:.6rem;">' + Math.round(x.sum) + '</div>' +
-        '</div>').join('');
+      for (let k = 5; k >= 0; k--) { const dt = new Date(new Date().getFullYear(), new Date().getMonth()-k, 1); months.push({y:dt.getFullYear(), m:dt.getMonth(), label:(dt.getMonth()+1)+'/'+String(dt.getFullYear()).slice(2), sum:0}); }
+      r.invs.forEach(i => { if (!i.t) return; const dt = new Date(i.t), s = months.find(x => x.y===dt.getFullYear() && x.m===dt.getMonth()); if (s) s.sum += i.total; });
+      const mx = Math.max(...months.map(x=>x.sum), 1);
+      const bars = months.map(x => '<div style="flex:1; text-align:center;"><div style="height:70px; display:flex; align-items:flex-end; justify-content:center;"><div style="width:70%; height:'+Math.max(3,x.sum/mx*70)+'px; background:#000; border-radius:4px 4px 0 0;"></div></div><div style="font-size:.6rem; font-weight:800; color:#5a677d;">'+x.label+'</div><div class="num" style="font-size:.6rem;">'+Math.round(x.sum)+'</div></div>').join('');
+      const top = Object.entries(r.items).sort((a,b)=>b[1].v-a[1].v).slice(0,5).map(([n,v]) => '<tr><td style="text-align:right;">'+n+'</td><td>'+v.q+'</td><td class="num">'+v.v.toFixed(0)+'</td></tr>').join('');
 
-      // أكتر الأصناف
-      const topItems = Object.entries(itemsMap).sort((a, b) => b[1].value - a[1].value).slice(0, 5);
-      const itemsHtml = topItems.map(([n, v]) =>
-        '<tr><td style="text-align:right;">' + n + '</td><td>' + v.qty + '</td><td class="num">' + v.value.toFixed(0) + '</td></tr>').join('');
-
-      // ===== تقييمين منفصلين: الشراء، والسداد =====
-      const gapBase = avgGap ? Math.max(avgGap, 15) : 45;
-      const recencyRatio = daysSince !== null ? daysSince / gapBase : 99;
-      const inactive = daysSince !== null && daysSince > Math.max(60, (avgGap || 30) * 2.5);
-
-      // --- تقييم الشراء: النشاط + التكرار + الاتجاه + الاستمرارية ---
-      const recencyPts = recencyRatio <= 1 ? 35 : recencyRatio <= 2 ? 22 : recencyRatio <= 3 ? 10 : 0;
-      const freqPts = Math.min(25, count * 5);
-      const recent3 = months.slice(3).reduce((a, x) => a + x.sum, 0);
-      const prev3 = months.slice(0, 3).reduce((a, x) => a + x.sum, 0);
-      let trendPts = 0, trendTxt = '';
-      if (recent3 === 0 && prev3 === 0) { trendPts = 0; trendTxt = 'مفيش مشتريات في آخر 6 شهور'; }
-      else if (prev3 === 0) { trendPts = 20; trendTxt = 'مشترياته بتزيد'; }
-      else if (recent3 >= prev3) { trendPts = 20; trendTxt = 'مشترياته ثابتة أو بتزيد'; }
-      else if (recent3 >= prev3 * 0.5) { trendPts = 10; trendTxt = 'مشترياته قلّت'; }
-      else { trendPts = 0; trendTxt = 'مشترياته قلّت بشكل كبير'; }
-      const activeMonths = months.filter(x => x.sum > 0).length;
-      const consistPts = Math.round((activeMonths / 6) * 20);
-      const buyScore = Math.round(recencyPts + freqPts + trendPts + consistPts);
-
-      const buyReasons = [];
-      if (count < 3) buyReasons.push('فواتيره قليلة (' + count + ')، التقييم مبدئي');
-      buyReasons.push(daysSince !== null ? 'آخر شراء من ' + daysSince + ' يوم' : 'بدون تاريخ شراء');
-      if (avgGap) buyReasons.push('بيشتري كل ' + avgGap + ' يوم');
-      buyReasons.push(trendTxt);
-      buyReasons.push('اشترى في ' + activeMonths + ' من آخر 6 شهور');
-
-      let buyRating;
-      if (inactive && buyScore < 80) buyRating = { txt: 'خامل', color: '#b45309', bg: '#fffbeb' };
-      else if (count < 3) buyRating = { txt: 'عميل جديد', color: '#5b21b6', bg: '#f5f3ff' };
-      else if (buyScore >= 80) buyRating = { txt: 'ممتاز', color: '#178a4a', bg: '#eefaf2' };
-      else if (buyScore >= 60) buyRating = { txt: 'جيد', color: '#1d4ed8', bg: '#eff6ff' };
-      else if (buyScore >= 40) buyRating = { txt: 'متوسط', color: '#b45309', bg: '#fffbeb' };
-      else buyRating = { txt: 'ضعيف', color: '#FF0000', bg: '#fff1f1' };
-      buyRating.score = buyScore; buyRating.reasons = buyReasons;
-
-      // --- تقييم السداد: نسبة التحصيل + حجم الدين نسبةً لمبيعاته ---
-      const debtRatio = (balance > 0 && totalSales > 0) ? Math.min(1, balance / totalSales) : 0;
-      const payScore = Math.round(Math.min(60, collectionRate * 0.6) + 40 * (1 - debtRatio));
-
-      const payReasons = [];
-      payReasons.push('سدد ' + collectionRate.toFixed(0) + '% من مبيعاته');
-      if (balance > 0) payReasons.push('عليه ' + fmt(balance) + ' (' + (debtRatio * 100).toFixed(0) + '% من مبيعاته)');
-      else if (balance < 0) payReasons.push('له عندنا ' + fmt(balance));
-      else payReasons.push('حسابه خالص');
-      if (count < 2) payReasons.push('فاتورة واحدة بس، مبدئي');
-
-      let payRating;
-      if (payScore >= 85) payRating = { txt: 'ممتاز', color: '#178a4a', bg: '#eefaf2' };
-      else if (payScore >= 65) payRating = { txt: 'جيد', color: '#1d4ed8', bg: '#eff6ff' };
-      else if (payScore >= 40) payRating = { txt: 'يحتاج متابعة', color: '#b45309', bg: '#fffbeb' };
-      else payRating = { txt: 'ضعيف - خطر', color: '#FF0000', bg: '#fff1f1' };
-      payRating.score = payScore; payRating.reasons = payReasons;
-
-      const ratingCard = (title, r) =>
-        '<div style="background:' + r.bg + '; border:1px solid ' + r.color + '; border-radius:14px; padding:10px 8px; text-align:center;">' +
-          '<div style="font-size:.68rem; font-weight:800; color:#5a677d;">' + title + '</div>' +
-          '<div style="font-weight:900; font-size:1rem; color:' + r.color + '; margin-top:2px;">' + r.txt + '</div>' +
-          '<div class="num" style="font-size:.75rem; margin-top:2px;">' + r.score + ' / 100</div>' +
-          '<div style="font-size:.65rem; font-weight:700; margin-top:6px; line-height:1.6; text-align:right;">• ' + r.reasons.join('<br>• ') + '</div>' +
-        '</div>';
-
-      const box = (lbl, val, color) =>
-        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px 4px; text-align:center;">' +
-        '<div style="font-size:.65rem; color:#5a677d; font-weight:800;">' + lbl + '</div>' +
-        '<div class="num" style="font-size:.9rem; margin-top:4px; color:' + (color || '#000') + ';">' + val + '</div></div>';
+      const box = (l, v, c) => '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px 4px; text-align:center;"><div style="font-size:.65rem; color:#5a677d; font-weight:800;">'+l+'</div><div class="num" style="font-size:.9rem; margin-top:4px; color:'+(c||'#000')+';">'+v+'</div></div>';
+      const card = (title, x, sub, lines) => '<div style="background:'+x.b+'; border:1px solid '+x.c+'; border-radius:14px; padding:10px 8px; text-align:center;"><div style="font-size:.68rem; font-weight:800; color:#5a677d;">'+title+'</div><div style="font-weight:900; font-size:1rem; color:'+x.c+'; margin-top:2px;">'+x.t+'</div><div class="num" dir="ltr" style="font-size:.72rem; margin-top:2px;">'+sub+'</div><div style="font-size:.65rem; font-weight:700; margin-top:6px; line-height:1.6; text-align:right;">'+lines+'</div></div>';
+      const sec = (t, inner) => '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px;"><div style="font-weight:900; font-size:.8rem; margin-bottom:6px;">'+t+'</div>'+inner+'</div>';
+      const agedBox = (l, v, c) => '<div style="flex:1; text-align:center; background:#f8fafc; border-radius:8px; padding:6px 2px;"><div style="font-size:.6rem; font-weight:800; color:#5a677d;">'+l+'</div><div class="num" style="font-size:.75rem; color:'+c+';">'+fmt(v)+'</div></div>';
 
       body.innerHTML =
         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">' +
-          ratingCard('تقييم الشراء', buyRating) + ratingCard('تقييم السداد', payRating) +
+          card('تصنيف العميل', seg, 'فئة ' + r.abc + ' (' + (r.abc==='A'?'أعلى 80% من المبيعات':r.abc==='B'?'الشريحة المتوسطة':'الشريحة الأقل') + ')',
+            'حداثة ' + r.r + '/5 • تكرار ' + r.f + '/5 • قيمة ' + r.m + '/5<br>(مقارنةً بباقي العملاء)' + (chg!==null ? '<br>اتجاه آخر 90 يوم: ' + (chg>=0?'+':'') + chg.toFixed(0) + '%' : '')) +
+          card('تقييم السداد', pay, ps + ' / 100', 'سدد ' + r.rate.toFixed(0) + '% من مبيعاته<br>' + (out>0 ? 'عليه ' + fmt(out) + (old>0?'<br>منه متأخر +60 يوم: ' + fmt(old):'') : r.bal<0 ? 'له عندنا ' + fmt(r.bal) : 'حسابه خالص')) +
         '</div>' +
         '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">' +
-          box('عدد الفواتير', count) +
-          box('إجمالي المبيعات', fmt(totalSales)) +
-          box('متوسط الفاتورة', fmt(avgInvoice)) +
-          box('نسبة التحصيل', collectionRate.toFixed(0) + '%', collectionRate < 50 ? '#FF0000' : '#178a4a') +
-          box('آخر شراء', daysSince !== null ? 'من ' + daysSince + ' يوم' : '-') +
-          box('بيشتري كل', avgGap !== null ? avgGap + ' يوم' : '-') +
+          box('عدد الفواتير', r.n) + box('إجمالي المبيعات', fmt(r.sales)) + box('متوسط الفاتورة', fmt(r.sales/r.n)) +
+          box('آخر شراء', r.days!==null ? 'من '+r.days+' يوم' : '-', late>0?'#b45309':'#000') + box('بيشتري كل', r.gap!==null ? r.gap+' يوم' : '-') + box('الربح' + (r.miss?' *':''), fmt(r.profit) + (r.profit<0?'-':''), r.profit>=0?'#178a4a':'#FF0000') +
         '</div>' +
-        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; font-weight:800; font-size:.85rem;">' +
-          '<span>الرصيد الحالي</span>' +
-          '<span class="num" style="color:' + (balance > 0 ? '#FF0000' : balance < 0 ? '#178a4a' : '#5a677d') + ';">' + fmt(balance) + ' ' + (balance > 0 ? 'عليه' : balance < 0 ? 'له' : 'خالص') + '</span>' +
-        '</div>' +
-        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px;">' +
-          '<div style="font-weight:900; font-size:.8rem; margin-bottom:6px;">مبيعات آخر 6 شهور</div>' +
-          '<div style="display:flex; gap:4px;">' + barsHtml + '</div>' +
-        '</div>' +
-        '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px;">' +
-          '<div style="font-weight:900; font-size:.8rem; margin-bottom:6px;">أكتر الأصناف شراءً</div>' +
-          '<table class="statement-item-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
-        '</div>';
-
+        sec('أعمار الدين (الرصيد المستحق)', '<div style="display:flex; gap:6px;">' + agedBox('0-30',r.age[0],'#178a4a') + agedBox('31-60',r.age[1],'#b45309') + agedBox('61-90',r.age[2],'#FF0000') + agedBox('+90',r.age[3],'#FF0000') + '</div>' +
+          '<div style="font-size:.7rem; font-weight:700; margin-top:6px; color:#5a677d;">الحد الائتماني المقترح: <b class="num">' + fmt(limit) + '</b> (متوسط مبيعاته الشهرية)</div>') +
+        sec('توصيات', rec.map(x => '<div style="font-size:.75rem; font-weight:700; line-height:1.7; padding:3px 0;">' + x[0] + ' ' + x[1] + '</div>').join('')) +
+        sec('مبيعات آخر 6 شهور', '<div style="display:flex; gap:4px;">' + bars + '</div>') +
+        sec('أكتر الأصناف شراءً', '<table class="statement-item-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody>' + top + '</tbody></table>');
     } catch (err) {
       console.error(err);
       body.innerHTML = '<div style="color:#f00; text-align:center; padding:20px; font-weight:700;">تعذر التحليل: ' + err.message + '</div>';
