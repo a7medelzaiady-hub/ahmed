@@ -1097,8 +1097,10 @@
         const ctns=c?q:q/f, cp=Number(it.baseCartonPrice)>0?Number(it.baseCartonPrice):(c?(Number(it.buy)||0):(Number(it.buy)||0)*f);
         if(ctns>0&&cp>0){ (acc[k]=acc[k]||[]).push({t:pt,p:ctns,v:ctns*cp}); } }); });
     const costOf=(i,tt)=>{ const k=keyOf(i); if(!k) return Number(i.cost??i.costPrice)||0; const st=stock[k], f=Math.max(1,Number(i.unitFactor||i.pcsPerCarton||i.factor||st.unitFactor||st.factor||st.pcsPerCarton)||1), c=isCtn(i);
-      let last=null; (acc[k]||[]).forEach(x=>{ if(!last||x.t>=last.t) last=x; }); // آخر فاتورة شراء للصنف
-      const a=last?last.v/last.p:0; if(a>0) return c?a:a/f; const b=Number(st.buy)||0; return b>0?(c?b:b/f):0; };
+      const L=acc[k]||[]; let best=null;
+      L.forEach(x=>{ if(tt&&x.t&&x.t<=tt+864e5&&(!best||x.t>=best.t)) best=x; }); // أقرب شراء قبل (أو في يوم) البيع
+      if(!best) L.forEach(x=>{ if(!best||(tt&&x.t&&Math.abs(x.t-tt)<Math.abs(best.t-tt))) best=x; }); // مفيش شراء قبله: أقرب شراء بعده
+      const a=best?best.v/best.p:0; if(a>0) return c?a:a/f; const b=Number(st.buy)||0; return b>0?(c?b:b/f):0; };
     const C={}, itemTotals={}; const get=(k)=>C[k]||(C[k]={invs:[],vouch:0,items:{}});
     const mk=(id,name)=>id||customersNameMap[normalizeName(name)];
     iS.forEach(d=>{ const x=d.data(); if(x.isDeleted) return; const k=mk(x.customerId,x.customerName); if(!k) return;
@@ -1226,7 +1228,7 @@
       const mg = r.sales > 0 ? r.profit / r.sales * 100 : 0;
       const cards = [...r.invs].sort((a, b) => b.t - a.t).map(v => {
         const m = v.total > 0 ? v.profit / v.total * 100 : 0, col = v.profit >= 0 ? '#178a4a' : '#FF0000';
-        const rows = (v.lines || []).map(l => { const sus = l.c && l.p > 0 && (l.p - l.c) / l.p > 0.4; return '<tr' + (sus ? ' style="background:#fff7ed;"' : '') + '><td style="text-align:right;">' + (sus ? '⚠️ ' : '') + l.n + (l.ret ? ' (مرتجع)' : '') + (sus && l.m ? '<br><small style="color:#5a677d;">مربوط بصنف المخزن: ' + l.m + '</small>' : '') + '</td><td>' + l.q + ' ' + l.u + '</td><td class="num">' + l.p.toFixed(1) + '</td><td class="num">' + (l.c ? l.c.toFixed(1) : '؟') + '</td><td class="num" style="color:' + (l.pr !== null && l.pr < 0 ? '#FF0000' : '#178a4a') + ';">' + (l.pr !== null ? l.pr.toFixed(1) : '-') + '</td></tr>'; }).join('');
+        const rows = (v.lines || []).map(l => { const sus = l.c && l.p > 0 && Math.abs((l.p - l.c) / l.p) > 0.4; return '<tr' + (sus ? ' style="background:#fff7ed;"' : '') + '><td style="text-align:right;">' + (sus ? '⚠️ ' : '') + l.n + (l.ret ? ' (مرتجع)' : '') + (sus && l.m ? '<br><small style="color:#5a677d;">مربوط بصنف المخزن: ' + l.m + '</small>' : '') + '</td><td>' + l.q + ' ' + l.u + '</td><td class="num">' + l.p.toFixed(1) + '</td><td class="num">' + (l.c ? l.c.toFixed(1) : '؟') + '</td><td class="num" style="color:' + (l.pr !== null && l.pr < 0 ? '#FF0000' : '#178a4a') + ';">' + (l.pr !== null ? l.pr.toFixed(1) : '-') + '</td></tr>'; }).join('');
         return '<div class="statement-card-item" style="padding:0; overflow:hidden;">' +
           '<div onclick="var n=this.nextElementSibling; n.style.display = n.style.display===\'none\' ? \'block\' : \'none\';" style="padding:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">' +
             '<div><div style="font-weight:800; font-size:.85rem;">' + (v.t ? new Date(v.t).toLocaleDateString('en-CA') : 'بلا تاريخ') + '</div>' +
@@ -1239,7 +1241,7 @@
         '<div style="background:#fff; border:1px solid #e5e9f0; border-radius:12px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; font-weight:800; font-size:.8rem;">' +
           '<span>إجمالي الربح: <span class="num" style="color:' + (r.profit >= 0 ? '#178a4a' : '#FF0000') + ';">' + (r.profit < 0 ? '-' : '') + fmt(r.profit) + '</span></span>' +
           '<span>الهامش: <span class="num">' + mg.toFixed(1) + '%</span></span><span>' + r.n + ' فاتورة</span></div>' +
-        '<div style="font-size:.68rem; color:#5a677d; font-weight:700; margin-bottom:8px;">اضغط على أي فاتورة لعرض ربح كل صنف. التكلفة = آخر سعر شراء للصنف. (*) = فيه صنف مالوش تكلفة مسجلة. ⚠️ = هامش أعلى من 40%، راجع تكلفته.</div>' + cards;
+        '<div style="font-size:.68rem; color:#5a677d; font-weight:700; margin-bottom:8px;">اضغط على أي فاتورة لعرض ربح كل صنف. التكلفة = سعر أقرب فاتورة شراء قبل تاريخ البيع. (*) = فيه صنف مالوش تكلفة مسجلة. ⚠️ = ربح أو خسارة أكبر من 40%، راجع تكلفته.</div>' + cards;
     } catch (err) {
       console.error(err);
       body.innerHTML = '<div style="color:#f00; text-align:center; padding:20px; font-weight:700;">تعذر التحميل: ' + err.message + '</div>';
