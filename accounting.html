@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>النظام المحاسبي - شركة الزيادي</title>
+<script src="auth-guard.js"></script>
+<style>
+:root{--bg:#f2f4f3;--ink:#17211c;--mut:#667269;--line:#d5dbd7;--card:#fff;--ac:#0b6b4f;--hd:#0b4f3a;--on:#fff;--dr:#1f4f9a;--cr:#a4452c;--ok:#0b6b4f;--bad:#b3261e;--hl:#fff6d6}
+@media(prefers-color-scheme:dark){:root{--bg:#121714;--ink:#e6ece8;--mut:#93a097;--line:#2c3630;--card:#1a211d;--ac:#4fc39a;--hd:#0e2a21;--on:#06231a;--dr:#7fa8ef;--cr:#e59178;--ok:#4fc39a;--bad:#ff8a80;--hl:#3a3414}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Segoe UI",Tahoma,system-ui,sans-serif;font-variant-numeric:tabular-nums;padding-bottom:env(safe-area-inset-bottom)}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));background:var(--hd);color:#fff}
+header a{color:#fff;font-size:13px;opacity:.85}
+nav{display:flex;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+nav button{background:none;border:0;border-bottom:3px solid transparent;border-radius:0;color:var(--mut);padding:12px 14px;white-space:nowrap}
+nav button.on{color:var(--ink);border-bottom-color:var(--ac);font-weight:700}
+.wrap{max-width:900px;margin:auto;padding:10px 12px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0;overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right}
+th{color:var(--mut);font-weight:600;font-size:13px}
+td.n,th.n{text-align:left;white-space:nowrap}
+tr.tot td{border-top:1px solid var(--ink);border-bottom:3px double var(--ink);font-weight:700}
+tr.sub td{font-weight:700;background:var(--bg)}
+tr.hl td{background:var(--hl)}
+tr[data-a]{cursor:pointer}
+.dr{color:var(--dr)}.cr{color:var(--cr)}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+.mt{color:var(--mut);font-size:13px}
+.bd{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;margin:0 8px}
+.eh{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+button{font:inherit;padding:8px 14px;border:1px solid var(--ac);background:var(--ac);color:var(--on);border-radius:8px;cursor:pointer}
+button.g{background:transparent;color:var(--ac)}
+input,select{font:inherit;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);max-width:100%}
+.ml{display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;margin:6px 0}
+summary{cursor:pointer;font-weight:700}
+h3{margin:4px 0 8px}
+pre{white-space:pre-wrap;margin:8px 0 0;font:inherit}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+</style>
+</head>
+<body>
+<header><b>النظام المحاسبي</b><a href="dashboard.html">النظام الحالي</a></header>
+<nav id="nav"></nav>
+<main class="wrap" id="v"><p class="mt">جاري التحميل…</p></main>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,getFirestore,collection,getDocs,doc,getDoc,setDoc,deleteDoc,writeBatch,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const app=initializeApp({apiKey:"AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",authDomain:"ahmedelzaiady.firebaseapp.com",projectId:"ahmedelzaiady",storageBucket:"ahmedelzaiady.firebasestorage.app",messagingSenderId:"300306825071",appId:"1:300306825071:web:0426ddde56280fa090329a"});
+let db;
+try{db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch(e){db=getFirestore(app)}
+
+/* ---------- دليل الحسابات (الأول = النوع: 1 أصول، 2 التزامات، 3 حقوق ملكية، 4 إيرادات، 5 مصروفات) ---------- */
+const CH={'1101':'الخزينة (نقدي)','1102':'المحافظ الإلكترونية','1103':'العملاء','1104':'المخزون','2101':'الموردون','3101':'رأس المال والأرصدة الافتتاحية','4101':'إيرادات المبيعات','5101':'تكلفة البضاعة المباعة'};
+const nm=a=>CH[a]||(a.startsWith('5-')?'مصروف: '+a.slice(2):a);
+const $=s=>document.querySelector(s);
+const r2=n=>Math.round((+n||0)*100)/100;
+const f=n=>r2(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const p2=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+const isW=m=>/wallet|محفظ|فودافون|vodafone/i.test(m||'');
+function day(x){
+  if(typeof x.date==='string'&&/^\d{4}-\d\d-\d\d/.test(x.date))return x.date.slice(0,10);
+  const d=x.timestamp?.toDate?.()||x.createdAt?.toDate?.();
+  return ymd(d||new Date());
+}
+
+const state={entries:[],lock:'',f:'',tab:'tb'};
+const allAcc=()=>[...new Set([...Object.keys(CH),...state.entries.flatMap(e=>e.lines.map(l=>l.a))])].sort();
+
+/* ---------- تحويل بيانات النظام الحالي إلى قيود ---------- */
+const L=(a,v)=>({a,d:v>0?r2(v):0,c:v<0?r2(-v):0});
+const E=(id,src,x,desc,lines)=>({id,src,srcId:x.id,date:day(x),desc,lines:lines.filter(l=>l.d||l.c),auto:true});
+const gone=x=>x.isDeleted||x.deleted||x.isCancelled||x.status==='deleted';
+
+function build(S){
+  const out=[],skip={};
+  const cost={};
+  S.inventory.forEach(p=>cost[p.id]=(+p.buy||+p.cost||0)/(+p.unitFactor||1));
+
+  S.invoices.forEach(v=>{
+    if(gone(v))return;
+    const t=+v.total||0,ca=+v.cashAmount||0,wa=+v.walletAmount||0;
+    let cg=0;
+    (v.items||[]).forEach(i=>{
+      const q=+i.qty||0;
+      const pcs=i.totalPieces!=null?+i.totalPieces:(i.unit==='box'?q*(+i.unitFactor||1):q);
+      cg+=(i.isReturn?-1:1)*pcs*(cost[i.stockId]||0);
+    });
+    out.push(E('inv_'+v.id,'فاتورة بيع',v,'فاتورة بيع - '+(v.customerName||''),
+      [L('1101',ca),L('1102',wa),L('1103',t-ca-wa),L('4101',-t),L('5101',cg),L('1104',-cg)]));
+  });
+
+  S.transactions.forEach(t=>{
+    const a=+t.amount||0;
+    if(!a||gone(t))return;
+    const cash=isW(t.paymentMethod)?'1102':'1101';
+    if(t.supplierId&&t.type==='صرف')
+      out.push(E('trx_'+t.id,'سداد مورد',t,t.details||'سداد مورد',[L('2101',a),L(cash,-a)]));
+    else if(t.partyType==='customer'&&t.type==='قبض')
+      out.push(E('trx_'+t.id,'تحصيل من عميل',t,'تحصيل من '+(t.customerName||'عميل'),[L(cash,a),L('1103',-a)]));
+    else if(t.partyType==='customer'&&t.type==='صرف')
+      out.push(E('trx_'+t.id,'صرف لعميل',t,'صرف لـ '+(t.customerName||'عميل'),[L('1103',a),L(cash,-a)]));
+    else skip['حركات خزينة أخرى']=(skip['حركات خزينة أخرى']||0)+1;
+  });
+
+  S.supplier_transactions.forEach(s=>{
+    const t=+s.total||0;
+    if(!t||gone(s))return;
+    if(s.type==='شراء')
+      out.push(E('pur_'+s.id,'فاتورة شراء',s,'فاتورة شراء - '+(s.supplierName||''),[L('1104',t),L('2101',-t)]));
+    else if(s.type==='مرتجع شراء')
+      out.push(E('prt_'+s.id,'مرتجع شراء',s,'مرتجع شراء',[L('2101',t),L('1104',-t)]));
+    else skip['حركات موردين أخرى']=(skip['حركات موردين أخرى']||0)+1;
+  });
+
+  S.expenses.forEach(x=>{
+    const a=+x.amount||0;
+    if(!a||gone(x))return;
+    out.push(E('exp_'+x.id,'مصروف',x,(x.type||'مصروف')+' '+(x.note||''),
+      [L('5-'+(x.type||'عام'),a),L(isW(x.paymentMethod)?'1102':'1101',-a)]));
+  });
+  return {out,skip};
+}
+
+/* ---------- الأرصدة والتقارير ---------- */
+function bal(){
+  const m={};
+  state.entries.forEach(e=>e.lines.forEach(l=>{const o=m[l.a]||(m[l.a]={d:0,c:0});o.d+=l.d;o.c+=l.c}));
+  return m;
+}
+const R=(label,v,cls)=>`<tr class="${cls||''}"><td>${label}</td><td class="n">${f(v)}</td></tr>`;
+
+function tb(){
+  const m=bal();let D=0,C=0;
+  const rows=Object.keys(m).sort().map(a=>{
+    const n=r2(m[a].d-m[a].c),d=n>0?n:0,c=n<0?-n:0;D+=d;C+=c;
+    return `<tr data-a="${esc(a)}"><td>${esc(nm(a))}</td><td class="n dr">${d?f(d):''}</td><td class="n cr">${c?f(c):''}</td></tr>`;
+  }).join('');
+  const ok=r2(D-C)===0;
+  return `<div class="card"><h3>ميزان المراجعة</h3>
+  ${rows?`<table><tr><th>الحساب</th><th class="n">مدين</th><th class="n">دائن</th></tr>${rows}
+  <tr class="tot"><td>الإجمالي</td><td class="n">${f(D)}</td><td class="n">${f(C)}</td></tr></table>
+  <p class="${ok?'ok':'bad'}">${ok?'الميزان متزن':'الميزان مش متزن - الفرق '+f(D-C)}</p>
+  <p class="mt">اضغط على أي حساب لعرض حركاته.</p>`
+  :'<p class="mt">لسه مفيش قيود. افتح تبويب الترحيل واضغط «ترحيل من النظام الحالي».</p>'}</div>`;
+}
+
+function fs(){
+  const m=bal(),ids=Object.keys(m),net=a=>m[a]?r2(m[a].d-m[a].c):0;
+  const sum=(arr,sg)=>r2(arr.reduce((s,a)=>s+net(a),0)*sg);
+  const rv=ids.filter(a=>a[0]=='4'),ex=ids.filter(a=>a[0]=='5'&&a!='5101');
+  const rev=sum(rv,-1),cogs=net('5101'),gp=r2(rev-cogs),exp=sum(ex,1),ni=r2(gp-exp);
+  const A=ids.filter(a=>a[0]=='1'),Lb=ids.filter(a=>a[0]=='2'),Q=ids.filter(a=>a[0]=='3');
+  const ta=sum(A,1),tl=sum(Lb,-1),tq=r2(sum(Q,-1)+ni);
+  const ok=r2(ta-tl-tq)===0;
+  return `<div class="card"><h3>قائمة الدخل</h3><table>
+  ${R('إيرادات المبيعات',rev)}${R('تكلفة البضاعة المباعة',cogs)}${R('مجمل الربح',gp,'sub')}
+  ${ex.map(a=>R(esc(nm(a)),net(a))).join('')}${R('إجمالي المصروفات',exp,'sub')}
+  ${R('صافي الربح',ni,'tot')}</table></div>
+  <div class="card"><h3>المركز المالي</h3><table>
+  <tr class="sub"><td colspan="2">الأصول</td></tr>${A.map(a=>R(esc(nm(a)),net(a))).join('')}${R('إجمالي الأصول',ta,'tot')}
+  <tr class="sub"><td colspan="2">الالتزامات</td></tr>${Lb.map(a=>R(esc(nm(a)),-net(a))).join('')}${R('إجمالي الالتزامات',tl,'tot')}
+  <tr class="sub"><td colspan="2">حقوق الملكية</td></tr>${Q.map(a=>R(esc(nm(a)),-net(a))).join('')}${R('أرباح الفترة',ni)}${R('إجمالي حقوق الملكية',tq,'tot')}</table>
+  <p class="${ok?'ok':'bad'}">${ok?'الأصول = الالتزامات + حقوق الملكية':'المعادلة مش متزنة - الفرق '+f(ta-tl-tq)}</p>
+  <p class="mt">لو الأصول أكبر من المتوقع، سجّل قيداً افتتاحياً بأرصدة الخزينة والمخزون من تبويب «دفتر القيود».</p></div>`;
+}
+
+function je(){
+  const fa=state.f;
+  let es=[...state.entries].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  if(fa)es=es.filter(e=>e.lines.some(l=>l.a==fa));
+  const opts=allAcc().map(a=>`<option value="${esc(a)}">${esc(nm(a))}</option>`).join('');
+  const row=`<div class="ml"><select><option value="">الحساب</option>${opts}</select><input class="d" type="number" step="0.01" min="0" placeholder="مدين"><input class="c" type="number" step="0.01" min="0" placeholder="دائن"></div>`;
+  const form=`<details class="card"><summary>قيد يدوي (افتتاحي أو تسوية)</summary>
+  <p><input id="md" type="date" value="${ymd(new Date())}"> <input id="mt" placeholder="البيان" style="width:60%"></p>
+  <div id="ml">${row+row}</div>
+  <button class="g" id="addl" type="button">إضافة سطر</button> <button id="savem" type="button">حفظ القيد</button></details>`;
+  state.rowHtml=row;
+  const list=es.slice(0,150).map(e=>`<div class="card"><div class="eh"><b>${esc(e.desc)}</b><span class="bd">${esc(e.src)}</span><span class="mt">${e.date}</span>${e.auto?'':`<button class="g" data-del="${esc(e.id)}">حذف</button>`}</div>
+  <table>${e.lines.map(l=>`<tr class="${l.a==fa?'hl':''}"><td>${esc(nm(l.a))}</td><td class="n dr">${l.d?f(l.d):''}</td><td class="n cr">${l.c?f(l.c):''}</td></tr>`).join('')}</table></div>`).join('');
+  return (fa?`<div class="card">كشف حساب: <b>${esc(nm(fa))}</b> <button class="g" id="clr">عرض الكل</button></div>`:'')
+    +form+(list||'<p class="mt">مفيش قيود.</p>')+(es.length>150?`<p class="mt">معروض أحدث 150 قيد من ${es.length}.</p>`:'');
+}
+
+function sy(){
+  return `<div class="card"><h3>الترحيل من النظام الحالي</h3>
+  <p>بيقرأ الفواتير والتحصيل والسداد والمشتريات والمصروفات ويحوّلها لقيود مزدوجة. تقدر تعيده في أي وقت: القيد اللي اتغيّر بيتحدّث، واللي ما اتغيرش بيتسيب زي ما هو.</p>
+  <button id="run">ترحيل من النظام الحالي</button><pre id="log" class="mt"></pre></div>
+  <div class="card"><h3>قفل الفترة</h3>
+  <p class="mt">أي قيد بتاريخ يساوي أو أقدم من التاريخ ده ما بيتغيّرش ولا بيتحذف.</p>
+  <input id="lk" type="date" value="${esc(state.lock)}"> <button id="savel">حفظ</button></div>
+  <div class="card"><h3>ملاحظات</h3>
+  <p class="mt">تكلفة البضاعة محسوبة من سعر الشراء الحالي للصنف، لأن الفاتورة ما بتحفظش التكلفة وقت البيع. مرتجعات المبيعات والرواتب والأقساط لسه غير مرحّلة.</p></div>`;
+}
+
+/* ---------- التنقل ---------- */
+const TABS=[['tb','ميزان المراجعة',tb],['fs','القوائم المالية',fs],['je','دفتر القيود',je],['sy','الترحيل',sy]];
+function go(t){
+  if(t)state.tab=t;
+  $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==state.tab?'on':''}" data-t="${k}">${l}</button>`).join('');
+  $('#v').innerHTML=TABS.find(x=>x[0]==state.tab)[2]();
+}
+$('#nav').onclick=e=>{const b=e.target.closest('[data-t]');if(b){state.f='';go(b.dataset.t)}};
+
+const locked=d=>state.lock&&d<=state.lock;
+$('#v').onclick=async e=>{
+  const t=e.target;
+  const r=t.closest('[data-a]');
+  if(r){state.f=r.dataset.a;return go('je')}
+  if(t.id=='clr'){state.f='';return go('je')}
+  if(t.id=='addl')return $('#ml').insertAdjacentHTML('beforeend',state.rowHtml);
+  if(t.id=='savem')return saveManual();
+  if(t.dataset.del)return delManual(t.dataset.del);
+  if(t.id=='run')return runSync();
+  if(t.id=='savel'){
+    state.lock=$('#lk').value;
+    await setDoc(doc(db,'acc_settings','main'),{lockedUntil:state.lock},{merge:true});
+    alert('تم حفظ تاريخ القفل');
+  }
+};
+
+async function saveManual(){
+  const date=$('#md').value,desc=$('#mt').value.trim();
+  const ls=[...document.querySelectorAll('#ml .ml')].map(r=>({a:r.querySelector('select').value,d:r2(r.querySelector('.d').value),c:r2(r.querySelector('.c').value)})).filter(l=>l.a&&(l.d||l.c));
+  const D=r2(ls.reduce((s,l)=>s+l.d,0)),C=r2(ls.reduce((s,l)=>s+l.c,0));
+  if(!date||!desc)return alert('اكتب التاريخ والبيان');
+  if(ls.length<2||!D||D!==C)return alert('القيد لازم يتزن: مدين '+f(D)+' ، دائن '+f(C));
+  if(locked(date))return alert('الفترة دي مقفولة');
+  const e={id:'man_'+Date.now(),src:'قيد يدوي',srcId:'',date,desc,lines:ls,auto:false};
+  await setDoc(doc(db,'acc_entries',e.id),{...e,updatedAt:serverTimestamp()});
+  state.entries.push(e);go('je');
+}
+async function delManual(id){
+  const e=state.entries.find(x=>x.id==id);
+  if(!e||e.auto||locked(e.date))return alert('القيد ده مقفول أو تلقائي');
+  if(!confirm('حذف القيد؟'))return;
+  await deleteDoc(doc(db,'acc_entries',id));
+  state.entries=state.entries.filter(x=>x.id!=id);go('je');
+}
+
+async function runSync(){
+  const log=$('#log'),btn=$('#run');
+  btn.disabled=true;log.textContent='جاري قراءة بيانات النظام الحالي…';
+  try{
+    const S={};
+    for(const c of ['invoices','transactions','supplier_transactions','expenses','inventory'])
+      S[c]=(await getDocs(collection(db,c))).docs.map(d=>({id:d.id,...d.data()}));
+    const {out,skip}=build(S);
+    const have=new Map(state.entries.map(e=>[e.id,e])),ids=new Set(out.map(e=>e.id));
+    let lk=0;
+    const ops=[];
+    out.forEach(e=>{
+      const o=have.get(e.id);
+      if(o&&JSON.stringify(o.lines)===JSON.stringify(e.lines)&&o.date===e.date)return;
+      if(locked(e.date)||(o&&locked(o.date))){lk++;return}
+      ops.push({e});
+    });
+    const stale=state.entries.filter(e=>e.auto&&!ids.has(e.id)&&!locked(e.date));
+    if(stale.length&&confirm(`${stale.length} قيد مصدره اتحذف من النظام الحالي. نشيلهم؟`))stale.forEach(e=>ops.push({del:e.id}));
+    else stale.length=0;
+    for(let i=0;i<ops.length;i+=400){
+      const b=writeBatch(db);
+      ops.slice(i,i+400).forEach(o=>o.e?b.set(doc(db,'acc_entries',o.e.id),{...o.e,updatedAt:serverTimestamp()}):b.delete(doc(db,'acc_entries',o.del)));
+      await b.commit();
+    }
+    const gone2=new Set(ops.filter(o=>o.del).map(o=>o.del)),add=new Map(ops.filter(o=>o.e).map(o=>[o.e.id,o.e]));
+    state.entries=[...state.entries.filter(e=>!gone2.has(e.id)&&!add.has(e.id)),...add.values()];
+    log.textContent=`تم.\nقيود جديدة أو محدّثة: ${add.size}\nقيود اتشالت: ${gone2.size}\nمقفولة وما اتغيرتش: ${lk}\nإجمالي القيود: ${state.entries.length}`
+      +Object.entries(skip).map(([k,v])=>`\nمتخطي - ${k}: ${v}`).join('');
+  }catch(err){
+    console.error(err);log.textContent='فشل الترحيل: '+err.message;
+  }
+  btn.disabled=false;
+}
+
+/* ---------- تشغيل ---------- */
+(async()=>{
+  const role=(localStorage.getItem('authGuard_role')||'').toLowerCase();
+  if(role!=='admin'){$('#v').innerHTML='<div class="card"><b>النظام المحاسبي للمدير فقط.</b></div>';return}
+  try{
+    state.entries=(await getDocs(collection(db,'acc_entries'))).docs.map(d=>d.data());
+    const s=await getDoc(doc(db,'acc_settings','main'));
+    state.lock=s.exists()?(s.data().lockedUntil||''):'';
+    go();
+  }catch(err){
+    console.error(err);$('#v').innerHTML='<div class="card bad">تعذر تحميل القيود: '+esc(err.message)+'</div>';
+  }
+})();
+</script>
+</body>
+</html>
