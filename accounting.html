@@ -41,7 +41,7 @@ pre{white-space:pre-wrap;margin:8px 0 0;font:inherit}
 </style>
 </head>
 <body>
-<header><b>النظام المحاسبي</b><a href="dashboard.html">النظام الحالي</a></header>
+<header><b>النظام المحاسبي</b><a href="index1.html">النظام الحالي</a></header>
 <nav id="nav"></nav>
 <main class="wrap" id="v"><p class="mt">جاري التحميل…</p></main>
 
@@ -54,7 +54,7 @@ let db;
 try{db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch(e){db=getFirestore(app)}
 
 /* ---------- دليل الحسابات (الأول = النوع: 1 أصول، 2 التزامات، 3 حقوق ملكية، 4 إيرادات، 5 مصروفات) ---------- */
-const CH={'1101':'الخزينة (نقدي)','1102':'المحافظ الإلكترونية','1103':'العملاء','1104':'المخزون','2101':'الموردون','3101':'رأس المال والأرصدة الافتتاحية','4101':'إيرادات المبيعات','5101':'تكلفة البضاعة المباعة'};
+const CH={'1101':'الخزينة (نقدي)','1102':'المحافظ الإلكترونية','1103':'العملاء','1104':'المخزون','2101':'الموردون','3101':'رأس المال والأرصدة الافتتاحية','3102':'حركات نقدية يدوية','4101':'إيرادات المبيعات','5101':'تكلفة البضاعة المباعة'};
 const nm=a=>CH[a]||(a.startsWith('5-')?'مصروف: '+a.slice(2):a);
 const $=s=>document.querySelector(s);
 const r2=n=>Math.round((+n||0)*100)/100;
@@ -77,54 +77,76 @@ const L=(a,v)=>({a,d:v>0?r2(v):0,c:v<0?r2(-v):0});
 const E=(id,src,x,desc,lines)=>({id,src,srcId:x.id,date:day(x),desc,lines:lines.filter(l=>l.d||l.c),auto:true});
 const gone=x=>x.isDeleted||x.deleted||x.isCancelled||x.status==='deleted';
 
-function build(S){
-  const out=[],skip={};
-  const cost={};
+const nk=t=>String(t||'عام').trim().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ');
+function build(S,X){
+  const out=[],skip={},cost={};
+  const bump=k=>skip[k]=(skip[k]||0)+1;
+  const cash=t=>isW(t)?'1102':'1101';
   S.inventory.forEach(p=>cost[p.id]=(+p.buy||+p.cost||0)/(+p.unitFactor||1));
 
   S.invoices.forEach(v=>{
-    if(gone(v))return;
-    const t=+v.total||0,ca=+v.cashAmount||0,wa=+v.walletAmount||0;
+    if(gone(v)||!X.after(v))return;
+    const s=(v.type==='مرتجع'||v.isReturn)?-1:1;
+    const t=s*(+v.grandTotal||+v.total||0),ca=s*(+v.cashAmount||0),wa=s*(+v.walletAmount||0);
     let cg=0;
     (v.items||[]).forEach(i=>{
       const q=+i.qty||0;
       const pcs=i.totalPieces!=null?+i.totalPieces:(i.unit==='box'?q*(+i.unitFactor||1):q);
       cg+=(i.isReturn?-1:1)*pcs*(cost[i.stockId]||0);
     });
-    out.push(E('inv_'+v.id,'فاتورة بيع',v,'فاتورة بيع - '+(v.customerName||''),
+    cg*=s;
+    out.push(E('inv_'+v.id,s<0?'مرتجع بيع':'فاتورة بيع',v,(s<0?'مرتجع بيع - ':'فاتورة بيع - ')+(v.customerName||''),
       [L('1101',ca),L('1102',wa),L('1103',t-ca-wa),L('4101',-t),L('5101',cg),L('1104',-cg)]));
   });
 
   S.transactions.forEach(t=>{
-    const a=+t.amount||0;
-    if(!a||gone(t))return;
-    const cash=isW(t.paymentMethod)?'1102':'1101';
-    if(t.supplierId&&t.type==='صرف')
-      out.push(E('trx_'+t.id,'سداد مورد',t,t.details||'سداد مورد',[L('2101',a),L(cash,-a)]));
-    else if(t.partyType==='customer'&&t.type==='قبض')
-      out.push(E('trx_'+t.id,'تحصيل من عميل',t,'تحصيل من '+(t.customerName||'عميل'),[L(cash,a),L('1103',-a)]));
-    else if(t.partyType==='customer'&&t.type==='صرف')
-      out.push(E('trx_'+t.id,'صرف لعميل',t,'صرف لـ '+(t.customerName||'عميل'),[L('1103',a),L(cash,-a)]));
-    else skip['حركات خزينة أخرى']=(skip['حركات خزينة أخرى']||0)+1;
+    const a=Math.abs(+t.amount||+t.total||0);
+    if(!a||gone(t)||!X.after(t))return;
+    if(t.isInvoicePayment||t.invoiceId||t.expenseId||t.isExpense||t.type==='مصروف'||t.category)return;
+    const p=t.partyId||t.customerId||t.supplierId;
+    const c=cash((t.method||t.paymentMethod||'')+' '+(t.note||''));
+    const rec=t.type==='قبض',pay=t.type==='صرف'||t.type==='سداد';
+    if(!rec&&!pay)return bump('حركات خزينة أخرى');
+    const sup=t.supplierId||X.sup.has(p),cus=!sup&&X.cus.has(p);
+    const who=sup?'2101':cus?'1103':'3102';
+    const nm2=sup?'مورد':cus?(t.customerName||'عميل'):'';
+    out.push(E('trx_'+t.id,rec?'قبض':'صرف',t,(rec?'قبض ':'صرف ')+nm2,rec?[L(c,a),L(who,-a)]:[L(who,a),L(c,-a)]));
   });
 
   S.supplier_transactions.forEach(s=>{
-    const t=+s.total||0;
-    if(!t||gone(s))return;
-    if(s.type==='شراء')
-      out.push(E('pur_'+s.id,'فاتورة شراء',s,'فاتورة شراء - '+(s.supplierName||''),[L('1104',t),L('2101',-t)]));
-    else if(s.type==='مرتجع شراء')
+    const t=+s.total||+s.amount||0;
+    if(!t||gone(s)||!X.after(s))return;
+    const ty=s.type;
+    if(ty==='شراء'||ty==='فاتورة شراء'||!ty){
+      let cp=+s.cashPaid||0;const wp=+s.walletPaid||0;
+      if(!cp&&!wp)cp=+s.totalPaid||+s.paid||0;
+      out.push(E('pur_'+s.id,'فاتورة شراء',s,'فاتورة شراء - '+(s.supplierName||''),[L('1104',t),L('1101',-cp),L('1102',-wp),L('2101',-(t-cp-wp))]));
+    }else if(ty==='مرتجع شراء'||ty==='مرتجع')
       out.push(E('prt_'+s.id,'مرتجع شراء',s,'مرتجع شراء',[L('2101',t),L('1104',-t)]));
-    else skip['حركات موردين أخرى']=(skip['حركات موردين أخرى']||0)+1;
+    else bump('حركات موردين أخرى');
   });
 
   S.expenses.forEach(x=>{
-    const a=+x.amount||0;
-    if(!a||gone(x))return;
+    const a=Math.abs(+x.amount||+x.total||0);
+    if(!a||gone(x)||!X.after(x))return;
     out.push(E('exp_'+x.id,'مصروف',x,(x.type||'مصروف')+' '+(x.note||''),
-      [L('5-'+(x.type||'عام'),a),L(isW(x.paymentMethod)?'1102':'1101',-a)]));
+      [L('5-'+nk(x.type),a),L(cash((x.paymentMethod||x.method||'')+' '+(x.note||'')),-a)]));
+  });
+
+  S.cash_logs.forEach(l=>{
+    if(gone(l)||!X.after(l)||l.invoiceId||l.expenseId||l.isExpense||l.type==='مصروف'||l.category)return;
+    const a=+l.amount||0,c=cash((l.method||l.paymentMethod||'')+' '+(l.note||''));
+    if(!a)return;
+    if(['in','قبض','إيراد','ايراد'].includes(l.type))out.push(E('log_'+l.id,'حركة نقدية',l,l.note||'إيداع',[L(c,a),L('3102',-a)]));
+    else if(['out','صرف'].includes(l.type))out.push(E('log_'+l.id,'حركة نقدية',l,l.note||'سحب',[L('3102',a),L(c,-a)]));
   });
   return {out,skip};
+}
+
+function recon(S){
+  const m=bal(),n=a=>m[a]?r2(m[a].d-m[a].c):0;
+  const sum=arr=>arr.filter(x=>!gone(x)).reduce((t,x)=>t+(+x.currentBalance||0),0);
+  return `\n\nمطابقة مع النظام الحالي:\nالعملاء: قيود ${f(n('1103'))} | النظام ${f(sum(S.customers))}\nالموردين: قيود ${f(-n('2101'))} | النظام ${f(sum(S.suppliers))}\nالنقدية: ${f(n('1101'))} | المحفظة: ${f(n('1102'))} | المخزون: ${f(n('1104'))}`;
 }
 
 /* ---------- الأرصدة والتقارير ---------- */
@@ -195,7 +217,7 @@ function sy(){
   <p class="mt">أي قيد بتاريخ يساوي أو أقدم من التاريخ ده ما بيتغيّرش ولا بيتحذف.</p>
   <input id="lk" type="date" value="${esc(state.lock)}"> <button id="savel">حفظ</button></div>
   <div class="card"><h3>ملاحظات</h3>
-  <p class="mt">تكلفة البضاعة محسوبة من سعر الشراء الحالي للصنف، لأن الفاتورة ما بتحفظش التكلفة وقت البيع. مرتجعات المبيعات والرواتب والأقساط لسه غير مرحّلة.</p></div>`;
+  <p class="mt">الأرصدة الافتتاحية بتتاخد من إعدادات أول المدة، والحركات بتترحّل من تاريخ الأرشفة. تكلفة البضاعة من سعر الشراء الحالي للصنف. الرواتب والأقساط لسه غير مرحّلة.</p></div>`;
 }
 
 /* ---------- التنقل ---------- */
@@ -248,9 +270,18 @@ async function runSync(){
   btn.disabled=true;log.textContent='جاري قراءة بيانات النظام الحالي…';
   try{
     const S={};
-    for(const c of ['invoices','transactions','supplier_transactions','expenses','inventory'])
+    for(const c of ['invoices','transactions','supplier_transactions','expenses','inventory','customers','suppliers','cash_logs'])
       S[c]=(await getDocs(collection(db,c))).docs.map(d=>({id:d.id,...d.data()}));
-    const {out,skip}=build(S);
+    const ib=await getDoc(doc(db,'settings','initial_balances'));
+    const I=ib.exists()?ib.data():{};
+    const cut=I.archiveCutoffDate?new Date(I.archiveCutoffDate).getTime():0;
+    const X={cus:new Set(S.customers.map(c=>c.id)),sup:new Set(S.suppliers.map(c=>c.id)),
+      after:x=>{if(!cut)return true;const d=x.createdAt?.toDate?.()||x.timestamp?.toDate?.()||(x.date?new Date(x.date):null);return !!d&&d.getTime()>=cut}};
+    const {out,skip}=build(S,X);
+    const nv=k=>+I[k]||0;
+    const op=[L('1101',nv('cash')),L('1102',nv('wallet')),L('1104',nv('inventory')),L('1103',nv('customers')),L('2101',-nv('suppliers'))];
+    op.push(L('3101',-r2(op.reduce((t,l)=>t+l.d-l.c,0))));
+    out.push({id:'opening',src:'قيد افتتاحي',srcId:'',date:cut?ymd(new Date(cut)):'2000-01-01',desc:'الأرصدة الافتتاحية من إعدادات النظام',lines:op.filter(l=>l.d||l.c),auto:true});
     const have=new Map(state.entries.map(e=>[e.id,e])),ids=new Set(out.map(e=>e.id));
     let lk=0;
     const ops=[];
@@ -261,7 +292,7 @@ async function runSync(){
       ops.push({e});
     });
     const stale=state.entries.filter(e=>e.auto&&!ids.has(e.id)&&!locked(e.date));
-    if(stale.length&&confirm(`${stale.length} قيد مصدره اتحذف من النظام الحالي. نشيلهم؟`))stale.forEach(e=>ops.push({del:e.id}));
+    if(stale.length&&confirm(`${stale.length} قيد قديم (قبل تاريخ الأرشفة أو مصدره اتحذف). نشيلهم؟`))stale.forEach(e=>ops.push({del:e.id}));
     else stale.length=0;
     for(let i=0;i<ops.length;i+=400){
       const b=writeBatch(db);
@@ -271,7 +302,7 @@ async function runSync(){
     const gone2=new Set(ops.filter(o=>o.del).map(o=>o.del)),add=new Map(ops.filter(o=>o.e).map(o=>[o.e.id,o.e]));
     state.entries=[...state.entries.filter(e=>!gone2.has(e.id)&&!add.has(e.id)),...add.values()];
     log.textContent=`تم.\nقيود جديدة أو محدّثة: ${add.size}\nقيود اتشالت: ${gone2.size}\nمقفولة وما اتغيرتش: ${lk}\nإجمالي القيود: ${state.entries.length}`
-      +Object.entries(skip).map(([k,v])=>`\nمتخطي - ${k}: ${v}`).join('');
+      +Object.entries(skip).map(([k,v])=>`\nمتخطي - ${k}: ${v}`).join('')+recon(S);
   }catch(err){
     console.error(err);log.textContent='فشل الترحيل: '+err.message;
   }
