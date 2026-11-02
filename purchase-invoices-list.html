@@ -363,6 +363,7 @@
             text-decoration: none !important;
         }
         .footer-action-btn:active { transform: scale(0.94); background-color: #f8fafc; }
+        .footer-action-btn[disabled] { opacity: 0.6; pointer-events: none; }
         
         .btn-share-mobile { color: var(--primary); background: var(--primary-light); border-color: #d2f4e3; }
         .btn-items-mobile { color: var(--info); background: var(--info-light); border-color: #bae6fd; }
@@ -403,11 +404,11 @@
             font-family: 'Montserrat', sans-serif;
         }
 
+        /* العنصر المخفي لتوليد صورة الفاتورة (تم تعديله ليعمل مع html2canvas) */
         #thermalInvoiceHidden {
-            position: fixed; left: -9999px; top: 0;
+            position: absolute; left: -9999px; top: 0;
             width: 380px; background: #ffffff; color: #000000; padding: 20px;
             box-sizing: border-box; direction: rtl; font-family: 'Cairo', sans-serif;
-            z-index: -1;
         }
         .term-header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 12px; margin-bottom: 12px; }
         .term-title { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: normal !important; line-height: 1.4; }
@@ -419,6 +420,23 @@
 
         .loading-wrapper { text-align: center; padding: 70px 0; color: var(--primary); }
         .loading-wrapper p { font-weight: 800; margin-top: 12px; font-size: 0.85rem; }
+
+        /* نافذة المشاركة الاحتياطية */
+        .share-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 3000;
+            display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .share-sheet {
+            background: #fff; border-radius: 20px; padding: 18px; width: 100%; max-width: 360px;
+            text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+        }
+        .share-sheet img { max-width: 100%; max-height: 50vh; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 14px; }
+        .share-sheet button {
+            width: 100%; padding: 11px; border: 0; border-radius: 12px; font-weight: 800;
+            font-family: 'Cairo', sans-serif; margin-top: 6px; cursor: pointer;
+        }
+        .share-sheet .s-primary { background: var(--primary-gradient); color: #fff; }
+        .share-sheet .s-secondary { background: #f1f5f9; color: var(--text-dark); }
     </style>
 </head>
 <body>
@@ -729,7 +747,7 @@
                 </div>
 
                 <div class="inv-actions-footer">
-                    <button class="footer-action-btn btn-share-mobile" onclick="window.shareAsThermalImageDirectly('${inv.id}')" title="مشاركة">
+                    <button class="footer-action-btn btn-share-mobile" onclick="window.shareAsThermalImageDirectly('${inv.id}', this)" title="مشاركة">
                         <i class="fas fa-share-alt"></i> مشاركة
                     </button>
                     <button class="footer-action-btn btn-items-mobile" onclick="toggleInvoiceDetails('${inv.id}')" title="الأصناف">
@@ -774,19 +792,12 @@
     }
 
     // ============================================================
-    // دالة المشاركة كصورة الحرارية بمرونة عالية مع أجهزة المحمول
+    // بناء محتوى الفاتورة الحرارية (مشترك بين المشاركة وتصدير ZIP)
     // ============================================================
-    window.shareAsThermalImageDirectly = async function(invoiceId) {
-        const inv = allInvoices.find(i => i.id === invoiceId);
-        if (!inv) {
-            alert("لم يتم العثور على بيانات الفاتورة المراد مشاركتها.");
-            return;
-        }
-
+    function buildThermalInvoiceHTML(inv) {
         const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
         const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp, inv.date);
         const items = inv.items || [];
-        const hiddenDiv = document.getElementById('thermalInvoiceHidden');
         const formattedDate = formatEnglishDate(inv.date);
 
         let rowsHtml = "";
@@ -819,7 +830,7 @@
         else if (cashPaid > 0) paymentDesc = "نقدي كاش";
         else if (walletPaid > 0) paymentDesc = "محفظة إلكترونية";
 
-        hiddenDiv.innerHTML = `
+        const html = `
             <div class="term-header">
                 <p class="term-title">شركة الزيادى للتجارة</p>
                 <small style="color:#222; font-size:13px; font-weight:700;">فاتورة مشتريات </small>
@@ -858,41 +869,129 @@
                 إدارة وتصميم / أحمد محمود الزيادى
             </div>`;
 
+        return { html, supName };
+    }
+
+    // تحويل الفاتورة إلى صورة PNG (Blob)
+    async function renderInvoiceToBlob(inv) {
+        const hiddenDiv = document.getElementById('thermalInvoiceHidden');
+        const { html, supName } = buildThermalInvoiceHTML(inv);
+        hiddenDiv.innerHTML = html;
+
+        if (document.fonts && document.fonts.ready) {
+            try { await document.fonts.ready; } catch (e) {}
+        }
+
+        const canvas = await html2canvas(hiddenDiv, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            logging: false,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 380
+        });
+
+        const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+        return { blob, supName };
+    }
+
+    function canShareFile(file) {
         try {
-            const canvas = await html2canvas(hiddenDiv, { 
-                scale: 2, 
-                backgroundColor: "#ffffff", 
-                useCORS: true,
-                logging: false
-            });
+            return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+        } catch (e) {
+            return false;
+        }
+    }
 
-            canvas.toBlob(async (blob) => {
-                if (!blob) {
-                    alert("فشل إنشاء صورة الفاتورة");
-                    return;
-                }
-                const fileName = `فاتورة_${supName.replace(/\s+/g, '_')}_${inv.id}.png`;
-                const file = new File([blob], fileName, { type: "image/png" });
+    // نافذة احتياطية: تظهر عندما يرفض المتصفح المشاركة التلقائية (يتطلب نقرة مباشرة من المستخدم)
+    function showShareSheet(file, blob, fileName, supName) {
+        const old = document.getElementById('shareOverlay');
+        if (old) old.remove();
 
-                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                    try {
-                        await navigator.share({
-                            files: [file],
-                            title: `فاتورة شركة الزيادى - ${supName}`,
-                            text: `تفاصيل فاتورة ${supName}`
-                        });
-                    } catch (err) {
-                        if (err.name !== 'AbortError') {
-                            downloadImageFallback(blob, fileName);
-                        }
-                    }
-                } else {
+        const imgUrl = URL.createObjectURL(blob);
+        const overlay = document.createElement('div');
+        overlay.className = 'share-overlay';
+        overlay.id = 'shareOverlay';
+        overlay.innerHTML = `
+            <div class="share-sheet">
+                <img src="${imgUrl}" alt="الفاتورة">
+                <button class="s-primary" id="shareNowBtn"><i class="fas fa-share-alt"></i> مشاركة الآن</button>
+                <button class="s-secondary" id="shareDownloadBtn"><i class="fas fa-download"></i> تحميل الصورة</button>
+                <button class="s-secondary" id="shareCloseBtn">إغلاق</button>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        const close = () => { URL.revokeObjectURL(imgUrl); overlay.remove(); };
+
+        // هنا navigator.share يُستدعى مباشرة من نقرة المستخدم فيعمل بشكل مضمون
+        document.getElementById('shareNowBtn').onclick = async () => {
+            try {
+                await navigator.share({ files: [file], title: `فاتورة شركة الزيادى - ${supName}` });
+                close();
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.warn("Share failed:", err);
                     downloadImageFallback(blob, fileName);
+                    close();
                 }
-            }, "image/png");
+            }
+        };
+        document.getElementById('shareDownloadBtn').onclick = () => downloadImageFallback(blob, fileName);
+        document.getElementById('shareCloseBtn').onclick = close;
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    }
+
+    // ============================================================
+    // دالة المشاركة كصورة حرارية (معدّلة)
+    // ============================================================
+    window.shareAsThermalImageDirectly = async function(invoiceId, btnEl) {
+        const inv = allInvoices.find(i => i.id === invoiceId);
+        if (!inv) {
+            alert("لم يتم العثور على بيانات الفاتورة المراد مشاركتها.");
+            return;
+        }
+
+        const originalHTML = btnEl ? btnEl.innerHTML : '';
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التجهيز';
+        }
+
+        try {
+            const { blob, supName } = await renderInvoiceToBlob(inv);
+            if (!blob) {
+                alert("فشل إنشاء صورة الفاتورة");
+                return;
+            }
+
+            const fileName = `فاتورة_${supName.replace(/\s+/g, '_')}_${inv.id}.png`;
+            const file = new File([blob], fileName, { type: "image/png" });
+
+            if (canShareFile(file)) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: `فاتورة شركة الزيادى - ${supName}`
+                    });
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // المستخدم ألغى المشاركة
+                    console.warn("Auto share failed, showing manual share sheet:", err);
+                    // غالباً NotAllowedError: انتهت صلاحية النقرة بعد توليد الصورة
+                    showShareSheet(file, blob, fileName, supName);
+                }
+            } else {
+                // المتصفح لا يدعم مشاركة الملفات: نعرض المعاينة مع خيار التحميل
+                showShareSheet(file, blob, fileName, supName);
+            }
         } catch (error) {
             console.error("HTML2Canvas Error:", error);
-            alert("حدث خطأ أثناء توليد الصورة: " + error.message);
+            alert("حدث خطأ أثناء توليد الصورة: " + (error && error.message ? error.message : error));
+        } finally {
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.innerHTML = originalHTML;
+            }
         }
     };
 
@@ -1020,7 +1119,6 @@
         if (!confirmProceed) return;
 
         const zip = new JSZip();
-        const hiddenDiv = document.getElementById('thermalInvoiceHidden');
         
         const progressAlert = document.createElement('div');
         progressAlert.style = "position:fixed; bottom:20px; right:20px; background:#0b5e3d; color:#fff; padding:15px 25px; border-radius:8px; z-index:9999; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-family:'Cairo', sans-serif;";
@@ -1028,91 +1126,18 @@
 
         for (let i = 0; i < allInvoices.length; i++) {
             const inv = allInvoices[i];
-            const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
+            const supNameForProgress = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
             
-            progressAlert.innerText = `جاري تجهيز الفاتورة (${i + 1} من ${allInvoices.length}) - ${supName}`;
-
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp, inv.date);
-            const items = inv.items || [];
-            const formattedDate = formatEnglishDate(inv.date);
-
-            let rowsHtml = "";
-            items.forEach(item => {
-                const isItemReturn = item.returnQty > 0 || inv.isReturn;
-                const qty = item.qty || item.returnQty || 0;
-                const unit = item.unitName || 'كرتونة';
-                const price = Number(item.buy || 0);
-                const subtotal = qty * price;
-                rowsHtml += `
-                    <tr>
-                        <td style="padding: 6px 0; font-size:13px; color:#000;">
-                            <b>${item.name}</b><br>
-                            <span style="color:#555; font-size:11px;">(${isItemReturn ? '-' : ''}${qty} ${unit} × ${price.toFixed(2)})</span>
-                        </td>
-                        <td style="text-align: left; padding: 6px 0; font-family:'Montserrat', sans-serif; font-weight:800; font-size:13px;" dir="ltr">
-                            ${isItemReturn ? '-' : ''}${subtotal.toFixed(2)}
-                        </td>
-                    </tr>`;
-            });
-
-            const grossTotal = Number(inv.displayGross);
-            const cashPaid = Number(inv.computedCashPaid || 0);
-            const walletPaid = Number(inv.computedWalletPaid || 0);
-            const netPending = Number(inv.displayNetPending);
-            const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : netPending);
-
-            let paymentDesc = "آجل الحساب";
-            if (cashPaid > 0 && walletPaid > 0) paymentDesc = "مشترك (كاش + محفظة)";
-            else if (cashPaid > 0) paymentDesc = "نقدي كاش";
-            else if (walletPaid > 0) paymentDesc = "محفظة إلكترونية";
-
-            hiddenDiv.innerHTML = `
-                <div class="term-header">
-                    <p class="term-title">شركة الزيادى للتجارة</p>
-                    <small style="color:#222; font-size:13px; font-weight:700;">فاتورة مشتريات </small>
-                </div>
-                <div style="font-size: 12px; margin-bottom: 10px; border-bottom:1px dashed #000; padding-bottom:8px; line-height: 1.5;">
-                    <div><b>نوع الحساب:</b> ${inv.isReturn ? 'مرتجع شراء ↩️' : 'فاتورة شراء 🧾'}</div>
-                    <div><b>المورد:</b> ${supName}</div>
-                    <div><b>التاريخ:</b> ${formattedDate}</div>
-                    <div><b>طريقة السداد:</b> ${paymentDesc}</div>
-                </div>
-                <table class="term-table">
-                    <thead><tr><th>الصنف</th><th style="text-align:left;">الإجمالي</th></tr></thead>
-                    <tbody>${rowsHtml}</tbody>
-                </table>
-                <div class="term-footer">
-                    <div class="term-row" style="color:#444;">
-                        <span>الحساب السابق:</span>
-                        <span dir="ltr">${historicalPrevBalance.toFixed(2)} EGP</span>
-                    </div>
-                    <div class="term-row">
-                        <span>إجمالي الفاتورة:</span>
-                        <span dir="ltr">${inv.isReturn ? '-' : ''}${grossTotal.toFixed(2)} EGP</span>
-                    </div>
-                    ${cashPaid > 0 ? `<div class="term-row" style="color:#2d6a4f;"><span>المدفوع نقداً:</span><span dir="ltr">-${cashPaid.toFixed(2)} EGP</span></div>` : ''}
-                    ${walletPaid > 0 ? `<div class="term-row" style="color:#0077b6;"><span>المدفوع بالمحفظة:</span><span dir="ltr">-${walletPaid.toFixed(2)} EGP</span></div>` : ''}
-                    <div class="term-row" style="border-top:1px dashed #000; padding-top:6px; color:#555;">
-                        <span>صافي الآجل:</span>
-                        <span dir="ltr">${inv.isReturn ? '-' : ''}${netPending.toFixed(2)} EGP</span>
-                    </div>
-                    <div class="term-row" style="border-top:2px dashed #000; padding-top:8px; font-size:15px; color:#0b5e3d;">
-                        <span>صافى المتبقي :</span>
-                        <span dir="ltr">${finalSupplierTotal.toFixed(2)} EGP</span>
-                    </div>
-                </div>
-                <div style="text-align:center; margin-top:20px; font-size:11px; color:#333; border-top:1px dashed #000; padding-top:8px; font-weight:700;">
-                    إدارة وتصميم / أحمد محمود الزيادى
-                </div>`;
+            progressAlert.innerText = `جاري تجهيز الفاتورة (${i + 1} من ${allInvoices.length}) - ${supNameForProgress}`;
 
             try {
-                const canvas = await html2canvas(hiddenDiv, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-                const imgData = canvas.toDataURL("image/png").split(',')[1];
-                
+                const { blob, supName } = await renderInvoiceToBlob(inv);
+                if (!blob) throw new Error("blob is empty");
+
                 const sanitizedSupName = supName.replace(/[/\\?%*:|"<>. ]/g, '_');
                 const fileName = `فاتورة_${sanitizedSupName}_${inv.id}.png`;
                 
-                zip.file(fileName, imgData, {base64: true});
+                zip.file(fileName, blob);
             } catch (err) {
                 console.error(`فشل توليد صورة الفاتورة رقم ${inv.id}: `, err);
             }
@@ -1122,12 +1147,7 @@
         
         try {
             const content = await zip.generateAsync({type:"blob"});
-            const url = URL.createObjectURL(content);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `كافة_صور_فواتير_المشتريات.zip`;
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadImageFallback(content, `كافة_صور_فواتير_المشتريات.zip`);
         } catch (e) {
             alert("حدث خطأ أثناء تجميع وضغط الصور: " + e.message);
         } finally {
