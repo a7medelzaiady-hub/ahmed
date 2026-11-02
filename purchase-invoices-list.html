@@ -404,12 +404,13 @@
         }
 
         #thermalInvoiceHidden {
-            position: absolute; left: -9999px; top: -9999px;
-            width: 400px; background: #ffffff; color: #000000; padding: 25px;
+            position: fixed; left: -9999px; top: 0;
+            width: 380px; background: #ffffff; color: #000000; padding: 20px;
             box-sizing: border-box; direction: rtl; font-family: 'Cairo', sans-serif;
+            z-index: -1;
         }
         .term-header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 12px; margin-bottom: 12px; }
-        .term-title { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: normal !important; line-height: 1.4; }
+        .term-title { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: normal !important; line-height: 1.4; }
         .term-table { width: 100%; font-size: 13px; margin-top: 12px; border-collapse: collapse; }
         .term-table th { border-bottom: 1px dashed #000; padding: 6px 0; text-align: right; font-weight: bold; }
         .term-table td { padding: 8px 0; border-bottom: 1px dotted #ccc; vertical-align: middle; }
@@ -516,7 +517,7 @@
 
     function formatEnglishDate(dateStr) {
         if (!dateStr) return 'No Date';
-        return dateStr.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+        return String(dateStr).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
     }
 
     function generateCurrencyHTML(value, forceColor = '') {
@@ -576,7 +577,6 @@
                 allInvoices.push(data);
             });
 
-            // تجميع السندات المستقلة للربط في الإحصائيات الشاملة
             let totalVoucherPayments = 0;
             globalVouchers.forEach(v => {
                 if (v.type === "صرف" || v.actionType === "سداد مورد" || String(v.details || '').includes("سداد")) {
@@ -607,7 +607,6 @@
         }
     };
 
-    // دالة دقيقة ومحدثة لحساب الحساب السابق للمورد قبل هذه الفاتورة تحديداً (مع استثناء الفاتورة الحالية)
     function calculateHistoricalPreviousBalance(supId, currentInvoiceId, currentTimestamp, currentDate) {
         const supplier = suppliersBase[supId];
         if (!supplier) return 0;
@@ -617,7 +616,6 @@
         
         const targetTime = currentTimestamp?.seconds || (currentDate ? new Date(currentDate).getTime() / 1000 : Infinity);
 
-        // 1. حساب جميع السندات المسجلة المنسوبة للمورد قبل زمن هذه الفاتورة
         globalVouchers.forEach(v => {
             if ((v.partyId === supId || v.supplierId === supId) && !v.invoiceId) {
                 const vTime = v.timestamp?.seconds || (v.date ? new Date(v.date).getTime() / 1000 : 0);
@@ -633,7 +631,6 @@
             }
         });
 
-        // 2. حساب الفواتير السابقة لنفس المورد (باستثناء الفاتورة الحالية)
         allInvoices.forEach(inv => {
             if (inv.supplierId === supId && inv.id !== currentInvoiceId) {
                 const invTime = inv.timestamp?.seconds || (inv.date ? new Date(inv.date).getTime() / 1000 : 0);
@@ -732,7 +729,7 @@
                 </div>
 
                 <div class="inv-actions-footer">
-                    <button class="footer-action-btn btn-share-mobile" onclick="shareAsThermalImageDirectly('${inv.id}')" title="مشاركة">
+                    <button class="footer-action-btn btn-share-mobile" onclick="window.shareAsThermalImageDirectly('${inv.id}')" title="مشاركة">
                         <i class="fas fa-share-alt"></i> مشاركة
                     </button>
                     <button class="footer-action-btn btn-items-mobile" onclick="toggleInvoiceDetails('${inv.id}')" title="الأصناف">
@@ -777,8 +774,139 @@
     }
 
     // ============================================================
-    // حذف فاتورة واحدة (تم إصلاح ترتيب القراءة/الكتابة داخل الترانزاكشن)
+    // دالة المشاركة كصورة الحرارية بمرونة عالية مع أجهزة المحمول
     // ============================================================
+    window.shareAsThermalImageDirectly = async function(invoiceId) {
+        const inv = allInvoices.find(i => i.id === invoiceId);
+        if (!inv) {
+            alert("لم يتم العثور على بيانات الفاتورة المراد مشاركتها.");
+            return;
+        }
+
+        const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
+        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp, inv.date);
+        const items = inv.items || [];
+        const hiddenDiv = document.getElementById('thermalInvoiceHidden');
+        const formattedDate = formatEnglishDate(inv.date);
+
+        let rowsHtml = "";
+        items.forEach(item => {
+            const isItemReturn = item.returnQty > 0 || inv.isReturn;
+            const qty = item.qty || item.returnQty || 0;
+            const unit = item.unitName || 'كرتونة';
+            const price = Number(item.buy || 0);
+            const subtotal = qty * price;
+            rowsHtml += `
+                <tr>
+                    <td style="padding: 6px 0; font-size:13px; color:#000;">
+                        <b>${item.name}</b><br>
+                        <span style="color:#555; font-size:11px;">(${isItemReturn ? '-' : ''}${qty} ${unit} × ${price.toFixed(2)})</span>
+                    </td>
+                    <td style="text-align: left; padding: 6px 0; font-family:'Montserrat', sans-serif; font-weight:800; font-size:13px;" dir="ltr">
+                        ${isItemReturn ? '-' : ''}${subtotal.toFixed(2)}
+                    </td>
+                </tr>`;
+        });
+
+        const grossTotal = Number(inv.displayGross);
+        const cashPaid = Number(inv.computedCashPaid || 0);
+        const walletPaid = Number(inv.computedWalletPaid || 0);
+        const netPending = Number(inv.displayNetPending);
+        const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : netPending);
+
+        let paymentDesc = "آجل الحساب";
+        if (cashPaid > 0 && walletPaid > 0) paymentDesc = "مشترك (كاش + محفظة)";
+        else if (cashPaid > 0) paymentDesc = "نقدي كاش";
+        else if (walletPaid > 0) paymentDesc = "محفظة إلكترونية";
+
+        hiddenDiv.innerHTML = `
+            <div class="term-header">
+                <p class="term-title">شركة الزيادى للتجارة</p>
+                <small style="color:#222; font-size:13px; font-weight:700;">فاتورة مشتريات </small>
+            </div>
+            <div style="font-size: 12px; margin-bottom: 10px; border-bottom:1px dashed #000; padding-bottom:8px; line-height: 1.5;">
+                <div><b>نوع الحساب:</b> ${inv.isReturn ? 'مرتجع شراء ↩️' : 'فاتورة شراء 🧾'}</div>
+                <div><b>المورد:</b> ${supName}</div>
+                <div><b>التاريخ:</b> ${formattedDate}</div>
+                <div><b>طريقة السداد:</b> ${paymentDesc}</div>
+            </div>
+            <table class="term-table">
+                <thead><tr><th>الصنف</th><th style="text-align:left;">الإجمالي</th></tr></thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+            <div class="term-footer">
+                <div class="term-row" style="color:#444;">
+                    <span>الحساب السابق:</span>
+                    <span dir="ltr">${historicalPrevBalance.toFixed(2)} EGP</span>
+                </div>
+                <div class="term-row">
+                    <span>إجمالي الفاتورة:</span>
+                    <span dir="ltr">${inv.isReturn ? '-' : ''}${grossTotal.toFixed(2)} EGP</span>
+                </div>
+                ${cashPaid > 0 ? `<div class="term-row" style="color:#2d6a4f;"><span>المدفوع نقداً:</span><span dir="ltr">-${cashPaid.toFixed(2)} EGP</span></div>` : ''}
+                ${walletPaid > 0 ? `<div class="term-row" style="color:#0077b6;"><span>المدفوع بالمحفظة:</span><span dir="ltr">-${walletPaid.toFixed(2)} EGP</span></div>` : ''}
+                <div class="term-row" style="border-top:1px dashed #000; padding-top:6px; color:#555;">
+                    <span>صافي الآجل:</span>
+                    <span dir="ltr">${inv.isReturn ? '-' : ''}${netPending.toFixed(2)} EGP</span>
+                </div>
+                <div class="term-row" style="border-top:2px dashed #000; padding-top:8px; font-size:15px; color:#0b5e3d;">
+                    <span>صافى المتبقي :</span>
+                    <span dir="ltr">${finalSupplierTotal.toFixed(2)} EGP</span>
+                </div>
+            </div>
+            <div style="text-align:center; margin-top:20px; font-size:11px; color:#333; border-top:1px dashed #000; padding-top:8px; font-weight:700;">
+                إدارة وتصميم / أحمد محمود الزيادى
+            </div>`;
+
+        try {
+            const canvas = await html2canvas(hiddenDiv, { 
+                scale: 2, 
+                backgroundColor: "#ffffff", 
+                useCORS: true,
+                logging: false
+            });
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    alert("فشل إنشاء صورة الفاتورة");
+                    return;
+                }
+                const fileName = `فاتورة_${supName.replace(/\s+/g, '_')}_${inv.id}.png`;
+                const file = new File([blob], fileName, { type: "image/png" });
+
+                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: `فاتورة شركة الزيادى - ${supName}`,
+                            text: `تفاصيل فاتورة ${supName}`
+                        });
+                    } catch (err) {
+                        if (err.name !== 'AbortError') {
+                            downloadImageFallback(blob, fileName);
+                        }
+                    }
+                } else {
+                    downloadImageFallback(blob, fileName);
+                }
+            }, "image/png");
+        } catch (error) {
+            console.error("HTML2Canvas Error:", error);
+            alert("حدث خطأ أثناء توليد الصورة: " + error.message);
+        }
+    };
+
+    function downloadImageFallback(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     window.deleteSingleInvoice = async function(invoiceId) {
         if (!confirm('هل تريد حذف هذه الفاتورة؟ سيتم تعديل كميات الأصناف في المخزن وتحديث السندات المرتبطة تلقائياً.')) return;
         
@@ -789,7 +917,6 @@
         }
 
         try {
-            // 0. جلب السندات المرتبطة قبل الترانزاكشن (getDocs لا تعمل داخل الترانزاكشن)
             const voucherSnaps = await getDocs(
                 query(collection(db, "transactions"), where("invoiceId", "==", invoiceId))
             );
@@ -798,8 +925,7 @@
             const isReturnInvoice = inv.isReturn || inv.type === "مرتجع شراء" || inv.type === "مرتجع";
 
             await runTransaction(db, async (transaction) => {
-                // ===== مرحلة القراءات: كل المنتجات الفريدة =====
-                const productCache = {}; // stockId -> { ref, snap }
+                const productCache = {};
                 for (const item of items) {
                     const stockId = item.stockId || item.id;
                     if (!stockId || productCache[stockId]) continue;
@@ -808,8 +934,7 @@
                     productCache[stockId] = { ref, snap };
                 }
 
-                // ===== حساب التغيير المجمّع لكل صنف (يدعم تكرار الصنف في الفاتورة) =====
-                const deltas = {}; // stockId -> مجموع التعديل بالقطع
+                const deltas = {};
                 for (const item of items) {
                     const stockId = item.stockId || item.id;
                     if (!stockId) continue;
@@ -827,7 +952,6 @@
                     deltas[stockId] = (deltas[stockId] || 0) + modifier;
                 }
 
-                // ===== مرحلة الكتابات =====
                 for (const stockId in deltas) {
                     const { ref, snap } = productCache[stockId];
                     const productData = snap.data();
@@ -889,105 +1013,6 @@
         document.getElementById('totalPending').innerHTML  = generateCurrencyHTML(finalPending);
     }
 
-    window.shareAsThermalImageDirectly = async (invoiceId) => {
-        const inv = allInvoices.find(i => i.id === invoiceId);
-        if (!inv) return;
-
-        const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp, inv.date);
-        const items = inv.items || [];
-        const hiddenDiv = document.getElementById('thermalInvoiceHidden');
-        const formattedDate = formatEnglishDate(inv.date);
-
-        let rowsHtml = "";
-        items.forEach(item => {
-            const isItemReturn = item.returnQty > 0 || inv.isReturn;
-            const qty = item.qty || item.returnQty || 0;
-            const unit = item.unitName || 'كرتونة';
-            const price = item.buy || 0;
-            const subtotal = qty * price;
-            rowsHtml += `
-                <tr>
-                    <td style="padding: 8px 0; font-size:14px; color:#000;">
-                        <b>${item.name}</b><br>
-                        <span style="color:#555; font-size:12px;">(${isItemReturn ? '-' : ''}${qty} ${unit} × ${price.toFixed(2)} EGP)</span>
-                    </td>
-                    <td style="text-align: left; padding: 8px 0; font-family:'Montserrat', sans-serif; font-weight:800; font-size:14px;" dir="ltr">
-                        ${isItemReturn ? '-' : ''}${subtotal.toFixed(2)}
-                    </td>
-                </tr>`;
-        });
-
-        const grossTotal = Number(inv.displayGross);
-        const cashPaid = Number(inv.computedCashPaid || 0);
-        const walletPaid = Number(inv.computedWalletPaid || 0);
-        const netPending = Number(inv.displayNetPending);
-        const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : netPending);
-
-        let paymentDesc = "آجل الحساب";
-        if (cashPaid > 0 && walletPaid > 0) paymentDesc = "مشترك (كاش + محفظة)";
-        else if (cashPaid > 0) paymentDesc = "نقدي كاش";
-        else if (walletPaid > 0) paymentDesc = "محفظة إلكترونية";
-
-        hiddenDiv.innerHTML = `
-            <div class="term-header">
-                <p class="term-title">شركة الزيادى للتجارة</p>
-                <small style="color:#222; font-size:14px; font-weight:700;">فاتورة مشتريات </small>
-            </div>
-            <div style="font-size: 13px; margin-bottom: 12px; border-bottom:1px dashed #000; padding-bottom:10px; line-height: 1.6;">
-                <div><b>نوع الحساب:</b> ${inv.isReturn ? 'مرتجع شراء ↩️' : 'فاتورة شراء 🧾'}</div>
-                <div><b>المورد:</b> ${supName}</div>
-                <div><b>التاريخ:</b> ${formattedDate}</div>
-                <div><b>طريقة السداد:</b> ${paymentDesc}</div>
-            </div>
-            <table class="term-table">
-                <thead><tr><th>الصنف</th><th style="text-align:left;">الإجمالي</th></tr></thead>
-                <tbody>${rowsHtml}</tbody>
-            </table>
-            <div class="term-footer">
-                <div class="term-row" style="color:#444;">
-                    <span>الحساب السابق:</span>
-                    <span dir="ltr">${historicalPrevBalance.toFixed(2)} EGP</span>
-                </div>
-                <div class="term-row">
-                    <span>إجمالي الفاتورة:</span>
-                    <span dir="ltr">${inv.isReturn ? '-' : ''}${grossTotal.toFixed(2)} EGP</span>
-                </div>
-                ${cashPaid > 0 ? `<div class="term-row" style="color:#2d6a4f;"><span>المدفوع نقداً:</span><span dir="ltr">-${cashPaid.toFixed(2)} EGP</span></div>` : ''}
-                ${walletPaid > 0 ? `<div class="term-row" style="color:#0077b6;"><span>المدفوع بالمحفظة:</span><span dir="ltr">-${walletPaid.toFixed(2)} EGP</span></div>` : ''}
-                <div class="term-row" style="border-top:1px dashed #000; padding-top:6px; color:#555;">
-                    <span>صافي الآجل:</span>
-                    <span dir="ltr">${inv.isReturn ? '-' : ''}${netPending.toFixed(2)} EGP</span>
-                </div>
-                <div class="term-row" style="border-top:2px dashed #000; padding-top:8px; font-size:17px; color:#0b5e3d;">
-                    <span>صافى المتبقي :</span>
-                    <span dir="ltr">${finalSupplierTotal.toFixed(2)} EGP</span>
-                </div>
-            </div>
-            <div style="text-align:center; margin-top:25px; font-size:12px; color:#333; border-top:1px dashed #000; padding-top:10px; font-weight:700;">
-                إدارة وتصميم / أحمد محمود الزيادى
-            </div>`;
-
-        try {
-            const canvas = await html2canvas(hiddenDiv, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-            canvas.toBlob(async (blob) => {
-                if (!blob) return alert("فشل تصدير الصورة");
-                const file = new File([blob], `Invoice_${invoiceId}.png`, { type: "image/png" });
-                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({ files: [file], title: `فاتورة شركة الزيادى للمورد ${supName}` });
-                } else {
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `فاتورة_${supName}.png`;
-                    a.click();
-                }
-            }, "image/png");
-        } catch (error) {
-            alert("خطأ أثناء توليد الفاتورة: " + error.message);
-        }
-    };
-
     window.exportAllInvoicesAsImages = async function() {
         if (allInvoices.length === 0) return alert("لا تتوفر فواتير لتصديرها كصور");
         
@@ -1016,15 +1041,15 @@
                 const isItemReturn = item.returnQty > 0 || inv.isReturn;
                 const qty = item.qty || item.returnQty || 0;
                 const unit = item.unitName || 'كرتونة';
-                const price = item.buy || 0;
+                const price = Number(item.buy || 0);
                 const subtotal = qty * price;
                 rowsHtml += `
                     <tr>
-                        <td style="padding: 8px 0; font-size:14px; color:#000;">
+                        <td style="padding: 6px 0; font-size:13px; color:#000;">
                             <b>${item.name}</b><br>
-                            <span style="color:#555; font-size:12px;">(${isItemReturn ? '-' : ''}${qty} ${unit} × ${price.toFixed(2)} EGP)</span>
+                            <span style="color:#555; font-size:11px;">(${isItemReturn ? '-' : ''}${qty} ${unit} × ${price.toFixed(2)})</span>
                         </td>
-                        <td style="text-align: left; padding: 8px 0; font-family:'Montserrat', sans-serif; font-weight:800; font-size:14px;" dir="ltr">
+                        <td style="text-align: left; padding: 6px 0; font-family:'Montserrat', sans-serif; font-weight:800; font-size:13px;" dir="ltr">
                             ${isItemReturn ? '-' : ''}${subtotal.toFixed(2)}
                         </td>
                     </tr>`;
@@ -1044,9 +1069,9 @@
             hiddenDiv.innerHTML = `
                 <div class="term-header">
                     <p class="term-title">شركة الزيادى للتجارة</p>
-                    <small style="color:#222; font-size:14px; font-weight:700;">فاتورة مشتريات </small>
+                    <small style="color:#222; font-size:13px; font-weight:700;">فاتورة مشتريات </small>
                 </div>
-                <div style="font-size: 13px; margin-bottom: 12px; border-bottom:1px dashed #000; padding-bottom:10px; line-height: 1.6;">
+                <div style="font-size: 12px; margin-bottom: 10px; border-bottom:1px dashed #000; padding-bottom:8px; line-height: 1.5;">
                     <div><b>نوع الحساب:</b> ${inv.isReturn ? 'مرتجع شراء ↩️' : 'فاتورة شراء 🧾'}</div>
                     <div><b>المورد:</b> ${supName}</div>
                     <div><b>التاريخ:</b> ${formattedDate}</div>
@@ -1071,17 +1096,17 @@
                         <span>صافي الآجل:</span>
                         <span dir="ltr">${inv.isReturn ? '-' : ''}${netPending.toFixed(2)} EGP</span>
                     </div>
-                    <div class="term-row" style="border-top:2px dashed #000; padding-top:8px; font-size:17px; color:#0b5e3d;">
+                    <div class="term-row" style="border-top:2px dashed #000; padding-top:8px; font-size:15px; color:#0b5e3d;">
                         <span>صافى المتبقي :</span>
                         <span dir="ltr">${finalSupplierTotal.toFixed(2)} EGP</span>
                     </div>
                 </div>
-                <div style="text-align:center; margin-top:25px; font-size:12px; color:#333; border-top:1px dashed #000; padding-top:10px; font-weight:700;">
+                <div style="text-align:center; margin-top:20px; font-size:11px; color:#333; border-top:1px dashed #000; padding-top:8px; font-weight:700;">
                     إدارة وتصميم / أحمد محمود الزيادى
                 </div>`;
 
             try {
-                const canvas = await html2canvas(hiddenDiv, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+                const canvas = await html2canvas(hiddenDiv, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
                 const imgData = canvas.toDataURL("image/png").split(',')[1];
                 
                 const sanitizedSupName = supName.replace(/[/\\?%*:|"<>. ]/g, '_');
@@ -1114,7 +1139,7 @@
         const term = document.getElementById('searchInput').value.toLowerCase();
         const filtered = allInvoices.filter(inv => {
             const name = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name.toLowerCase() : '';
-            return name.includes(term) || (inv.date && inv.date.includes(term));
+            return name.includes(term) || (inv.date && String(inv.date).includes(term));
         });
         renderInvoices(filtered);
     };
