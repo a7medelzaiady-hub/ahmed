@@ -259,23 +259,27 @@
                 <span class="stat-value" id="summaryWallet">0</span>
             </div>
             <div class="col-3 stat-item">
-                <span class="stat-label">أرباح الفترة</span>
+                <span class="stat-label">أرباح البضاعة</span>
                 <span class="stat-value text-warning" id="summaryGrossProfit">0</span>
             </div>
             <div class="col-3 stat-item">
-                <span class="stat-label" style="color: #f87171;">متبقي آجل بالشارع</span>
+                <span class="stat-label" style="color: #f87171;">متبقي بالشارع</span>
                 <span class="stat-value" style="color: #f87171;" id="summaryRemaining">0</span>
             </div>
         </div>
 
-        <div class="row align-items-center">
-            <div class="col-6 text-center border-end border-white border-opacity-25">
+        <div class="row align-items-center border-bottom border-white border-opacity-25 pb-2 mb-2">
+            <div class="col-4 text-center border-end border-white border-opacity-25">
                 <span class="stat-label">إجمالي التحصيلات</span>
                 <span class="stat-value text-white fs-6" id="summaryGrandTotal">0 ج.م</span>
             </div>
-            <div class="col-6 text-center">
-                <span class="stat-label" style="color: #ffeb3b;">العمولة المستحقة (<span id="summaryRate">0</span>%)</span>
+            <div class="col-4 text-center border-end border-white border-opacity-25">
+                <span class="stat-label" style="color: #ffeb3b;">عمولة المندوب (<span id="summaryRate">0</span>%)</span>
                 <span class="stat-value-highlight" id="summaryNetCommission">0 ج.م</span>
+            </div>
+            <div class="col-4 text-center">
+                <span class="stat-label" style="color: #4ade80;">صافي ربحك الفعلي</span>
+                <span class="stat-value text-success fw-bold fs-6" style="color: #4ade80 !important;" id="summaryNetProfit">0 ج.م</span>
             </div>
         </div>
 
@@ -300,9 +304,9 @@
                 <thead class="table-dark">
                     <tr>
                         <th>من - إلى</th>
-                        <th>أرباحك</th>
-                        <th>ديون العملاء</th>
-                        <th>العمولة المصروفة</th>
+                        <th>أرباح البضاعة</th>
+                        <th>صافي ربحك</th>
+                        <th>عمولة المندوب</th>
                         <th>تاريخ الصرف</th>
                     </tr>
                 </thead>
@@ -467,7 +471,7 @@
         }
     };
 
-    // احتساب العمولة والأرباح والمبالغ الآجلة بالشارع
+    // احتساب العمولة وأرباحك الصافية الحقيقية من الفواتير
     window.calculateCommissionReport = async () => {
         const selectedRep = document.getElementById("salesRepFilterSelect").value;
         const startStr = document.getElementById("startDateFilter").value;
@@ -482,7 +486,6 @@
         const summaryBox = document.getElementById("reportSummaryBox");
         summaryBox.style.display = 'block';
 
-        // 1. جلب وتحديد كافة العملاء المأسندين للمندوب وحساب ديونهم الإجمالية المتبقية
         const assignedCustomers = allCustomers.filter(c => (c.assignedTo || 'admin') === selectedRep);
         const assignedCustomerIds = assignedCustomers.map(c => c.id);
 
@@ -498,23 +501,24 @@
         if (custCount === 0) {
             document.getElementById("summaryCash").innerText = "0";
             document.getElementById("summaryWallet").innerText = "0";
-            document.getElementById("summaryGrossProfit").innerText = "0";
+            document.getElementById("summaryGrossProfit").innerText = "0 ج.م";
             document.getElementById("summaryRemaining").innerText = "0 ج.م";
             document.getElementById("summaryGrandTotal").innerText = "0 ج.م";
             document.getElementById("summaryRate").innerText = rate;
             document.getElementById("summaryNetCommission").innerText = "0 ج.م";
+            document.getElementById("summaryNetProfit").innerText = "0 ج.م";
             document.getElementById("profitEvaluationBox").innerHTML = "لا يوجد عملاء مأسندون للمندوب حالياً.";
             return;
         }
 
         let totalCash = 0;
         let totalWallet = 0;
-        let totalPeriodProfit = 0;
+        let totalRealNetProfit = 0;
 
         const startMs = startStr ? new Date(startStr).getTime() : 0;
         const endMs = endStr ? new Date(endStr + 'T23:59:59').getTime() : Date.now();
 
-        // 2. حساب تحصيلات وأرباح الفواتير للفترة
+        // 1. حساب تحصيلات وأرباح الفواتير الفعلية
         const invSnap = await getDocs(collection(db, "invoices"));
         invSnap.forEach(d => {
             const data = d.data();
@@ -524,21 +528,21 @@
                     totalCash += Number(data.cashAmount) || 0;
                     totalWallet += Number(data.walletAmount) || 0;
 
-                    if (data.profit !== undefined) {
-                        totalPeriodProfit += Number(data.profit) || 0;
-                    } else if (data.items && Array.isArray(data.items)) {
+                    if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(item => {
-                            const buyPrice = Number(item.buyPrice || item.costPrice) || 0;
-                            const sellPrice = Number(item.price) || 0;
+                            const sellPrice = Number(item.price || item.unitPrice) || 0;
+                            const buyPrice = Number(item.buyPrice || item.costPrice || item.purchasePrice) || 0;
                             const qty = Number(item.qty || item.quantity) || 1;
-                            totalPeriodProfit += (sellPrice - buyPrice) * qty;
+                            totalRealNetProfit += (sellPrice - buyPrice) * qty;
                         });
+                    } else if (data.netProfit !== undefined) {
+                        totalRealNetProfit += Number(data.netProfit) || 0;
                     }
                 }
             }
         });
 
-        // 3. حساب تحصيلات سندات القبض
+        // 2. حساب تحصيلات سندات القبض
         const transSnap = await getDocs(query(collection(db, "transactions"), where("type", "==", "قبض")));
         transSnap.forEach(d => {
             const tr = d.data();
@@ -555,40 +559,41 @@
 
         const grandTotalCollected = totalCash + totalWallet;
         const netCommission = (grandTotalCollected * rate) / 100;
+        const netProfitAfterCommission = totalRealNetProfit - netCommission;
 
         document.getElementById("summaryCash").innerText = totalCash.toLocaleString();
         document.getElementById("summaryWallet").innerText = totalWallet.toLocaleString();
-        document.getElementById("summaryGrossProfit").innerText = totalPeriodProfit.toLocaleString() + " ج.م";
+        document.getElementById("summaryGrossProfit").innerText = totalRealNetProfit.toLocaleString() + " ج.م";
         document.getElementById("summaryRemaining").innerText = totalRemainingDebt.toLocaleString() + " ج.م";
         document.getElementById("summaryGrandTotal").innerText = `${grandTotalCollected.toLocaleString()} ج.م`;
         document.getElementById("summaryRate").innerText = rate;
         document.getElementById("summaryNetCommission").innerText = `${netCommission.toLocaleString()} ج.م`;
+        document.getElementById("summaryNetProfit").innerText = `${netProfitAfterCommission.toLocaleString()} ج.م`;
 
-        // تقييم الربحية والديون بالشارع
         const evalBox = document.getElementById("profitEvaluationBox");
-        if (totalPeriodProfit > 0) {
-            const commissionToProfitRatio = ((netCommission / totalPeriodProfit) * 100).toFixed(1);
+        if (totalRealNetProfit > 0) {
+            const commissionToProfitRatio = ((netCommission / totalRealNetProfit) * 100).toFixed(1);
 
             let statusText = "";
             if (commissionToProfitRatio <= 15) {
                 evalBox.className = "profitability-badge profit-good";
-                statusText = `<b>النسبة ممتازة ومربحة جداً!</b> العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك.`;
+                statusText = `<b>صافي ربحك الفعلي للفترة: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> فقط من أرباحك (ممتازة).`;
             } else if (commissionToProfitRatio <= 25) {
                 evalBox.className = "profitability-badge profit-warning";
-                statusText = `<b>النسبة متوازنة.</b> العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك.`;
+                statusText = `<b>صافي ربحك الفعلي للفترة: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك (متوازنة).`;
             } else {
                 evalBox.className = "profitability-badge profit-bad";
-                statusText = `<b>النسبة مرتفعة!</b> العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك! يفضل تعديل النسبة.`;
+                statusText = `<b>تنبيه! صافي ربحك الفعلي: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك (مرتفعة التكلفة)!`;
             }
 
             if (totalRemainingDebt > 0) {
-                statusText += `<br><small class="text-danger fw-bold"><i class="fas fa-exclamation-circle me-1"></i> تنبيه: يوجد مبالغ متبقية آتره بالشارع لعملائه قدرها (${totalRemainingDebt.toLocaleString()} ج.م)</small>`;
+                statusText += `<br><small class="text-danger fw-bold"><i class="fas fa-exclamation-circle me-1"></i> متبقي آجل بالشارع لعملائه: (${totalRemainingDebt.toLocaleString()} ج.م)</small>`;
             }
 
             evalBox.innerHTML = statusText;
         } else {
             evalBox.className = "profitability-badge profit-warning";
-            evalBox.innerHTML = `<i class="fas fa-info-circle me-1"></i> لا توجد أرباح مسجلة بالفترة. المبالغ الآجلة بالشارع لعملائه: (${totalRemainingDebt.toLocaleString()} ج.م).`;
+            evalBox.innerHTML = `<i class="fas fa-info-circle me-1"></i> يرجى التأكد من توفر أسعار الشراء للأصناف لحساب الأرباح الصافية.`;
         }
 
         currentCalculatedReportData = {
@@ -599,7 +604,8 @@
             totalCash,
             totalWallet,
             grandTotalCollected,
-            totalPeriodProfit,
+            totalRealNetProfit,
+            netProfitAfterCommission,
             totalRemainingDebt,
             commissionRate: rate,
             netCommissionPaid: netCommission
@@ -656,9 +662,9 @@
                 return `
                     <tr>
                         <td>${data.startDate} إلى ${data.endDate}</td>
-                        <td class="fw-bold text-primary">${(data.totalPeriodProfit || 0).toLocaleString()} ج.م</td>
-                        <td class="fw-bold text-danger">${(data.totalRemainingDebt || 0).toLocaleString()} ج.م</td>
-                        <td class="fw-bold text-success">${data.netCommissionPaid.toLocaleString()} ج.م</td>
+                        <td class="fw-bold text-warning">${(data.totalRealNetProfit || 0).toLocaleString()} ج.م</td>
+                        <td class="fw-bold text-success">${(data.netProfitAfterCommission || 0).toLocaleString()} ج.م</td>
+                        <td class="fw-bold text-primary">${data.netCommissionPaid.toLocaleString()} ج.م</td>
                         <td>${data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString('ar-EG') : '-'}</td>
                     </tr>
                 `;
