@@ -51,7 +51,7 @@
                 </thead>
                 <tbody id="customersTableBody">
                     <tr>
-                        <td colspan="4" class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> جاري تحميل قائمة العملاء...</td>
+                        <td colspan="4" class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> جاري تحميل قائمة العملاء والمندوبين...</td>
                     </tr>
                 </tbody>
             </table>
@@ -63,8 +63,10 @@
         <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="fas fa-calculator me-1"></i> احتساب عمولة المندوب بالفترة</h6>
         <div class="row g-2 mb-3">
             <div class="col-md-3 col-6">
-                <label class="form-label small fw-bold">اسم/يوزر المندوب:</label>
-                <input type="text" id="salesRepFilter" class="form-control form-control-sm text-center fw-bold" placeholder="اكتب يوزر المندوب">
+                <label class="form-label small fw-bold">اختر المندوب:</label>
+                <select id="salesRepFilter" class="form-select form-select-sm text-center fw-bold">
+                    <option value="">-- اختر المندوب --</option>
+                </select>
             </div>
             <div class="col-md-3 col-6">
                 <label class="form-label small fw-bold">من تاريخ:</label>
@@ -108,7 +110,7 @@
                 </thead>
                 <tbody id="commissionTableBody">
                     <tr>
-                        <td colspan="8" class="text-muted">ادخل اسم المندوب واضغط استخراج التقرير.</td>
+                        <td colspan="8" class="text-muted">اختر اسم المندوب واضغط استخراج التقرير.</td>
                     </tr>
                 </tbody>
             </table>
@@ -134,12 +136,24 @@
     const db = initializeFirestore(app, {});
 
     let allCustomers = [];
+    let salespeopleList = new Set(["admin"]);
 
     async function loadCustomersTable() {
         const tbody = document.getElementById("customersTableBody");
         try {
             const snap = await getDocs(collection(db, "customers"));
-            allCustomers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            allCustomers = snap.docs.map(d => {
+                const data = d.data();
+                if (data.assignedTo && data.assignedTo.trim() !== "") {
+                    salespeopleList.add(data.assignedTo.trim());
+                }
+                if (data.createdBy && data.createdBy.trim() !== "") {
+                    salespeopleList.add(data.createdBy.trim());
+                }
+                return { id: d.id, ...data };
+            });
+
+            populateSalespeopleDropdown();
             renderCustomersTable(allCustomers);
         } catch (e) {
             console.error(e);
@@ -147,6 +161,17 @@
         }
     }
 
+    // تغذية القائمة المنسدلة للمندوبين
+    function populateSalespeopleDropdown() {
+        const filterSelect = document.getElementById("salesRepFilter");
+        let optionsHtml = '<option value="">-- اختر المندوب --</option>';
+        salespeopleList.forEach(sp => {
+            optionsHtml += `<option value="${sp}">${sp}</option>`;
+        });
+        filterSelect.innerHTML = optionsHtml;
+    }
+
+    // عرض جدول العملاء بقوائم منسدلة لكل عميل
     function renderCustomersTable(list) {
         const tbody = document.getElementById("customersTableBody");
         if (list.length === 0) {
@@ -154,21 +179,50 @@
             return;
         }
 
-        tbody.innerHTML = list.map((c, index) => `
-            <tr>
-                <td class="fw-bold">${index + 1}</td>
-                <td style="text-align: right; padding-right: 12px;" class="fw-bold">${c.name}</td>
-                <td>
-                    <input type="text" id="salesInput_${c.id}" class="form-control form-control-sm text-center fw-bold" value="${c.assignedTo || 'admin'}" placeholder="اسم المندوب">
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-success fw-bold px-3 py-1" onclick="updateCustomerSalesperson('${c.id}')">
-                        <i class="fas fa-save"></i> حفظ
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        const salespeopleArray = Array.from(salespeopleList);
+
+        tbody.innerHTML = list.map((c, index) => {
+            const currentSalesperson = c.assignedTo || 'admin';
+            
+            // تجهيز خيارات القائمة المنسدلة للعميل
+            let selectOptionsHtml = salespeopleArray.map(sp => {
+                const selected = (sp === currentSalesperson) ? 'selected' : '';
+                return `<option value="${sp}" ${selected}>${sp}</option>`;
+            }).join('');
+
+            // خيار إضافي للمندوب الجديد إذا لم يكن بالقائمة
+            selectOptionsHtml += `<option value="__NEW__">+ إضافة مندوب جديد...</option>`;
+
+            return `
+                <tr>
+                    <td class="fw-bold">${index + 1}</td>
+                    <td style="text-align: right; padding-right: 12px;" class="fw-bold">${c.name}</td>
+                    <td>
+                        <select id="salesSelect_${c.id}" class="form-select form-select-sm text-center fw-bold" onchange="handleSalespersonChange(this, '${c.id}')">
+                            ${selectOptionsHtml}
+                        </select>
+                        <input type="text" id="customSalesInput_${c.id}" class="form-control form-control-sm text-center mt-1 d-none" placeholder="اكتب اسم المندوب الجديد">
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-success fw-bold px-3 py-1" onclick="updateCustomerSalesperson('${c.id}')">
+                            <i class="fas fa-save"></i> حفظ
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
     }
+
+    // معالجة اختيار مندوب جديد يدوي
+    window.handleSalespersonChange = (selectElem, custId) => {
+        const customInput = document.getElementById(`customSalesInput_${custId}`);
+        if (selectElem.value === "__NEW__") {
+            customInput.classList.remove("d-none");
+            customInput.focus();
+        } else {
+            customInput.classList.add("d-none");
+        }
+    };
 
     window.filterCustomersTable = () => {
         const term = document.getElementById("searchCustomerInput").value.toLowerCase().trim();
@@ -176,9 +230,16 @@
         renderCustomersTable(filtered);
     };
 
+    // حفظ وتحديث المندوب
     window.updateCustomerSalesperson = async (custId) => {
-        const input = document.getElementById(`salesInput_${custId}`);
-        const newSalesperson = input.value.trim() || "admin";
+        const selectElem = document.getElementById(`salesSelect_${custId}`);
+        const customInput = document.getElementById(`customSalesInput_${custId}`);
+        
+        let newSalesperson = selectElem.value;
+        if (newSalesperson === "__NEW__") {
+            newSalesperson = customInput.value.trim();
+            if (!newSalesperson) return alert("يرجى كتابة اسم المندوب الجديد أولاً.");
+        }
 
         try {
             const custRef = doc(db, "customers", custId);
@@ -188,9 +249,14 @@
                 assignedAt: serverTimestamp()
             });
 
+            // تحديث القائمة العامة وقوائم الاختيار
+            salespeopleList.add(newSalesperson);
+            populateSalespeopleDropdown();
+
             const idx = allCustomers.findIndex(c => c.id === custId);
             if (idx !== -1) allCustomers[idx].assignedTo = newSalesperson;
 
+            renderCustomersTable(allCustomers);
             alert(`تم تغيير المندوب للعميل بنجاح إلى: (${newSalesperson})`);
         } catch (e) {
             console.error(e);
@@ -198,14 +264,14 @@
         }
     };
 
-    // الدالة الحسابية المحدثة لإظهار النتيجة بالجدول السفلـي
+    // استخراج تقرير العمولة للمندوب المحدد من القائمة المنسدلة
     window.calculateCommissionReport = async () => {
         const salesRep = document.getElementById("salesRepFilter").value.trim();
         const startStr = document.getElementById("startDateFilter").value;
         const endStr = document.getElementById("endDateFilter").value;
         const rate = parseFloat(document.getElementById("commissionRateInput").value) || 0;
 
-        if (!salesRep) return alert("يرجى كتابة اسم المندوب أولاً.");
+        if (!salesRep) return alert("يرجى اختيار اسم المندوب أولاً.");
 
         const tbody = document.getElementById("commissionTableBody");
         tbody.innerHTML = `<tr><td colspan="8" class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> جاري استخراج وتحليل تحصيلات المندوب...</td></tr>`;
@@ -227,7 +293,6 @@
         const startMs = startStr ? new Date(startStr).getTime() : 0;
         const endMs = endStr ? new Date(endStr + 'T23:59:59').getTime() : Date.now();
 
-        // 1. تجميع التحصيلات المباشرة في الفواتير
         const invSnap = await getDocs(collection(db, "invoices"));
         invSnap.forEach(d => {
             const data = d.data();
@@ -241,7 +306,6 @@
             }
         });
 
-        // 2. تجميع التحصيلات في سندات القبض
         const transSnap = await getDocs(query(collection(db, "transactions"), where("type", "==", "قبض")));
         transSnap.forEach(d => {
             const tr = d.data();
@@ -260,7 +324,6 @@
         const grandTotalCollected = totalCash + totalWallet + totalBank;
         const netCommission = (grandTotalCollected * rate) / 100;
 
-        // طباعة النتيجة في الجدول
         tbody.innerHTML = `
             <tr>
                 <td class="fw-bold">${salesRep}</td>
