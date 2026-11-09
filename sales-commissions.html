@@ -238,7 +238,7 @@
         </div>
 
         <button class="btn-calc-report" onclick="calculateCommissionReport()">
-            <i class="fas fa-chart-line me-1"></i> احتساب المبيعات والديون والعمولة
+            <i class="fas fa-chart-line me-1"></i> احتساب المبيعات وأرباح الفواتير والعمولة
         </button>
     </div>
 
@@ -278,7 +278,7 @@
                 <span class="stat-value-highlight" id="summaryNetCommission">0 ج.م</span>
             </div>
             <div class="col-4 text-center">
-                <span class="stat-label" style="color: #4ade80;">صافي ربحك الفعلي</span>
+                <span class="stat-label" style="color: #4ade80;">صافي مكسبك الفعلي</span>
                 <span class="stat-value text-success fw-bold fs-6" style="color: #4ade80 !important;" id="summaryNetProfit">0 ج.م</span>
             </div>
         </div>
@@ -305,7 +305,7 @@
                     <tr>
                         <th>من - إلى</th>
                         <th>أرباح البضاعة</th>
-                        <th>صافي ربحك</th>
+                        <th>صافي مكسبك</th>
                         <th>عمولة المندوب</th>
                         <th>تاريخ الصرف</th>
                     </tr>
@@ -337,12 +337,34 @@
 
     let allCustomers = [];
     let systemUsersSet = new Set(["admin"]);
+    let factorMap = {};
+    let currentBuyMap = {};
     let currentCalculatedReportData = null;
 
     const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "admin";
 
+    // 1. تحميل قاعدة بيانات الأصناء وأسعار التكلفة
+    async function loadInventoryData() {
+        try {
+            const itemsSnap = await getDocs(collection(db, "inventory"));
+            itemsSnap.forEach(doc => {
+                const itm = doc.data();
+                if (!itm.name) return;
+                const name = itm.name.trim();
+                const factor = Number(itm.unitFactor) || 1;
+                factorMap[name] = factor;
+                
+                let rawBuy = Number(itm.buy) || 0;
+                currentBuyMap[name] = rawBuy / factor; 
+            });
+        } catch (e) {
+            console.error("خطأ في جلب بيانات أسعار الشراء:", e);
+        }
+    }
+
     async function loadData() {
         try {
+            await loadInventoryData();
             systemUsersSet.add(loggedUser);
 
             try {
@@ -471,7 +493,7 @@
         }
     };
 
-    // احتساب العمولة وأرباحك الصافية الحقيقية من الفواتير
+    // احتساب العمولة وأرباحك الصافية الحقيقية بنفس طريقة تقرير الأرباح اليومية
     window.calculateCommissionReport = async () => {
         const selectedRep = document.getElementById("salesRepFilterSelect").value;
         const startStr = document.getElementById("startDateFilter").value;
@@ -518,10 +540,12 @@
         const startMs = startStr ? new Date(startStr).getTime() : 0;
         const endMs = endStr ? new Date(endStr + 'T23:59:59').getTime() : Date.now();
 
-        // 1. حساب تحصيلات وأرباح الفواتير الفعلية
+        // حساب أرباح الفواتير بدقة الصنف بسعر الشراء والبيع والكمية
         const invSnap = await getDocs(collection(db, "invoices"));
         invSnap.forEach(d => {
             const data = d.data();
+            if (data.isDeleted === true) return;
+
             if (assignedCustomerIds.includes(data.customerId)) {
                 const invoiceTime = data.timestamp ? (data.timestamp.seconds * 1000) : 0;
                 if (invoiceTime >= startMs && invoiceTime <= endMs) {
@@ -530,13 +554,28 @@
 
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(item => {
-                            const sellPrice = Number(item.price || item.unitPrice) || 0;
-                            const buyPrice = Number(item.buyPrice || item.costPrice || item.purchasePrice) || 0;
-                            const qty = Number(item.qty || item.quantity) || 1;
-                            totalRealNetProfit += (sellPrice - buyPrice) * qty;
+                            if (item.isReturn) return;
+
+                            const name = (item.name || "").trim();
+                            const qty = Number(item.qty || item.quantity) || 0;
+                            const sellPrice = Number(item.price) || 0;
+                            const unit = (item.unitName || item.unit || "قطعة").toString().trim();
+                            const factor = factorMap[name] || 1;
+                            const basePieceCost = currentBuyMap[name] || Number(item.buyPrice || item.costPrice) || 0;
+
+                            if (qty > 0) {
+                                let itemCost = 0;
+                                let itemSales = qty * sellPrice;
+
+                                if (unit === "box" || unit === "كرتونة") {
+                                    itemCost = qty * (basePieceCost * factor);
+                                } else {
+                                    itemCost = qty * basePieceCost;
+                                }
+
+                                totalRealNetProfit += (itemSales - itemCost);
+                            }
                         });
-                    } else if (data.netProfit !== undefined) {
-                        totalRealNetProfit += Number(data.netProfit) || 0;
                     }
                 }
             }
@@ -577,13 +616,13 @@
             let statusText = "";
             if (commissionToProfitRatio <= 15) {
                 evalBox.className = "profitability-badge profit-good";
-                statusText = `<b>صافي ربحك الفعلي للفترة: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> فقط من أرباحك (ممتازة).`;
+                statusText = `<b>صافي مكسبك الفعلي للفترة: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> فقط من أرباحك (ممتازة).`;
             } else if (commissionToProfitRatio <= 25) {
                 evalBox.className = "profitability-badge profit-warning";
-                statusText = `<b>صافي ربحك الفعلي للفترة: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك (متوازنة).`;
+                statusText = `<b>صافي مكسبك الفعلي للفترة: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك (متوازنة).`;
             } else {
                 evalBox.className = "profitability-badge profit-bad";
-                statusText = `<b>تنبيه! صافي ربحك الفعلي: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك (مرتفعة التكلفة)!`;
+                statusText = `<b>تنبيه! صافي مكسبك الفعلي: (${netProfitAfterCommission.toLocaleString()} ج.م)</b><br>العمولة تأخذ <b>${commissionToProfitRatio}%</b> من أرباحك (مرتفعة التكلفة)!`;
             }
 
             if (totalRemainingDebt > 0) {
