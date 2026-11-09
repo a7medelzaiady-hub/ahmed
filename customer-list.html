@@ -583,8 +583,13 @@
     return negative ? -n : n;
   }
 
-  async function loadAllLedgerData() {
-    const debtMap = {}; 
+  // حساب حركة الرصيد لكل عميل — موحّد مع صفحة الفاتورة والسجل وكشف الحساب:
+  // - الفواتير غير المحذوفة: (الإجمالي - المدفوع)، ويتم ربط الفاتورة بالعميل بالاسم لو customerId فاضي
+  // - السندات المستقلة فقط (قبض/صرف)، وتُستبعد سندات سداد الفواتير
+  async function loadAllLedgerData(custDocs) {
+    const debtMap = {};
+    const nameMap = {};
+    custDocs.forEach(d => { const n = d.data().name; if (n) nameMap[normalizeName(n)] = d.id; });
 
     const [invoicesSnap, transSnap] = await Promise.all([
       getDocs(collection(db, "invoices")),
@@ -592,23 +597,22 @@
     ]);
 
     invoicesSnap.forEach(d => {
-      const data = d.data();
-      if (data.isDeleted) return;
-      const cid = data.customerId;
+      const x = d.data();
+      if (x.isDeleted) return;
+      const cid = x.customerId || nameMap[normalizeName(x.customerName)];
       if (!cid) return;
-      debtMap[cid] = (debtMap[cid] || 0) + parseSignedNumber(data.remaining);
+      const paid = (Number(x.cashAmount ?? x.cashPaid ?? x.paid) || 0) + (Number(x.walletAmount ?? x.walletPaid) || 0);
+      debtMap[cid] = (debtMap[cid] || 0) + ((Number(x.total) || 0) - paid);
     });
 
     transSnap.forEach(d => {
       const tr = d.data();
       if (tr.isDeleted) return;
-      const pid = tr.partyId || tr.customerId;
+      if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+      const pid = tr.partyId || tr.customerId || nameMap[normalizeName(tr.customerName || tr.partyName)];
       if (!pid) return;
-      let effect = 0;
-      const amt = parseSignedNumber(tr.amount);
-      if (tr.type === 'قبض') effect = -Math.abs(amt);
-      else if (tr.type === 'صرف') effect = Math.abs(amt);
-      debtMap[pid] = (debtMap[pid] || 0) + effect;
+      const amt = Math.abs(parseSignedNumber(tr.amount || tr.total));
+      debtMap[pid] = (debtMap[pid] || 0) + (tr.type === 'قبض' ? -amt : tr.type === 'صرف' ? amt : 0);
     });
 
     return debtMap;
@@ -618,7 +622,8 @@
     const container = document.getElementById('customersContainer');
     try {
       const q = query(collection(db, "customers"), orderBy("name"));
-      const [custSnap, debtMap] = await Promise.all([getDocs(q), loadAllLedgerData()]);
+      const custSnap = await getDocs(q);
+      const debtMap = await loadAllLedgerData(custSnap.docs);
 
       customersData = {};
       customersNameMap = {};
