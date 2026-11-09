@@ -3,116 +3,305 @@
 <head>
     <meta charset="UTF-8">
     <script src="auth-guard.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>إدارة المندوبين والعمولات - شركة الزيادي</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>إدارة وتوزيع المندوبين - شركة الزيادي</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b5e3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
         :root {
             --accent: #0b5e3d;
-            --bg-light: #f3f6f5;
-            --border: #e4e9e6;
+            --accent-gradient: linear-gradient(135deg, #07472e 0%, #0b5e3d 100%);
+            --bg-light: #eef3f0;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --card-radius: 16px;
+            --shadow-sm: 0 4px 12px rgba(0,0,0,0.04);
+            --shadow-md: 0 8px 24px rgba(7, 71, 46, 0.08);
         }
-        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; padding-bottom: 60px; }
-        .header-title { background: linear-gradient(135deg, var(--accent), #08432b); color: white; padding: 15px; border-radius: 0 0 15px 15px; }
-        .card-custom { background: white; border-radius: 12px; border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
-        .table-responsive { border-radius: 10px; overflow: hidden; }
-        .search-box { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-weight: 700; font-size: 0.85rem; }
+
+        body { 
+            background: var(--bg-light); 
+            font-family: 'Cairo', sans-serif; 
+            color: var(--text-primary); 
+            padding-bottom: 40px; 
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* هيدر حديث احترافي */
+        .header-nav {
+            background: var(--accent-gradient);
+            color: white;
+            padding: 14px 16px;
+            box-shadow: 0 4px 16px rgba(7, 71, 46, 0.25);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .section-card {
+            background: #ffffff;
+            border-radius: var(--card-radius);
+            padding: 16px;
+            margin-top: 14px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .section-title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+        }
+
+        /* تصميم كروت العملاء بدل الجدول الكلاسيكي */
+        .customer-card-item {
+            background: #f8faf9;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .customer-card-item:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(11, 94, 61, 0.08);
+            background: #ffffff;
+        }
+
+        .cust-name-info {
+            flex: 1;
+        }
+
+        .cust-name {
+            font-size: 0.9rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .cust-status-badge {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            display: inline-block;
+            margin-top: 2px;
+        }
+
+        .select-mandoob-box {
+            border: 1.5px solid #cbd5e1 !important;
+            border-radius: 10px !important;
+            font-size: 0.82rem !important;
+            font-weight: 700 !important;
+            color: #1e293b !important;
+            padding: 6px 10px !important;
+            background-color: #ffffff !important;
+            min-width: 135px;
+            text-align: center;
+        }
+
+        .select-mandoob-box:focus {
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.12) !important;
+        }
+
+        .btn-update-cust {
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 7px 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+            transition: 0.2s;
+        }
+        
+        .btn-update-cust:active { transform: scale(0.95); }
+
+        /* حقل البحث العصري */
+        .search-input-modern {
+            border: 1.5px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            width: 100%;
+            background: #ffffff;
+            transition: 0.2s;
+        }
+
+        .search-input-modern:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(11, 94, 61, 0.12);
+        }
+
+        /* كارت نتيجة التقرير المحاسبي */
+        .report-summary-box {
+            background: linear-gradient(135deg, #07472e 0%, #0b5e3d 100%);
+            color: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 14px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 6px;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            opacity: 0.85;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            font-size: 0.95rem;
+            font-weight: 800;
+        }
+
+        .stat-value-highlight {
+            color: #ffeb3b;
+            font-size: 1.15rem;
+            font-weight: 900;
+        }
+
+        .btn-calc-report {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            border: none;
+            color: white;
+            font-weight: 800;
+            border-radius: 12px;
+            padding: 11px;
+            width: 100%;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+            transition: 0.2s;
+        }
+        .btn-calc-report:active { transform: scale(0.98); }
     </style>
 </head>
 <body>
 
-<div class="header-title d-flex justify-content-between align-items-center mb-3">
-    <h5 class="m-0 fw-bold"><i class="fas fa-user-tie me-2"></i> إدارة المندوبين وحساب العمولات</h5>
-    <a href="reports.html" class="btn btn-sm btn-warning fw-bold"><i class="fas fa-arrow-right me-1"></i> التقارير</a>
+<!-- الهيدر العلوي -->
+<div class="header-nav d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-2">
+        <i class="fas fa-user-tie fs-5"></i>
+        <h6 class="m-0 fw-bold" style="font-size: 1rem;">إدارة المندوبين والعمولات</h6>
+    </div>
+    <a href="reports.html" class="btn btn-sm btn-light fw-bold text-success rounded-3 px-3 py-1">
+        <i class="fas fa-arrow-right me-1"></i> التقارير
+    </a>
 </div>
 
-<div class="container-fluid px-2">
+<div class="container px-2">
 
-    <!-- قسم قائمة العملاء وتغيير المندوب لكل عميل -->
-    <div class="card-custom">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h6 class="fw-bold text-success m-0"><i class="fas fa-users-cog me-1"></i> قائمة العملاء وتحديد المندوب التابع له</h6>
-            <div style="width: 240px;">
-                <input type="text" id="searchCustomerInput" class="form-control form-control-sm search-box" placeholder="ابحث باسم العميل..." oninput="filterCustomersTable()">
-            </div>
+    <!-- قسم البحث وتعيين المندوب للعملاء -->
+    <div class="section-card">
+        <div class="section-title">
+            <i class="fas fa-users-gear text-success"></i>
+            <span>قائمة العملاء وتحديد المندوب المسؤول</span>
         </div>
 
-        <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
-            <table class="table table-sm table-hover table-bordered text-center align-middle m-0" style="font-size: 0.85rem;">
-                <thead class="table-dark" style="position: sticky; top: 0; z-index: 5;">
-                    <tr>
-                        <th style="width: 5%;">#</th>
-                        <th style="width: 40%; text-align: right; padding-right: 12px;">اسم العميل</th>
-                        <th style="width: 35%;">يوزر المندوب المسؤول</th>
-                        <th style="width: 20%;">تحديث</th>
-                    </tr>
-                </thead>
-                <tbody id="customersTableBody">
-                    <tr>
-                        <td colspan="4" class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> جاري تحميل قائمة العملاء والمندوبين...</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="mb-3 position-relative">
+            <input type="text" id="searchCustomerInput" class="search-input-modern" placeholder="🔍 ابحث عن اسم العميل هنا..." oninput="filterCustomers()">
+        </div>
+
+        <!-- الحاوية الديناميكية لكروت العملاء -->
+        <div id="customersCardsContainer" style="max-height: 400px; overflow-y: auto; padding-left: 2px;">
+            <div class="text-center py-4 text-muted">
+                <i class="fas fa-circle-notch fa-spin fs-4 text-success mb-2 d-block"></i>
+                <small class="fw-bold">جاري جلب قائمة العملاء واليوزرات...</small>
+            </div>
         </div>
     </div>
 
-    <!-- قسم احتساب عمولة المندوب بالفترة -->
-    <div class="card-custom">
-        <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="fas fa-calculator me-1"></i> احتساب عمولة المندوب بالفترة</h6>
+    <!-- قسم احتساب وتصفية العمولة -->
+    <div class="section-card">
+        <div class="section-title">
+            <i class="fas fa-calculator text-primary"></i>
+            <span>احتساب عمولة المندوب بالفترة</span>
+        </div>
+
         <div class="row g-2 mb-3">
-            <div class="col-md-3 col-6">
-                <label class="form-label small fw-bold">اختر المندوب (يوزر الجلسة):</label>
-                <select id="salesRepFilter" class="form-select form-select-sm text-center fw-bold">
-                    <option value="">-- اختر المندوب --</option>
+            <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">اختر يوزر المندوب:</label>
+                <select id="salesRepFilterSelect" class="form-select select-mandoob-box w-100">
+                    <option value="">-- تحميل اليوزرات... --</option>
                 </select>
             </div>
-            <div class="col-md-3 col-6">
-                <label class="form-label small fw-bold">من تاريخ:</label>
-                <input type="date" id="startDateFilter" class="form-control form-control-sm">
+            <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">نسبة العمولة (%):</label>
+                <input type="number" id="commissionRateInput" class="form-control select-mandoob-box w-100" value="2" step="0.1">
             </div>
-            <div class="col-md-3 col-6">
-                <label class="form-label small fw-bold">إلى تاريخ:</label>
-                <input type="date" id="endDateFilter" class="form-control form-control-sm">
+            <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">من تاريخ:</label>
+                <input type="date" id="startDateFilter" class="form-control select-mandoob-box w-100">
             </div>
-            <div class="col-md-3 col-6">
-                <label class="form-label small fw-bold">نسبة العمولة (%):</label>
-                <input type="number" id="commissionRateInput" class="form-control form-control-sm text-center fw-bold" value="2" step="0.1">
+            <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">إلى تاريخ:</label>
+                <input type="date" id="endDateFilter" class="form-control select-mandoob-box w-100">
             </div>
         </div>
-        
-        <button class="btn btn-sm btn-primary fw-bold w-100 py-2" onclick="calculateCommissionReport()">
-            <i class="fas fa-search me-1"></i> استخراج تقرير العمولة
+
+        <button class="btn-calc-report" onclick="calculateCommissionReport()">
+            <i class="fas fa-chart-pie me-1"></i> احتساب وتوليد تقرير العمولة
         </button>
     </div>
 
-    <!-- عرض جدول ملخص التقرير -->
-    <div class="card-custom">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="fw-bold m-0"><i class="fas fa-table me-1"></i> تقرير التحصيلات والعمولة المستحقة</h6>
-            <button class="btn btn-sm btn-outline-dark fw-bold" onclick="window.print()"><i class="fas fa-print me-1"></i> طباعة التقرير</button>
+    <!-- بطاقة الملخص المالي للعمولة -->
+    <div class="report-summary-box" id="reportSummaryBox" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom border-white border-opacity-25">
+            <span class="fw-bold fs-6" id="summaryRepName"><i class="fas fa-user me-1"></i> المندوب</span>
+            <span class="badge bg-warning text-dark fw-bold" id="summaryCustCount">0 عميل</span>
         </div>
 
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped text-center align-middle" style="font-size: 0.85rem;">
-                <thead class="table-dark">
-                    <tr>
-                        <th>المندوب</th>
-                        <th>عدد العملاء</th>
-                        <th>تحصيل كاش</th>
-                        <th>تحصيل محفظة</th>
-                        <th>إجمالي التحصيلات</th>
-                        <th>النسبة</th>
-                        <th>العمولة المستحقة</th>
-                    </tr>
-                </thead>
-                <tbody id="commissionTableBody">
-                    <tr>
-                        <td colspan="7" class="text-muted">اختر يوزر المندوب واضغط استخراج التقرير.</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="row g-2 border-bottom border-white border-opacity-25 pb-2 mb-2">
+            <div class="col-4 stat-item">
+                <span class="stat-label">كاش</span>
+                <span class="stat-value" id="summaryCash">0</span>
+            </div>
+            <div class="col-4 stat-item">
+                <span class="stat-label">محفظة</span>
+                <span class="stat-value" id="summaryWallet">0</span>
+            </div>
+            <div class="col-4 stat-item">
+                <span class="stat-label">بنكي</span>
+                <span class="stat-value" id="summaryBank">0</span>
+            </div>
+        </div>
+
+        <div class="row align-items-center">
+            <div class="col-6 text-center border-end border-white border-opacity-25">
+                <span class="stat-label">إجمالي التحصيلات</span>
+                <span class="stat-value text-white" id="summaryGrandTotal">0 ج.م</span>
+            </div>
+            <div class="col-6 text-center">
+                <span class="stat-label" style="color: #ffeb3b;">العمولة المستحقة (<span id="summaryRate">0</span>%)</span>
+                <span class="stat-value-highlight" id="summaryNetCommission">0 ج.م</span>
+            </div>
         </div>
     </div>
 
@@ -135,140 +324,180 @@
     const db = initializeFirestore(app, {});
 
     let allCustomers = [];
-    let salespeopleSet = new Set(["admin"]);
+    let systemUsersSet = new Set(["admin"]);
 
-    // جلب يوزر الجلسة الحالي
     const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "admin";
 
-    async function loadCustomersData() {
-        const tbody = document.getElementById("customersTableBody");
+    // 1. جلب اليوزرات والعملاء من قواعد البيانات المباشرة
+    async function loadData() {
         try {
-            // إضافة يوزر الجلسة الحالية لقائمة المندوبين
-            salespeopleSet.add(loggedUser);
+            systemUsersSet.add(loggedUser);
 
-            const snap = await getDocs(collection(db, "customers"));
-            allCustomers = snap.docs.map(d => {
+            // جلب المستخدمين الحقيقيين من كولكشن users إن وجد
+            try {
+                const uSnap = await getDocs(collection(db, "users"));
+                uSnap.forEach(uDoc => {
+                    const uData = uDoc.data();
+                    const username = uData.username || uData.name || uData.email;
+                    if (username) systemUsersSet.add(username.trim());
+                });
+            } catch (err) { }
+
+            // جلب اليوزرات المسجلة في سجل الفواتير للضمان
+            try {
+                const invSnap = await getDocs(collection(db, "invoices"));
+                invSnap.forEach(iDoc => {
+                    const iData = iDoc.data();
+                    if (iData.createdBy) systemUsersSet.add(iData.createdBy.trim());
+                    if (iData.createdByName) systemUsersSet.add(iData.createdByName.trim());
+                });
+            } catch (err) { }
+
+            // جلب العملاء
+            const cSnap = await getDocs(collection(db, "customers"));
+            allCustomers = cSnap.docs.map(d => {
                 const data = d.data();
                 if (data.assignedTo && data.assignedTo.trim() !== "") {
-                    salespeopleSet.add(data.assignedTo.trim());
+                    systemUsersSet.add(data.assignedTo.trim());
                 }
                 if (data.createdBy && data.createdBy.trim() !== "") {
-                    salespeopleSet.add(data.createdBy.trim());
+                    systemUsersSet.add(data.createdBy.trim());
                 }
                 return { id: d.id, ...data };
             });
 
-            populateSalespeopleDropdowns();
-            renderCustomersTable(allCustomers);
+            populateSalesRepSelect();
+            renderCustomerCards(allCustomers);
+
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="4" class="text-danger">حدث خطأ أثناء تحميل البيانات</td></tr>`;
+            document.getElementById("customersCardsContainer").innerHTML = `<div class="text-center text-danger p-3">حدث خطأ أثناء تحميل البيانات، يرجى إعادة المحاولة</div>`;
         }
     }
 
-    // تجميع يوزرات المندوبين المسجلين بالجلسات
-    function populateSalespeopleDropdowns() {
-        const filterSelect = document.getElementById("salesRepFilter");
-        let optionsHtml = '<option value="">-- اختر يوزر المندوب --</option>';
-        salespeopleSet.forEach(spUser => {
-            optionsHtml += `<option value="${spUser}">${spUser}</option>`;
+    // تعبئة القائمة المنسدلة بأسماء اليوزرات الفتية
+    function populateSalesRepSelect() {
+        const select = document.getElementById("salesRepFilterSelect");
+        let html = '<option value="">-- اختر يوزر المندوب --</option>';
+        systemUsersSet.forEach(user => {
+            html += `<option value="${user}">${user}</option>`;
         });
-        filterSelect.innerHTML = optionsHtml;
+        select.innerHTML = html;
     }
 
-    function renderCustomersTable(list) {
-        const tbody = document.getElementById("customersTableBody");
+    // عرض العملاء على شكل كروت أنيقة Morden Cards
+    function renderCustomerCards(list) {
+        const container = document.getElementById("customersCardsContainer");
         if (list.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-muted">لا يوجد عملاء.</td></tr>`;
+            container.innerHTML = `<div class="text-center py-4 text-muted font-weight-bold">لا يوجد عملاء مطبقين للبحث.</div>`;
             return;
         }
 
-        const salespeopleArray = Array.from(salespeopleSet);
+        const usersArray = Array.from(systemUsersSet);
 
-        tbody.innerHTML = list.map((c, index) => {
-            const currentSalesperson = c.assignedTo || 'admin';
-            
-            let selectOptionsHtml = salespeopleArray.map(spUser => {
-                const selected = (spUser === currentSalesperson) ? 'selected' : '';
-                return `<option value="${spUser}" ${selected}>${spUser}</option>`;
+        container.innerHTML = list.map(c => {
+            const currentAssigned = c.assignedTo || 'admin';
+
+            const selectOptions = usersArray.map(u => {
+                const isSelected = (u === currentAssigned) ? 'selected' : '';
+                return `<option value="${u}" ${isSelected}>${u}</option>`;
             }).join('');
 
             return `
-                <tr>
-                    <td class="fw-bold">${index + 1}</td>
-                    <td style="text-align: right; padding-right: 12px;" class="fw-bold">${c.name}</td>
-                    <td>
-                        <select id="salesSelect_${c.id}" class="form-select form-select-sm text-center fw-bold" style="max-width: 220px; margin: 0 auto;">
-                            ${selectOptionsHtml}
+                <div class="customer-card-item">
+                    <div class="cust-name-info">
+                        <p class="cust-name">${c.name}</p>
+                        <span class="cust-status-badge">
+                            <i class="fas fa-user-check me-1 text-success"></i> المندوب الحالي: <b class="text-dark">${currentAssigned}</b>
+                        </span>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-1">
+                        <select id="select_${c.id}" class="select-mandoob-box">
+                            ${selectOptions}
                         </select>
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-success fw-bold px-3 py-1" onclick="updateCustomerSalesperson('${c.id}')">
-                            <i class="fas fa-save"></i> حفظ
+                        <button class="btn-update-cust" onclick="saveCustomerAssignment('${c.id}')" title="حفظ التغيير">
+                            <i class="fas fa-save"></i>
                         </button>
-                    </td>
-                </tr>
+                    </div>
+                </div>
             `;
         }).join('');
     }
 
-    window.filterCustomersTable = () => {
+    // تصفية العملاء أثناء البحث
+    window.filterCustomers = () => {
         const term = document.getElementById("searchCustomerInput").value.toLowerCase().trim();
         const filtered = allCustomers.filter(c => c.name && c.name.toLowerCase().includes(term));
-        renderCustomersTable(filtered);
+        renderCustomerCards(filtered);
     };
 
-    // تغيير وتعيين المندوب للعميل
-    window.updateCustomerSalesperson = async (custId) => {
-        const selectElem = document.getElementById(`salesSelect_${custId}`);
-        const newSalespersonUser = selectElem.value;
+    // حفظ ونقل العميل إلى المندوب المختار
+    window.saveCustomerAssignment = async (custId) => {
+        const selectBox = document.getElementById(`select_${custId}`);
+        const selectedUser = selectBox.value;
 
         try {
             const custRef = doc(db, "customers", custId);
             await updateDoc(custRef, {
-                assignedTo: newSalespersonUser,
+                assignedTo: selectedUser,
                 assignedBy: loggedUser,
                 assignedAt: serverTimestamp()
             });
 
+            // تحديث المصفوفة المحلية والشاشة
             const idx = allCustomers.findIndex(c => c.id === custId);
-            if (idx !== -1) allCustomers[idx].assignedTo = newSalespersonUser;
+            if (idx !== -1) allCustomers[idx].assignedTo = selectedUser;
 
-            alert(`تم تعديل التبعية إلى يوزر المندوب: (${newSalespersonUser}) بنجاح.`);
+            renderCustomerCards(allCustomers);
+            alert(`تم ربط العميل بالمندوب (${selectedUser}) بنجاح.`);
         } catch (e) {
             console.error(e);
-            alert("فشل تحديث ملكية العميل.");
+            alert("حدث خطأ، تعذر حفظ البيانات.");
         }
     };
 
-    // حساب عمولات المندوب من التحصيلات الحقيقية
+    // احتساب العمولة والتحصيلات للمندوب المختار
     window.calculateCommissionReport = async () => {
-        const salesRep = document.getElementById("salesRepFilter").value.trim();
+        const selectedRep = document.getElementById("salesRepFilterSelect").value;
         const startStr = document.getElementById("startDateFilter").value;
         const endStr = document.getElementById("endDateFilter").value;
         const rate = parseFloat(document.getElementById("commissionRateInput").value) || 0;
 
-        if (!salesRep) return alert("يرجى اختيار يوزر المندوب أولاً.");
+        if (!selectedRep) {
+            alert("برجاء اختيار يوزر المندوب أولاً من القائمة.");
+            return;
+        }
 
-        const tbody = document.getElementById("commissionTableBody");
-        tbody.innerHTML = `<tr><td colspan="7" class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> جاري تجميع تحصيلات المندوب (${salesRep})...</td></tr>`;
+        const summaryBox = document.getElementById("reportSummaryBox");
+        summaryBox.style.display = 'block';
 
-        const custQuery = query(collection(db, "customers"), where("assignedTo", "==", salesRep));
+        // 1. جلب العملاء التابعين لهذا المندوب حالياً
+        const custQuery = query(collection(db, "customers"), where("assignedTo", "==", selectedRep));
         const custSnap = await getDocs(custQuery);
-        
         const assignedCustomerIds = custSnap.docs.map(d => d.id);
 
+        document.getElementById("summaryRepName").innerHTML = `<i class="fas fa-user me-1"></i> يوزر المندوب: ${selectedRep}`;
+        document.getElementById("summaryCustCount").innerText = `${assignedCustomerIds.length} عميل`;
+
         if (assignedCustomerIds.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-danger fw-bold">لا يوجد عملاء مأسندون للمندوب (${salesRep}) حالياً.</td></tr>`;
+            document.getElementById("summaryCash").innerText = "0";
+            document.getElementById("summaryWallet").innerText = "0";
+            document.getElementById("summaryBank").innerText = "0";
+            document.getElementById("summaryGrandTotal").innerText = "0 ج.م";
+            document.getElementById("summaryRate").innerText = rate;
+            document.getElementById("summaryNetCommission").innerText = "0 ج.م";
             return;
         }
 
         let totalCash = 0;
         let totalWallet = 0;
+        let totalBank = 0;
 
         const startMs = startStr ? new Date(startStr).getTime() : 0;
         const endMs = endStr ? new Date(endStr + 'T23:59:59').getTime() : Date.now();
 
+        // 2. حساب تحصيلات الفواتير
         const invSnap = await getDocs(collection(db, "invoices"));
         invSnap.forEach(d => {
             const data = d.data();
@@ -277,10 +506,12 @@
                 if (invoiceTime >= startMs && invoiceTime <= endMs) {
                     totalCash += Number(data.cashAmount) || 0;
                     totalWallet += Number(data.walletAmount) || 0;
+                    totalBank += Number(data.bankAmount) || 0;
                 }
             }
         });
 
+        // 3. حساب تحصيلات سندات القبض
         const transSnap = await getDocs(query(collection(db, "transactions"), where("type", "==", "قبض")));
         transSnap.forEach(d => {
             const tr = d.data();
@@ -290,28 +521,24 @@
                     const method = String(tr.paymentMethod || '').trim();
                     const amt = Number(tr.amount) || 0;
                     if (method === "محفظة") totalWallet += amt;
+                    else if (method === "تحويل بنكي") totalBank += amt;
                     else totalCash += amt;
                 }
             }
         });
 
-        const grandTotalCollected = totalCash + totalWallet;
-        const netCommission = (grandTotalCollected * rate) / 100;
+        const grandTotal = totalCash + totalWallet + totalBank;
+        const netCommission = (grandTotal * rate) / 100;
 
-        tbody.innerHTML = `
-            <tr>
-                <td class="fw-bold">${salesRep}</td>
-                <td><span class="badge bg-success fs-6">${assignedCustomerIds.length} عميل</span></td>
-                <td>${totalCash.toLocaleString()} ج.م</td>
-                <td>${totalWallet.toLocaleString()} ج.م</td>
-                <td class="fw-bold text-primary">${grandTotalCollected.toLocaleString()} ج.م</td>
-                <td>${rate}%</td>
-                <td class="fw-bold text-success fs-6" style="background: #e8f5e9;">${netCommission.toLocaleString()} ج.م</td>
-            </tr>
-        `;
+        document.getElementById("summaryCash").innerText = totalCash.toLocaleString();
+        document.getElementById("summaryWallet").innerText = totalWallet.toLocaleString();
+        document.getElementById("summaryBank").innerText = totalBank.toLocaleString();
+        document.getElementById("summaryGrandTotal").innerText = `${grandTotal.toLocaleString()} ج.م`;
+        document.getElementById("summaryRate").innerText = rate;
+        document.getElementById("summaryNetCommission").innerText = `${netCommission.toLocaleString()} ج.م`;
     };
 
-    loadCustomersData();
+    loadData();
 </script>
 </body>
 </html>
