@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <script src="auth-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة وتوزيع عمولات المندوبين - شركة الزيادي</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --accent: #0b5e3d;
+            --bg-light: #f3f6f5;
+            --border: #e4e9e6;
+        }
+        body { background: var(--bg-light); font-family: 'Cairo', sans-serif; padding-bottom: 60px; }
+        .header-title { background: linear-gradient(135deg, var(--accent), #08432b); color: white; padding: 15px; border-radius: 0 0 15px 15px; }
+        .card-custom { background: white; border-radius: 12px; border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+        .table-responsive { border-radius: 10px; overflow: hidden; }
+    </style>
+</head>
+<body>
+
+<div class="header-title d-flex justify-content-between align-items-center">
+    <h5 class="m-0 fw-bold"><i class="fas fa-user-tie me-2"></i> إدارة المندوبين وحساب العمولات</h5>
+    <a href="index.html" class="btn btn-sm btn-warning fw-bold"><i class="fas fa-home me-1"></i> الرئيسية</a>
+</div>
+
+<div class="container-fluid mt-3">
+
+    <!-- قسم توزيع وإسناد ملكية العملاء -->
+    <div class="card-custom">
+        <h6 class="fw-bold text-success border-bottom pb-2 mb-3"><i class="fas fa-exchange-alt me-1"></i> إسناد ونقل ملكية العملاء للمندوبين</h6>
+        <div class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">اختر العميل:</label>
+                <select id="selectCustomerToAssign" class="form-select form-select-sm">
+                    <option value="">جاري تحميل العملاء...</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">إسناد إلى المندوب:</label>
+                <input type="text" id="targetSalespersonUser" class="form-control form-control-sm" placeholder="اسم/يوزر المندوب (أو اترك admin لسحبه)">
+            </div>
+            <div class="col-md-4 mt-4">
+                <button class="btn btn-sm btn-success w-100 fw-bold" onclick="assignSingleCustomer()">
+                    <i class="fas fa-check-circle me-1"></i> حفظ وتحديث الملكية
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- قسم تقرير العمولات والتحصيلات -->
+    <div class="card-custom">
+        <h6 class="fw-bold text-success border-bottom pb-2 mb-3"><i class="fas fa-calculator me-1"></i> احتساب عمولة المندوب بالفترة</h6>
+        <div class="row g-2 mb-3">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">اسم المندوب:</label>
+                <input type="text" id="salesRepFilter" class="form-control form-control-sm" placeholder="اكتب يوزر المندوب">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">من تاريخ:</label>
+                <input type="date" id="startDateFilter" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">إلى تاريخ:</label>
+                <input type="date" id="endDateFilter" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">نسبة العمولة (%):</label>
+                <input type="number" id="commissionRateInput" class="form-control form-control-sm" value="2" step="0.1">
+            </div>
+        </div>
+        
+        <button class="btn btn-sm btn-primary fw-bold px-4" onclick="calculateCommissionReport()">
+            <i class="fas fa-search me-1"></i> استخراج التقرير
+        </button>
+    </div>
+
+    <!-- عرض جدول النتيجة -->
+    <div class="card-custom">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold m-0"><i class="fas fa-table me-1"></i> جدول ملخص التحصيلات والعمولة</h6>
+            <button class="btn btn-sm btn-outline-dark" onclick="window.print()"><i class="fas fa-print me-1"></i> طباعة التقرير</button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped text-center align-middle" style="font-size: 0.85rem;">
+                <thead class="table-dark">
+                    <tr>
+                        <th>المندوب</th>
+                        <th>عدد العملاء التابعين</th>
+                        <th>تحصيل كاش</th>
+                        <th>تحصيل محفظة</th>
+                        <th>تحويل بنكي</th>
+                        <th>إجمالي التحصيلات</th>
+                        <th>نسبة العمولة</th>
+                        <th>العمولة المستحقة</th>
+                    </tr>
+                </thead>
+                <tbody id="commissionTableBody">
+                    <tr>
+                        <td colspan="8" class="text-muted">اختر المندوب والفترة ثم اضغط استخراج التقرير.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { initializeFirestore, collection, getDocs, doc, updateDoc, query, where, Timestamp, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
+        authDomain: "ahmedelzaiady.firebaseapp.com",
+        projectId: "ahmedelzaiady",
+        storageBucket: "ahmedelzaiady.firebasestorage.app",
+        messagingSenderId: "300306825071",
+        appId: "1:300306825071:web:0426ddde56280fa090329a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = initializeFirestore(app, {});
+
+    let allCustomers = [];
+
+    // جلب قائمة العملاء لتسهيل التوزيع
+    async function loadCustomers() {
+        const snap = await getDocs(collection(db, "customers"));
+        allCustomers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const select = document.getElementById("selectCustomerToAssign");
+        select.innerHTML = '<option value="">-- اختر عميلاً للتعديل --</option>' + 
+            allCustomers.map(c => `<option value="${c.id}">${c.name} (المالك الحالى: ${c.assignedTo || 'بدون'})</option>`).join('');
+    }
+
+    // نقل عميل منفرد
+    window.assignSingleCustomer = async () => {
+        const custId = document.getElementById("selectCustomerToAssign").value;
+        const targetUser = document.getElementById("targetSalespersonUser").value.trim() || "admin";
+
+        if (!custId) return alert("اختر العميل أولاً");
+
+        try {
+            const custRef = doc(db, "customers", custId);
+            await updateDoc(custRef, {
+                assignedTo: targetUser,
+                assignedBy: sessionStorage.getItem('username') || "admin",
+                assignedAt: serverTimestamp()
+            });
+
+            // تسجيل أمان للم نقل الملكية
+            await addDoc(collection(db, "customer_assignment_history"), {
+                customerId: custId,
+                assignedTo: targetUser,
+                changedBy: sessionStorage.getItem('username') || "admin",
+                timestamp: serverTimestamp()
+            });
+
+            alert(`تم تحويل ملكية العميل بنجاح للمندوب (${targetUser})`);
+            loadCustomers();
+        } catch (e) {
+            console.error(e);
+            alert("حدث خطأ أثناء نقل العميل.");
+        }
+    };
+
+    // احتساب تقرير التحصيلات والعمولة للمندوب
+    window.calculateCommissionReport = async () => {
+        const salesRep = document.getElementById("salesRepFilter").value.trim();
+        const startStr = document.getElementById("startDateFilter").value;
+        const endStr = document.getElementById("endDateFilter").value;
+        const rate = parseFloat(document.getElementById("commissionRateInput").value) || 0;
+
+        if (!salesRep) return alert("يرجى كتابة يوزر المندوب أولاً.");
+
+        // 1. الاستعلام عن العملاء التابعين للمندوب حالياً فقط
+        const custQuery = query(collection(db, "customers"), where("assignedTo", "==", salesRep));
+        const custSnap = await getDocs(custQuery);
+        const assignedCustomerIds = custSnap.docs.map(d => d.id);
+
+        if (assignedCustomerIds.length === 0) {
+            document.getElementById("commissionTableBody").innerHTML = `
+                <tr><td colspan="8" class="text-danger font-weight-bold">لا يوجد عملاء مأسندون للمندوب (${salesRep}) حالياً.</td></tr>`;
+            return;
+        }
+
+        // 2. تجميع التحصيلات الفعلية من الفواتير وسندات القبض لهؤلاء العملاء فقط
+        let totalCash = 0;
+        let totalWallet = 0;
+        let totalBank = 0;
+
+        const invSnap = await getDocs(collection(db, "invoices"));
+        
+        const startMs = startStr ? new Date(startStr).getTime() : 0;
+        const endMs = endStr ? new Date(endStr + 'T23:59:59').getTime() : Date.now();
+
+        invSnap.forEach(d => {
+            const data = d.data();
+            if (assignedCustomerIds.includes(data.customerId)) {
+                const invoiceTime = data.timestamp ? (data.timestamp.seconds * 1000) : 0;
+                if (invoiceTime >= startMs && invoiceTime <= endMs) {
+                    totalCash += Number(data.cashAmount) || 0;
+                    totalWallet += Number(data.walletAmount) || 0;
+                    totalBank += Number(data.bankAmount) || 0;
+                }
+            }
+        });
+
+        // 3. جلب مقبوضات السندات المستقلة (transactions)
+        const transSnap = await getDocs(query(collection(db, "transactions"), where("type", "==", "قبض")));
+        transSnap.forEach(d => {
+            const tr = d.data();
+            if (assignedCustomerIds.includes(tr.partyId)) {
+                const trTime = tr.timestamp ? (tr.timestamp.seconds * 1000) : 0;
+                if (trTime >= startMs && trTime <= endMs) {
+                    if (tr.paymentMethod === "محفظة") totalWallet += Number(tr.amount) || 0;
+                    else if (tr.paymentMethod === "تحويل بنكي") totalBank += Number(tr.amount) || 0;
+                    else totalCash += Number(tr.amount) || 0;
+                }
+            }
+        });
+
+        const grandTotalCollected = totalCash + totalWallet + totalBank;
+        const netCommission = (grandTotalCollected * rate) / 100;
+
+        document.getElementById("commissionTableBody").innerHTML = `
+            <tr>
+                <td class="fw-bold">${salesRep}</td>
+                <td><span class="badge bg-success">${assignedCustomerIds.length} عميل</span></td>
+                <td>${totalCash.toLocaleString()} ج.م</td>
+                <td>${totalWallet.toLocaleString()} ج.م</td>
+                <td>${totalBank.toLocaleString()} ج.م</td>
+                <td class="fw-bold text-primary">${grandTotalCollected.toLocaleString()} ج.م</td>
+                <td>${rate}%</td>
+                <td class="fw-bold text-success fs-6">${netCommission.toLocaleString()} ج.م</td>
+            </tr>
+        `;
+    };
+
+    loadCustomers();
+</script>
+</body>
+</html>
