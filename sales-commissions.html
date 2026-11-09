@@ -219,7 +219,7 @@
         <div class="row g-2 mb-3">
             <div class="col-6">
                 <label class="form-label small fw-bold text-secondary mb-1">اختر يوزر المندوب:</label>
-                <select id="salesRepFilterSelect" class="form-select select-mandoob-box w-100" onchange="loadSettlementsHistory()">
+                <select id="salesRepFilterSelect" class="form-select select-mandoob-box w-100" onchange="onRepChange()">
                     <option value="">-- تحميل اليوزرات... --</option>
                 </select>
             </div>
@@ -228,11 +228,11 @@
                 <input type="number" id="commissionRateInput" class="form-control select-mandoob-box w-100" value="2" step="0.1">
             </div>
             <div class="col-6">
-                <label class="form-label small fw-bold text-secondary mb-1">من تاريخ:</label>
-                <input type="date" id="startDateFilter" class="form-control select-mandoob-box w-100">
+                <label class="form-label small fw-bold text-secondary mb-1">من تاريخ (بداية الفترة التالية):</label>
+                <input type="date" id="startDateFilter" class="form-control select-mandoob-box w-100" style="background-color: #f1f5f9 !important;">
             </div>
             <div class="col-6">
-                <label class="form-label small fw-bold text-secondary mb-1">إلى تاريخ:</label>
+                <label class="form-label small fw-bold text-secondary mb-1">إلى تاريخ المحاسبة:</label>
                 <input type="date" id="endDateFilter" class="form-control select-mandoob-box w-100">
             </div>
         </div>
@@ -343,7 +343,7 @@
 
     const loggedUser = localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "admin";
 
-    // 1. تحميل قاعدة بيانات الأصناء وأسعار التكلفة
+    // 1. تحميل أسعار التكلفة للمنتجات
     async function loadInventoryData() {
         try {
             const itemsSnap = await getDocs(collection(db, "inventory"));
@@ -493,7 +493,48 @@
         }
     };
 
-    // احتساب العمولة وأرباحك الصافية الحقيقية بنفس طريقة تقرير الأرباح اليومية
+    // إيجاد وتثبيت تاريخ بداية الفترة التلقائي (اليوم التالي لآخر تسوية مصروفة)
+    window.onRepChange = async () => {
+        const selectedRep = document.getElementById("salesRepFilterSelect").value;
+        const startInput = document.getElementById("startDateFilter");
+        const endInput = document.getElementById("endDateFilter");
+
+        if (!selectedRep) {
+            startInput.value = "";
+            document.getElementById("historyCard").style.display = 'none';
+            return;
+        }
+
+        // إرجاع الأرشيف وتأكيدات التسويات السابقة
+        const settlements = await loadSettlementsHistory();
+
+        if (settlements && settlements.length > 0) {
+            // ترتيب التسويات للحصول على آخر نهاية فترة
+            settlements.sort((a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime());
+            const lastEndDateStr = settlements[0].endDate;
+
+            if (lastEndDateStr) {
+                const nextDayDate = new Date(lastEndDateStr);
+                nextDayDate.setDate(nextDayDate.getDate() + 1);
+
+                const yyyy = nextDayDate.getFullYear();
+                const mm = String(nextDayDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(nextDayDate.getDate()).padStart(2, '0');
+
+                startInput.value = `${yyyy}-${mm}-${dd}`;
+            }
+        } else {
+            startInput.value = ""; 
+        }
+
+        const today = new Date();
+        const tYYYY = today.getFullYear();
+        const tMM = String(today.getMonth() + 1).padStart(2, '0');
+        const tDD = String(today.getDate()).padStart(2, '0');
+        endInput.value = `${tYYYY}-${tMM}-${tDD}`;
+    };
+
+    // احتساب العمولة وأرباحك الصافية الحقيقية من الفواتير
     window.calculateCommissionReport = async () => {
         const selectedRep = document.getElementById("salesRepFilterSelect").value;
         const startStr = document.getElementById("startDateFilter").value;
@@ -540,7 +581,7 @@
         const startMs = startStr ? new Date(startStr).getTime() : 0;
         const endMs = endStr ? new Date(endStr + 'T23:59:59').getTime() : Date.now();
 
-        // حساب أرباح الفواتير بدقة الصنف بسعر الشراء والبيع والكمية
+        // 1. حساب تحصيلات وأرباح الفواتير للفترة
         const invSnap = await getDocs(collection(db, "invoices"));
         invSnap.forEach(d => {
             const data = d.data();
@@ -651,6 +692,7 @@
         };
     };
 
+    // اعتماد الصرف وتلقائياً تحديد البداية للفترة القادمة
     window.saveSettlementPeriod = async () => {
         if (!currentCalculatedReportData || currentCalculatedReportData.netCommissionPaid <= 0) {
             alert("لا توجد عمولة مستحقة للاعتماد.");
@@ -668,7 +710,11 @@
             });
 
             alert("تم تسوية وتوثيق الفترة بنجاح في الأرشيف لضمان عدم تكرار الحساب.");
-            loadSettlementsHistory();
+            
+            // إعادة تحديث الأرشيف وبداية الفترة الجديدة
+            await onRepChange();
+            document.getElementById("reportSummaryBox").style.display = 'none';
+
         } catch (e) {
             console.error(e);
             alert("فشل تسوية الفترة.");
@@ -682,7 +728,7 @@
 
         if (!selectedRep) {
             historyCard.style.display = 'none';
-            return;
+            return [];
         }
 
         historyCard.style.display = 'block';
@@ -693,11 +739,12 @@
             
             if (qSnap.empty) {
                 tbody.innerHTML = `<tr><td colspan="5" class="text-muted">لا توجد تسويات سابقة لهذا المندوب.</td></tr>`;
-                return;
+                return [];
             }
 
-            tbody.innerHTML = qSnap.docs.map(d => {
-                const data = d.data();
+            const list = qSnap.docs.map(d => d.data());
+
+            tbody.innerHTML = list.map(data => {
                 return `
                     <tr>
                         <td>${data.startDate} إلى ${data.endDate}</td>
@@ -708,9 +755,13 @@
                     </tr>
                 `;
             }).join('');
+
+            return list;
+
         } catch (e) {
             console.error(e);
             tbody.innerHTML = `<tr><td colspan="5" class="text-danger">فشل جلب الأرشيف</td></tr>`;
+            return [];
         }
     };
 
