@@ -785,6 +785,10 @@
         return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
     }
 
+    function normalizeName(str) {
+        return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+    }
+
     function roundUpToNextFiveOrTen(val) {
         const num = parseFloat(val);
         if (isNaN(num) || num <= 0) return 0;
@@ -1013,54 +1017,57 @@
         return 0;
     }
 
+    // 🔥 المحرك الموحد المحدث للحساب اللحظي للرصيد الفعلي للمبيعات 🔥
     async function getRealBalance(customerId, baseBalance = 0, targetInvoiceTimeStr = null) {
         try {
+            const custObj = customers.find(c => c.id === customerId);
+            const cleanName = custObj ? normalizeName(custObj.name) : "";
+
             const [snapInvoices, snapTrans] = await Promise.all([
-                getDocs(query(collection(db, "invoices"), where("customerId", "==", customerId))),
-                getDocs(query(collection(db, "transactions"), where("partyId", "==", customerId)))
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "transactions"))
             ]);
 
             const targetTimeMs = targetInvoiceTimeStr ? parseArabicDate(targetInvoiceTimeStr) : null;
-
-            let invoicesList = snapInvoices.docs.map(d => {
-                const data = d.data();
-                const timeMs = data.timestamp ? (data.timestamp.seconds * 1000) : (data.time ? parseArabicDate(data.time) : 0);
-                return { id: String(d.id).trim(), timeMs, data };
-            });
-
-            invoicesList.sort((a, b) => a.timeMs - b.timeMs);
-
             let invoiceDebt = 0;
 
-            for (const item of invoicesList) {
-                if (editId && item.id === String(editId).trim()) {
-                    continue;
-                }
+            snapInvoices.forEach(d => {
+                const inv = d.data();
+                if (inv.isDeleted) return;
 
-                if (targetTimeMs && targetTimeMs > 0 && item.timeMs >= targetTimeMs) {
-                    continue;
-                }
+                if (editId && String(d.id).trim() === String(editId).trim()) return;
 
-                const total = Number(item.data.total) || 0;
-                const paid = Number(item.data.paid) || 0;
-                const rem = item.data.remaining !== undefined ? Number(item.data.remaining) : (total - paid);
-                
-                invoiceDebt += rem;
-            }
+                const timeMs = inv.timestamp ? (inv.timestamp.seconds * 1000) : (inv.time ? parseArabicDate(inv.time) : 0);
+                if (targetTimeMs && targetTimeMs > 0 && timeMs >= targetTimeMs) return;
+
+                const matchById = inv.customerId && String(inv.customerId).trim() === customerId;
+                const matchByName = !inv.customerId && inv.customerName && normalizeName(inv.customerName) === cleanName;
+
+                if (matchById || matchByName) {
+                    const paid = (Number(inv.cashAmount ?? inv.cashPaid ?? inv.paid) || 0) + (Number(inv.walletAmount ?? inv.walletPaid) || 0);
+                    invoiceDebt += ((Number(inv.total) || 0) - paid);
+                }
+            });
 
             let transEffect = 0;
             snapTrans.forEach(docSnap => {
                 const tr = docSnap.data();
+                if (tr.isDeleted) return;
+                if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return; // استبعاد سندات الفواتير المباشرة لعدم التكرار
+
                 if (targetTimeMs && targetTimeMs > 0) {
                     const trTimeMs = tr.timestamp ? (tr.timestamp.seconds * 1000) : (tr.date || tr.time ? parseArabicDate(tr.date || tr.time) : 0);
-                    if (trTimeMs >= targetTimeMs) {
-                        return;
-                    }
+                    if (trTimeMs >= targetTimeMs) return;
                 }
 
-                const amt = Number(tr.amount) || 0;
-                if (tr.type === 'قبض') transEffect -= amt;
-                else if (tr.type === 'صرف') transEffect += amt;
+                const matchById = (tr.partyId || tr.customerId) && String(tr.partyId || tr.customerId).trim() === customerId;
+                const matchByName = !(tr.partyId || tr.customerId) && normalizeName(tr.customerName || tr.partyName) === cleanName;
+
+                if (matchById || matchByName) {
+                    const amt = Math.abs(Number(tr.amount || tr.total || 0));
+                    if (tr.type === 'قبض') transEffect -= amt;
+                    else if (tr.type === 'صرف') transEffect += amt;
+                }
             });
 
             return Number(baseBalance) + invoiceDebt + transEffect;
@@ -1133,7 +1140,7 @@
             return;
         }
 
-        const exactMatch = customers.find(c => c.name === term);
+        const exactMatch = customers.find(c => normalizeName(c.name) === normalizeName(term));
         if (exactMatch) {
             document.getElementById('customerSelect').value = exactMatch.id;
             resultsDiv.style.display = 'none';
@@ -1151,7 +1158,7 @@
             return;
         }
 
-        const filtered = customers.filter(c => c.name.toLowerCase().includes(term.toLowerCase()));
+        const filtered = customers.filter(c => c.name && normalizeName(c.name).includes(normalizeName(term)));
 
         if (filtered.length > 0) {
             resultsDiv.innerHTML = filtered.map(c => `
@@ -1220,9 +1227,6 @@
         }
     };
 
-    // =======================================================
-    // دالة حفظ العملاء المعتمدة والصحيحة 100% بدون تكرارات
-    // =======================================================
     window.saveOrUpdateCustomerDirectly = async () => {
         const idInput = document.getElementById('customerSelect');
         const nameInput = document.getElementById('customerSearch');
@@ -2316,7 +2320,7 @@
                     matchedCust = customers.find(c => String(c.id).trim() === String(paramCustomerId).trim());
                 }
                 if (!matchedCust && paramCustomerName) {
-                    matchedCust = customers.find(c => c.name.trim() === paramCustomerName.trim());
+                    matchedCust = customers.find(c => normalizeName(c.name) === normalizeName(paramCustomerName));
                 }
 
                 if (matchedCust) {
