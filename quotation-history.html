@@ -215,8 +215,6 @@ nav button.active, nav button:hover, nav a.nav-btn:hover { color: #fff; border-b
 .inv-item-card { background: #fff; border: 1.5px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 8px; box-shadow: var(--shadow-3d); transition: opacity 0.2s ease, transform 0.2s ease; }
 .inv-item-card:active { transform: translateY(1px); }
 .inv-item-card.completed-card { background: #f8faf9; border-color: #a3d9b1; }
-@keyframes flashCard { 0%,60% { background:#fde68a; box-shadow:0 0 0 3px #f59e0b; } 100% { background:#fff; box-shadow: var(--shadow-3d); } }
-.inv-item-card.flash-card { animation: flashCard 2.2s ease; }
 
 .inv-item-name { font-size: 14px; font-weight: 800; color: var(--brand-d); margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed var(--border); display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .stock-badge { font-size: 11px; font-weight: 800; background: var(--blue-lt); color: var(--blue); border-radius: 14px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0; }
@@ -271,7 +269,6 @@ tr:hover td { background: var(--brand-lt); }
 .lstep .stitle{font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap: wrap;}
 .snum{width:26px;height:26px;background:var(--brand);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;}
 .snum.dn{background:var(--green);}
-.snum.muted{background:var(--gray);}
 .dsummary{font-size:13px;color:var(--green);font-weight:800; background: #fff; padding: 6px 8px; border-radius: 8px; display: inline-block; margin-top: 4px; border: 1.5px solid var(--green-lt); box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);}
 
 .item-stock-badge { display: inline-flex; align-items: center; gap: 3px; background: var(--blue-lt); color: var(--blue); border-radius: 14px; padding: 3px 8px; font-size: 11px; font-weight: 800; white-space: nowrap; }
@@ -459,6 +456,25 @@ table select:focus { border-color: var(--brand); }
       <div id="summaryCards">
         <div class="empty"><span class="em">📭</span>لا توجد بيانات متاحة</div>
       </div>
+
+      <div class="summary-tbl-wrap" id="summaryTable-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:22%; text-align:right; padding-right:6px;">اسم الصنف</th>
+              <th style="width:13%;">قبل التحميل</th>
+              <th style="width:13%;">تم تحميله</th>
+              <th style="width:13%;">المباع لايف</th>
+              <th style="width:15%;">المتبقي بالعربية</th>
+              <th style="width:14%;">الراجع الفعلي</th>
+              <th style="width:10%;">حالة الفرق</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTable">
+            <tr><td colspan="7"><div class="empty"><span class="em">📭</span>لا توجد بيانات</div></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -502,22 +518,6 @@ table select:focus { border-color: var(--brand); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-<script>
-(function(){
-  function show(msg){
-    var a=document.getElementById('app-content'); if(a) a.style.display='block';
-    var b=document.getElementById('boot-error');
-    if(!b){ b=document.createElement('div'); b.id='boot-error';
-      b.style.cssText='position:fixed;top:60px;left:8px;right:8px;z-index:99999;background:#fee2e2;color:#7f1d1d;border:2px solid #d90429;border-radius:12px;padding:10px;font:700 12px/1.6 Cairo,sans-serif;direction:rtl;white-space:pre-wrap;word-break:break-word';
-      document.body.appendChild(b); }
-    b.textContent='⚠️ خطأ في الصفحة (صوّر هذه الرسالة وابعتها):\n'+msg;
-  }
-  window.addEventListener('error',function(e){ show((e.message||'خطأ')+(e.filename?' @ '+e.filename.split('/').pop()+':'+e.lineno:'')); });
-  window.addEventListener('unhandledrejection',function(e){ show('Promise: '+((e.reason&&e.reason.message)||e.reason)); });
-  window.__bootFail=show;
-  setTimeout(function(){ if(!window.__started) show('لم يبدأ تشغيل الصفحة بعد 8 ثوانٍ. غالباً تعذر تحميل مكتبة Firebase (الإنترنت أو حظر gstatic) أو الكاش القديم. جرّب مسح بيانات الموقع ثم أعد الفتح.'); },8000);
-})();
-</script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, deleteField, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -542,107 +542,204 @@ try {
 }
 
 // ==========================================
-// STATE
+// STATE MANAGEMENT & LISTENERS SINGLETON
 // ==========================================
-let allProducts   = [];          // كل الأصناف (بما فيها رصيد صفر) مع الرصيد المحسوب
-let firebaseItems = [];          // الأصناف الظاهرة في صفحة التحميل (رصيد ≠ 0 أو تم تحميلها اليوم)
-let productMap    = new Map();   // id -> product
+let firebaseItems = [];
 let cartItems     = {};
 let loadedInSession = {};
-let previousTruckStock = {};
+let previousTruckStock = {}; 
 let forceShowLoadList = false;
 let suggestFocusIdx = -1;
 let currentSummaryTab = 'active';
 
-let memorySalesCache = null;     // null = لم تصل المبيعات بعد
+let memorySalesCache = null;
+let lastFetchedDate = null;
 let cachedCalculatedRows = [];
+let isInventoryLoadedOnce = false;
 
 let factorsMap = {};
 let namesMap = {};
-
-// مصادر حساب الرصيد (نفس منطق صفحة المخزن بالضبط)
-let inventoryDocs = [];          // [{id, data}]
-let supplierItems = [];
-let openingMap = {};
-let invoicesAll = new Map();     // id -> {inv, day}  (الفواتير السارية فقط)
-let inventoryReady = false, invoicesReady = false, staticReady = false;
-let stockTimer = null;
-let resolveStockReady;
-const stockReady = new Promise(r => { resolveStockReady = r; });
 
 const today = new Date();
 const offset = today.getTimezoneOffset();
 const localToday = new Date(today.getTime() - (offset*60*1000));
 const defaultDateStr = localToday.toISOString().split('T')[0];
 document.getElementById('summaryDate').value = defaultDateStr;
-const selectedDate = () => document.getElementById('summaryDate').value || defaultDateStr;
 
 let unsubscribeDailyLoad = null;
 let unsubscribeInvoices = null;
-let unsubscribeInventory = null;
 
-let drafts = {};
-let editingIds = new Set();
+let drafts = {};            
+let editingIds = new Set(); 
 let busyIds = new Set();
-let lastDailySig = null, currentListenDate = null;
+let lastDailySig = null, currentListenDate = null, invoicesDate = null;
+let dayInvoices = new Map();
 let pendingWrites = 0;
 const saveTimers = {};
 const isActive = id => document.getElementById(id).classList.contains('active');
 
 // ==========================================
-// CACHE (للسرعة فقط - Firestore هو المصدر الحقيقي)
+// CACHE HELPERS (FALLBACK & SPEED-UP ONLY)
 // ==========================================
-const STOCK_CACHE_KEY = 'loadPageStockCache_v2';
-
 function loadFromLocalCache(dateStr) {
   try {
     const cachedCart = localStorage.getItem('cartItems_' + dateStr);
     const cachedSess = localStorage.getItem('loadedInSession_' + dateStr);
     if (cachedCart) cartItems = JSON.parse(cachedCart);
     if (cachedSess) loadedInSession = JSON.parse(cachedSess);
-  } catch(e) { console.warn("تعذر قراءة الكاش المحلي:", e); }
+  } catch(e) {
+    console.warn("تعذر قراءة الكاش المحلي:", e);
+  }
 }
 
 function updateLocalCache(dateStr, dataCart, dataSess) {
   try {
     if (dataCart) localStorage.setItem('cartItems_' + dateStr, JSON.stringify(dataCart));
     if (dataSess) localStorage.setItem('loadedInSession_' + dateStr, JSON.stringify(dataSess));
-  } catch(e) { console.warn("تعذر تحديث الكاش المحلي:", e); }
-}
-
-function saveStockCache() {
-  try { localStorage.setItem(STOCK_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data: allProducts })); } catch(e) {}
-}
-
-function loadStockCache() {
-  try {
-    const c = JSON.parse(localStorage.getItem(STOCK_CACHE_KEY) || 'null');
-    if (c && Array.isArray(c.data) && c.data.length) {
-      allProducts = c.data;
-      factorsMap = {}; namesMap = {};
-      allProducts.forEach(p => {
-        factorsMap[p.id] = p.capacity || 1;
-        if (p.name) namesMap[String(p.name).trim()] = p.id;
-      });
-      productMap = new Map(allProducts.map(p => [p.id, p]));
-      return true;
-    }
-  } catch(e) {}
-  return false;
+  } catch(e) {
+    console.warn("تعذر تحديث الكاش المحلي:", e);
+  }
 }
 
 function updateSyncUIStatus(status, text) {
   const globalEl = document.getElementById('globalSyncStatus');
   const loadEl   = document.getElementById('loadSyncStatus');
   const syncEl   = document.getElementById('syncStatus');
+
   if (globalEl) globalEl.outerHTML = `<span id="globalSyncStatus" class="sync-badge ${status}">${text}</span>`;
   if (loadEl)   loadEl.outerHTML   = `<span id="loadSyncStatus" class="sync-badge ${status}">${text}</span>`;
   if (syncEl)   syncEl.innerHTML   = text;
 }
 
 // ==========================================
-// UTILITIES
+// FIRESTORE REALTIME LISTENERS (SINGLETONS)
 // ==========================================
+function refreshActivePages() {
+  if (isActive('pg-load')) renderLoadFlow();
+  if (isActive('pg-summary')) {
+    buildCalculatedRows();
+    const a = document.activeElement;
+    const typing = a && a.closest && a.closest('#summaryCards, #summaryTable');
+    if (!typing) window.filterSummaryUI();
+  }
+}
+
+function listenToDailyLoadChanges() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  if (unsubscribeDailyLoad && currentListenDate === d) return;   
+  if (unsubscribeDailyLoad) unsubscribeDailyLoad();
+  currentListenDate = d; lastDailySig = null; drafts = {}; editingIds.clear();
+
+  loadFromLocalCache(d);
+  if (isActive('pg-load')) renderLoadFlow();
+  updateSyncUIStatus('syncing', '🟡 جاري الاتصال بـ Firestore...');
+
+  unsubscribeDailyLoad = onSnapshot(doc(db, 'daily_loads', d), { includeMetadataChanges: true }, (snap) => {
+    const data = snap.exists() ? snap.data() : {};
+    const sig = JSON.stringify([data.loadedInSession || {}, data.cartItems || {}]);
+    const changed = sig !== lastDailySig;
+    if (changed) {
+      lastDailySig = sig;
+      loadedInSession = data.loadedInSession || {};
+      cartItems = data.cartItems || {};
+      updateLocalCache(d, cartItems, loadedInSession);
+    }
+    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) {
+      updateSyncUIStatus('syncing', '🟡 جاري المزامنة مع الخادم...');
+    } else {
+      const t = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      updateSyncUIStatus('online', `🟢 متصل ومزامنة مباشرة (آخر تحديث: ${t})`);
+    }
+    if (changed) refreshActivePages();
+  }, (err) => {
+    console.error("خطأ في listener الحمولة:", err);
+    updateSyncUIStatus('offline', '🔴 غير متصل - تعذر المزامنة');
+  });
+
+  getDoc(doc(db, 'daily_loads', getPreviousDateStr(d))).then(prevSnap => {
+    previousTruckStock = {};
+    if (prevSnap.exists()) {
+      const c = prevSnap.data().cartItems || {};
+      Object.keys(c).forEach(id => { if (c[id].inTruckPcs) previousTruckStock[id] = c[id].inTruckPcs; });
+    }
+    if (isActive('pg-load')) renderLoadFlow();
+  }).catch(e => console.warn("تعذر جلب حمولة اليوم السابق:", e));
+}
+
+function recomputeSales() {
+  memorySalesCache = {};
+  dayInvoices.forEach(inv => {
+    const isRet = inv.type === 'return' || inv.isReturn === true;
+    inv.items?.forEach(itm => {
+      const id = getProductIdForItem(itm);
+      if (!id) return;
+      const cap = Number(itm.unitFactor || itm.factor) || factorsMap[id] || 1;
+      const raw = Number(itm.qty) || 0;
+      const pcs = isCartonUnit(itm.unit || itm.unitName, itm.isCarton) ? raw * cap : raw;
+      memorySalesCache[id] = (memorySalesCache[id] || 0) + ((isRet || itm.isReturn === true) ? -Math.abs(pcs) : pcs);
+    });
+  });
+  buildCalculatedRows();
+}
+
+function listenToLiveInvoices() {
+  const sel = document.getElementById('summaryDate').value || defaultDateStr;
+  if (unsubscribeInvoices && invoicesDate === sel) return;
+  if (unsubscribeInvoices) unsubscribeInvoices();
+  invoicesDate = sel; dayInvoices = new Map(); memorySalesCache = null;
+
+  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snap) => {
+    snap.docChanges().forEach(ch => {            
+      const inv = ch.doc.data();
+      if (ch.type === 'removed' || inv.isDeleted || !Array.isArray(inv.items) ||
+          parseDate(inv.date || inv.time, inv.timestamp) !== sel) dayInvoices.delete(ch.doc.id);
+      else dayInvoices.set(ch.doc.id, inv);
+    });
+    lastFetchedDate = sel;
+    recomputeSales();
+    if (isActive('pg-summary')) refreshActivePages();
+  }, (err) => console.error("خطأ في استماع المبيعات:", err));
+}
+
+// ==========================================
+// CORE PERSISTENCE
+// ==========================================
+function writeItem(itemId, { session = true, cart = true } = {}) {
+  const d = currentListenDate || document.getElementById('summaryDate').value || defaultDateStr;
+  const patch = { date: d, updatedAt: serverTimestamp() };
+  if (session) patch.loadedInSession = { [itemId]: loadedInSession[itemId] ?? deleteField() };
+  if (cart)    patch.cartItems       = { [itemId]: cartItems[itemId]       ?? deleteField() };
+  return trackWrite(setDoc(doc(db, 'daily_loads', d), patch, { merge: true }));
+}
+function trackWrite(p) {
+  pendingWrites++;
+  updateSyncUIStatus('syncing', '🟡 جاري الحفظ...');
+  return p.then(() => { pendingWrites--; })
+    .catch(e => {
+      pendingWrites--;
+      console.error("خطأ المزامنة السحابية:", e);
+      updateSyncUIStatus('offline', '🔴 فشل الحفظ - يرجى فحص الشبكة');
+      window.toast('❌ تعذر الحفظ في Firebase');
+    });
+}
+function flushItem(id) {
+  clearTimeout(saveTimers[id]); delete saveTimers[id];
+  if (cartItems[id]) writeItem(id, { session: false });
+}
+window.addEventListener('pagehide', () => Object.keys(saveTimers).forEach(flushItem));
+
+// ==========================================
+// UTILITY FUNCTIONS (تنظيف الأسماء والمشتقات)
+// ==========================================
+function startApp() {
+  document.getElementById('app-content').style.display = 'block';
+  listenToDailyLoadChanges();
+  listenToLiveInvoices();
+  const p = new URLSearchParams(location.search).get('item');
+  (isInventoryLoadedOnce ? Promise.resolve() : window.fetchInventoryFresh())
+    .then(() => { if (p) window.goToItem(p); });
+}
+
 function cleanItemName(str) {
   if (!str) return "";
   return String(str).trim()
@@ -660,18 +757,16 @@ function isCartonUnit(unitValue, isCartonFlag) {
   return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
 }
 
-// === نفس منطق صفحة المخزن بالضبط ===
-function resolveId(item) {
-  return item.stockId || namesMap[String(item.name || '').trim()] || null;
-}
-function signedInvoicePcs(item, id) {
-  const factor = factorsMap[id] || 1;
-  const rawQty = Number(item.qty) || 0;
-  const pcs = isCartonUnit(item.unit, item.isCarton) ? rawQty * factor : rawQty;
-  return item.isReturn ? -pcs : pcs;
-}
-function isLiveInvoice(inv) {
-  return inv && inv.isDeleted !== true && inv.status !== 'deleted' && inv.status !== 'cancelled' && Array.isArray(inv.items);
+function getProductIdForItem(item) {
+  if (item.stockId && factorsMap[item.stockId]) return item.stockId;
+  if (item.productId && factorsMap[item.productId]) return item.productId;
+  if (item.id && factorsMap[item.id]) return item.id;
+  
+  if (item.name) {
+    const cleanName = cleanItemName(item.name);
+    if (namesMap[cleanName]) return namesMap[cleanName];
+  }
+  return item.stockId || item.productId || item.id || null;
 }
 
 function getPreviousDateStr(dateStr) {
@@ -698,15 +793,6 @@ function applyLoad(itemId, it, v) {
     loadedCartons: v.cartons, loadedLoose: v.loose, lastEditedAt: t });
 }
 
-function ensureCart(itemId) {
-  if (!cartItems[itemId]) {
-    const p = productMap.get(itemId);
-    const r = cachedCalculatedRows.find(x => x.id === itemId);
-    cartItems[itemId] = { name: p?.name || r?.it?.name || '', capacity: p?.capacity || r?.cap || 1 };
-  }
-  return cartItems[itemId];
-}
-
 function focusCard(id) {
   const el = id && document.getElementById('step-' + id);
   if (!el) return;
@@ -714,7 +800,7 @@ function focusCard(id) {
   el.querySelector('input[type=number]')?.focus({ preventScroll: true });
 }
 
-window.handleLiveInputChange = function(id) { drafts[id] = readInputs(id); };
+window.handleLiveInputChange = function(id) { drafts[id] = readInputs(id); };  
 
 function getUnitName(name) {
   const n = (name || '').toLowerCase();
@@ -725,7 +811,7 @@ function getUnitName(name) {
 
 function cleanTextForPdf(str) {
   if (!str) return "0";
-  return String(str).replace(/&nbsp;/g, ' ').replace(/nbsp;/g, ' ').replace(/&/g, '');
+  return str.replace(/&nbsp;/g, ' ').replace(/nbsp;/g, ' ').replace(/&/g, '');
 }
 
 function formatQuantityDetailed(totalPcs, capacity, unit) {
@@ -735,25 +821,24 @@ function formatQuantityDetailed(totalPcs, capacity, unit) {
   const isNegative = totalPcs < 0;
   const absPcs = Math.abs(totalPcs);
   let result = '';
-  if (capacity <= 1) { result = `${absPcs} ${unit}`; }
+  if (capacity <= 1) { result = `${absPcs} ${unit}`; } 
   else {
     const cartons = Math.floor(absPcs / capacity);
     const loose = absPcs % capacity;
-    if (cartons > 0 && loose > 0) { result = `${cartons} كرتونة و ${loose} ${unit}`; }
-    else if (cartons > 0) { result = `${cartons} كرتونة`; }
+    if (cartons > 0 && loose > 0) { result = `${cartons} كرتونة و ${loose} ${unit}`; } 
+    else if (cartons > 0) { result = `${cartons} كرتونة`; } 
     else { result = `${loose} ${unit}`; }
   }
   return isNegative ? `-${result}` : result;
 }
 
-function highlightMatch(text, q) {
-  if (!q) return text;
+function highlightMatch(text, query) {
+  if (!query) return text;
   const cleaned = cleanItemName(text);
-  const cleanQ  = cleanItemName(q);
-  if (cleaned.length !== String(text).length) return text;
+  const cleanQ  = cleanItemName(query);
   const idx = cleaned.indexOf(cleanQ);
   if (idx === -1) return text;
-  return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + cleanQ.length) + '</mark>' + text.slice(idx + cleanQ.length);
+  return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + query.length) + '</mark>' + text.slice(idx + query.length);
 }
 
 function toEn(s){
@@ -774,250 +859,6 @@ function parseDate(df,ts){
   return"";
 }
 
-// ==========================================
-// حساب الرصيد (موحّد مع صفحة المخزن) + الأصناف الظاهرة
-// ==========================================
-function updateVisibleItems() {
-  // الصنف يظهر لو رصيده ≠ 0 أو تم تحميله اليوم (حتى لا يختفي من الجرد لو رصيده صفر)
-  firebaseItems = allProducts.filter(p => p.totalPcs !== 0 || loadedInSession[p.id] !== undefined || !!cartItems[p.id]);
-  firebaseItems.forEach(fi => {
-    if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; }
-  });
-}
-
-function scheduleStock(ms) {
-  clearTimeout(stockTimer);
-  stockTimer = setTimeout(recomputeStock, ms);
-}
-
-function recomputeStock() {
-  if (!inventoryReady || !invoicesReady || !staticReady) return;
-
-  const salesMap = {};
-  invoicesAll.forEach(({ inv }) => {
-    inv.items.forEach(item => {
-      const id = resolveId(item);
-      if (!id) return;
-      salesMap[id] = (salesMap[id] || 0) + signedInvoicePcs(item, id);
-    });
-  });
-
-  const purchasesMap = {};
-  supplierItems.forEach(item => {
-    const id = resolveId(item);
-    if (!id) return;
-    const factor = factorsMap[id] || 1;
-    const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-    const rawQty = (isReturn ? Number(item.returnQty || item.qty) : Number(item.qty)) || 0;
-    const pcs = isCartonUnit(item.unitName || item.unit, item.isCarton) ? rawQty * factor : rawQty;
-    purchasesMap[id] = (purchasesMap[id] || 0) + (isReturn ? -pcs : pcs);
-  });
-
-  const products = [];
-  inventoryDocs.forEach(({ id, data }) => {
-    if (data.isDeleted) return;
-    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-    let openingTotalPcs = 0;
-    if (data.openingTotalPcs != null) openingTotalPcs = Number(data.openingTotalPcs);
-    else if (data.openingQty != null) openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-    else if (openingMap[id] != null) openingTotalPcs = openingMap[id];
-
-    const totalPcs = openingTotalPcs + (purchasesMap[id] || 0) - (salesMap[id] || 0);
-    products.push({ id, name: data.name, capacity: factor, totalPcs, unit: data.unit || '' });
-  });
-
-  allProducts = products;
-  productMap = new Map(products.map(p => [p.id, p]));
-  saveStockCache();
-  updateVisibleItems();
-  renderItemsPage();
-  recomputeSales();
-  refreshActivePages();
-  resolveStockReady();
-}
-
-// ==========================================
-// FIRESTORE LISTENERS
-// ==========================================
-function refreshActivePages() {
-  if (isActive('pg-load')) renderLoadFlow();
-  if (isActive('pg-summary')) {
-    buildCalculatedRows();
-    const a = document.activeElement;
-    const typing = a && a.closest && a.closest('#summaryCards');
-    if (!typing) window.filterSummaryUI();
-  }
-}
-
-function listenToDailyLoadChanges() {
-  const d = selectedDate();
-  if (unsubscribeDailyLoad && currentListenDate === d) return;
-  if (unsubscribeDailyLoad) unsubscribeDailyLoad();
-  currentListenDate = d; lastDailySig = null; drafts = {}; editingIds.clear();
-
-  // تصفير بيانات اليوم السابق حتى لا تظهر بيانات يوم آخر عند تغيير التاريخ
-  cartItems = {}; loadedInSession = {}; previousTruckStock = {};
-  loadFromLocalCache(d);
-  updateVisibleItems();
-  if (isActive('pg-load')) renderLoadFlow();
-  updateSyncUIStatus('syncing', '🟡 جاري الاتصال بـ Firestore...');
-
-  unsubscribeDailyLoad = onSnapshot(doc(db, 'daily_loads', d), { includeMetadataChanges: true }, (snap) => {
-    const data = snap.exists() ? snap.data() : {};
-    const sig = JSON.stringify([data.loadedInSession || {}, data.cartItems || {}]);
-    const changed = sig !== lastDailySig;
-    if (changed) {
-      lastDailySig = sig;
-      loadedInSession = data.loadedInSession || {};
-      cartItems = data.cartItems || {};
-      updateLocalCache(d, cartItems, loadedInSession);
-      updateVisibleItems();
-    }
-    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) {
-      updateSyncUIStatus('syncing', '🟡 جاري المزامنة مع الخادم...');
-    } else {
-      const t = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-      updateSyncUIStatus('online', `🟢 متصل ومزامنة مباشرة (آخر تحديث: ${t})`);
-    }
-    if (changed) refreshActivePages();
-  }, (err) => {
-    console.error("خطأ في listener الحمولة:", err);
-    updateSyncUIStatus('offline', '🔴 غير متصل - تعذر المزامنة');
-  });
-
-  getDoc(doc(db, 'daily_loads', getPreviousDateStr(d))).then(prevSnap => {
-    if (currentListenDate !== d) return;
-    previousTruckStock = {};
-    if (prevSnap.exists()) {
-      const c = prevSnap.data().cartItems || {};
-      Object.keys(c).forEach(id => { if (c[id].inTruckPcs) previousTruckStock[id] = c[id].inTruckPcs; });
-    }
-    if (isActive('pg-load')) renderLoadFlow();
-  }).catch(e => console.warn("تعذر جلب حمولة اليوم السابق:", e));
-}
-
-// مبيعات اليوم المحدد (من نفس مجموعة الفواتير المستخدمة في حساب الرصيد)
-function recomputeSales() {
-  if (!invoicesReady) return;
-  const sel = selectedDate();
-  const sales = {};
-  invoicesAll.forEach(({ inv, day }) => {
-    if (day !== sel) return;
-    inv.items.forEach(item => {
-      const id = resolveId(item);
-      if (!id) return;
-      sales[id] = (sales[id] || 0) + signedInvoicePcs(item, id);
-    });
-  });
-  memorySalesCache = sales;
-}
-
-// مستمع واحد للفواتير (بدل تحميلها مرتين)
-function listenToLiveInvoices() {
-  if (unsubscribeInvoices) return;
-  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snap) => {
-    snap.docChanges().forEach(ch => {
-      const inv = ch.doc.data();
-      if (ch.type === 'removed' || !isLiveInvoice(inv)) invoicesAll.delete(ch.doc.id);
-      else invoicesAll.set(ch.doc.id, { inv, day: parseDate(inv.date || inv.time, inv.timestamp) });
-    });
-    invoicesReady = true;
-    recomputeSales();
-    if (isActive('pg-summary')) refreshActivePages();
-    scheduleStock(400);
-  }, (err) => console.error("خطأ في استماع الفواتير:", err));
-}
-
-function listenToInventory() {
-  if (unsubscribeInventory) return;
-  unsubscribeInventory = onSnapshot(collection(db, "inventory"), (snap) => {
-    inventoryDocs = []; factorsMap = {}; namesMap = {};
-    snap.forEach(d => {
-      const data = d.data();
-      const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-      factorsMap[d.id] = f;
-      if (data.name) namesMap[data.name.trim()] = d.id;
-      inventoryDocs.push({ id: d.id, data });
-    });
-    inventoryReady = true;
-    recomputeSales();
-    scheduleStock(0);
-  }, (err) => console.error("خطأ في استماع المخزن:", err));
-}
-
-async function loadStaticSources() {
-  const [supplierSnap, transSnap] = await Promise.all([
-    getDocs(collection(db, "supplier_transactions")),
-    getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
-  ]);
-  supplierItems = [];
-  supplierSnap.forEach(d => { (d.data().items || []).forEach(it => supplierItems.push(it)); });
-  openingMap = {};
-  transSnap.forEach(d => {
-    const data = d.data();
-    if (data.productId) openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
-  });
-  staticReady = true;
-}
-
-window.fetchInventoryFresh = async function() {
-  if (window._invBusy) return;
-  window._invBusy = true;
-  try {
-    await loadStaticSources();
-    recomputeStock();
-    window.toast('✅ تم تحديث الأرصدة التراكمية بنجاح');
-  } catch (e) {
-    console.error(e);
-    window.toast('❌ تعذر جلب الأصناف من السيرفر');
-  } finally { window._invBusy = false; }
-};
-
-// ==========================================
-// CORE PERSISTENCE
-// ==========================================
-function writeItem(itemId, { session = true, cart = true } = {}) {
-  const d = currentListenDate || selectedDate();
-  const patch = { date: d, updatedAt: serverTimestamp() };
-  if (session) patch.loadedInSession = { [itemId]: loadedInSession[itemId] ?? deleteField() };
-  if (cart)    patch.cartItems       = { [itemId]: cartItems[itemId]       ?? deleteField() };
-  return trackWrite(setDoc(doc(db, 'daily_loads', d), patch, { merge: true }));
-}
-function trackWrite(p) {
-  pendingWrites++;
-  updateSyncUIStatus('syncing', '🟡 جاري الحفظ...');
-  return p.then(() => { pendingWrites--; })
-    .catch(e => {
-      pendingWrites--;
-      console.error("خطأ المزامنة السحابية:", e);
-      updateSyncUIStatus('offline', '🔴 فشل الحفظ - يرجى فحص الشبكة');
-      window.toast('❌ تعذر الحفظ في Firebase');
-    });
-}
-function flushItem(id) {
-  clearTimeout(saveTimers[id]); delete saveTimers[id];
-  if (cartItems[id]) writeItem(id, { session: false });
-}
-window.addEventListener('pagehide', () => Object.keys(saveTimers).forEach(flushItem));
-
-function startApp() {
-  window.__started = true;
-  document.getElementById('app-content').style.display = 'block';
-  // 1) عرض فوري من الكاش
-  if (loadStockCache()) { updateVisibleItems(); }
-  renderItemsPage();
-  // 2) اشتراكات حية
-  listenToDailyLoadChanges();
-  listenToLiveInvoices();
-  listenToInventory();
-  loadStaticSources().then(() => scheduleStock(0)).catch(e => { console.error(e); window.toast('❌ تعذر جلب بيانات الموردين'); });
-  const p = new URLSearchParams(location.search).get('item');
-  if (p) stockReady.then(() => window.goToItem(p));
-}
-
-// ==========================================
-// NAVIGATION & SEARCH
-// ==========================================
 window.showPage = function(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -1032,12 +873,12 @@ window.showPage = function(id, btn) {
 window.handleSearchInput = function() { suggestFocusIdx = -1; openSuggestList(); filterLoadFlow(); };
 
 window.openSuggestList = function() {
-  const q = cleanItemName(document.getElementById('searchLoad').value);
+  const query = cleanItemName(document.getElementById('searchLoad').value);
   const list  = document.getElementById('searchSuggestList');
   if (!firebaseItems.length) { list.classList.remove('open'); return; }
-  const matches = q ? firebaseItems.filter(it => cleanItemName(it.name).includes(q)) : firebaseItems.slice(0, 8);
+  const matches = query ? firebaseItems.filter(it => cleanItemName(it.name).includes(query)) : firebaseItems.slice(0, 8);
   if (!matches.length) { list.classList.remove('open'); return; }
-  list.innerHTML = matches.map(it => {
+  list.innerHTML = matches.map((it, i) => {
     const done    = loadedInSession[it.id] !== undefined;
     const label   = done ? '<span class="s-status done">✓ تم</span>' : '<span class="s-status pending">لم يُحمَّل</span>';
     return `<div class="suggest-item" data-id="${it.id}" onmousedown="event.preventDefault();selectSuggestItem('${it.id}')">${highlightMatch(it.name, document.getElementById('searchLoad').value)}${label}</div>`;
@@ -1053,16 +894,16 @@ window.selectSuggestItem = function(itemId) {
   filterLoadFlow();
   const targetEl = document.getElementById('step-' + itemId);
   if (targetEl) targetEl.classList.add('active');
-  focusCard(itemId);
+  focusCard(itemId);   
 };
 
 window.handleSearchKeydown = function(e) {
   const list = document.getElementById('searchSuggestList');
   const items = list.querySelectorAll('.suggest-item');
   if (!items.length) return;
-  if (e.key === 'ArrowDown') { e.preventDefault(); suggestFocusIdx = Math.min(suggestFocusIdx + 1, items.length - 1); updateSuggestFocus(items); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); suggestFocusIdx = Math.max(suggestFocusIdx - 1, 0); updateSuggestFocus(items); }
-  else if (e.key === 'Enter') { e.preventDefault(); if (suggestFocusIdx >= 0 && items[suggestFocusIdx]) { selectSuggestItem(items[suggestFocusIdx].dataset.id); } else if (items.length === 1) { selectSuggestItem(items[0].dataset.id); } }
+  if (e.key === 'ArrowDown') { e.preventDefault(); suggestFocusIdx = Math.min(suggestFocusIdx + 1, items.length - 1); updateSuggestFocus(items); } 
+  else if (e.key === 'ArrowUp') { e.preventDefault(); suggestFocusIdx = Math.max(suggestFocusIdx - 1, 0); updateSuggestFocus(items); } 
+  else if (e.key === 'Enter') { e.preventDefault(); if (suggestFocusIdx >= 0 && items[suggestFocusIdx]) { selectSuggestItem(items[suggestFocusIdx].dataset.id); } else if (items.length === 1) { selectSuggestItem(items[0].dataset.id); } } 
   else if (e.key === 'Escape') { list.classList.remove('open'); }
 };
 
@@ -1072,37 +913,149 @@ function updateSuggestFocus(items) {
 }
 
 function filterLoadFlow() {
-  const q = cleanItemName(document.getElementById('searchLoad').value);
+  const query = cleanItemName(document.getElementById('searchLoad').value);
   const steps = document.querySelectorAll('#loadFlow .lstep');
   steps.forEach(el => {
     const id = el.dataset.itemid;
     if (!id) return;
-    const it = productMap.get(id);
+    const it = firebaseItems.find(f => f.id === id);
     if (!it) return;
-    el.style.display = (!q || cleanItemName(it.name).includes(q)) ? '' : 'none';
+    el.style.display = (!query || cleanItemName(it.name).includes(query)) ? '' : 'none';
   });
 }
 
 // ==========================================
-// صفحة أصناف المخزن
+// محرك جلب رصيد المخزن التراكمي السريع
 // ==========================================
+window.fetchInventoryFresh = async function() {
+  if (window._invBusy) return;
+  window._invBusy = true;
+  const card = document.getElementById('itemsCard');
+  if (card) card.innerHTML = '<div class="spin"></div>';
+  try {
+    const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
+      getDocs(collection(db, "invoices")),
+      getDocs(collection(db, "supplier_transactions")),
+      getDocs(collection(db, "inventory")),
+      getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+    ]);
+
+    factorsMap = {};
+    namesMap = {};
+    inventorySnap.forEach(d => {
+      const data = d.data();
+      const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
+      factorsMap[d.id] = f;
+      if (data.name) namesMap[cleanItemName(data.name)] = d.id;
+    });
+
+    let salesMap = {};
+    let purchasesMap = {};
+    let openingMap = {};
+
+    transSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.productId) {
+        openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
+      }
+    });
+
+    invoicesSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.isDeleted) return;
+      data.items?.forEach(item => {
+        const id = getProductIdForItem(item);
+        if (id) {
+          if (!salesMap[id]) salesMap[id] = 0;
+          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
+          const rawQty = Number(item.qty) || 0;
+          const isCartonItem = isCartonUnit(item.unit || item.unitName, item.isCarton);
+          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
+          
+          const isReturn = data.type === 'return' || data.isReturn === true || item.isReturn === true;
+
+          if (isReturn) {
+            salesMap[id] -= Math.abs(pcs);
+          } else {
+            salesMap[id] += pcs;
+          }
+        }
+      });
+    });
+
+    supplierSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      data.items?.forEach(item => {
+        const id = getProductIdForItem(item);
+        if (id) {
+          if (!purchasesMap[id]) purchasesMap[id] = 0;
+          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
+          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+          const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty || 0);
+          const isCartonItem = isCartonUnit(item.unitName || item.unit, item.isCarton);
+          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
+
+          if (isReturn) {
+            purchasesMap[id] -= Math.abs(pcs);
+          } else {
+            purchasesMap[id] += pcs;
+          }
+        }
+      });
+    });
+
+    firebaseItems = [];
+    inventorySnap.forEach(doc => {
+      const data = doc.data();
+      if (!data.isDeleted) {
+        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
+        
+        let openingTotalPcs = 0;
+        if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
+          openingTotalPcs = Number(data.openingTotalPcs);
+        } else if (data.openingQty !== undefined && data.openingQty !== null) {
+          openingTotalPcs = Math.round(Number(data.openingQty) * factor);
+        } else if (openingMap[doc.id]) {
+          openingTotalPcs = openingMap[doc.id];
+        }
+
+        const salesPcs = salesMap[doc.id] || 0;
+        const purchasesPcs = purchasesMap[doc.id] || 0;
+        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+
+        if (calculatedRealPcs !== 0) {
+          firebaseItems.push({
+            id: doc.id,
+            name: data.name,
+            capacity: factor,
+            totalPcs: calculatedRealPcs,
+            unit: data.unit || ''
+          });
+        }
+      }
+    });
+
+    renderItemsPage();
+    firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
+    isInventoryLoadedOnce = true;
+    recomputeSales();       
+    refreshActivePages();
+    window.toast('✅ تم تحديث الأرصدة التراكمية بنجاح');
+  } catch(e) { console.error(e); window.toast('❌ تعذر جلب الأصناف من السيرفر'); }
+  finally { window._invBusy = false; }
+};
+
 function renderItemsPage() {
   const card = document.getElementById('itemsCard');
   if (!card) return;
-  const stockItems = allProducts.filter(p => p.totalPcs !== 0);
-  if (!stockItems.length) {
-    card.innerHTML = (inventoryReady && invoicesReady && staticReady)
-      ? '<div class="empty"><span class="em">📭</span>لا توجد أصناف بالمخزن</div>'
-      : '<div class="spin"></div>';
-    return;
-  }
+  if (!firebaseItems.length) { card.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أصناف بالمخزن</div>'; return; }
   card.innerHTML = `
-    <h3>📋 الأصناف المتاحة بالمخزن الرئيسي (${stockItems.length} صنف)</h3>
+    <h3>📋 الأصناف المتاحة بالمخزن الرئيسي (${firebaseItems.length} صنف)</h3>
     <div class="tbl-wrap">
       <table style="min-width: 100%;">
         <thead><tr><th>#</th><th style="text-align: right; padding-right:10px;">اسم الصنف</th><th>الكمية المنفردة</th><th>الكمية بالتعبئة الإجمالية</th></tr></thead>
         <tbody>
-          ${stockItems.map((it, i) => {
+          ${firebaseItems.map((it, i) => {
             const unit = getUnitName(it.name);
             const isNegative = it.totalPcs < 0;
             const styleLabel = isNegative ? 'style="color: var(--red); font-weight: bold;"' : '';
@@ -1116,9 +1069,6 @@ function renderItemsPage() {
     </div>`;
 }
 
-// ==========================================
-// صفحة التحميل
-// ==========================================
 function initLoadFlow() {
   const noMsg = document.getElementById('noItemsMsg');
   if (!firebaseItems.length) { document.getElementById('loadFlow').innerHTML = ''; noMsg.style.display = 'block'; document.getElementById('loadDoneMsg').style.display = 'none'; return; }
@@ -1235,7 +1185,7 @@ function buildStep(it, idx, sortedItems, pendingItems, loadedCount) {
     div.innerHTML = `
       <div class="stitle">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span class="snum ${isCurrent ? '' : 'muted'}">${origIdx + 1}</span>
+          <span class="snum ${isCurrent ? '' : 'style="background:var(--gray)"'}">${origIdx + 1}</span>
           <span style="font-size:15px;">${it.name}</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
@@ -1256,16 +1206,13 @@ function buildStep(it, idx, sortedItems, pendingItems, loadedCount) {
 function renderLoadFlow() {
   const flow    = document.getElementById('loadFlow');
   const doneMsg = document.getElementById('loadDoneMsg');
-  const noMsg   = document.getElementById('noItemsMsg');
   if (!flow) return;
-  if (!firebaseItems.length) { flow.innerHTML = ''; noMsg.style.display = (inventoryReady && staticReady && invoicesReady) ? 'block' : 'none'; doneMsg.style.display = 'none'; return; }
-  noMsg.style.display = 'none';
   const searchVal = cleanItemName(document.getElementById('searchLoad').value);
   const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
   const loadedCount  = Object.keys(loadedInSession).length;
   const alertBanner  = document.getElementById('newItemsAlertBanner');
   if (alertBanner) {
-    if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; }
+    if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
     else { alertBanner.style.display = 'none'; }
   }
   const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined) && !editingIds.size;
@@ -1289,7 +1236,7 @@ function renderLoadFlow() {
 
 window.confirmStep = function(itemId) {
   if (busyIds.has(itemId)) return;
-  const it = productMap.get(itemId);
+  const it = firebaseItems.find(i => i.id === itemId);
   if (!it) return;
   busyIds.add(itemId);
   try {
@@ -1297,19 +1244,19 @@ window.confirmStep = function(itemId) {
     if (btn) { btn.disabled = true; btn.textContent = 'جاري الحفظ... ⏳'; }
     applyLoad(itemId, it, readInputs(itemId));
     delete drafts[itemId]; editingIds.delete(itemId);
-    writeItem(itemId);
+    writeItem(itemId);                                   
     const i = firebaseItems.findIndex(x => x.id === itemId);
     const next = firebaseItems.slice(i + 1).find(x => loadedInSession[x.id] === undefined);
     if (firebaseItems.every(x => loadedInSession[x.id] !== undefined)) forceShowLoadList = false;
     renderLoadFlow();
-    focusCard(next && next.id);
+    focusCard(next && next.id);      
   } finally { busyIds.delete(itemId); }
 };
 
 window.editStep = function(itemId) {
   const s = loadedInSession[itemId];
   if (!s) return;
-  drafts[itemId] = { ...s }; editingIds.add(itemId);
+  drafts[itemId] = { ...s }; editingIds.add(itemId);     
   renderLoadFlow();
   focusCard(itemId);
 };
@@ -1319,27 +1266,23 @@ window.resetLoad = function() {
   loadedInSession = {}; cartItems = {}; drafts = {}; editingIds.clear(); forceShowLoadList = false;
   document.getElementById('searchLoad').value = '';
   document.getElementById('searchSuggestList').classList.remove('open');
-  const d = currentListenDate || selectedDate();
+  const d = currentListenDate || document.getElementById('summaryDate').value || defaultDateStr;
   trackWrite(setDoc(doc(db, 'daily_loads', d),
     { date: d, updatedAt: serverTimestamp(), loadedInSession: deleteField(), cartItems: deleteField() }, { merge: true }));
-  updateVisibleItems();
   renderLoadFlow();
 };
 
 window.editAllLoad = function() {
-  forceShowLoadList = true;
-  document.getElementById('loadDoneMsg').style.display = 'none';
+  forceShowLoadList = true; 
+  document.getElementById('loadDoneMsg').style.display = 'none'; 
   renderLoadFlow();
 };
 
-// ==========================================
-// صفحة الجرد
-// ==========================================
 window.updateManualSummaryField = function(itemId, field, val) {
-  const c = ensureCart(itemId);
-  if (field === 'manualCartons') c.manualCartons = parseFloat(val) || 0;
-  if (field === 'manualLoose')   c.manualLoose   = parseInt(val) || 0;
-  if (field === 'diffStatus')    c.diffStatus    = val;
+  if (!cartItems[itemId]) cartItems[itemId] = {};
+  if (field === 'manualCartons') cartItems[itemId].manualCartons = parseFloat(val) || 0;
+  if (field === 'manualLoose')   cartItems[itemId].manualLoose   = parseInt(val) || 0;
+  if (field === 'diffStatus')    cartItems[itemId].diffStatus    = val;
 
   const r = cachedCalculatedRows.find(item => item.id === itemId);
   if (r) {
@@ -1349,23 +1292,23 @@ window.updateManualSummaryField = function(itemId, field, val) {
 
     const totalManualPcs = ((parseFloat(r.currentManualCartons)||0) * r.cap) + (parseInt(r.currentManualLoose)||0);
     r.manualText = (r.currentManualCartons !== '' || r.currentManualLoose !== '') ? formatQuantityDetailed(totalManualPcs, r.cap, r.unit) : '—';
-
-    if (memorySalesCache !== null) {
-      const inTruckPcs = r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs;
-      r.inTruckPcs = Math.max(0, inTruckPcs);
-      r.inTruckText = formatQuantityDetailed(r.inTruckPcs, r.cap, r.unit);
-      c.inTruckPcs = r.inTruckPcs;
-    }
+    
+    const inTruckPcs = r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs;
+    r.inTruckPcs = Math.max(0, inTruckPcs);
+    r.inTruckText = formatQuantityDetailed(r.inTruckPcs, r.cap, r.unit);
+    
+    cartItems[itemId].inTruckPcs = r.inTruckPcs;
   }
   clearTimeout(saveTimers[itemId]);
-  saveTimers[itemId] = setTimeout(() => flushItem(itemId), 500);
+  saveTimers[itemId] = setTimeout(() => flushItem(itemId), 500);   
 };
 
-window.toggleItemInventoryComplete = function(itemId, isComplete) {
-  ensureCart(itemId).isInventoryDone = isComplete;
+window.toggleItemInventoryComplete = async function(itemId, isComplete) {
+  if (!cartItems[itemId]) cartItems[itemId] = {}; 
+  cartItems[itemId].isInventoryDone = isComplete; 
   writeItem(itemId, { session: false });
-
-  const r = cachedCalculatedRows.find(item => item.id === itemId);
+  
+  const r = cachedCalculatedRows.find(item => item.id === itemId); 
   if (r) r.isInventoryDone = isComplete;
   const cardEl = document.getElementById('card-item-' + itemId);
   if (cardEl) {
@@ -1380,205 +1323,184 @@ window.toggleItemInventoryComplete = function(itemId, isComplete) {
 };
 
 function updateTabCounters() {
-  document.getElementById('countActive').textContent = cachedCalculatedRows.filter(r => !r.isInventoryDone).length;
-  document.getElementById('countCompleted').textContent = cachedCalculatedRows.filter(r => r.isInventoryDone).length;
+  const activeCount = cachedCalculatedRows.filter(r => !r.isInventoryDone).length; 
+  const completedCount = cachedCalculatedRows.filter(r => r.isInventoryDone).length;
+  document.getElementById('countActive').textContent = activeCount; 
+  document.getElementById('countCompleted').textContent = completedCount;
 }
 
 window.switchSummaryTab = function(tab) {
-  currentSummaryTab = tab;
-  document.getElementById('btnTabActive').classList.toggle('active', tab === 'active');
-  document.getElementById('btnTabCompleted').classList.toggle('active', tab === 'completed');
+  currentSummaryTab = tab; 
+  document.getElementById('btnTabActive').classList.toggle('active', tab === 'active'); 
+  document.getElementById('btnTabCompleted').classList.toggle('active', tab === 'completed'); 
   window.filterSummaryUI();
 };
 
-window.onSummaryDateChange = function() {
-  listenToDailyLoadChanges();
-  recomputeSales();
-  buildCalculatedRows();
-  window.filterSummaryUI();
-};
+window.onSummaryDateChange = function() { listenToDailyLoadChanges(); listenToLiveInvoices(); };
 
-window.refreshSummaryData = function() { recomputeSales(); buildCalculatedRows(); window.filterSummaryUI(); };
+window.refreshSummaryData = function() { recomputeSales(); window.filterSummaryUI(); };
 
 function buildCalculatedRows() {
-  const salesLoading = memorySalesCache === null;
-  const liveSales = memorySalesCache || {};
-
-  // الصفوف تُبنى من بيانات الحمولة مباشرة (فورية) + أي صنف له مبيعات
-  const ids = new Set([...Object.keys(cartItems), ...Object.keys(loadedInSession)]);
-  Object.keys(liveSales).forEach(id => { if (liveSales[id] !== 0) ids.add(id); });
-
+  const processedIds = new Set();
   const rows = [];
-  ids.forEach(id => {
-    const p = productMap.get(id);
-    let cartData = cartItems[id];
-    const name = p?.name || cartData?.name;
-    if (!name) return;
-    const cap = p?.capacity || cartData?.capacity || 1;
 
-    if (!cartData) {
-      cartData = {
-        name, capacity: cap,
-        prevCartons: loadedInSession[id]?.prevCartons || 0,
-        prevLoose: loadedInSession[id]?.prevLoose || 0,
-        loadedCartons: loadedInSession[id]?.cartons || 0,
-        loadedLoose: loadedInSession[id]?.loose || 0,
-        manualCartons: '', manualLoose: '', diffStatus: '', lastEditedAt: '', isInventoryDone: false
-      };
+  firebaseItems.forEach(fbItem => {
+    if (processedIds.has(fbItem.id)) return;
+    processedIds.add(fbItem.id);
+
+    let cartData = cartItems[fbItem.id];
+    if (!cartData) { 
+      cartData = { 
+        name: fbItem.name, 
+        capacity: fbItem.capacity, 
+        prevCartons: loadedInSession[fbItem.id]?.prevCartons || 0,
+        prevLoose: loadedInSession[fbItem.id]?.prevLoose || 0,
+        loadedCartons: loadedInSession[fbItem.id]?.cartons || 0, 
+        loadedLoose: loadedInSession[fbItem.id]?.loose || 0, 
+        manualCartons: '', 
+        manualLoose: '', 
+        diffStatus: '', 
+        lastEditedAt: '', 
+        isInventoryDone: false 
+      }; 
     } else {
-      cartData.name = name; cartData.capacity = cap;
-      if (loadedInSession[id]) {
-        cartData.prevCartons   = loadedInSession[id].prevCartons || 0;
-        cartData.prevLoose     = loadedInSession[id].prevLoose || 0;
-        cartData.loadedCartons = loadedInSession[id].cartons || 0;
-        cartData.loadedLoose   = loadedInSession[id].loose || 0;
+      if (loadedInSession[fbItem.id]) {
+        cartData.prevCartons   = loadedInSession[fbItem.id].prevCartons || 0;
+        cartData.prevLoose     = loadedInSession[fbItem.id].prevLoose || 0;
+        cartData.loadedCartons = loadedInSession[fbItem.id].cartons || 0;
+        cartData.loadedLoose   = loadedInSession[fbItem.id].loose || 0;
       }
     }
 
-    const unit = getUnitName(name);
-    const totalSoldPcs = liveSales[id] || 0;
-
+    const liveSales = memorySalesCache || {};
+    const unit = getUnitName(cartData.name); 
+    const cap  = cartData.capacity || 1; 
+    const totalSoldPcs = liveSales[fbItem.id] || 0;
+    
     const totalPrevPcs   = ((parseFloat(cartData.prevCartons || 0)) * cap) + parseInt(cartData.prevLoose || 0);
     const totalNewPcs    = ((parseFloat(cartData.loadedCartons || 0)) * cap) + parseInt(cartData.loadedLoose || 0);
     const totalLoadedPcs = totalPrevPcs + totalNewPcs;
 
     const totalRemPcs    = totalLoadedPcs - totalSoldPcs;
-    const currentManualCartons = cartData.manualCartons !== undefined ? cartData.manualCartons : '';
+    const currentManualCartons = cartData.manualCartons !== undefined ? cartData.manualCartons : ''; 
     const currentManualLoose   = cartData.manualLoose   !== undefined ? cartData.manualLoose   : '';
-    const lastEditedAt         = cartData.lastEditedAt || '';
+    const lastEditedAt         = cartData.lastEditedAt || ''; 
     const isInventoryDone      = !!cartData.isInventoryDone;
-    const hasManual = currentManualCartons !== '' || currentManualLoose !== '';
-
-    // صنف بلا تحميل ولا مبيعات ولا جرد -> لا معنى لعرضه
-    if (!(totalLoadedPcs > 0 || totalSoldPcs !== 0 || hasManual || isInventoryDone || loadedInSession[id])) return;
-
+    
     let calculatedStatus = cartData.diffStatus || "";
-    if (!cartData.diffStatus && hasManual && !salesLoading) {
+    if (!cartData.diffStatus && (currentManualCartons !== '' || currentManualLoose !== '')) {
       const totalManualPcs = ((parseFloat(currentManualCartons)||0) * cap) + (parseInt(currentManualLoose)||0);
       calculatedStatus = (totalManualPcs < totalRemPcs) ? "عجز" : (totalManualPcs > totalRemPcs) ? "زيادة" : "";
     }
 
     const totalReturnedPcs = ((parseFloat(currentManualCartons)||0) * cap) + (parseInt(currentManualLoose)||0);
     const inTruckPcs = Math.max(0, totalLoadedPcs - totalSoldPcs - totalReturnedPcs);
-    const inTruckText = salesLoading ? '…' : formatQuantityDetailed(inTruckPcs, cap, unit);
-
-    // لا نحفظ المتبقي قبل وصول المبيعات حتى لا تُكتب قيمة خاطئة
-    if (!salesLoading && cartItems[id]) cartData.inTruckPcs = inTruckPcs;
+    const inTruckText = formatQuantityDetailed(inTruckPcs, cap, unit);
+    
+    cartData.inTruckPcs = inTruckPcs;
 
     const prevLoadedText = formatQuantityDetailed(totalPrevPcs, cap, unit);
     const newLoadedText  = formatQuantityDetailed(totalNewPcs, cap, unit);
     const loadedText     = formatQuantityDetailed(totalLoadedPcs, cap, unit);
-
+    
     let soldText = formatQuantityDetailed(Math.abs(totalSoldPcs), cap, unit);
-    if (salesLoading) soldText = '…';
-    else if (totalSoldPcs === 0) soldText = '0';
-    else if (totalSoldPcs < 0) soldText = '↺ ' + soldText;
+    if (totalSoldPcs === 0) soldText = '0'; else if (totalSoldPcs < 0) soldText = '↺ ' + soldText;
+    
+    let manualText = '—';
+    if (currentManualCartons !== '' || currentManualLoose !== '') { manualText = formatQuantityDetailed(totalReturnedPcs, cap, unit); }
+    const stockText = formatQuantityDetailed(fbItem.totalPcs, cap, unit);
 
-    const manualText = hasManual ? formatQuantityDetailed(totalReturnedPcs, cap, unit) : '—';
-    const stockText = p ? formatQuantityDetailed(p.totalPcs, cap, unit) : '—';
-
-    rows.push({ id, it: cartData, unit, cap, prevLoadedText, newLoadedText, totalLoadedPcs, totalSoldPcs, loadedText, soldText, manualText, inTruckPcs, inTruckText, stockText, calculatedStatus, currentManualCartons, currentManualLoose, lastEditedAt, totalRemPcs, isInventoryDone });
+    rows.push({ id: fbItem.id, it: cartData, unit, cap, prevLoadedText, newLoadedText, totalLoadedPcs, totalSoldPcs, loadedText, soldText, manualText, inTruckPcs, inTruckText, stockText, calculatedStatus, currentManualCartons, currentManualLoose, lastEditedAt, totalRemPcs, isInventoryDone });
   });
 
   rows.sort((a, b) => {
     if (a.totalSoldPcs > 0 && b.totalSoldPcs > 0) return b.totalSoldPcs - a.totalSoldPcs;
     if (a.totalSoldPcs > 0 && b.totalSoldPcs <= 0) return -1;
     if (a.totalSoldPcs <= 0 && b.totalSoldPcs > 0) return 1;
-    return (a.it.name || '').localeCompare(b.it.name || '', 'ar');
+    return a.it.name.localeCompare(b.it.name, 'ar');
   });
   cachedCalculatedRows = rows; updateTabCounters();
 }
 
-function renderSummaryCard(r) {
-  const { id, it, unit, cap, prevLoadedText, newLoadedText, totalSoldPcs, soldText, inTruckText, stockText, calculatedStatus, currentManualCartons, currentManualLoose, lastEditedAt, isInventoryDone } = r;
-  const statusClass = calculatedStatus === 'عجز' ? 'status-ajz' : calculatedStatus === 'زيادة' ? 'status-zyada' : '';
-  const isNegativeStock = stockText.startsWith('-');
-  let returnFieldsHtml;
-  if (cap > 1) {
-    returnFieldsHtml = `<input type="number" value="${currentManualCartons}" placeholder="ك" oninput="window.updateManualSummaryField('${id}','manualCartons',this.value)"><input type="number" value="${currentManualLoose}" placeholder="${unit.slice(0,3)}" oninput="window.updateManualSummaryField('${id}','manualLoose',this.value)">`;
-  } else {
-    returnFieldsHtml = `<input type="number" value="${currentManualLoose}" style="width: 75px;" placeholder="${unit}" oninput="window.updateManualSummaryField('${id}','manualLoose',this.value)">`;
-  }
-  const editBadgeHtml = lastEditedAt ? `<div class="edit-timestamp-badge"><span>🕒 تعديل:</span> <b>${lastEditedAt}</b></div>` : '';
-  const actionBtnHtml = isInventoryDone ? `<button class="btn-restore-item" onclick="window.toggleItemInventoryComplete('${id}', false)">↩️ استرجاع</button>` : `<button class="btn-complete-item" onclick="window.toggleItemInventoryComplete('${id}', true)">تم الجرد ✔</button>`;
-
-  return `
-  <div class="inv-item-card ${isInventoryDone ? 'completed-card' : ''}" id="card-item-${id}">
-    <div class="inv-item-name"><span>${it.name}</span><div style="display:flex; align-items:center; gap:4px;">${actionBtnHtml}<button class="btn btn-sm" style="background:var(--amber-lt); color:var(--amber); font-size:11px; padding:3px 6px; font-weight:800;" onclick="window.openEditLoadModal('${id}')">✏️</button><span class="stock-badge ${isNegativeStock ? 'negative' : ''}" title="المخزون الفعلي بالمخزن الرئيسي">🏭 ${stockText}</span></div></div>
-    ${editBadgeHtml}
-    <div class="inv-stats-row">
-      <div class="inv-stat"><span class="lbl">قبل التحميل</span><span class="val" style="color:var(--gray);">${prevLoadedText}</span></div>
-      <div class="inv-stat loaded"><span class="lbl">تم تحميله</span><span class="val" style="color:var(--brand);">${newLoadedText}</span></div>
-      <div class="inv-stat sold"><span class="lbl">المباع</span><span class="val" style="${totalSoldPcs < 0 ? 'color:var(--amber)' : ''}">${soldText}</span></div>
-      <div class="inv-stat in-truck"><span class="lbl">المتبقي بالعربية</span><span class="val">${inTruckText}</span></div>
-    </div>
-    <div class="inv-bottom-row">
-      <div class="inv-return-group"><label>الراجع:</label>${returnFieldsHtml}</div>
-      <select class="inv-status-select ${statusClass}" onchange="this.className='inv-status-select '+(this.value==='عجز'?'status-ajz':this.value==='زيادة'?'status-zyada':''); window.updateManualSummaryField('${id}','diffStatus',this.value)">
-        <option value=""         ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
-        <option value="عجز"    ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
-        <option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option>
-      </select>
-    </div>
-  </div>`;
-}
-
-// النزول المباشر لأي بند جديد لم يتم جرده
-function scrollToNewPending(list) {
-  if (memorySalesCache === null || !list.length) return;
-  const key = 'seenSummary_' + (currentListenDate || selectedDate());
-  let seen;
-  try { seen = new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch (e) { seen = new Set(); }
-  const fresh = list.find(r => !seen.has(r.id));
-  cachedCalculatedRows.forEach(r => seen.add(r.id));
-  try { localStorage.setItem(key, JSON.stringify([...seen])); } catch (e) {}
-  if (!fresh) return;
-  requestAnimationFrame(() => {
-    const el = document.getElementById('card-item-' + fresh.id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('flash-card');
-    setTimeout(() => el.classList.remove('flash-card'), 2300);
-  });
-}
-
 window.filterSummaryUI = function() {
-  const cardsContainer = document.getElementById('summaryCards');
-  const searchSummaryVal = cleanItemName(document.getElementById('searchSummary').value);
+  const tb = document.getElementById('summaryTable'); const cardsContainer = document.getElementById('summaryCards'); const searchSummaryVal = cleanItemName(document.getElementById('searchSummary').value);
   let filtered = cachedCalculatedRows.filter(r => currentSummaryTab === 'completed' ? r.isInventoryDone : !r.isInventoryDone);
   if (searchSummaryVal) { filtered = filtered.filter(r => cleanItemName(r.it.name).includes(searchSummaryVal)); }
   if (!filtered.length) {
     const emptyMsg = currentSummaryTab === 'completed' ? 'لا توجد أصناف مكتملة الجرد حالياً' : 'ممتاز! تم جرد كافة أصناف هذه الحركة';
-    cardsContainer.innerHTML = `<div class="empty"><span class="em">🎉</span>${emptyMsg}</div>`;
-    return;
+    cardsContainer.innerHTML = `<div class="empty"><span class="em">🎉</span>${emptyMsg}</div>`; tb.innerHTML = '<tr><td colspan="7"></td></tr>'; return;
   }
-  cardsContainer.innerHTML = filtered.map(renderSummaryCard).join('');
-  if (!searchSummaryVal && currentSummaryTab === 'active' && isActive('pg-summary')) scrollToNewPending(filtered);
+  cardsContainer.innerHTML = ''; tb.innerHTML = '';
+
+  filtered.forEach(({ id, it, unit, cap, prevLoadedText, newLoadedText, totalSoldPcs, soldText, manualText, inTruckText, stockText, calculatedStatus, currentManualCartons, currentManualLoose, lastEditedAt, isInventoryDone }) => {
+    const statusClass = calculatedStatus === 'عجز' ? 'status-ajz' : calculatedStatus === 'زيادة' ? 'status-zyada' : ''; const isNegativeStock = stockText.startsWith('-');
+    let returnFieldsHtml = ''; let tblReturnFieldsHtml = '';
+    if (cap > 1) {
+      returnFieldsHtml = `<input type="number" value="${currentManualCartons}" placeholder="ك" oninput="window.updateManualSummaryField('${id}','manualCartons',this.value)"><input type="number" value="${currentManualLoose}" placeholder="${unit.slice(0,3)}" oninput="window.updateManualSummaryField('${id}','manualLoose',this.value)">`;
+      tblReturnFieldsHtml = `<div style="display:flex;gap:4px;justify-content:center;"><input type="number" value="${currentManualCartons}" placeholder="ك" oninput="window.updateManualSummaryField('${id}','manualCartons',this.value)"><input type="number" value="${currentManualLoose}" placeholder="${unit.slice(0,3)}" oninput="window.updateManualSummaryField('${id}','manualLoose',this.value)"></div>`;
+    } else {
+      returnFieldsHtml = `<input type="hidden" value="0" oninput="window.updateManualSummaryField('${id}','manualCartons',this.value)"><input type="number" value="${currentManualLoose}" style="width: 75px;" placeholder="${unit}" oninput="window.updateManualSummaryField('${id}','manualLoose',this.value)">`;
+      tblReturnFieldsHtml = `<input type="number" value="${currentManualLoose}" placeholder="${unit}" oninput="window.updateManualSummaryField('${id}','manualLoose',this.value)">`;
+    }
+
+    const editBadgeHtml = lastEditedAt ? `<div class="edit-timestamp-badge"><span>🕒 تعديل:</span> <b>${lastEditedAt}</b></div>` : '';
+    const actionBtnHtml = isInventoryDone ? `<button class="btn-restore-item" onclick="window.toggleItemInventoryComplete('${id}', false)">↩️ استرجاع</button>` : `<button class="btn-complete-item" onclick="window.toggleItemInventoryComplete('${id}', true)">تم الجرد ✔</button>`;
+
+    const card = document.createElement('div');
+    card.className = `inv-item-card ${isInventoryDone ? 'completed-card' : ''}`;
+    card.id = 'card-item-' + id;
+    card.innerHTML = `
+      <div class="inv-item-name"><span>${it.name}</span><div style="display:flex; align-items:center; gap:4px;">${actionBtnHtml}<button class="btn btn-sm" style="background:var(--amber-lt); color:var(--amber); font-size:11px; padding:3px 6px; font-weight:800;" onclick="window.openEditLoadModal('${id}')">✏️</button><span class="stock-badge ${isNegativeStock ? 'negative' : ''}" title="المخزون الفعلي بالمخزن الرئيسي">🏭 ${stockText}</span></div></div>
+      ${editBadgeHtml}
+      <div class="inv-stats-row">
+        <div class="inv-stat"><span class="lbl">قبل التحميل</span><span class="val" style="color:var(--gray);">${prevLoadedText}</span></div>
+        <div class="inv-stat loaded"><span class="lbl">تم تحميله</span><span class="val" style="color:var(--brand);">${newLoadedText}</span></div>
+        <div class="inv-stat sold"><span class="lbl">المباع</span><span class="val" style="${totalSoldPcs < 0 ? 'color:var(--amber)' : ''}">${soldText}</span></div>
+        <div class="inv-stat in-truck"><span class="lbl">المتبقي بالعربية</span><span class="val">${inTruckText}</span></div>
+      </div>
+      <div class="inv-bottom-row">
+        <div class="inv-return-group"><label>الراجع:</label>${returnFieldsHtml}</div>
+        <select class="inv-status-select ${statusClass}" onchange="this.className='inv-status-select '+(this.value==='عجز'?'status-ajz':this.value==='زيادة'?'status-zyada':''); window.updateManualSummaryField('${id}','diffStatus',this.value)">
+          <option value=""         ${calculatedStatus===''      ?'selected':''}>— حالة —</option>
+          <option value="عجز"    ${calculatedStatus==='عجز'  ?'selected':''}>❌ عجز</option>
+          <option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option>
+        </select>
+      </div>`;
+    cardsContainer.appendChild(card);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="text-align:right; padding-right:6px; font-weight:800; color:var(--brand-d);">${it.name}${lastEditedAt ? `<br><small style="font-size:10px; color:var(--amber); font-weight:bold;">🕒 ${lastEditedAt}</small>` : ''}</td>
+      <td style="color:var(--gray);">${prevLoadedText}</td>
+      <td style="color:var(--brand); font-weight:bold;">${newLoadedText}</td>
+      <td>${soldText}</td>
+      <td style="color:var(--blue); background:#f0f9ff; font-weight:bold;">${inTruckText}</td>
+      <td>${tblReturnFieldsHtml}</td>
+      <td><select onchange="window.updateManualSummaryField('${id}','diffStatus',this.value)"><option value="" ${calculatedStatus===''?'selected':''}>— —</option><option value="عجز" ${calculatedStatus==='عجز'?'selected':''}>❌ عجز</option><option value="زيادة" ${calculatedStatus==='زيادة'?'selected':''}>➕ زيادة</option></select></td>`;
+    tb.appendChild(tr);
+  });
 };
 
 window.openEditLoadModal = function(itemId) {
-  const p = productMap.get(itemId);
-  const row = cachedCalculatedRows.find(r => r.id === itemId);
-  const name = p?.name || row?.it?.name;
-  const capacity = p?.capacity || row?.cap || 1;
-  if (!name) return;
+  const fbItem = firebaseItems.find(i => i.id === itemId); 
+  if (!fbItem) return;
 
   const currentSess = loadedInSession[itemId] || {};
   const currentCart = cartItems[itemId] || {};
-
+  
   const prevCartonsVal = currentSess.prevCartons !== undefined ? currentSess.prevCartons : (currentCart.prevCartons ?? '');
   const prevLooseVal   = currentSess.prevLoose   !== undefined ? currentSess.prevLoose   : (currentCart.prevLoose   ?? '');
   const cartonsVal     = currentSess.cartons     !== undefined ? currentSess.cartons     : (currentCart.loadedCartons ?? '');
   const looseVal       = currentSess.loose       !== undefined ? currentSess.loose       : (currentCart.loadedLoose   ?? '');
 
-  const unit = getUnitName(name);
+  const unit = getUnitName(fbItem.name);
 
-  document.getElementById('modalItemId').value = itemId;
-  document.getElementById('modalItemName').textContent = name;
+  document.getElementById('modalItemId').value = itemId; 
+  document.getElementById('modalItemName').textContent = fbItem.name;
 
   const fieldsArea = document.getElementById('modalFieldsArea');
 
-  if (capacity > 1) {
+  if (fbItem.capacity > 1) {
     fieldsArea.innerHTML = `
       <div class="load-section-box">
         <div class="load-section-title">🛑 قبل التحميل</div>
@@ -1608,7 +1530,7 @@ window.openEditLoadModal = function(itemId) {
       </div>`;
   }
 
-  document.getElementById('editLoadModal').classList.add('open');
+  document.getElementById('editLoadModal').classList.add('open'); 
 };
 
 window.closeEditLoadModal = function() { document.getElementById('editLoadModal').classList.remove('open'); };
@@ -1616,9 +1538,7 @@ window.closeEditLoadModal = function() { document.getElementById('editLoadModal'
 window.saveQuickLoadEdit = function() {
   if (!document.getElementById('editLoadModal').classList.contains('open')) return;
   const itemId = document.getElementById('modalItemId').value;
-  const p = productMap.get(itemId);
-  const row = cachedCalculatedRows.find(r => r.id === itemId);
-  const fb = p || (row ? { name: row.it.name, capacity: row.cap } : null);
+  const fb = firebaseItems.find(i => i.id === itemId);
   if (!fb) { window.closeEditLoadModal(); return; }
   const g = (id, f) => f(document.getElementById(id)?.value) || 0;
   applyLoad(itemId, fb, { prevCartons: g('m-plc', parseFloat), prevLoose: g('m-pll', parseInt),
@@ -1629,18 +1549,15 @@ window.saveQuickLoadEdit = function() {
   window.toast('✅ تم تحديث كمية التحميل بنجاح');
 };
 
-// ==========================================
-// الأرشفة
-// ==========================================
 window.archiveLoad = async function() {
   if (window._archivingLoad) return;
-  const d = selectedDate();
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
   if(!confirm(`هل أنت متأكد من ترحيل واعتماد حمولة يوم ${d}؟`)) return;
   window._archivingLoad = true;
   try {
     const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
     window.toast('⏳ جاري ترحيل الحمولة وتحديث الأرشيف...');
-
+    
     await setDoc(doc(db, 'archived_loads', d), {
       date: d,
       timestamp: serverTimestamp(),
@@ -1649,33 +1566,39 @@ window.archiveLoad = async function() {
       loadedInSession: loadedInSession,
       cartItems: cartItems
     });
-
+    
     window.toast('✅ تم حفظ الحمولة في الأرشيف بنجاح!');
-  } catch (e) {
-    console.error(e);
-    window.toast('❌ حدث خطأ أثناء الترحيل!');
+  } catch (e) { 
+    console.error(e); 
+    window.toast('❌ حدث خطأ أثناء الترحيل!'); 
   } finally { window._archivingLoad = false; }
 };
 
 window.archiveInventory = async function() {
   if (window._archiving) return;
-  const d = selectedDate();
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
 
-  if (memorySalesCache === null) {
-    window.toast('⏳ المبيعات لم تصل بعد، انتظر لحظات ثم أعد المحاولة');
+  if (!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) {
     return;
   }
 
-  if (!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) return;
+  if (!Array.isArray(cachedCalculatedRows)) {
+    window.toast('❌ لا توجد بيانات جرد لترحيلها');
+    console.error('cachedCalculatedRows ليست Array:', cachedCalculatedRows);
+    return;
+  }
 
-  if (!Array.isArray(cachedCalculatedRows) || !cachedCalculatedRows.length) {
+  if (!cachedCalculatedRows.length) {
     window.toast('⚠️ لا توجد أصناف في الجرد لترحيلها');
     return;
   }
 
   window._archiving = true;
   try {
-    const loggedUser = JSON.parse(localStorage.getItem('loggedUser') || '{}');
+    const loggedUser = JSON.parse(
+      localStorage.getItem('loggedUser') || '{}'
+    );
+
     window.toast('⏳ جاري إغلاق اليوم وترحيل الجرد...');
 
     const exportData = cachedCalculatedRows.map(r => ({
@@ -1697,20 +1620,28 @@ window.archiveInventory = async function() {
 
     const archiveRef = doc(db, 'archived_inventory', d);
 
-    await setDoc(archiveRef, {
-      date: d,
-      timestamp: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      user: loggedUser.username || 'أحمد محمود الزيادي',
-      inventoryData: exportData,
-      itemsCount: exportData.length,
-      isClosed: true
-    }, { merge: true });
+    await setDoc(
+      archiveRef,
+      {
+        date: d,
+        timestamp: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        user: loggedUser.username || 'أحمد محمود الزيادي',
+        inventoryData: exportData,
+        itemsCount: exportData.length,
+        isClosed: true
+      },
+      { merge: true }
+    );
 
     const verifySnap = await getDoc(archiveRef);
-    if (!verifySnap.exists()) throw new Error('تم تنفيذ الحفظ ولكن لم يتم العثور على مستند الأرشيف');
+
+    if (!verifySnap.exists()) {
+      throw new Error('تم تنفيذ الحفظ ولكن لم يتم العثور على مستند الأرشيف');
+    }
 
     window.toast('✅ تم ترحيل الجرد وإغلاق اليوم بنجاح!');
+
   } catch (e) {
     console.error('❌ خطأ كامل أثناء ترحيل الجرد:', e);
     let errorMessage = '❌ حدث خطأ أثناء ترحيل الجرد';
@@ -1722,7 +1653,7 @@ window.archiveInventory = async function() {
 };
 
 window.fetchArchive = async function() {
-  const selectedArchiveDate = document.getElementById('archiveDate').value;
+  const selectedDate = document.getElementById('archiveDate').value;
   const container = document.getElementById('archiveContent');
   container.innerHTML = '<div class="spin"></div>';
 
@@ -1730,13 +1661,13 @@ window.fetchArchive = async function() {
     let archivedLoadsMap = {};
     let archivedInventoryMap = {};
 
-    if (selectedArchiveDate) {
+    if (selectedDate) {
       const [loadSnap, invSnap] = await Promise.all([
-        getDoc(doc(db, 'archived_loads', selectedArchiveDate)),
-        getDoc(doc(db, 'archived_inventory', selectedArchiveDate))
+        getDoc(doc(db, 'archived_loads', selectedDate)),
+        getDoc(doc(db, 'archived_inventory', selectedDate))
       ]);
-      if (loadSnap.exists()) archivedLoadsMap[selectedArchiveDate] = loadSnap.data();
-      if (invSnap.exists()) archivedInventoryMap[selectedArchiveDate] = invSnap.data();
+      if (loadSnap.exists()) archivedLoadsMap[selectedDate] = loadSnap.data();
+      if (invSnap.exists()) archivedInventoryMap[selectedDate] = invSnap.data();
     } else {
       const [loadSnap, invSnap] = await Promise.all([
         getDocs(collection(db, 'archived_loads')),
@@ -1757,6 +1688,7 @@ window.fetchArchive = async function() {
     allDates.forEach(d => {
       const invData  = archivedInventoryMap[d];
       const loadData = archivedLoadsMap[d];
+
       const isClosed = !!invData;
       const user = (invData?.user || loadData?.user) || 'أحمد محمود الزيادي';
 
@@ -1804,10 +1736,8 @@ window.fetchArchive = async function() {
 };
 
 async function buildArchiveReportHtml(d, areaId) {
-  const [invDoc, loadDoc] = await Promise.all([
-    getDoc(doc(db, 'archived_inventory', d)),
-    getDoc(doc(db, 'archived_loads', d))
-  ]);
+  const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+  const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
   let tbody = '';
   const printDateStr = new Date().toLocaleDateString('ar-EG');
@@ -1871,11 +1801,11 @@ window.shareArchiveWhatsApp = async function(d) {
     container.style.position = 'absolute'; container.style.left = '-9999px';
     document.body.appendChild(container);
 
-    const opt = {
-      margin: 0.1,
-      filename: `تقرير_جرد_${d}.pdf`,
-      image: { type:'jpeg', quality:0.98 },
-      html2canvas: { scale:2, useCORS:true },
+    const opt = { 
+      margin: 0.1, 
+      filename: `تقرير_جرد_${d}.pdf`, 
+      image: { type:'jpeg', quality:0.98 }, 
+      html2canvas: { scale:2, useCORS:true }, 
       jsPDF: { unit:'in', format:'a4', orientation:'landscape' }
     };
 
@@ -1917,10 +1847,8 @@ window.toggleArchiveDetails = async function(d) {
   detailsEl.innerHTML = '<div class="spin" style="width:18px;height:18px;"></div>';
 
   try {
-    const [invDoc, loadDoc] = await Promise.all([
-      getDoc(doc(db, 'archived_inventory', d)),
-      getDoc(doc(db, 'archived_loads', d))
-    ]);
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
 
     let html = '';
     if (invDoc.exists()) {
@@ -1989,7 +1917,7 @@ window.deleteArchiveDate = async function(d) {
   try {
     window.toast('⏳ جاري مسح السجل...');
     await deleteDoc(doc(db, 'archived_loads', d));
-    await deleteDoc(doc(db, 'archived_inventory', d));
+    await deleteDoc(doc(db, 'archived_inventory', d));   
     const card = document.getElementById(`arch-card-${d}`);
     if (card) card.remove();
     window.toast('✅ تم مسح سجل اليوم بنجاح');
@@ -2009,15 +1937,15 @@ window.exportArchivePDF = async function(d) {
     container.style.position = 'absolute'; container.style.left = '-9999px';
     document.body.appendChild(container);
 
-    const opt = {
-      margin: 0.1,
-      filename: `تقرير_أرشيف_${d}.pdf`,
-      image: { type:'jpeg', quality:0.98 },
-      html2canvas: { scale:2, useCORS:true },
+    const opt = { 
+      margin: 0.1, 
+      filename: `تقرير_أرشيف_${d}.pdf`, 
+      image: { type:'jpeg', quality:0.98 }, 
+      html2canvas: { scale:2, useCORS:true }, 
       jsPDF: { unit:'in', format:'a4', orientation:'landscape' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
-
+    
     try {
       const pdfUrl = await html2pdf().set(opt).from(container.querySelector('#arch-pdf-area')).output('bloburl');
       window.open(pdfUrl, '_blank');
@@ -2034,12 +1962,21 @@ window.exportPDF = async function(mode = 'all') {
   const exportRows = mode === 'completed' ? cachedCalculatedRows.filter(r => r.isInventoryDone) : cachedCalculatedRows;
   if (!exportRows.length) { window.toast('⚠️ لا توجد أصناف مكتملة لتصديرها'); return; }
   window.toast('⏳ جاري تجهيز تقرير الجرد للعرض...');
-
-  const reportDate = selectedDate();
+  
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr; 
   const nowStr = new Date().toLocaleDateString('ar-EG');
   let tbody = '';
-
+  
+  const uniqueRows = [];
+  const seenIds = new Set();
   exportRows.forEach(r => {
+    if (!seenIds.has(r.id)) {
+      seenIds.add(r.id);
+      uniqueRows.push(r);
+    }
+  });
+
+  uniqueRows.forEach(r => {
     let statusColor = r.calculatedStatus === 'عجز' ? '#d90429' : (r.calculatedStatus === 'زيادة' ? '#2d6a4f' : '#1b2e26');
     tbody += `
       <tr style="page-break-inside: avoid;">
@@ -2052,7 +1989,382 @@ window.exportPDF = async function(mode = 'all') {
         <td style="padding: 6px 3px; border: 1px solid #0b5e3d; text-align: center; font-weight: bold; color: ${statusColor}; font-size:12px;">${r.calculatedStatus || '—'}</td>
       </tr>`;
   });
-
+  
   const titleText = mode === 'completed' ? 'تقرير الأصناف المكتملة الجرد' : 'تقرير جرد وتتبع حركة حمولة السيارة الفعلي';
   const html = `
-    <div id="summary-print-area" style="padding: 12px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; colo
+    <div id="summary-print-area" style="padding: 12px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 100%; box-sizing: border-box;">
+       <div style="text-align: center; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 6px; margin-bottom: 10px;">
+         <h1 style="margin:0 0 3px 0; font-size: 20px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
+         <h2 style="margin:0 0 4px 0; font-size: 14px; color: #475569; font-weight:700;">${titleText}</h2>
+         <p style="margin:0; font-size: 12px; font-weight: bold; color:#475569;">تاريخ الحركة: ${reportDate} | تاريخ الطباعة: ${nowStr}</p>
+       </div>
+       <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 1.5px solid #0b5e3d;">
+         <thead>
+           <tr style="background-color: #0b5e3d; color: #ffffff !important;">
+             <th style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: right; color: #ffffff; font-size:13px; font-weight:800; width:22%;">اسم الصنف</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">قبل التحميل</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">تم تحميله</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">المباع</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; background:#08462d; width:15%;">المتبقي بالعربية</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:14%;">الراجع</th>
+             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:10%;">الحالة</th>
+           </tr>
+         </thead>
+         <tbody>${tbody}</tbody>
+       </table>
+    </div>`;
+  
+  const container = document.createElement('div'); 
+  container.innerHTML = html; 
+  container.style.position = 'absolute'; 
+  container.style.left = '-9999px'; 
+  container.style.top = '-9999px'; 
+  document.body.appendChild(container);
+  
+  const opt = { 
+    margin: 0.1, 
+    filename: `تقرير_جرد_العربة_${mode}_${reportDate}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  
+  try {
+    const pdfUrl = await html2pdf().set(opt).from(container.querySelector('#summary-print-area')).output('bloburl');
+    window.open(pdfUrl, '_blank');
+    window.toast('✅ تم فتح ملف PDF'); 
+  } catch (err) {
+    console.error(err); window.toast('❌ حدث خطأ أثناء تجهيز التقرير');
+  } finally { document.body.removeChild(container); }
+};
+
+window.exportLoadPDF = async function() {
+  const loadedKeys = Object.keys(loadedInSession);
+  if (loadedKeys.length === 0) { window.toast('⚠️ لم يتم تسجيل تحميل أي أصناف بعد لتصديرها'); return; }
+  window.toast('⏳ جاري تجهيز إذن التحميل...');
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr; let tbody = ''; let index = 1;
+  firebaseItems.forEach(fbItem => {
+    if (loadedInSession[fbItem.id]) {
+      const sess = loadedInSession[fbItem.id]; const cap = fbItem.capacity || 1; const unit = getUnitName(fbItem.name);
+      
+      const prevPcs = (parseFloat(sess.prevCartons || 0) * cap) + parseInt(sess.prevLoose || 0);
+      const newPcs  = (parseFloat(sess.cartons || 0) * cap) + parseInt(sess.loose || 0);
+      const totalLoadedPcs = prevPcs + newPcs;
+      
+      const loadedText = formatQuantityDetailed(totalLoadedPcs, cap, unit);
+      tbody += `<tr style="page-break-inside: avoid;"><td style="padding: 10px; border: 1px solid #0b5e3d; text-align: center; font-size: 15px; font-weight: bold; width: 10%;">${index++}</td><td style="padding: 10px 12px 10px 6px; border: 1px solid #0b5e3d; text-align: right; font-weight: bold; color: #1b2e26; font-size: 15px; width: 60%;">${fbItem.name}</td><td style="padding: 10px 6px 10px 12px; border: 1px solid #0b5e3d; text-align: left; font-weight: bold; color: #0b5e3d; font-size: 15px; width: 30%; direction: ltr;">${loadedText}</td></tr>`;
+    }
+  });
+  const invoiceHTML = `
+    <div id="invoice-print-area" style="padding: 18px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 100%; box-sizing: border-box;">
+       <div style="text-align: center; border-bottom: 2px dashed #0b5e3d; padding-bottom: 10px; margin-bottom: 14px;"><h1 style="margin:0 0 4px 0; font-size: 22px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1><h2 style="margin:0 0 5px 0; font-size: 17px; color: #475569; font-weight:700;">إذن تحميل بضاعة</h2><p style="margin:0; font-size: 14px; font-weight: bold; color: #1b2e26;">التاريخ: ${reportDate}</p></div>
+       <table style="width: 100%; border-collapse: collapse; margin-bottom: 18px; border: 2px solid #0b5e3d;"><thead><tr style="background-color: #0b5e3d; color: #ffffff !important;"><th style="padding: 10px; border: 1px solid #0b5e3d; text-align: center; font-size: 16px; color: #ffffff;">م</th><th style="padding: 10px 12px; border: 1px solid #0b5e3d; text-align: right; font-size: 16px; color: #ffffff;">اسم الصنف</th><th style="padding: 10px 12px; border: 1px solid #0b5e3d; text-align: left; font-size: 16px; color: #ffffff;">إجمالي الحمولة (سابق + جديد)</th></tr></thead><tbody>${tbody}</tbody></table>
+       <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; color: #1b2e26; margin-top: 24px; padding: 0 10px;"><div>توقيع أمين المخزن: .......................</div><div>توقيع السائق: .......................</div></div>
+    </div>`;
+  const container = document.createElement('div'); container.innerHTML = invoiceHTML; container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '-9999px'; document.body.appendChild(container);
+  const opt = { 
+    margin: 0.1, 
+    filename: `إذن_تحميل_${reportDate}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  
+  try {
+    const pdfUrl = await html2pdf().set(opt).from(container.querySelector('#invoice-print-area')).output('bloburl');
+    window.open(pdfUrl, '_blank');
+    window.toast('✅ تم فتح الإذن للقراءة'); 
+  } catch (err) { console.error(err); window.toast('❌ حدث خطأ أثناء المعاينة'); }
+  finally { document.body.removeChild(container); }
+};
+
+window.exportLoadExcel = function() {
+  const loadedKeys = Object.keys(loadedInSession);
+  if (loadedKeys.length === 0) { window.toast('⚠️ لا توجد أصناف محملة لتصديرها'); return; }
+  
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr;
+  const excelData = [];
+  let index = 1;
+
+  firebaseItems.forEach(fbItem => {
+    if (loadedInSession[fbItem.id]) {
+      const sess = loadedInSession[fbItem.id];
+      const cap = fbItem.capacity || 1;
+      const unit = getUnitName(fbItem.name);
+      
+      const prevPcs = (parseFloat(sess.prevCartons || 0) * cap) + parseInt(sess.prevLoose || 0);
+      const newPcs  = (parseFloat(sess.cartons || 0) * cap) + parseInt(sess.loose || 0);
+      const totalPcs = prevPcs + newPcs;
+
+      excelData.push({
+        "م": index++,
+        "اسم الصنف": fbItem.name,
+        "قبل التحميل": formatQuantityDetailed(prevPcs, cap, unit),
+        "التحميل الجديد": formatQuantityDetailed(newPcs, cap, unit),
+        "إجمالي الحمولة بالعربة": formatQuantityDetailed(totalPcs, cap, unit)
+      });
+    }
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  
+  if (!worksheet['!views']) worksheet['!views'] = [];
+  worksheet['!views'].push({ RTL: true });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "إذن التحميل");
+  
+  XLSX.writeFile(workbook, `إذن_تحميل_${reportDate}.xlsx`);
+  window.toast('📊 تم تصدير ملف Excel للتحميل بنجاح!');
+};
+
+window.exportSummaryExcel = function() {
+  if (!cachedCalculatedRows || !cachedCalculatedRows.length) { window.toast('⚠️ لا توجد بيانات جرد لتصديرها'); return; }
+  
+  const reportDate = document.getElementById('summaryDate').value || defaultDateStr;
+  const excelData = cachedCalculatedRows.map((r, i) => ({
+    "م": i + 1,
+    "اسم الصنف": r.it.name,
+    "قبل التحميل": cleanTextForPdf(r.prevLoadedText),
+    "تم تحميله جديد": cleanTextForPdf(r.newLoadedText),
+    "إجمالي المحمل": cleanTextForPdf(r.loadedText),
+    "المباع لايف": cleanTextForPdf(r.soldText),
+    "المتبقي بالعربية": cleanTextForPdf(r.inTruckText),
+    "الراجع الفعلي": cleanTextForPdf(r.manualText),
+    "حالة الفرق": r.calculatedStatus || 'مضبوط',
+    "حالة الجرد": r.isInventoryDone ? 'مكتمل' : 'قيد الجرد',
+    "تاريخ التعديل": r.lastEditedAt || '—'
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+  if (!worksheet['!views']) worksheet['!views'] = [];
+  worksheet['!views'].push({ RTL: true });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "جرد حمولة السيارة");
+  
+  XLSX.writeFile(workbook, `تقرير_جرد_العربة_${reportDate}.xlsx`);
+  window.toast('📊 تم تصدير ملف Excel لتقرير الجرد بنجاح!');
+};
+
+window.exportArchiveExcel = async function(d) {
+  window.toast('⏳ جاري إعداد ملف Excel التنسيقي المطور...');
+  try {
+    const invDoc  = await getDoc(doc(db, 'archived_inventory', d));
+    const loadDoc = await getDoc(doc(db, 'archived_loads', d));
+
+    let excelData = [];
+
+    const parseCartonAndLoose = (str) => {
+      if (!str || str === '—' || str === '0') return { cartons: 0, loose: 0 };
+      const cleaned = cleanTextForPdf(str);
+      
+      let cartons = 0;
+      let loose = 0;
+
+      const cMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:كرتونة|كرتونه|ك)/);
+      if (cMatch) cartons = parseFloat(cMatch[1]);
+
+      const lMatch = cleaned.match(/(\d+)\s*(?:قطعة|قطعه|جركن|ق)/);
+      if (lMatch) loose = parseInt(lMatch[1]);
+
+      if (!cMatch && !lMatch) {
+        const numMatch = cleaned.match(/(-?\d+)/);
+        if (numMatch) loose = parseInt(numMatch[1]);
+      }
+
+      return { cartons, loose };
+    };
+
+    const valOrEmpty = (v) => (v && v !== 0 ? v : "");
+
+    if (invDoc.exists()) {
+      const data = invDoc.data().inventoryData;
+      excelData = data.map((r) => {
+        const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
+        let mainStockCartons = 0;
+        let mainStockLoose = 0;
+
+        if (fbItem) {
+          const cap = fbItem.capacity || 1;
+          const totalPcs = fbItem.totalPcs || 0;
+          if (cap > 1) {
+            mainStockCartons = Math.floor(Math.abs(totalPcs) / cap) * (totalPcs < 0 ? -1 : 1);
+            mainStockLoose = (Math.abs(totalPcs) % cap) * (totalPcs < 0 ? -1 : 1);
+          } else {
+            mainStockLoose = totalPcs;
+          }
+        }
+
+        const prev     = parseCartonAndLoose(r.prevLoaded);
+        const loaded   = parseCartonAndLoose(r.newLoaded || r.loaded);
+        const sold     = parseCartonAndLoose(r.sold);
+        const inTruck  = parseCartonAndLoose(r.inTruck);
+
+        const totalCartons = (prev.cartons || 0) + (loaded.cartons || 0);
+        const totalLoose   = (prev.loose || 0) + (loaded.loose || 0);
+
+        return {
+          "مخزن ك": valOrEmpty(mainStockCartons),
+          "مخزن ق": valOrEmpty(mainStockLoose),
+          "اسم الصنف": r.name,
+          "سابق ك": valOrEmpty(prev.cartons),
+          "سابق ق": valOrEmpty(prev.loose),
+          "جديد ك": valOrEmpty(loaded.cartons),
+          "جديد ق": valOrEmpty(loaded.loose),
+          "اجمالي ك": valOrEmpty(totalCartons),
+          "اجمالي ق": valOrEmpty(totalLoose),
+          "مباع ك": valOrEmpty(sold.cartons),
+          "مباع ق": valOrEmpty(sold.loose),
+          "متبقى ك": valOrEmpty(inTruck.cartons),
+          "متبقى ق": valOrEmpty(inTruck.loose)
+        };
+      });
+    } else if (loadDoc.exists()) {
+      const loadData = loadDoc.data().cartItems || {};
+      excelData = Object.values(loadData).map((r) => {
+        const fbItem = firebaseItems.find(item => cleanItemName(item.name) === cleanItemName(r.name));
+        let mainStockCartons = 0;
+        let mainStockLoose = 0;
+
+        if (fbItem) {
+          const cap = fbItem.capacity || 1;
+          const totalPcs = fbItem.totalPcs || 0;
+          if (cap > 1) {
+            mainStockCartons = Math.floor(Math.abs(totalPcs) / cap) * (totalPcs < 0 ? -1 : 1);
+            mainStockLoose = (Math.abs(totalPcs) % cap) * (totalPcs < 0 ? -1 : 1);
+          } else {
+            mainStockLoose = totalPcs;
+          }
+        }
+
+        const prevCartons   = Number(r.prevCartons) || 0;
+        const prevLoose     = Number(r.prevLoose) || 0;
+        const loadedCartons = Number(r.loadedCartons) || 0;
+        const loadedLoose   = Number(r.loadedLoose) || 0;
+
+        return {
+          "مخزن ك": valOrEmpty(mainStockCartons),
+          "مخزن ق": valOrEmpty(mainStockLoose),
+          "اسم الصنف": r.name,
+          "سابق ك": valOrEmpty(prevCartons),
+          "سابق ق": valOrEmpty(prevLoose),
+          "جديد ك": valOrEmpty(loadedCartons),
+          "جديد ق": valOrEmpty(loadedLoose),
+          "اجمالي ك": valOrEmpty(prevCartons + loadedCartons),
+          "اجمالي ق": valOrEmpty(prevLoose + loadedLoose),
+          "مباع ك": "",
+          "مباع ق": "",
+          "متبقى ك": "",
+          "متبقى ق": ""
+        };
+      });
+    }
+
+    if (!excelData.length) {
+      window.toast('⚠️ لا توجد بيانات أرشيف لتصديرها لهذا اليوم');
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    if (!worksheet['!views']) worksheet['!views'] = [];
+    worksheet['!views'].push({ RTL: true });
+
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const borderStyle = {
+      top:    { style: 'thin', color: { rgb: "000000" } },
+      bottom: { style: 'thin', color: { rgb: "000000" } },
+      left:   { style: 'thin', color: { rgb: "000000" } },
+      right:  { style: 'thin', color: { rgb: "000000" } }
+    };
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cell_address]) continue;
+        
+        worksheet[cell_address].s = {
+          font: { bold: true, name: "Cairo" },
+          border: borderStyle,
+          alignment: { horizontal: C === 2 ? "right" : "center", vertical: "center" }
+        };
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, `أرشيف ${d}`);
+    
+    XLSX.writeFile(workbook, `أرشيف_جرد_${d}.xlsx`);
+    window.toast('📊 تم تصدير ملف Excel وتحديث الترتيب بنجاح!');
+  } catch (e) {
+    console.error(e);
+    window.toast('❌ حدث خطأ أثناء تصدير ملف Excel');
+  }
+};
+
+// ==========================================
+// TOAST & التنقل
+// ==========================================
+let toastTimer;
+window.toast = function(msg, action) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.pointerEvents = action ? 'auto' : 'none';
+  if (action) {
+    const b = document.createElement('button');
+    b.textContent = action.label;
+    b.style.cssText = 'margin-inline-start:10px;background:#6ee7b7;color:#0a4a31;border:0;border-radius:12px;padding:3px 10px;font:inherit;font-weight:800;cursor:pointer';
+    b.onclick = () => { el.classList.remove('show'); action.onClick(); };
+    el.appendChild(b);
+  }
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), action ? 7000 : 2400);
+};
+
+window.goToItem = async function(itemId) {
+  window.showPage('pg-items', document.querySelectorAll('nav button')[0]);
+  let row = document.getElementById('item-row-' + itemId);
+  if (!row) { await window.fetchInventoryFresh(); row = document.getElementById('item-row-' + itemId); }
+  if (!row) { window.toast('⚠️ الصنف رصيده صفر فلا يظهر في قائمة المخزن'); return; }
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.add('flash-new');
+  row.addEventListener('animationend', () => row.classList.remove('flash-new'), { once: true });
+};
+window.announceNewItem = (id, name) =>
+  window.toast('✅ تمت إضافة الصنف: ' + name, { label: 'عرض الصنف', onClick: () => window.goToItem(id) });
+
+// ==========================================
+// التنقل بين الخانات (Enter) داخل صفحة التحميل
+// ==========================================
+const flowEl = document.getElementById('loadFlow');
+flowEl.addEventListener('focusin', e => {
+  const t = e.target;
+  if (t.tagName !== 'INPUT' || t.type !== 'number') return;
+  const inputs = [...t.closest('.lstep').querySelectorAll('input[type=number]')];
+  t.enterKeyHint = inputs.indexOf(t) === inputs.length - 1 ? 'done' : 'next';
+  try { t.select(); } catch (_) {}
+});
+flowEl.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+  e.preventDefault();
+  const card = e.target.closest('.lstep');
+  const inputs = [...card.querySelectorAll('input[type=number]')];
+  const i = inputs.indexOf(e.target);
+  if (i < inputs.length - 1) inputs[i + 1].focus();      
+  else window.confirmStep(card.dataset.itemid);          
+});
+
+startApp();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").then(() => console.log("SW Registered")).catch(err => console.log("SW Failed", err));
+}
+</script>
+</body>
+</html>
