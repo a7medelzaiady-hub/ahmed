@@ -502,6 +502,22 @@ table select:focus { border-color: var(--brand); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+<script>
+(function(){
+  function show(msg){
+    var a=document.getElementById('app-content'); if(a) a.style.display='block';
+    var b=document.getElementById('boot-error');
+    if(!b){ b=document.createElement('div'); b.id='boot-error';
+      b.style.cssText='position:fixed;top:60px;left:8px;right:8px;z-index:99999;background:#fee2e2;color:#7f1d1d;border:2px solid #d90429;border-radius:12px;padding:10px;font:700 12px/1.6 Cairo,sans-serif;direction:rtl;white-space:pre-wrap;word-break:break-word';
+      document.body.appendChild(b); }
+    b.textContent='⚠️ خطأ في الصفحة (صوّر هذه الرسالة وابعتها):\n'+msg;
+  }
+  window.addEventListener('error',function(e){ show((e.message||'خطأ')+(e.filename?' @ '+e.filename.split('/').pop()+':'+e.lineno:'')); });
+  window.addEventListener('unhandledrejection',function(e){ show('Promise: '+((e.reason&&e.reason.message)||e.reason)); });
+  window.__bootFail=show;
+  setTimeout(function(){ if(!window.__started) show('لم يبدأ تشغيل الصفحة بعد 8 ثوانٍ. غالباً تعذر تحميل مكتبة Firebase (الإنترنت أو حظر gstatic) أو الكاش القديم. جرّب مسح بيانات الموقع ثم أعد الفتح.'); },8000);
+})();
+</script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, deleteField, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -985,6 +1001,7 @@ function flushItem(id) {
 window.addEventListener('pagehide', () => Object.keys(saveTimers).forEach(flushItem));
 
 function startApp() {
+  window.__started = true;
   document.getElementById('app-content').style.display = 'block';
   // 1) عرض فوري من الكاش
   if (loadStockCache()) { updateVisibleItems(); }
@@ -2038,15 +2055,4 @@ window.exportPDF = async function(mode = 'all') {
 
   const titleText = mode === 'completed' ? 'تقرير الأصناف المكتملة الجرد' : 'تقرير جرد وتتبع حركة حمولة السيارة الفعلي';
   const html = `
-    <div id="summary-print-area" style="padding: 12px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; width: 100%; box-sizing: border-box;">
-       <div style="text-align: center; border-bottom: 1.5px dashed #0b5e3d; padding-bottom: 6px; margin-bottom: 10px;">
-         <h1 style="margin:0 0 3px 0; font-size: 20px; color: #0b5e3d; font-weight:800;">الزيادي لزيوت السيارات</h1>
-         <h2 style="margin:0 0 4px 0; font-size: 14px; color: #475569; font-weight:700;">${titleText}</h2>
-         <p style="margin:0; font-size: 12px; font-weight: bold; color:#475569;">تاريخ الحركة: ${reportDate} | تاريخ الطباعة: ${nowStr}</p>
-       </div>
-       <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 1.5px solid #0b5e3d;">
-         <thead>
-           <tr style="background-color: #0b5e3d; color: #ffffff !important;">
-             <th style="padding: 8px 4px; border: 1px solid #0b5e3d; text-align: right; color: #ffffff; font-size:13px; font-weight:800; width:22%;">اسم الصنف</th>
-             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-align: center; color: #ffffff; font-size:13px; font-weight:800; width:13%;">قبل التحميل</th>
-             <th style="padding: 8px 3px; border: 1px solid #0b5e3d; text-al
+    <div id="summary-print-area" style="padding: 12px; direction: rtl; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; colo
