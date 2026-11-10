@@ -152,7 +152,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, deleteDoc, updateDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, deleteDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -177,27 +177,52 @@
     const urlParams = new URLSearchParams(window.location.search);
     const custId = urlParams.get('id');
 
-    async function calculateDetailedBalance(customerId, initialBalance) {
+    function normalizeName(str) {
+        return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+    }
+
+    // 🔥 المحرك الموحد للحساب المطابق لصفحة المبيعات 🔥
+    async function calculateAccurateBalance(customerId, initialBalance, customerName) {
         try {
-            const qInvoices = query(collection(db, "invoices"), where("customerId", "==", customerId));
-            const snapInvoices = await getDocs(qInvoices);
-            let totalInvoicesRemaining = 0;
-            snapInvoices.forEach(doc => {
-                totalInvoicesRemaining += (Number(doc.data().remaining) || 0);
+            const cleanName = normalizeName(customerName);
+            const [snapInvoices, snapTrans] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(collection(db, "transactions"))
+            ]);
+
+            let ledgerDebt = 0;
+
+            snapInvoices.forEach(d => {
+                const inv = d.data();
+                if (inv.isDeleted) return;
+                const matchId = inv.customerId && String(inv.customerId).trim() === customerId;
+                const matchName = !inv.customerId && inv.customerName && normalizeName(inv.customerName) === cleanName;
+
+                if (matchId || matchName) {
+                    const paid = (Number(inv.cashAmount ?? inv.cashPaid ?? inv.paid) || 0) + (Number(inv.walletAmount ?? inv.walletPaid) || 0);
+                    ledgerDebt += ((Number(inv.total) || 0) - paid);
+                }
             });
 
-            const qTrans = query(collection(db, "transactions"), where("partyId", "==", customerId));
-            const snapTrans = await getDocs(qTrans);
-            let transEffect = 0;
-            snapTrans.forEach(doc => {
-                const tr = doc.data();
-                if(tr.type === 'قبض') transEffect -= (Number(tr.amount) || 0);
-                else if(tr.type === 'صرف') transEffect += (Number(tr.amount) || 0);
+            snapTrans.forEach(d => {
+                const tr = d.data();
+                if (tr.isDeleted) return;
+                if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
+
+                const matchId = (tr.partyId || tr.customerId) && String(tr.partyId || tr.customerId).trim() === customerId;
+                const matchName = !(tr.partyId || tr.customerId) && normalizeName(tr.customerName || tr.partyName) === cleanName;
+
+                if (matchId || matchName) {
+                    const amt = Math.abs(Number(tr.amount || tr.total || 0));
+                    if (tr.type === 'قبض') ledgerDebt -= amt;
+                    else if (tr.type === 'صرف') ledgerDebt += amt;
+                }
             });
 
-            return Number(initialBalance) + totalInvoicesRemaining + transEffect;
+            return Number(initialBalance || 0) + ledgerDebt;
         } catch (e) {
-            return Number(initialBalance);
+            console.error("خطأ في حساب الرصيد:", e);
+            return Number(initialBalance || 0);
         }
     }
 
@@ -217,14 +242,16 @@
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const startBalance = Number(data.initialBalance || 0);
-                const realBalance = await calculateDetailedBalance(custId, startBalance);
                 
-                // 🌟 تحديث الرصيد الحالي للعميل في السيرفر لكي تراه صفحة العملاء الخارجية فوراً
+                // حساب الرصيد الموحد اللحظي المطابق للمبيعات
+                const realBalance = await calculateAccurateBalance(custId, startBalance, data.name);
+                
+                // تحديث الرصيد الحالي للعميل في السيرفر لكي تراه الشاشات الخارجية فوراً
                 await updateDoc(docRef, { currentBalance: realBalance });
                 
                 document.getElementById('displayName').innerText = data.name;
-                document.getElementById('displayBalance').innerText = Math.abs(realBalance).toLocaleString(undefined, {minimumFractionDigits: 2});
-                document.getElementById('displayOpening').innerText = startBalance.toLocaleString();
+                document.getElementById('displayBalance').innerText = Math.abs(realBalance).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                document.getElementById('displayOpening').innerText = startBalance.toLocaleString('en-US', {minimumFractionDigits: 2});
                 document.getElementById('displayPhone').innerText = data.phone || 'غير مسجل';
                 document.getElementById('displayAddress').innerText = data.address || 'غير مسجل';
                 
