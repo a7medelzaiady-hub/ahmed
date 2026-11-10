@@ -177,7 +177,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, query, where, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -201,57 +201,120 @@
     const urlParams = new URLSearchParams(window.location.search);
     const custId = urlParams.get('id');
 
+    function normalizeName(str) {
+        return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+    }
+
+    function convertToEnglishNumbers(str) {
+        if (!str) return "";
+        const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+        let res = str.toString();
+        for (let i = 0; i < 10; i++) { res = res.replace(arabicNumbers[i], i); }
+        return res;
+    }
+
+    function parseArabicDateToMs(dateStr) {
+        if (!dateStr) return 0;
+        try {
+            let cleanStr = convertToEnglishNumbers(String(dateStr)).replace(/ص/g, 'AM').replace(/م/g, 'PM');
+            const parsed = Date.parse(cleanStr);
+            if (!isNaN(parsed)) return parsed;
+            const parts = cleanStr.match(/(\d+)/g);
+            if (parts && parts.length >= 3) {
+                let year = parseInt(parts[0]), month = parseInt(parts[1]) - 1, day = parseInt(parts[2]);
+                if (year < 1000) { day = parseInt(parts[0]); month = parseInt(parts[1]) - 1; year = parseInt(parts[2]); }
+                let hour = parts[3] ? parseInt(parts[3]) : 0, minute = parts[4] ? parseInt(parts[4]) : 0;
+                if (cleanStr.includes('PM') && hour < 12) hour += 12;
+                if (cleanStr.includes('AM') && hour === 12) hour = 0;
+                return new Date(year, month, day, hour, minute).getTime();
+            }
+        } catch (e) { } return 0;
+    }
+
     async function loadStatement() {
         if(!custId) return;
         try {
             const custSnap = await getDoc(doc(db, "customers", custId));
             let opening = 0;
+            let custName = "";
             if(custSnap.exists()){
                 const d = custSnap.data();
                 opening = Number(d.initialBalance) || 0;
+                custName = d.name || "";
                 document.getElementById('titleName').innerText = `كشف حساب: ${d.name}`;
-                document.getElementById('displayOpening').innerText = opening.toLocaleString() + " ج.م";
-                document.getElementById('p-opening').innerText = opening.toLocaleString();
+                document.getElementById('displayOpening').innerText = opening.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ج.م";
+                document.getElementById('p-opening').innerText = opening.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 document.getElementById('p-name').innerText = d.name;
                 document.getElementById('p-date').innerText = new Date().toLocaleDateString('ar-EG');
             }
 
-            const qInv = query(collection(db, "invoices"), where("customerId", "==", custId));
-            const qTr = query(collection(db, "transactions"), where("partyId", "==", custId));
-            const [iS, tS] = await Promise.all([getDocs(qInv), getDocs(qTr)]);
+            const cleanName = normalizeName(custName);
+
+            const [iS, tS] = await Promise.all([
+                getDocs(collection(db, "invoices")), 
+                getDocs(collection(db, "transactions"))
+            ]);
 
             let list = [];
+
+            // 🔥 تجميع الفواتير مع حساب المدفوعات كاش + محفظة
             iS.forEach(s => {
                 const v = s.data();
-                list.push({ 
-                    id: s.id,
-                    d: v.time || '---', 
-                    t: 'فاتورة مبيعات', 
-                    class: 'type-invoice',
-                    n: `رقم: ${s.id.substring(0,6).toUpperCase()}`, 
-                    tot: Number(v.total)||0, 
-                    p: Number(v.paid)||0, 
-                    r: Number(v.remaining)||0, 
-                    ts: v.timestamp?.seconds||0 
-                });
-            });
-            tS.forEach(s => {
-                const v = s.data();
-                const isP = v.type === 'قبض';
-                list.push({ 
-                    id: null,
-                    d: v.date || '---', 
-                    t: isP?'سند قبض':'سند صرف', 
-                    class: isP ? 'type-receive' : 'type-pay',
-                    n: v.notes || (isP?'نقدية':'نثريات'), 
-                    tot: 0, 
-                    p: Number(v.amount)||0, 
-                    r: isP ? -(Number(v.amount)||0) : (Number(v.amount)||0), 
-                    ts: v.createdAt?.seconds||0 
-                });
+                if (v.isDeleted) return;
+                
+                const matchId = v.customerId && String(v.customerId).trim() === custId;
+                const matchName = !v.customerId && v.customerName && normalizeName(v.customerName) === cleanName;
+
+                if (matchId || matchName) {
+                    const paid = (Number(v.cashAmount ?? v.cashPaid ?? v.paid) || 0) + (Number(v.walletAmount ?? v.walletPaid) || 0);
+                    const total = Number(v.total) || 0;
+                    const rem = total - paid;
+                    const ts = v.timestamp?.seconds ? (v.timestamp.seconds * 1000) : parseArabicDateToMs(v.time || v.date);
+
+                    list.push({ 
+                        id: s.id,
+                        d: v.time || v.date || '---', 
+                        t: 'فاتورة مبيعات', 
+                        class: 'type-invoice',
+                        n: `رقم: ${s.id.substring(0,6).toUpperCase()}`, 
+                        tot: total, 
+                        p: paid, 
+                        r: rem, 
+                        ts: ts
+                    });
+                }
             });
 
-            list.sort((a,b) => b.ts - a.ts);
+            // 🔥 تجميع السندات المستقلة مع استبعاد مدفوعات الفواتير
+            tS.forEach(s => {
+                const v = s.data();
+                if (v.isDeleted) return;
+                if (v.invoiceId || (v.note && v.note.includes('فاتورة'))) return;
+
+                const matchId = (v.partyId || v.customerId) && String(v.partyId || v.customerId).trim() === custId;
+                const matchName = !(v.partyId || v.customerId) && normalizeName(v.customerName || v.partyName) === cleanName;
+
+                if (matchId || matchName) {
+                    const isP = v.type === 'قبض';
+                    const amt = Math.abs(Number(v.amount || v.total || 0));
+                    const ts = v.createdAt?.seconds ? (v.createdAt.seconds * 1000) : parseArabicDateToMs(v.date || v.time);
+
+                    list.push({ 
+                        id: null,
+                        d: v.date || v.time || '---', 
+                        t: isP ? 'سند قبض' : 'سند صرف', 
+                        class: isP ? 'type-receive' : 'type-pay',
+                        n: v.notes || v.note || (isP ? 'نقدية' : 'نثريات'), 
+                        tot: 0, 
+                        p: amt, 
+                        r: isP ? -amt : amt, 
+                        ts: ts
+                    });
+                }
+            });
+
+            // ترتيب زمني تصاعدي لتسلسل الرصيد
+            list.sort((a,b) => a.ts - b.ts);
             
             const tbody = document.getElementById('statementBody');
             const pbody = document.getElementById('printBody');
@@ -260,7 +323,7 @@
             let runningDebt = opening;
             list.forEach(item => {
                 runningDebt += item.r;
-                let ds = item.d.split(' ')[0];
+                let ds = String(item.d).split(' ')[0];
                 
                 const isInvoice = item.t === 'فاتورة مبيعات' && item.id;
                 const dataAttr = isInvoice ? `data-id="${item.id}"` : '';
@@ -272,15 +335,15 @@
                             <div class="${item.class}" ${dataAttr}>${item.t}</div>
                             <div style="font-size:0.7rem; color:#707b7c; font-weight:600;">${item.n}</div>
                         </td>
-                        <td class="num-font">${item.tot > 0 ? item.tot.toLocaleString() : '-'}</td>
-                        <td class="num-font val-minus">${item.p > 0 ? item.p.toLocaleString() : '-'}</td>
+                        <td class="num-font">${item.tot > 0 ? item.tot.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+                        <td class="num-font val-minus">${item.p > 0 ? item.p.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
                     </tr>`;
                 
-                pbody.innerHTML += `<tr><td>${ds}</td><td style="text-align:right; font-weight:bold;">${item.t} <br><small>${item.n}</small></td><td>${item.tot ? item.tot.toLocaleString() : '-'}</td><td>${item.p ? item.p.toLocaleString() : '-'}</td></tr>`;
+                pbody.innerHTML += `<tr><td>${ds}</td><td style="text-align:right; font-weight:bold;">${item.t} <br><small>${item.n}</small></td><td>${item.tot ? item.tot.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td><td>${item.p ? item.p.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td></tr>`;
             });
 
-            document.getElementById('displayTotal').innerText = runningDebt.toLocaleString();
-            document.getElementById('p-balance').innerText = runningDebt.toLocaleString();
+            document.getElementById('displayTotal').innerText = runningDebt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('p-balance').innerText = runningDebt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             
             const badge = document.getElementById('balanceType');
             const pStatus = document.getElementById('p-status');
