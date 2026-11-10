@@ -259,6 +259,7 @@ tr:hover td { background: var(--brand-lt); }
 
 @keyframes flashNew{0%,60%{background:#fde68a}100%{background:transparent}}
 .flash-new td{animation:flashNew 2.5s ease}
+.flash-new-card{animation:flashNew 2.5s ease}
 
 .tag{display:inline-block;padding:2px 7px;border-radius:14px;font-size:10px;font-weight:800;}
 .tag-blue{background:var(--brand-lt);color:var(--brand);}
@@ -556,6 +557,7 @@ let memorySalesCache = null;
 let lastFetchedDate = null;
 let cachedCalculatedRows = [];
 let isInventoryLoadedOnce = false;
+let isSalesReady = false;
 
 let factorsMap = {};
 let namesMap = {};
@@ -628,6 +630,11 @@ function listenToDailyLoadChanges() {
   const d = document.getElementById('summaryDate').value || defaultDateStr;
   if (unsubscribeDailyLoad && currentListenDate === d) return;   
   if (unsubscribeDailyLoad) unsubscribeDailyLoad();
+
+  if (currentListenDate !== d) {
+    previousTruckStock = {};
+  }
+
   currentListenDate = d; lastDailySig = null; drafts = {}; editingIds.clear();
 
   loadFromLocalCache(d);
@@ -669,6 +676,7 @@ function listenToDailyLoadChanges() {
 function recomputeSales() {
   memorySalesCache = {};
   dayInvoices.forEach(inv => {
+    if (inv.isDeleted) return;
     const isRet = inv.type === 'return' || inv.isReturn === true;
     inv.items?.forEach(itm => {
       const id = getProductIdForItem(itm);
@@ -676,9 +684,11 @@ function recomputeSales() {
       const cap = Number(itm.unitFactor || itm.factor) || factorsMap[id] || 1;
       const raw = Number(itm.qty) || 0;
       const pcs = isCartonUnit(itm.unit || itm.unitName, itm.isCarton) ? raw * cap : raw;
-      memorySalesCache[id] = (memorySalesCache[id] || 0) + ((isRet || itm.isReturn === true) ? -Math.abs(pcs) : pcs);
+      const isItemReturn = isRet || itm.isReturn === true;
+      memorySalesCache[id] = (memorySalesCache[id] || 0) + (isItemReturn ? -Math.abs(pcs) : pcs);
     });
   });
+  isSalesReady = true;
   buildCalculatedRows();
 }
 
@@ -686,7 +696,7 @@ function listenToLiveInvoices() {
   const sel = document.getElementById('summaryDate').value || defaultDateStr;
   if (unsubscribeInvoices && invoicesDate === sel) return;
   if (unsubscribeInvoices) unsubscribeInvoices();
-  invoicesDate = sel; dayInvoices = new Map(); memorySalesCache = null;
+  invoicesDate = sel; dayInvoices = new Map(); memorySalesCache = null; isSalesReady = false;
 
   unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snap) => {
     snap.docChanges().forEach(ch => {            
@@ -859,6 +869,31 @@ function parseDate(df,ts){
   return"";
 }
 
+function checkAutoScrollToFirstActive() {
+  const d = document.getElementById('summaryDate').value || defaultDateStr;
+  const searchSummaryVal = cleanItemName(document.getElementById('searchSummary').value);
+
+  if (searchSummaryVal || currentSummaryTab === 'completed') return;
+
+  const key = `seenItemIds_${d}`;
+  const seenIds = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+
+  const firstUnseen = cachedCalculatedRows.find(r => !r.isInventoryDone && !seenIds.has(r.id));
+
+  if (firstUnseen) {
+    seenIds.add(firstUnseen.id);
+    localStorage.setItem(key, JSON.stringify([...seenIds]));
+    setTimeout(() => {
+      const cardEl = document.getElementById('card-item-' + firstUnseen.id);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        cardEl.classList.add('flash-new-card');
+        cardEl.addEventListener('animationend', () => cardEl.classList.remove('flash-new-card'), { once: true });
+      }
+    }, 100);
+  }
+}
+
 window.showPage = function(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -866,7 +901,7 @@ window.showPage = function(id, btn) {
   if (btn) btn.classList.add('active');
 
   if (id === 'pg-load')    initLoadFlow();
-  if (id === 'pg-summary') { buildCalculatedRows(); window.filterSummaryUI(); }
+  if (id === 'pg-summary') { buildCalculatedRows(); window.filterSummaryUI(); checkAutoScrollToFirstActive(); }
   if (id === 'pg-archive') window.fetchArchive();
 };
 
@@ -963,6 +998,7 @@ window.fetchInventoryFresh = async function() {
     invoicesSnap.forEach(docSnap => {
       const data = docSnap.data();
       if (data.isDeleted) return;
+      const isRet = data.type === 'return' || data.isReturn === true;
       data.items?.forEach(item => {
         const id = getProductIdForItem(item);
         if (id) {
@@ -972,9 +1008,9 @@ window.fetchInventoryFresh = async function() {
           const isCartonItem = isCartonUnit(item.unit || item.unitName, item.isCarton);
           const pcs = isCartonItem ? (rawQty * factor) : rawQty;
           
-          const isReturn = data.type === 'return' || data.isReturn === true || item.isReturn === true;
+          const isItemReturn = isRet || item.isReturn === true;
 
-          if (isReturn) {
+          if (isItemReturn) {
             salesMap[id] -= Math.abs(pcs);
           } else {
             salesMap[id] += pcs;
@@ -1023,15 +1059,13 @@ window.fetchInventoryFresh = async function() {
         const purchasesPcs = purchasesMap[doc.id] || 0;
         const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
 
-        if (calculatedRealPcs !== 0) {
-          firebaseItems.push({
-            id: doc.id,
-            name: data.name,
-            capacity: factor,
-            totalPcs: calculatedRealPcs,
-            unit: data.unit || ''
-          });
-        }
+        firebaseItems.push({
+          id: doc.id,
+          name: data.name,
+          capacity: factor,
+          totalPcs: calculatedRealPcs,
+          unit: data.unit || ''
+        });
       }
     });
 
@@ -1048,14 +1082,15 @@ window.fetchInventoryFresh = async function() {
 function renderItemsPage() {
   const card = document.getElementById('itemsCard');
   if (!card) return;
-  if (!firebaseItems.length) { card.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أصناف بالمخزن</div>'; return; }
+  const visibleItems = firebaseItems.filter(it => it.totalPcs !== 0);
+  if (!visibleItems.length) { card.innerHTML = '<div class="empty"><span class="em">📭</span>لا توجد أصناف بالمخزن</div>'; return; }
   card.innerHTML = `
-    <h3>📋 الأصناف المتاحة بالمخزن الرئيسي (${firebaseItems.length} صنف)</h3>
+    <h3>📋 الأصناف المتاحة بالمخزن الرئيسي (${visibleItems.length} صنف)</h3>
     <div class="tbl-wrap">
       <table style="min-width: 100%;">
         <thead><tr><th>#</th><th style="text-align: right; padding-right:10px;">اسم الصنف</th><th>الكمية المنفردة</th><th>الكمية بالتعبئة الإجمالية</th></tr></thead>
         <tbody>
-          ${firebaseItems.map((it, i) => {
+          ${visibleItems.map((it, i) => {
             const unit = getUnitName(it.name);
             const isNegative = it.totalPcs < 0;
             const styleLabel = isNegative ? 'style="color: var(--red); font-weight: bold;"' : '';
@@ -1182,10 +1217,11 @@ function buildStep(it, idx, sortedItems, pendingItems, loadedCount) {
         </div>`;
     }
     const isNewBadge = (pendingItems.length > 0 && loadedCount > 0 && idx === sortedItems.findIndex(x => loadedInSession[x.id] === undefined)) ? `<span class="tag tag-blue" style="background:var(--blue-lt); color:var(--blue); font-size:10px;">🆕 صنف مضاف حديثاً</span>` : '';
+    const numBadgeStyle = isCurrent ? '' : 'style="background:var(--gray);"';
     div.innerHTML = `
       <div class="stitle">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span class="snum ${isCurrent ? '' : 'style="background:var(--gray)"'}">${origIdx + 1}</span>
+          <span class="snum" ${numBadgeStyle}>${origIdx + 1}</span>
           <span style="font-size:15px;">${it.name}</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
@@ -1293,11 +1329,12 @@ window.updateManualSummaryField = function(itemId, field, val) {
     const totalManualPcs = ((parseFloat(r.currentManualCartons)||0) * r.cap) + (parseInt(r.currentManualLoose)||0);
     r.manualText = (r.currentManualCartons !== '' || r.currentManualLoose !== '') ? formatQuantityDetailed(totalManualPcs, r.cap, r.unit) : '—';
     
-    const inTruckPcs = r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs;
-    r.inTruckPcs = Math.max(0, inTruckPcs);
-    r.inTruckText = formatQuantityDetailed(r.inTruckPcs, r.cap, r.unit);
-    
-    cartItems[itemId].inTruckPcs = r.inTruckPcs;
+    if (isSalesReady) {
+      const inTruckPcs = r.totalLoadedPcs - r.totalSoldPcs - totalManualPcs;
+      r.inTruckPcs = Math.max(0, inTruckPcs);
+      r.inTruckText = formatQuantityDetailed(r.inTruckPcs, r.cap, r.unit);
+      cartItems[itemId].inTruckPcs = r.inTruckPcs;
+    }
   }
   clearTimeout(saveTimers[itemId]);
   saveTimers[itemId] = setTimeout(() => flushItem(itemId), 500);   
@@ -1375,7 +1412,7 @@ function buildCalculatedRows() {
     const liveSales = memorySalesCache || {};
     const unit = getUnitName(cartData.name); 
     const cap  = cartData.capacity || 1; 
-    const totalSoldPcs = liveSales[fbItem.id] || 0;
+    const totalSoldPcs = (isSalesReady && liveSales[fbItem.id] !== undefined) ? liveSales[fbItem.id] : 0;
     
     const totalPrevPcs   = ((parseFloat(cartData.prevCartons || 0)) * cap) + parseInt(cartData.prevLoose || 0);
     const totalNewPcs    = ((parseFloat(cartData.loadedCartons || 0)) * cap) + parseInt(cartData.loadedLoose || 0);
@@ -1394,17 +1431,23 @@ function buildCalculatedRows() {
     }
 
     const totalReturnedPcs = ((parseFloat(currentManualCartons)||0) * cap) + (parseInt(currentManualLoose)||0);
-    const inTruckPcs = Math.max(0, totalLoadedPcs - totalSoldPcs - totalReturnedPcs);
-    const inTruckText = formatQuantityDetailed(inTruckPcs, cap, unit);
-    
-    cartData.inTruckPcs = inTruckPcs;
+    let inTruckPcs = 0;
+    let inTruckText = '…';
+    if (isSalesReady) {
+      inTruckPcs = Math.max(0, totalLoadedPcs - totalSoldPcs - totalReturnedPcs);
+      inTruckText = formatQuantityDetailed(inTruckPcs, cap, unit);
+      cartData.inTruckPcs = inTruckPcs;
+    }
 
     const prevLoadedText = formatQuantityDetailed(totalPrevPcs, cap, unit);
     const newLoadedText  = formatQuantityDetailed(totalNewPcs, cap, unit);
     const loadedText     = formatQuantityDetailed(totalLoadedPcs, cap, unit);
     
-    let soldText = formatQuantityDetailed(Math.abs(totalSoldPcs), cap, unit);
-    if (totalSoldPcs === 0) soldText = '0'; else if (totalSoldPcs < 0) soldText = '↺ ' + soldText;
+    let soldText = '…';
+    if (isSalesReady) {
+      soldText = formatQuantityDetailed(Math.abs(totalSoldPcs), cap, unit);
+      if (totalSoldPcs === 0) soldText = '0'; else if (totalSoldPcs < 0) soldText = '↺ ' + soldText;
+    }
     
     let manualText = '—';
     if (currentManualCartons !== '' || currentManualLoose !== '') { manualText = formatQuantityDetailed(totalReturnedPcs, cap, unit); }
@@ -1577,6 +1620,11 @@ window.archiveLoad = async function() {
 window.archiveInventory = async function() {
   if (window._archiving) return;
   const d = document.getElementById('summaryDate').value || defaultDateStr;
+
+  if (!isSalesReady) {
+    window.toast('⏳ جاري تحضير المبيعات، يرجى الانتظار قليلاً ثم المحاولة مرة أخرى');
+    return;
+  }
 
   if (!confirm(`⚠️ تحذير: هل أنت متأكد من إغلاق يوم ${d} وترحيل الجرد؟`)) {
     return;
