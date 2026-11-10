@@ -583,9 +583,7 @@
     return negative ? -n : n;
   }
 
-  // حساب حركة الرصيد لكل عميل — موحّد مع صفحة الفاتورة والسجل وكشف الحساب:
-  // - الفواتير غير المحذوفة: (الإجمالي - المدفوع)، ويتم ربط الفاتورة بالعميل بالاسم لو customerId فاضي
-  // - السندات المستقلة فقط (قبض/صرف)، وتُستبعد سندات سداد الفواتير
+  // 🔥 المحرك الموحد لحساب حركة الرصيد لكل عميل 🔥
   async function loadAllLedgerData(custDocs) {
     const debtMap = {};
     const nameMap = {};
@@ -1000,7 +998,6 @@
                       finish();
                   }).catch(err => {
                       finish();
-                      // المستخدم لغى المشاركة بنفسه، لا داعي لتنزيل الملف أو إظهار خطأ
                       if (err && err.name === 'AbortError') return;
                       console.log('تعذرت المشاركة، سيتم تنزيل الصورة مباشرة:', err);
                       downloadBlob();
@@ -1103,8 +1100,8 @@
         if(ctns>0&&cp>0){ (acc[k]=acc[k]||[]).push({t:pt,p:ctns,v:ctns*cp}); } }); });
     const costOf=(i,tt)=>{ const k=keyOf(i); if(!k) return Number(i.cost??i.costPrice)||0; const st=stock[k], f=Math.max(1,Number(i.unitFactor||i.pcsPerCarton||i.factor||st.unitFactor||st.factor||st.pcsPerCarton)||1), c=isCtn(i);
       const L=acc[k]||[]; let best=null;
-      L.forEach(x=>{ if(tt&&x.t&&x.t<=tt+864e5&&(!best||x.t>=best.t)) best=x; }); // أقرب شراء قبل (أو في يوم) البيع
-      if(!best) L.forEach(x=>{ if(!best||(tt&&x.t&&Math.abs(x.t-tt)<Math.abs(best.t-tt))) best=x; }); // مفيش شراء قبله: أقرب شراء بعده
+      L.forEach(x=>{ if(tt&&x.t&&x.t<=tt+864e5&&(!best||x.t>=best.t)) best=x; });
+      if(!best) L.forEach(x=>{ if(!best||(tt&&x.t&&Math.abs(x.t-tt)<Math.abs(best.t-tt))) best=x; });
       const a=best?best.v/best.p:0; if(a>0) return c?a:a/f; const b=Number(st.buy)||0; return b>0?(c?b:b/f):0; };
     const C={}, itemTotals={}; const get=(k)=>C[k]||(C[k]={invs:[],vouch:0,items:{}});
     const mk=(id,name)=>id||customersNameMap[normalizeName(name)];
@@ -1149,7 +1146,6 @@
       if (!r) { body.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i>لا توجد فواتير لهذا العميل للتحليل.</div>'; return; }
       const now = Date.now(), D = 86400000;
 
-      // تصنيف العميل (RFM نسبةً لباقي العملاء)
       const inactive = r.days !== null && r.days > Math.max(60, (r.gap || 30) * 2.5);
       let seg;
       if (r.n < 3) seg = { t:'عميل جديد', c:'#5b21b6', b:'#f5f3ff' };
@@ -1159,13 +1155,11 @@
       else if (r.r<=2 && (r.f>=3 || r.m>=3)) seg = { t:'معرّض للفقد', c:'#b45309', b:'#fffbeb' };
       else seg = { t:'عميل عادي', c:'#5a677d', b:'#f1f5f9' };
 
-      // تقييم السداد: تحصيل + حجم الدين + نسبة الدين المتأخر (+60 يوم)
       const out = Math.max(r.bal, 0), old = r.age[2] + r.age[3];
       const oldShare = out > 0 ? old / out : 0, debtRatio = r.sales > 0 ? Math.min(1, out / r.sales) : 0;
       const ps = Math.round(Math.min(50, r.rate*0.5) + 20*(1-debtRatio) + 30*(1-oldShare));
       const pay = ps>=85 ? {t:'ممتاز',c:'#178a4a',b:'#eefaf2'} : ps>=65 ? {t:'جيد',c:'#1d4ed8',b:'#eff6ff'} : ps>=40 ? {t:'يحتاج متابعة',c:'#b45309',b:'#fffbeb'} : {t:'ضعيف - خطر',c:'#FF0000',b:'#fff1f1'};
 
-      // مؤشرات
       const chg = r.p90 > 0 ? (r.s90 - r.p90) / r.p90 * 100 : null;
       const late = r.gap && r.days > r.gap ? r.days - r.gap : 0;
       const span = Math.max(1, (now - r.first) / D), avgInv = r.sales / r.n;
@@ -1176,7 +1170,6 @@
       const mg = r.sales > 0 ? r.profit / r.sales * 100 : 0;
       const cross = Object.entries(E.itemTotals).sort((a,b)=>b[1]-a[1]).slice(0,8).filter(([n])=>!r.items[n]).slice(0,3).map(x=>x[0]);
 
-      // توصيات
       const rec = [];
       if (late > 0 && r.n >= 3) rec.push(['📞','تأخر ' + late + ' يوم عن موعد شرائه المعتاد (كل ' + r.gap + ' يوم)، تواصل معه.']);
       if (old > 0) rec.push(['💰','عليه ' + fmt(old) + ' متأخر أكتر من 60 يوم، حصّله قبل أي بيع آجل جديد.']);
@@ -1187,7 +1180,6 @@
       if (cross.length) rec.push(['🛒','اعرض عليه: ' + cross.join('، ') + ' (من أكتر الأصناف مبيعاً ومشتراهاش).']);
       if (!rec.length) rec.push(['✅','لا توجد ملاحظات حرجة حالياً.']);
 
-      // مبيعات آخر 6 شهور + أكتر الأصناف
       const months = [];
       for (let k = 5; k >= 0; k--) { const dt = new Date(new Date().getFullYear(), new Date().getMonth()-k, 1); months.push({y:dt.getFullYear(), m:dt.getMonth(), label:(dt.getMonth()+1)+'/'+String(dt.getFullYear()).slice(2), sum:0}); }
       r.invs.forEach(i => { if (!i.t) return; const dt = new Date(i.t), s = months.find(x => x.y===dt.getFullYear() && x.m===dt.getMonth()); if (s) s.sum += i.total; });
@@ -1274,19 +1266,16 @@
         return key;
       };
 
-      // تحميل المخزن لمعرفة سعر التكلفة
       const invMap = {};
       try {
         const stockSnap = await getDocs(collection(db, "inventory"));
         stockSnap.forEach(d => { invMap[d.id] = d.data(); });
       } catch (e) { console.warn('تعذر تحميل المخزن:', e); }
 
-      // خريطة الأصناف بالاسم (للفواتير اللي مفيهاش stockId)
       const invByName = {};
       Object.entries(invMap).forEach(([id, st]) => { if (st.name) invByName[String(st.name).trim()] = st; });
 
-      // متوسط تكلفة القطعة من كل فواتير الشراء (متوسط مرجح بالكمية)
-      const avgAcc = {}; // key -> { pcs, value }
+      const avgAcc = {};
       try {
         const purSnap = await getDocs(collection(db, "supplier_transactions"));
         purSnap.forEach(d => {
@@ -1329,20 +1318,18 @@
         s.sales += Number(data.total) || 0;
         s.paid += cash + wallet;
 
-        // حساب الربح: (سعر البيع - التكلفة) × الكمية، والمرتجع بيتخصم، وبعدين الخصم
         let invProfit = 0;
         (data.items || []).forEach(i => {
           const qty = Number(i.qty) || 0;
           const price = Number(i.price) || 0;
-          // التكلفة: متوسط مرجح من فواتير الشراء، وlast buy كاحتياطي
           const stock = invMap[i.stockId || i.id] || invByName[String(i.name || '').trim()];
           const isCarton = (i.unit === 'box' || i.unit === 'carton' || i.unit === 'كرتونة' || i.unit === 'كرتونه' || i.unitName === 'كرتونة' || i.isCarton === true);
           const factor = Math.max(1, Number((stock && (stock.unitFactor || stock.factor || stock.pcsPerCarton)) || i.unitFactor || i.pcsPerCarton || i.factor) || 1);
           const stockKey = (i.stockId || i.id) && invMap[i.stockId || i.id] ? (i.stockId || i.id) : keyByName[String(i.name || '').trim()];
           const avgPiece = stockKey ? avgCostPerPiece(stockKey) : 0;
           let cost = 0;
-          if (avgPiece > 0) cost = isCarton ? avgPiece * factor : avgPiece;            // المتوسط من المشتريات
-          else if (stock && Number(stock.buy) > 0) cost = isCarton ? Number(stock.buy) : Number(stock.buy) / factor; // احتياطي: آخر سعر شراء
+          if (avgPiece > 0) cost = isCarton ? avgPiece * factor : avgPiece;
+          else if (stock && Number(stock.buy) > 0) cost = isCarton ? Number(stock.buy) : Number(stock.buy) / factor;
           else cost = Number(i.cost ?? i.costPrice) || 0;
           if (!cost) { s.missing++; return; }
           const line = (price - cost) * qty;
