@@ -8,7 +8,7 @@
 // - ملفات الموقع نفسه (HTML/JS/CSS) بتتعرض من الكاش فورًا وبتتحدّث بالخلفية،
 //   فأي تعديل في ملف زي shop-publish.js بيوصل في الفتحة اللي بعدها.
 // =====================================================================
-const CACHE_NAME = "elzaiady-cache-v16";
+const CACHE_NAME = "elzaiady-cache-v17";
 
 const LOCAL_FILES = [
   "./",
@@ -179,7 +179,7 @@ const PASS_THROUGH_HOSTS = [
 // ---------- أدوات مساعدة ----------
 async function cacheOne(cache, url) {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, /^https?:/.test(url) ? undefined : { cache: "reload" });
     if (res && (res.ok || res.type === "opaque")) { await cache.put(url, res.clone()); return res; }
   } catch (e) { console.warn("تعذر تخزين:", url); }
   return null;
