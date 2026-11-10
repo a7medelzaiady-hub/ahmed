@@ -910,8 +910,10 @@ window.handleSearchInput = function() { suggestFocusIdx = -1; openSuggestList();
 window.openSuggestList = function() {
   const query = cleanItemName(document.getElementById('searchLoad').value);
   const list  = document.getElementById('searchSuggestList');
-  if (!firebaseItems.length) { list.classList.remove('open'); return; }
-  const matches = query ? firebaseItems.filter(it => cleanItemName(it.name).includes(query)) : firebaseItems.slice(0, 8);
+  // فلترة الاصناف ذات الرصيد > 0 او السالب فقط
+  const loadableItems = firebaseItems.filter(it => it.totalPcs !== 0);
+  if (!loadableItems.length) { list.classList.remove('open'); return; }
+  const matches = query ? loadableItems.filter(it => cleanItemName(it.name).includes(query)) : loadableItems.slice(0, 8);
   if (!matches.length) { list.classList.remove('open'); return; }
   list.innerHTML = matches.map((it, i) => {
     const done    = loadedInSession[it.id] !== undefined;
@@ -1106,7 +1108,8 @@ function renderItemsPage() {
 
 function initLoadFlow() {
   const noMsg = document.getElementById('noItemsMsg');
-  if (!firebaseItems.length) { document.getElementById('loadFlow').innerHTML = ''; noMsg.style.display = 'block'; document.getElementById('loadDoneMsg').style.display = 'none'; return; }
+  const loadableItems = firebaseItems.filter(it => it.totalPcs !== 0);
+  if (!loadableItems.length) { document.getElementById('loadFlow').innerHTML = ''; noMsg.style.display = 'block'; document.getElementById('loadDoneMsg').style.display = 'none'; return; }
   noMsg.style.display = 'none';
   renderLoadFlow();
 }
@@ -1243,22 +1246,26 @@ function renderLoadFlow() {
   const flow    = document.getElementById('loadFlow');
   const doneMsg = document.getElementById('loadDoneMsg');
   if (!flow) return;
+
+  // إظهار فقط الاصناف ذات الرصيد غير الصفري (أكبر من صفر أو سالب)
+  const loadableItems = firebaseItems.filter(it => it.totalPcs !== 0);
+
   const searchVal = cleanItemName(document.getElementById('searchLoad').value);
-  const pendingItems = firebaseItems.filter(it => loadedInSession[it.id] === undefined);
+  const pendingItems = loadableItems.filter(it => loadedInSession[it.id] === undefined);
   const loadedCount  = Object.keys(loadedInSession).length;
   const alertBanner  = document.getElementById('newItemsAlertBanner');
   if (alertBanner) {
     if (pendingItems.length > 0 && loadedCount > 0) { alertBanner.style.display = 'flex'; alertBanner.querySelector('.snum').textContent = pendingItems.length; } 
     else { alertBanner.style.display = 'none'; }
   }
-  const allDone = firebaseItems.every(it => loadedInSession[it.id] !== undefined) && !editingIds.size;
+  const allDone = loadableItems.every(it => loadedInSession[it.id] !== undefined) && !editingIds.size;
   if (allDone && !forceShowLoadList && !searchVal) { flow.innerHTML = ''; doneMsg.style.display = 'block'; return; }
   doneMsg.style.display = 'none';
 
   const existing = new Map([...flow.children].map(el => [el.dataset.itemid, el]));
   let ref = flow.firstElementChild;
-  firebaseItems.forEach((it, idx) => {
-    const fresh = buildStep(it, idx, firebaseItems, pendingItems, loadedCount);
+  loadableItems.forEach((it, idx) => {
+    const fresh = buildStep(it, idx, loadableItems, pendingItems, loadedCount);
     let el = existing.get(it.id); existing.delete(it.id);
     const keep = el && (el.dataset.html === fresh.dataset.html ||
       (el.dataset.done === '0' && fresh.dataset.done === '0' &&
@@ -1281,9 +1288,10 @@ window.confirmStep = function(itemId) {
     applyLoad(itemId, it, readInputs(itemId));
     delete drafts[itemId]; editingIds.delete(itemId);
     writeItem(itemId);                                   
-    const i = firebaseItems.findIndex(x => x.id === itemId);
-    const next = firebaseItems.slice(i + 1).find(x => loadedInSession[x.id] === undefined);
-    if (firebaseItems.every(x => loadedInSession[x.id] !== undefined)) forceShowLoadList = false;
+    const loadableItems = firebaseItems.filter(x => x.totalPcs !== 0);
+    const i = loadableItems.findIndex(x => x.id === itemId);
+    const next = loadableItems.slice(i + 1).find(x => loadedInSession[x.id] === undefined);
+    if (loadableItems.every(x => loadedInSession[x.id] !== undefined)) forceShowLoadList = false;
     renderLoadFlow();
     focusCard(next && next.id);      
   } finally { busyIds.delete(itemId); }
