@@ -13,7 +13,7 @@ import * as FS from "./firestore-offline.js";
 import { __getDb } from "./firestore-offline.js";
 
 const STATE_KEY = "elzaiady_shop_publish_state";
-const AUTO_EVERY_MS = 30 * 60 * 1000;       // النشر التلقائي كل 30 دقيقة
+const AUTO_EVERY_MS = 3 * 60 * 60 * 1000;   // النشر التلقائي كل 3 ساعات
 const CHUNK_SIZE = 50;                      // تقسيم الكتالوج
 const STATE_VERSION = 3;                    // غيّر الرقم ده لو عدّلت منطق الحساب عشان يتعمل نشر كامل
 
@@ -21,19 +21,6 @@ const num = (v) => {
     if (v === null || v === undefined) return 0;
     const n = parseFloat(String(v).replace(/[^0-9.-]/g, ""));
     return isNaN(n) ? 0 : n;
-};
-// قراءة رقم بإشارته (نفس قائمة العملاء): "1,000" و "(500)" و "500-" و "-500"
-const signed = (val) => {
-    if (val === null || val === undefined || val === "") return 0;
-    if (typeof val === "number") return val;
-    let s = String(val).trim().replace(/,/g, "");
-    let negative = false;
-    if (s.startsWith("(") && s.endsWith(")")) { negative = true; s = s.slice(1, -1); }
-    if (s.endsWith("-")) { negative = true; s = s.slice(0, -1); }
-    if (s.startsWith("-")) { negative = true; s = s.slice(1); }
-    const n = parseFloat(s);
-    if (isNaN(n)) return 0;
-    return negative ? -n : n;
 };
 const round2 = (n) => Math.round(n * 100) / 100;
 const isDeleted = (d) => !!d && (d.isDeleted === true || d.deleted === true || d.status === "deleted" || d.isCancelled === true);
@@ -197,7 +184,7 @@ export async function publishBalances(db, force = false, debugCid = null) {
         if (isInvoicePayment) return;
         const cid = x.partyId || x.customerId || nameToId[normName(x.customerName || x.partyName)];
         if (!cid) return;
-        const amt = Math.abs(signed(x.amount ?? x.total));
+        const amt = Math.abs(num(x.amount ?? x.total));
         let eff = 0;
         if (x.type === "قبض") eff = -amt;
         else if (x.type === "صرف") eff = amt;
@@ -217,7 +204,7 @@ export async function publishBalances(db, force = false, debugCid = null) {
         const name = String(x.name || "").trim();
         if (!name) continue;
 
-        const initial = signed(x.initialBalance);
+        const initial = num(x.initialBalance);
         const balance = round2(initial + (invoiceBal[d.id] || 0) + (transBal[d.id] || 0));
         const customPrices = customerPrices[d.id] || {};
 
