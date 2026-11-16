@@ -5,7 +5,7 @@
 //   shop_catalog/meta + c0,c1,... : أسماء الأصناف وأسعار البيع الافتراضية والصور
 //   shop_accounts/{customerId}    : اسم التاجر + رصيده الحالي + أسعاره الخاصة من فواتيره
 //
-// الرصيد بيتحسب بنفس معادلة «قائمة العملاء / كشف الحساب» بالظبط:
+// الرصيد بيتحسب بنفس معادلة «كشف الحساب» في سجل المبيعات:
 //   الرصيد الافتتاحي + (إجمالي كل فاتورة - المسدد فيها) + سندات الصرف - سندات القبض
 //   (سندات سداد الفواتير بتتخطّى لأنها محسوبة جوه الفاتورة)
 // =====================================================================
@@ -15,10 +15,15 @@ import { __getDb } from "./firestore-offline.js";
 const STATE_KEY = "elzaiady_shop_publish_state";
 const AUTO_EVERY_MS = 30 * 60 * 1000;       // النشر التلقائي كل 30 دقيقة
 const CHUNK_SIZE = 50;                      // تقسيم الكتالوج
-const STATE_VERSION = 4;                    // غيّر الرقم ده لو عدّلت منطق الحساب عشان يتعمل نشر كامل
+const STATE_VERSION = 3;                    // غيّر الرقم ده لو عدّلت منطق الحساب عشان يتعمل نشر كامل
 
-// ---- نفس دوال قائمة العملاء بالحرف، عشان الأرقام تتطابق ----
-function parseSignedNumber(val) {
+const num = (v) => {
+    if (v === null || v === undefined) return 0;
+    const n = parseFloat(String(v).replace(/[^0-9.-]/g, ""));
+    return isNaN(n) ? 0 : n;
+};
+// قراءة رقم بإشارته (نفس قائمة العملاء): "1,000" و "(500)" و "500-" و "-500"
+const signed = (val) => {
     if (val === null || val === undefined || val === "") return 0;
     if (typeof val === "number") return val;
     let s = String(val).trim().replace(/,/g, "");
@@ -29,27 +34,16 @@ function parseSignedNumber(val) {
     const n = parseFloat(s);
     if (isNaN(n)) return 0;
     return negative ? -n : n;
-}
-// قيم الفواتير (إجمالي/كاش/محفظة): نفس قراءة القائمة
-const inum = (v) => Number(v) || 0;
-// للأسعار والأرقام العامة (لا تخص الرصيد)
-const num = (v) => {
-    if (v === null || v === undefined) return 0;
-    const n = parseFloat(String(v).replace(/[^0-9.-]/g, ""));
-    return isNaN(n) ? 0 : n;
 };
 const round2 = (n) => Math.round(n * 100) / 100;
-// القائمة تستبعد isDeleted فقط، فنطابقها في حساب الأرصدة
-const isDeletedRec = (d) => !!d && d.isDeleted === true;
-// للكتالوج (الأصناف): نفس الشرط القديم الأوسع
 const isDeleted = (d) => !!d && (d.isDeleted === true || d.deleted === true || d.status === "deleted" || d.isCancelled === true);
 
-// توحيد الاسم لربط الحركات اللي من غير customerId
+// توحيد الاسم (نفس منطق سجل المبيعات) لربط الحركات اللي من غير customerId
 const normName = (s) => String(s || "").trim().replace(/\s+/g, " ")
     .replace(/[\u064B-\u0652]/g, "").replace(/[إأآا]/g, "ا")
     .replace(/ى/g, "ي").replace(/ة/g, "ه").toLowerCase();
 
-// وقت الفاتورة بالمللي ثانية
+// وقت الفاتورة بالمللي ثانية (يدعم Timestamp و {seconds} و date نصي)
 const tsMs = (x) => {
     const t = x.timestamp || x.createdAt;
     if (t && typeof t.toMillis === "function") return t.toMillis();
@@ -61,6 +55,7 @@ const tsMs = (x) => {
 function loadState() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (_) { s = {}; }
+    // لو الإصدار اتغيّر نمسح بصمات الأرصدة عشان يتنشر كل شيء من جديد
     if (s.version !== STATE_VERSION) {
         s = { version: STATE_VERSION, catalogSig: s.catalogSig, chunks: s.chunks };
     }
@@ -134,7 +129,7 @@ export async function publishBalances(db, force = false, debugCid = null) {
         FS.getDocs(FS.collection(db, "inventory"))
     ]);
 
-    // 1. معاملات الكرتونة + خريطة اسم الصنف
+    // 1. معاملات الكرتونة + خريطة اسم الصنف (احتياطي لمطابقة البنود)
     const factors = {};
     const stockByName = {};
     invenSnap.forEach((d) => {
@@ -143,7 +138,7 @@ export async function publishBalances(db, force = false, debugCid = null) {
         if (x.name) stockByName[normName(x.name)] = d.id;
     });
 
-    // خريطة اسم العميل -> ID
+    // خريطة اسم العميل -> ID (للحركات اللي من غير customerId)
     const nameToId = {};
     custSnap.docs.forEach((d) => {
         const n = d.data().name;
@@ -155,11 +150,11 @@ export async function publishBalances(db, force = false, debugCid = null) {
     const transBal = {};
     const customerPrices = {}; // { customerId: { stockId: cartonPrice } }
 
-    // 2. تجميع الفواتير وربطها بالعميل
+    // 2. تجميع الفواتير وربطها بالعميل (بالـ ID أو بالاسم)
     const allInvoices = [];
     invSnap.forEach((d) => {
         const x = d.data();
-        if (isDeletedRec(x)) return;
+        if (isDeleted(x)) return;
         const cid = x.customerId || nameToId[normName(x.customerName)];
         if (!cid) return;
         allInvoices.push({ ...x, _cid: cid });
@@ -169,39 +164,40 @@ export async function publishBalances(db, force = false, debugCid = null) {
     allInvoices.sort((a, b) => tsMs(b) - tsMs(a));
 
     allInvoices.forEach((x) => {
-        // المديونية: إجمالي الفاتورة - المسدد (نفس قائمة العملاء بالحرف)
-        const cash = inum(x.cashAmount ?? x.cashPaid ?? x.paid);
-        const wallet = inum(x.walletAmount ?? x.walletPaid);
-        invoiceBal[x._cid] = (invoiceBal[x._cid] || 0) + (inum(x.total) - (cash + wallet));
+        // المديونية: إجمالي الفاتورة - المسدد (نفس كشف الحساب)
+        const cash = num(x.cashAmount ?? x.cashPaid ?? x.paid);
+        const wallet = num(x.walletAmount ?? x.walletPaid);
+        invoiceBal[x._cid] = (invoiceBal[x._cid] || 0) + (num(x.total) - (cash + wallet));
         invCount[x._cid] = (invCount[x._cid] || 0) + 1;
 
         // آخر سعر لكل صنف
         if (!customerPrices[x._cid]) customerPrices[x._cid] = {};
         (x.items || []).forEach((item) => {
-            if (item.isReturn) return;
+            if (item.isReturn) return;                       // المرتجع مش سعر شراء
             let sid = item.stockId || item.productId || item.itemId || item.id;
             if (!sid || factors[sid] === undefined) sid = stockByName[normName(item.name || item.itemName)] || sid;
-            if (!sid || customerPrices[x._cid][sid]) return;
+            if (!sid || customerPrices[x._cid][sid]) return; // اتسجل سعر أحدث قبل كده
 
             const factor = factors[sid] || Math.max(1, Number(item.unitFactor || item.pcsPerCarton || item.factor) || 1);
             const u = String(item.unit || item.unitName || "").trim().toLowerCase();
             const isCarton = item.isCarton === true || ["box", "carton", "كرتونة", "كرتونه"].includes(u);
             const price = num(item.price ?? item.unitPrice ?? item.sellPrice ?? item.sell);
 
+            // توحيد السعر ليكون سعر الكرتونة (زي ما المتجر بيعرض)
             const cartonPrice = isCarton ? price : price * factor;
             if (cartonPrice > 0) customerPrices[x._cid][sid] = round2(cartonPrice);
         });
     });
 
-    // 3. السندات (تخطّي سندات سداد الفواتير)
+    // 3. السندات (نفس كشف الحساب: تخطّي سندات سداد الفواتير)
     transSnap.forEach((d) => {
         const x = d.data();
-        if (isDeletedRec(x)) return;
+        if (isDeleted(x)) return;
         const isInvoicePayment = x.invoiceId || (x.note && String(x.note).includes("فاتورة"));
         if (isInvoicePayment) return;
         const cid = x.partyId || x.customerId || nameToId[normName(x.customerName || x.partyName)];
         if (!cid) return;
-        const amt = Math.abs(parseSignedNumber(x.amount || x.total));
+        const amt = Math.abs(signed(x.amount ?? x.total));
         let eff = 0;
         if (x.type === "قبض") eff = -amt;
         else if (x.type === "صرف") eff = amt;
@@ -221,7 +217,7 @@ export async function publishBalances(db, force = false, debugCid = null) {
         const name = String(x.name || "").trim();
         if (!name) continue;
 
-        const initial = parseSignedNumber(x.initialBalance);
+        const initial = signed(x.initialBalance);
         const balance = round2(initial + (invoiceBal[d.id] || 0) + (transBal[d.id] || 0));
         const customPrices = customerPrices[d.id] || {};
 
@@ -237,12 +233,13 @@ export async function publishBalances(db, force = false, debugCid = null) {
             };
         }
 
+        // البصمة بتشمل الأسعار الفعلية عشان أي تغيير في السعر يتنشر
         const sig = name + "|" + balance + "|" + JSON.stringify(customPrices);
         next[d.id] = sig;
 
         if (!force && prev[d.id] === sig) continue;
 
-        batch.set(FS.doc(db, "shop_accounts", d.id), { name, balance, customPrices, updatedAt: now }, { merge: true });
+        batch.set(FS.doc(db, "shop_accounts", d.id), { name, balance, customPrices, updatedAt: now });
         inBatch++; written++;
         if (inBatch >= 400) { await batch.commit(); batch = FS.writeBatch(db); inBatch = 0; }
     }
