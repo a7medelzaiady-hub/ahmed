@@ -1706,7 +1706,7 @@
     window.clearAllSalesAdmin = () => {
         window.showCustomUi({
             title: "تأكيد الأرشفة والتصفير",
-            message: "⚠️ سيقوم النظام الآن بتصوير جميع الفواتير الحالية وحفظها في أرشيف صور العملاء، ثم تصفير السجل ونقل البيانات لسلة المحذوفات. هل تريد الاستمرار؟",
+            message: "سيتم تصوير الفواتير وحفظها في أرشيف الصور، ثم إخفاء ما تم رفعه بنجاح من قائمة العرض فقط. الفواتير والسندات الأصلية ستظل محفوظة لحساب المخزون وأرصدة العملاء. هل تريد المتابعة؟",
             type: "confirm",
             icon: "danger",
             onConfirm: async () => {
@@ -1723,6 +1723,7 @@
                 try {
                     const storageRef = firebase.storage().ref();
                     let uploadedCount = 0;
+                    const successfullyArchived = new Set();
 
                     for (const inv of allInvoices) {
                         try {
@@ -1745,6 +1746,7 @@
                             });
 
                             uploadedCount++;
+                            successfullyArchived.add(inv.id);
                             document.getElementById('archiveProgressText').innerText = `${uploadedCount} / ${allInvoices.length}`;
                         } catch (uploadErr) {
                             console.error("خطأ في رفع فاتورة: ", inv.id, uploadErr);
@@ -1753,25 +1755,29 @@
 
                     document.getElementById('archiveProgressText').innerText = "جاري أرشفة العرض مع الحفاظ على القيود المحاسبية...";
 
-                    const batch = db.batch();
-                    let count = 0;
-                    allInvoices.forEach(inv => {
-                        batch.update(db.collection("invoices").doc(inv.id), { isArchived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() });
-                        count++;
+                    // Do not archive unuploaded invoices. Restrict linked vouchers
+                    // to these invoices; rawTransactionsList includes other dates
+                    // and supplier records. Keep all original accounting movements.
+                    const operations = [];
+                    allInvoices.filter(inv => successfullyArchived.has(inv.id)).forEach(inv => {
+                        operations.push(db.collection("invoices").doc(inv.id));
                     });
-                    rawTransactionsList.forEach(tr => {
-                        batch.update(db.collection("transactions").doc(tr.id), { isArchived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() });
-                        count++;
+                    rawTransactionsList.filter(tr => tr.invoiceId && successfullyArchived.has(tr.invoiceId)).forEach(tr => {
+                        operations.push(db.collection("transactions").doc(tr.id));
                     });
-
-                    if (count > 0) {
+                    // Firestore write batches are limited to 500 writes.
+                    for (let i = 0; i < operations.length; i += 400) {
+                        const batch = db.batch();
+                        operations.slice(i, i + 400).forEach(ref => {
+                            batch.update(ref, { isArchived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        });
                         await batch.commit();
                     }
 
                     document.body.removeChild(progressOverlay);
                     window.showCustomUi({
                         title: "تمت الأرشفة بنجاح",
-                        message: `تم إنشاء ${uploadedCount} صورة أرشيفية، وإخفاء السجلات من القائمة النشطة مع الحفاظ على القيود المالية والمخزون.`,
+                        message: `تم أرشفة ${uploadedCount} من ${allInvoices.length} فاتورة، وإخفاء المكتمل فقط من قائمة العرض مع الحفاظ على كل القيود المالية والمخزون. الفواتير التي تعذر رفعها ستبقى ظاهرة.`,
                         icon: "success",
                         onConfirm: () => { loadData(true, loadedScope === 'ARCHIVE'); }
                     });
