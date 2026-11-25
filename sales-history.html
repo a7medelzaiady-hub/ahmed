@@ -689,7 +689,7 @@
         try {
             const username = localStorage.getItem("username") || sessionStorage.getItem("username") || localStorage.getItem("currentUser") || "";
             const role = localStorage.getItem("role") || sessionStorage.getItem("role") || "";
-            const isAdmin = (role === "admin" || username === "admin" || username.includes("أحمد") || localStorage.getItem("isAdmin") === "true");
+            const isAdmin = (role === "admin");
             if (isAdmin) document.body.classList.add("admin-mode");
         } catch (e) { console.error(e); }
     }
@@ -1574,7 +1574,7 @@
             allReceiptVouchers = []; rawTransactionsList = [];
             if (transSnap) {
                 transSnap.forEach(d => {
-                    const tr = d.data(); if (tr.isDeleted) return;
+                    const tr = d.data(); if (tr.isDeleted || tr.isArchived) return;
                     
                     if (tr.custody === "يد أحمد") {
                         return;
@@ -1598,7 +1598,7 @@
 
             let tempInvoices = [];
             invSnap.forEach(d => {
-                const data = d.data(); if (data.isDeleted) return;
+                const data = d.data(); if (data.isDeleted || data.isArchived) return;
                 const invObj = { id: d.id, ...data, calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0, calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0, previousBalance: customersData[data.customerId]?.initialBalance || 0 };
                 if (loadAllArchive || parseInvoiceDate(invObj) === targetDate) tempInvoices.push(invObj);
             });
@@ -1751,16 +1751,16 @@
                         }
                     }
 
-                    document.getElementById('archiveProgressText').innerText = "جاري مسح السجلات الآن...";
+                    document.getElementById('archiveProgressText').innerText = "جاري أرشفة العرض مع الحفاظ على القيود المحاسبية...";
 
                     const batch = db.batch();
                     let count = 0;
                     allInvoices.forEach(inv => {
-                        batch.update(db.collection("invoices").doc(inv.id), { isDeleted: true, deletedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        batch.update(db.collection("invoices").doc(inv.id), { isArchived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() });
                         count++;
                     });
                     rawTransactionsList.forEach(tr => {
-                        batch.update(db.collection("transactions").doc(tr.id), { isDeleted: true, deletedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        batch.update(db.collection("transactions").doc(tr.id), { isArchived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() });
                         count++;
                     });
 
@@ -1771,7 +1771,7 @@
                     document.body.removeChild(progressOverlay);
                     window.showCustomUi({
                         title: "تمت الأرشفة بنجاح",
-                        message: `✅ تم تصوير وأرشفة ${uploadedCount} فاتورة بنجاح، وتم تصفير السجل الحالي ونقله للمحذوفات.`,
+                        message: `تم إنشاء ${uploadedCount} صورة أرشيفية، وإخفاء السجلات من القائمة النشطة مع الحفاظ على القيود المالية والمخزون.`,
                         icon: "success",
                         onConfirm: () => { loadData(true, loadedScope === 'ARCHIVE'); }
                     });
