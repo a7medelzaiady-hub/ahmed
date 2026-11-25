@@ -477,7 +477,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, orderBy, query, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -599,7 +599,10 @@
       if (x.isDeleted) return;
       const cid = x.customerId || nameMap[normalizeName(x.customerName)];
       if (!cid) return;
-      const paid = (Number(x.cashAmount ?? x.cashPaid ?? x.paid) || 0) + (Number(x.walletAmount ?? x.walletPaid) || 0);
+      const wallet = Number(x.walletAmount ?? x.walletPaid) || 0;
+      const hasCashField = x.cashAmount != null || x.cashPaid != null;
+      const cash = hasCashField ? (Number(x.cashAmount ?? x.cashPaid) || 0) : ((Number(x.paid) || 0) - wallet);
+      const paid = cash + wallet;
       debtMap[cid] = (debtMap[cid] || 0) + ((Number(x.total) || 0) - paid);
     });
 
@@ -626,7 +629,7 @@
       customersData = {};
       customersNameMap = {};
 
-      allCustomers = custSnap.docs.map(d => {
+      allCustomers = custSnap.docs.filter(d => d.data().isDeleted !== true).map(d => {
         const data = d.data();
         const initial = parseSignedNumber(data.initialBalance);
         const ledgerEffect = debtMap[d.id] || 0;
@@ -1053,31 +1056,28 @@
     applyFilters();
   };
 
+  // Keep historical invoice/voucher references intact. Archive only settled customers.
+  // Archived records remain in Firestore, so old receipts and reports can resolve IDs.
   window.deleteCustomer = async (id, name) => {
-    if (!confirm(`هل أنت متأكد من مسح العميل "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    const customer = allCustomers.find(c => c.id === id);
+    if (!customer) return;
+    if (Math.abs(Number(customer.realBalance) || 0) >= 0.01) {
+      alert('لا يمكن إخفاء عميل لديه رصيد قائم. سوِّ الحساب أولاً حفاظاً على السجلات.');
+      return;
+    }
+    if (!confirm(`إخفاء العميل "${name}" من القائمة؟ لن تُحذف أي فاتورة أو حركة مالية، ويمكن استعادته من قاعدة البيانات.`)) return;
     try {
-      await deleteDoc(doc(db, 'customers', id));
+      await updateDoc(doc(db, 'customers', id), { isDeleted: true, archivedAt: serverTimestamp() });
       allCustomers = allCustomers.filter(c => c.id !== id);
       applyFilters();
     } catch (err) {
-      alert('خطأ أثناء المسح: ' + err.message);
+      alert('تعذر أرشفة العميل: ' + err.message);
     }
   };
 
-  document.getElementById('deleteAllBtn').addEventListener('click', async () => {
-    if (allCustomers.length === 0) return;
-    const sure1 = confirm(`سيتم مسح ${allCustomers.length} عميل نهائياً من قاعدة البيانات. هل أنت متأكد؟`);
-    if (!sure1) return;
-    const sure2 = confirm('تأكيد أخير: هذا الإجراء لا يمكن التراجع عنه. متابعة؟');
-    if (!sure2) return;
-
-    try {
-      await Promise.all(allCustomers.map(c => deleteDoc(doc(db, 'customers', c.id))));
-      allCustomers = [];
-      applyFilters();
-    } catch (err) {
-      alert('خطأ أثناء مسح العملاء: ' + err.message);
-    }
+  // Destructive bulk deletion would orphan invoices, vouchers and statements.
+  document.getElementById('deleteAllBtn').addEventListener('click', () => {
+    alert('تم تعطيل الحذف الجماعي لحماية الفواتير وسندات العملاء. يمكنك أرشفة العملاء الذين تمت تسوية حساباتهم بشكل فردي.');
   });
 
   /* ================= محرك التحليل (RFM + أعمار الديون + الربحية) ================= */
