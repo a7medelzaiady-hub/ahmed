@@ -2161,7 +2161,7 @@
             if (!data.isDeleted) {
                 const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
                 factorsMap.set(d.id, f);
-                if (data.name) namesMap.set(data.name.trim(), d.id);
+                if (data.name) namesMap.set(normalizeName(data.name), d.id);
                 inventory.push({ id: d.id, ...data });
             }
         });
@@ -2184,7 +2184,7 @@
             const items = invoice.items || [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
-                const id = item.stockId || namesMap.get(item.name?.trim());
+                const id = item.stockId || item.id || namesMap.get(normalizeName(item.name));
                 if (id) {
                     const factor = factorsMap.get(id) || 1;
                     const rawQty = Number(item.qty) || 0;
@@ -2203,7 +2203,7 @@
             const items = purchase.items || [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
-                const id = item.stockId || namesMap.get(item.name?.trim());
+                const id = item.stockId || item.id || namesMap.get(normalizeName(item.name));
                 if (id) {
                     const factor = factorsMap.get(id) || 1;
                     const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
