@@ -379,6 +379,16 @@
         return item.displayName || item.name || item.productName || item.item_name || '';
     }
 
+    // Preserve the stock/catalog name for pricing, lookup and inventory updates.
+    // Take an independent snapshot of the NAME THE USER CHOSE for sending.
+    function itemForSupplierShare(item) {
+        const snapshot = normalizeItemNames({ ...item });
+        return {
+            ...snapshot,
+            supplierShareName: String(shownName(snapshot)).trim()
+        };
+    }
+
     function saveDraftToStorage() {
         try {
             if (hasDraft()) localStorage.setItem(DRAFT_KEY, JSON.stringify(cartOrders));
@@ -1189,6 +1199,8 @@
         if (newName === null) return;
         const trimmed = newName.trim();
         it.displayName = (trimmed && trimmed !== it.name) ? trimmed : '';
+        // Pre-rendered receipts may contain the previous name.
+        delete receiptCache[supplierName];
         saveDraftToStorage();
         openOrderModal();
     };
@@ -1234,7 +1246,7 @@
     let renderChain = Promise.resolve();
 
     function itemsSig(items) {
-        return JSON.stringify((items || []).map(i => [shownName(i), i.qty, i.unit]));
+        return JSON.stringify((items || []).map(i => [i.supplierShareName || shownName(i), i.qty, i.unit]));
     }
 
     function getCachedReceipt(supplierName, items) {
@@ -1242,12 +1254,19 @@
         return (c && c.sig === itemsSig(items)) ? c.blob : null;
     }
 
+    // Escape editable supplier labels before inserting them into the receipt HTML.
+    function escapeShareText(value) {
+        return String(value || '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
     function renderReceiptBlob(supplierName, items) {
         const job = renderChain.then(async () => {
             document.getElementById('thermalOrderDate').innerText = new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
             document.getElementById('thermalItemsList').innerHTML = items.map(item => `
                 <div class="thermal-row">
-                    <span>${shownName(item)}</span>
+                    <span>${escapeShareText(item.supplierShareName || shownName(item))}</span>
                     <span style="font-weight: 800;">${item.qty} ${item.unit}</span>
                 </div>
             `).join('');
@@ -1352,7 +1371,7 @@
     }
 
     function buildOrderText(p) {
-        const lines = (p.items || []).map(i => `• ${shownName(i)}: ${i.qty} ${i.unit || ''}`);
+        const lines = (p.items || []).map(i => `• ${i.supplierShareName || shownName(i)}: ${i.qty} ${i.unit || ''}`.trim());
         return `شركة الزيادي لزيوت السيارات\nطلب بضاعة : ${p.supplierName}\n\n${lines.join('\n')}`;
     }
 
@@ -1412,8 +1431,11 @@
     });
 
     window.shareReceiptImage = async function(supplierName, itemsParam = null, btnIdOverride = null) {
-        const items = itemsParam || cartOrders[supplierName];
-        if (!items || items.length === 0) {
+        const sourceItems = itemsParam || cartOrders[supplierName];
+        // Snapshot *after* the latest inline edit (including saved-history orders).
+        // The stock name remains unchanged; only the outgoing presentation name changes.
+        const items = (sourceItems || []).map(itemForSupplierShare);
+        if (items.length === 0) {
             alert("لا توجد أصناف في الطلبية لتجميع القسيمة!");
             return;
         }
@@ -1449,8 +1471,9 @@
                 });
             }
 
-            let blob = getCachedReceipt(supplierName, items);
-            if (!blob) blob = await renderReceiptBlob(supplierName, items);
+            // Always re-render when Share is pressed: do not send a prewarmed
+            // cached image containing the catalogue name from before an edit.
+            const blob = await renderReceiptBlob(supplierName, items);
             if (!blob) {
                 alert("تعذر توليد صورة الفاتورة");
                 restoreBtn();
