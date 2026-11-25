@@ -265,114 +265,82 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
+    // Re-read the ledger on each stock change. Previously movements were fetched
+    // only once, leaving this page stale after an invoice was edited or deleted.
+    let valuationLoadVersion = 0;
+    function normalizeStockName(name) {
+        return String(name || '').trim().replace(/[\u064B-\u0652]/g, '')
+            .replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+    }
+
     async function loadLiveInventory() {
-        try {
-            const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
-                getDocs(collection(db, "invoices")),
-                getDocs(collection(db, "supplier_transactions")),
-                getDocs(collection(db, "inventory")),
-                getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
-            ]);
+        onSnapshot(collection(db, "inventory"), async (snap) => {
+            const version = ++valuationLoadVersion;
+            try {
+                const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
+                    getDocs(collection(db, "invoices")),
+                    getDocs(collection(db, "supplier_transactions")),
+                    getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
+                ]);
+                if (version !== valuationLoadVersion) return;
 
-            const factorsMap = new Map();
-            const namesMap = new Map();
-
-            inventorySnap.forEach(d => {
-                const data = d.data();
-                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-                factorsMap.set(d.id, f);
-                if (data.name) namesMap.set(data.name.trim(), d.id);
-            });
-
-            const salesMap = new Map();
-            const purchasesMap = new Map();
-            const openingMap = new Map();
-
-            transSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.productId) {
-                    const current = openingMap.get(data.productId) || 0;
-                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
-                }
-            });
-
-            invoicesSnap.forEach(docSnap => {
-                const invData = docSnap.data();
-                if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') return;
-
-                const items = invData.items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const rawQty = Number(item.qty) || 0;
-                        const isCarton = isCartonUnit(item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-                        
-                        const current = salesMap.get(id) || 0;
-                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
-                    }
-                }
-            });
-
-            supplierSnap.forEach(docSnap => {
-                const purchase = docSnap.data();
-                if (purchase.isDeleted || purchase.status === 'deleted' || purchase.status === 'cancelled') return;
-                const items = purchase.items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-
-                        const current = purchasesMap.get(id) || 0;
-                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
-                    }
-                }
-            });
-
-            onSnapshot(collection(db, "inventory"), (snap) => {
-                const freshData = [];
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if (!data.isDeleted) {
-                        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                        
-                        let openingTotalPcs = 0;
-                        if (data.openingTotalPcs != null) {
-                            openingTotalPcs = Number(data.openingTotalPcs);
-                        } else if (data.openingQty != null) {
-                            openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-                        } else if (openingMap.has(doc.id)) {
-                            openingTotalPcs = openingMap.get(doc.id);
-                        }
-
-                        const salesPcs = salesMap.get(doc.id) || 0;
-                        const purchasesPcs = purchasesMap.get(doc.id) || 0;
-                        const calculatedRealPcs = (data.openingTotalPcs == null && data.openingQty == null && !openingMap.has(doc.id))
-                            ? Number(data.totalPcs ?? data.qty ?? 0)
-                            : openingTotalPcs + purchasesPcs - salesPcs;
-
-                        freshData.push({ 
-                            id: doc.id, 
-                            ...data,
-                            totalPcs: calculatedRealPcs
-                        });
-                    }
+                const factors = new Map(), names = new Map();
+                snap.forEach(d => {
+                    const data = d.data();
+                    factors.set(d.id, Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1));
+                    if (data.name) names.set(normalizeStockName(data.name), d.id);
                 });
-                allData = freshData;
-                renderItems();
-            });
 
-        } catch (e) {
-            console.error("خطأ:", e);
-            document.getElementById('itemsContainer').innerHTML = `<div class="text-center text-danger mt-5 fw-bold">حدث خطأ أثناء تحميل البيانات</div>`;
-        }
+                const sales = new Map(), purchases = new Map(), opening = new Map();
+                transSnap.forEach(d => {
+                    const row = d.data();
+                    if (row.productId) opening.set(row.productId,
+                        (opening.get(row.productId) || 0) + (Number(row.quantityPcs) || 0));
+                });
+                invoicesSnap.forEach(d => {
+                    const row = d.data();
+                    if (row.isDeleted || row.status === 'deleted' || row.status === 'cancelled') return;
+                    (row.items || []).forEach(item => {
+                        const id = item.stockId || item.id || names.get(normalizeStockName(item.name));
+                        if (!id || !factors.has(id)) return;
+                        const qty = Number(item.qty) || 0;
+                        const pieces = qty * (isCartonUnit(item.unit, item.isCarton) ? factors.get(id) : 1);
+                        sales.set(id, (sales.get(id) || 0) + (item.isReturn ? -pieces : pieces));
+                    });
+                });
+                supplierSnap.forEach(d => {
+                    const row = d.data();
+                    if (row.isDeleted || row.status === 'deleted' || row.status === 'cancelled') return;
+                    (row.items || []).forEach(item => {
+                        const id = item.stockId || item.id || names.get(normalizeStockName(item.name));
+                        if (!id || !factors.has(id)) return;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const qty = Number(isReturn ? item.returnQty || item.qty : item.qty) || 0;
+                        const pieces = qty * (isCartonUnit(item.unitName || item.unit, item.isCarton) ? factors.get(id) : 1);
+                        purchases.set(id, (purchases.get(id) || 0) + (isReturn ? -pieces : pieces));
+                    });
+                });
+
+                allData = snap.docs.filter(d => d.data().isDeleted !== true).map(d => {
+                    const data = d.data(), id = d.id, factor = factors.get(id);
+                    let openingPcs = 0;
+                    if (data.openingTotalPcs != null) openingPcs = Number(data.openingTotalPcs) || 0;
+                    else if (data.openingQty != null) openingPcs = Math.round(Number(data.openingQty) * factor) || 0;
+                    else if (opening.has(id)) openingPcs = opening.get(id);
+
+                    const totalPcs = data.openingTotalPcs == null && data.openingQty == null && !opening.has(id)
+                        ? Number(data.totalPcs ?? data.qty ?? 0)
+                        : openingPcs + (purchases.get(id) || 0) - (sales.get(id) || 0);
+                    return { id, ...data, totalPcs };
+                });
+                renderItems();
+            } catch (error) {
+                if (version !== valuationLoadVersion) return;
+                console.error('Inventory valuation reconciliation failed', error);
+                document.getElementById('itemsContainer').innerHTML =
+                    '<div class="text-center text-danger mt-5 fw-bold">تعذر مطابقة قيمة المخزون بحركات البيع والشراء. حاول التحديث لاحقاً.</div>';
+            }
+        }, err => console.error('Inventory valuation subscription failed', err));
     }
 
     window.renderItems = function() {
