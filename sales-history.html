@@ -840,7 +840,7 @@
                     const invData = {
                         id: invDoc.id,
                         ...docData,
-                        calculatedCash: Number(docData.cashAmount ?? docData.cashPaid ?? docData.paid) || 0,
+                        calculatedCash: Number(docData.cashAmount ?? docData.cashPaid ?? (docData.paid != null ? Number(docData.paid) - Number(docData.walletAmount ?? docData.walletPaid ?? 0) : 0)) || 0,
                         calculatedWallet: Number(docData.walletAmount ?? docData.walletPaid) || 0,
                         previousBalance: docData.previousBalance ?? cachedBalance.previousBalance ?? 0,
                         lastPendingInvoiceDate: docData.lastPendingInvoiceDate ?? cachedBalance.lastPendingInvoiceDate ?? null,
@@ -916,7 +916,7 @@
                 if (!key && data.customerName) key = "NAME_" + normalizeName(data.customerName);
                 if (!key || key !== targetKey) return;
 
-                const calculatedCash = Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0;
+                const calculatedCash = Number(data.cashAmount ?? data.cashPaid ?? (data.paid != null ? Number(data.paid) - Number(data.walletAmount ?? data.walletPaid ?? 0) : 0)) || 0;
                 const calculatedWallet = Number(data.walletAmount ?? data.walletPaid) || 0;
                 const total = Number(data.total) || 0;
                 const paid = calculatedCash + calculatedWallet;
@@ -1129,7 +1129,7 @@
                     fullInvoicesList.push({
                         id: d.id,
                         ...data,
-                        calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0,
+                        calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? (data.paid != null ? Number(data.paid) - Number(data.walletAmount ?? data.walletPaid ?? 0) : 0)) || 0,
                         calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0
                     });
                 }
@@ -1599,7 +1599,7 @@
             let tempInvoices = [];
             invSnap.forEach(d => {
                 const data = d.data(); if (data.isDeleted || data.isArchived) return;
-                const invObj = { id: d.id, ...data, calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? data.paid) || 0, calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0, previousBalance: customersData[data.customerId]?.initialBalance || 0 };
+                const invObj = { id: d.id, ...data, calculatedCash: Number(data.cashAmount ?? data.cashPaid ?? (data.paid != null ? Number(data.paid) - Number(data.walletAmount ?? data.walletPaid ?? 0) : 0)) || 0, calculatedWallet: Number(data.walletAmount ?? data.walletPaid) || 0, previousBalance: customersData[data.customerId]?.initialBalance || 0 };
                 if (loadAllArchive || parseInvoiceDate(invObj) === targetDate) tempInvoices.push(invObj);
             });
             allInvoices = tempInvoices.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
