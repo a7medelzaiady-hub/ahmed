@@ -309,6 +309,9 @@
             background: var(--card-bg); border: 1px solid var(--border-subtle); border-radius: 99px;
             padding: 8px 12px; font-size: 12.5px;
         }
+        .adv-item.is-credit { background: var(--brand-tint); border-color: #b5e6cc; }
+        .adv-item.is-credit .amount { color: var(--brand-dark); }
+        .badge-credit { background: #d3f5e3; color: var(--brand-dark); }
         .adv-item.is-deficit {
             border-color: #fca5a5;
             background: #fff5f5;
@@ -756,9 +759,10 @@
                 const initial = (d.name||'؟').trim().charAt(0);
 
                 const advItemsHtml = advsMonth.length ? advsMonth.map(a => `
-                    <div class="adv-item">
+                    <div class="adv-item ${Number(a.amount) < 0 ? 'is-credit' : ''}">
                         <div class="info">
                             <span class="amount">${fmt(a.amount)}</span>
+                            ${Number(a.amount) < 0 ? '<span class="badge-tag badge-credit">تسوية سلفة</span>' : ''}
                             <span class="date">${a.date||''}</span>
                             ${a.exception ? `<span class="badge-tag badge-exception">استثناء</span>` : ''}
                             ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
@@ -851,9 +855,9 @@
                     ` : ''}
 
                     <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
-                        <h3>تسجيل سلفة — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
+                        <h3>تسجيل سلفة أو تسوية — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
                         <div class="adv-form">
-                            <input type="number" min="0" placeholder="مبلغ السلفة" id="advAmount-${d.id}">
+                            <input type="number" step="any" placeholder="مبلغ السلفة (+ صرف / - تسوية)" title="مبلغ موجب لصرف سلفة، أو مبلغ سالب لتسوية السلفة" id="advAmount-${d.id}">
                             <input type="date" id="advDate-${d.id}" value="${visibleMonthInputDate()}">
                             <input type="text" placeholder="ملاحظة (اختياري)" id="advNote-${d.id}">
                             <button class="btn btn-brand" data-add-adv="${d.id}">إضافة سلفة</button>
@@ -972,6 +976,15 @@
 
     let pendingAdvance = null;
 
+    // A negative advance is a refund/correction of a prior advance.
+    // It reduces signed monthly advances and therefore increases the net salary.
+    function isValidAdvanceAmount(amount) {
+        return Number.isFinite(amount) && amount !== 0;
+    }
+    function requiresAdvanceException(amount, newTotal, limit) {
+        return amount > 0 && newTotal > limit;
+    }
+
     window.addAdvance = async function(driverId){
         const amountEl = document.getElementById(`advAmount-${driverId}`);
         const dateEl = document.getElementById(`advDate-${driverId}`);
@@ -979,7 +992,11 @@
         const amount = Number(amountEl.value);
         const date = dateEl.value || visibleMonthInputDate();
         const note = noteEl.value.trim();
-        if(!amount || amount <= 0){ amountEl.focus(); return; }
+        if (!isValidAdvanceAmount(amount)) {
+            alert('أدخل مبلغ سلفة غير صفري (موجب أو سالب)');
+            amountEl.focus();
+            return;
+        }
 
         const driver = drivers.find(d => d.id === driverId);
         if(!driver) return;
@@ -989,7 +1006,7 @@
         const newTotal = existingMonthTotal + amount;
         const limit = calcAllowedLimit(driver.baseSalary, date);
 
-        if(newTotal > limit){
+        if(requiresAdvanceException(amount, newTotal, limit)){
             pendingAdvance = { driverId, amount, date, note, limit, newTotal, existingMonthTotal };
             openExceptionModal(driver, pendingAdvance);
             return;
