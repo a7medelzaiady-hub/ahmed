@@ -363,9 +363,11 @@ function parseFilterDateInput(val) {
     return null;
 }
 
+let inventoryLoadSequence = 0;
 async function loadLiveInventory() {
     try {
         onSnapshot(collection(db, "inventory"), async (snap) => {
+            const loadSequence = ++inventoryLoadSequence;
             const factorsMap = new Map();
             const namesMap = new Map();
             snap.forEach(d => {
@@ -377,11 +379,12 @@ async function loadLiveInventory() {
 
             try {
                 const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
-                    getDocs(collection(db, "invoices")).catch(() => ({ forEach: () => {} })),
-                    getDocs(collection(db, "supplier_transactions")).catch(() => ({ forEach: () => {} })),
-                    getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance"))).catch(() => ({ forEach: () => {} }))
+                    getDocs(collection(db, "invoices")),
+                    getDocs(collection(db, "supplier_transactions")),
+                    getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
                 ]);
 
+                if (loadSequence !== inventoryLoadSequence) return;
                 salesMapGlobal.clear();
                 purchasesMapGlobal.clear();
                 openingMapGlobal.clear();
@@ -443,7 +446,9 @@ async function loadLiveInventory() {
                     });
                 }
             } catch (err) {
-                console.warn("تنبيه جلب الحركات:", err);
+                console.error("تعذر احتساب المخزون بسبب فشل جلب الحركات:", err);
+                if (dom.syncTime) dom.syncTime.textContent = "تعذر مطابقة حركات المخزون — حاول التحديث";
+                return;
             }
 
             allItems = [];
@@ -462,7 +467,9 @@ async function loadLiveInventory() {
 
                     const salesPcs = salesMapGlobal.get(doc.id) || 0;
                     const purchasesPcs = purchasesMapGlobal.get(doc.id) || 0;
-                    const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+                    const calculatedRealPcs = (data.openingTotalPcs == null && data.openingQty == null && !openingMapGlobal.has(doc.id))
+                        ? Number(data.totalPcs ?? data.qty ?? 0)
+                        : openingTotalPcs + purchasesPcs - salesPcs;
 
                     allItems.push({
                         id: doc.id,
