@@ -340,7 +340,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, updateDoc, doc, onSnapshot, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where, updateDoc, doc, onSnapshot, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -389,18 +389,81 @@
         }
     };
 
+    // Match the movement ledger used by inventory.html and inventory-valuation.html.
+    // The stored totalPcs alone can be out of sync after a sale is edited/deleted.
+    let stockLoadVersion = 0;
+    const normalizeStockName = s => String(s || '').trim().replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+    const isStockCarton = (unit, flag) => flag === true || ['box', 'carton', 'كرتونة', 'كرتونه'].includes(String(unit || '').trim().toLowerCase());
+
     function listenToInventory() {
-        onSnapshot(collection(db, "inventory"), (snap) => {
-            inventoryData = [];
-            snap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.isDeleted !== true) {
-                    inventoryData.push({ id: docSnap.id, ...data });
-                }
+        onSnapshot(collection(db, "inventory"), async (snap) => {
+            const version = ++stockLoadVersion;
+            const stocks = snap.docs.filter(d => d.data().isDeleted !== true);
+            const factors = new Map(), names = new Map();
+            stocks.forEach(d => {
+                const data = d.data();
+                factors.set(d.id, Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1));
+                if (data.name) names.set(normalizeStockName(data.name), d.id);
             });
-            updateStats();
-            renderStock();
-        });
+            try {
+                const [invoices, purchases, opening] = await Promise.all([
+                    getDocs(collection(db, 'invoices')),
+                    getDocs(collection(db, 'supplier_transactions')),
+                    getDocs(query(collection(db, 'inventory_transactions'), where('type', '==', 'opening_balance')))
+                ]);
+                if (version !== stockLoadVersion) return;
+                const salesMap = new Map(), purchaseMap = new Map(), openingMap = new Map();
+                opening.forEach(d => {
+                    const value = d.data();
+                    if (value.productId) openingMap.set(value.productId,
+                        (openingMap.get(value.productId) || 0) + (Number(value.quantityPcs) || 0));
+                });
+                invoices.forEach(d => {
+                    const invoice = d.data();
+                    if (invoice.isDeleted || invoice.status === 'deleted' || invoice.status === 'cancelled') return;
+                    (invoice.items || []).forEach(item => {
+                        const id = item.stockId || item.id || names.get(normalizeStockName(item.name));
+                        if (!id || !factors.has(id)) return;
+                        const pieces = (Number(item.qty) || 0) * (isStockCarton(item.unit, item.isCarton) ? factors.get(id) : 1);
+                        salesMap.set(id, (salesMap.get(id) || 0) + (item.isReturn ? -pieces : pieces));
+                    });
+                });
+                purchases.forEach(d => {
+                    const purchase = d.data();
+                    if (purchase.isDeleted || purchase.status === 'deleted' || purchase.status === 'cancelled') return;
+                    (purchase.items || []).forEach(item => {
+                        const id = item.stockId || item.id || names.get(normalizeStockName(item.name));
+                        if (!id || !factors.has(id)) return;
+                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
+                        const units = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
+                        const pieces = (units || 0) * (isStockCarton(item.unitName || item.unit, item.isCarton) ? factors.get(id) : 1);
+                        purchaseMap.set(id, (purchaseMap.get(id) || 0) + (isReturn ? -pieces : pieces));
+                    });
+                });
+                inventoryData = stocks.map(d => {
+                    const data = d.data(), id = d.id, factor = factors.get(id);
+                    let openingPcs = 0;
+                    if (data.openingTotalPcs != null) openingPcs = Number(data.openingTotalPcs) || 0;
+                    else if (data.openingQty != null) openingPcs = Math.round(Number(data.openingQty) * factor) || 0;
+                    else if (openingMap.has(id)) openingPcs = openingMap.get(id);
+                    const ledgerPcs = openingPcs + (purchaseMap.get(id) || 0) - (salesMap.get(id) || 0);
+                    const totalPcs = (data.openingTotalPcs == null && data.openingQty == null && !openingMap.has(id))
+                        ? Number(data.totalPcs ?? data.qty ?? 0) : ledgerPcs;
+                    return { id, ...data, totalPcs, qty: totalPcs };
+                });
+                updateStats();
+                renderStock();
+            } catch (error) {
+                if (version !== stockLoadVersion) return;
+                console.error('Stock ledger reconciliation failed', error);
+                // Do not silently display a potentially inconsistent cached stock count.
+                inventoryData = [];
+                updateStats();
+                renderStock();
+                const list = document.getElementById('stockTable');
+                if (list) list.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:18px;">تعذر مطابقة المخزون بالمبيعات والمشتريات. حاول التحديث عند توفر الاتصال.</td></tr>';
+            }
+        }, error => console.error('Inventory subscription failed', error));
     }
 
     function updateStats() {

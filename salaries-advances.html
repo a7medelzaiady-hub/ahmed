@@ -348,8 +348,20 @@
             .advances-panel { display: block !important; }
         }
         @media (max-width: 560px) {
-            .stats-row { grid-template-columns: repeat(3, 1fr); }
-            .driver-top { flex-direction: column; align-items: flex-start; }
+            .hero-panel { margin: 10px; padding: 16px 12px; }
+            .hero-top { justify-content: center; }
+            .month-nav { width: min(100%, 290px); justify-content: space-between; }
+            .month-nav button { width: 36px; height: 36px; flex-shrink: 0; }
+            .stats-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+            .stat-chip { padding: 10px 5px; }
+            .chip-num { font-size: 14px; }
+            .driver-top { flex-direction: column; align-items: stretch; }
+            .driver-nums { display: grid; width: 100%; gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .driver-nums .n { text-align: right; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border-subtle); min-width: 0; }
+            .driver-nums .n .k { font-size: 11px; }
+            .driver-nums .n .v { font-size: 13px; overflow-wrap: anywhere; }
+            .adv-form { display: grid; grid-template-columns: 1fr; gap: 8px; }
+            .section-block { padding-inline: 10px; }
         }
     </style>
 </head>
@@ -383,9 +395,9 @@
     <div class="hero-top">
         <div class="hero-eyebrow"><i class="fa-solid fa-truck-fast"></i> رواتب وسلف</div>
         <div class="month-nav">
-            <button id="prevMonth" title="الشهر السابق">›</button>
+            <button type="button" id="prevMonth" aria-label="الشهر السابق" title="الشهر السابق"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
             <div class="label" id="monthLabel">—</div>
-            <button id="nextMonth" title="الشهر التالي">‹</button>
+            <button type="button" id="nextMonth" aria-label="الشهر التالي" title="الشهر التالي"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
         </div>
     </div>
     <div class="stats-row" id="statsRow" style="display: none;">
@@ -443,7 +455,7 @@
         <div class="modal-rows" id="exceptionModalRows"></div>
         <div class="modal-actions">
             <button class="btn btn-cancel" id="modalCancelBtn">إلغاء</button>
-            <button class="btn btn-exception" id="modalExceptionBtn">استثناء وتسجيل مع العجز</button>
+            <button class="btn btn-exception" id="modalExceptionBtn">تسجيل السلفة الاستثنائية</button>
         </div>
     </div>
 </div>
@@ -479,7 +491,7 @@
 
     let drivers = [];
     let advances = [];
-    let currentMonth = new Date().toISOString().slice(0,7);
+    let currentMonth = localMonthKey();
     let openPanels = new Map();
 
     const currentUser = (localStorage.getItem("currentUser") || sessionStorage.getItem("currentUser") || localStorage.getItem("username") || sessionStorage.getItem("username") || "").trim();
@@ -505,12 +517,27 @@
         const [y,m] = ym.split('-').map(Number);
         return ARABIC_MONTHS[m-1] + ' ' + y;
     }
+    // Local calendar dates avoid UTC month/day drift around midnight in Egypt.
+    function localDateKey(date = new Date()) {
+        return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    }
+    function localMonthKey(date = new Date()) { return localDateKey(date).slice(0, 7); }
+    function shiftMonthKey(ym, step) {
+        const [year, month] = ym.split('-').map(Number);
+        if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) throw new Error('شهر غير صالح');
+        return localMonthKey(new Date(year, month - 1 + step, 1, 12));
+    }
+    // Legacy over-limit markers are *not* a second debt deduction.
+    function isOverLimitMarker(a) {
+        return a.isOverLimitMarker === true ||
+            (a.isDeficit === true && String(a.note || '').includes('عجز عن تجاوز الحد المسموح بالسلفة'));
+    }
     function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
     function itemsOfMonth(driverId, ym, type){ 
         return advancesOf(driverId).filter(a => {
             if (!a.date || a.date.slice(0,7) !== ym) return false;
             if (type === 'absence') return a.isAbsence;
-            if (type === 'deficit') return a.isDeficit;
+            if (type === 'deficit') return a.isDeficit && !isOverLimitMarker(a);
             if (type === 'nondeductible') return a.isNonDeductible;
             return !a.isDeficit && !a.isAbsence && !a.isNonDeductible;
         }); 
@@ -530,7 +557,7 @@
         const [vy, vm] = currentMonth.split('-').map(Number);
         let refDateStr;
         if (vy === now.getFullYear() && vm === (now.getMonth()+1)) {
-            refDateStr = now.toISOString().slice(0,10);
+            refDateStr = localDateKey(now);
         } else {
             const daysInMonth = new Date(vy, vm, 0).getDate();
             refDateStr = `${vy}-${String(vm).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
@@ -635,7 +662,7 @@
                         <div class="info">
                             <span class="amount">${fmt(a.amount)}</span>
                             <span class="date">${a.date||''}</span>
-                            ${a.exception ? `<span class="badge-tag badge-exception">استثناء</span>` : ''}
+                            ${a.exception ? `<span class="badge-tag badge-exception">استثناء${Number(a.excessAmount) > 0 ? ` — تجاوز ${fmt(a.excessAmount)} (تنبيه)` : ''}</span>` : ''}
                             ${a.note ? `<span class="note">— ${escapeHtml(a.note)}</span>` : ''}
                         </div>
                         ${isAdmin ? `<button data-del-adv="${a.id}" title="حذف">✕</button>` : ''}
@@ -729,7 +756,7 @@
                         <h3>تسجيل سلفة — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="مبلغ السلفة" id="advAmount-${d.id}">
-                            <input type="date" id="advDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="date" id="advDate-${d.id}" value="${localDateKey()}">
                             <input type="text" placeholder="ملاحظة (اختياري)" id="advNote-${d.id}">
                             <button class="btn btn-brand" data-add-adv="${d.id}">إضافة سلفة</button>
                         </div>
@@ -740,7 +767,7 @@
                         <h3 style="color: var(--violet);">تسجيل أسبوع/أيام غياب — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="قيمة الخصم أو اليومية" id="absenceAmount-${d.id}">
-                            <input type="date" id="absenceDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="date" id="absenceDate-${d.id}" value="${localDateKey()}">
                             <input type="text" placeholder="ملاحظة (مثال: غياب بدون إذن)" id="absenceNote-${d.id}">
                             <button class="btn btn-violet" data-add-absence="${d.id}">تسجيل غياب</button>
                         </div>
@@ -751,7 +778,7 @@
                         <h3 style="color: var(--coral);">تسجيل عجز مالي مميز — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="مبلغ العجز" id="deficitAmount-${d.id}">
-                            <input type="date" id="deficitDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="date" id="deficitDate-${d.id}" value="${localDateKey()}">
                             <input type="text" placeholder="سبب/ملاحظة العجز (اختياري)" id="deficitNote-${d.id}">
                             <button class="btn btn-coral" data-add-deficit="${d.id}">تسجيل عجز</button>
                         </div>
@@ -762,7 +789,7 @@
                         <h3 style="color: var(--teal);">تسجيل مصروف وعجز لن يخصم — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="المبلغ" id="nonDeductibleAmount-${d.id}">
-                            <input type="date" id="nonDeductibleDate-${d.id}" value="${new Date().toISOString().slice(0,10)}">
+                            <input type="date" id="nonDeductibleDate-${d.id}" value="${localDateKey()}">
                             <input type="text" placeholder="البيان / سبب الصرف" id="nonDeductibleNote-${d.id}">
                             <button class="btn btn-teal" data-add-nondeductible="${d.id}">تسجيل مصروف وعجز لن يخصم</button>
                         </div>
@@ -852,7 +879,7 @@
         const dateEl = document.getElementById(`advDate-${driverId}`);
         const noteEl = document.getElementById(`advNote-${driverId}`);
         const amount = Number(amountEl.value);
-        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const date = dateEl.value || localDateKey();
         const note = noteEl.value.trim();
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
@@ -884,7 +911,7 @@
         const dateEl = document.getElementById(`deficitDate-${driverId}`);
         const noteEl = document.getElementById(`deficitNote-${driverId}`);
         const amount = Number(amountEl.value);
-        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const date = dateEl.value || localDateKey();
         const note = noteEl.value.trim();
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
@@ -902,7 +929,7 @@
         const dateEl = document.getElementById(`absenceDate-${driverId}`);
         const noteEl = document.getElementById(`absenceNote-${driverId}`);
         const amount = Number(amountEl.value);
-        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const date = dateEl.value || localDateKey();
         const note = noteEl.value.trim();
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
@@ -920,7 +947,7 @@
         const dateEl = document.getElementById(`nonDeductibleDate-${driverId}`);
         const noteEl = document.getElementById(`nonDeductibleNote-${driverId}`);
         const amount = Number(amountEl.value);
-        const date = dateEl.value || new Date().toISOString().slice(0,10);
+        const date = dateEl.value || localDateKey();
         const note = noteEl.value.trim();
         if(!amount || amount <= 0){ amountEl.focus(); return; }
 
@@ -941,7 +968,7 @@
             <div class="modal-row"><span>سلف الشهر الحالية</span><b>${fmt(p.existingMonthTotal)}</b></div>
             <div class="modal-row"><span>السلفة الجديدة</span><b>${fmt(p.amount)}</b></div>
             <div class="modal-row"><span>الإجمالي بعد الإضافة</span><b>${fmt(p.newTotal)}</b></div>
-            <div class="modal-row excess"><span>مقدار التجاوز (سيتسجل كعجز تلقائياً)</span><b>${fmt(excess)}</b></div>
+            <div class="modal-row excess"><span>مقدار التجاوز (معلومة فقط — لا يخصم مرتين)</span><b>${fmt(excess)}</b></div>
         `;
         document.getElementById('exceptionModal').classList.add('open');
     }
@@ -961,9 +988,9 @@
             const { driverId, amount, date, note, limit, newTotal } = pendingAdvance;
             const excess = Math.round(newTotal - limit);
             try{
-                await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, isNonDeductible: false, exception: true, createdAt: serverTimestamp() });
-                await addDoc(collection(db, ADVANCES_COL), { driverId, amount: excess, date, note: 'عجز عن تجاوز الحد المسموح بالسلفة', isDeficit: true, isAbsence: false, isNonDeductible: false, exception: false, createdAt: serverTimestamp() });
-                openPanels.set(driverId, 'deficit');
+                // Persist the full cash advance only once. Store excess as metadata.
+                await addDoc(collection(db, ADVANCES_COL), { driverId, amount, date, note, isDeficit: false, isAbsence: false, isNonDeductible: false, exception: true, excessAmount: Math.max(0, excess), createdAt: serverTimestamp() });
+                openPanels.set(driverId, 'adv');
             }catch(e){
                 alert('تعذر تسجيل السلفة بالعجز');
                 console.error(e);
@@ -1003,7 +1030,7 @@
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             const [y,m] = currentMonth.split('-').map(Number);
-            currentMonth = new Date(y, m-2, 1).toISOString().slice(0,7);
+            currentMonth = shiftMonthKey(currentMonth, -1);
             render();
         });
     }
@@ -1012,7 +1039,7 @@
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
             const [y,m] = currentMonth.split('-').map(Number);
-            currentMonth = new Date(y, m, 1).toISOString().slice(0,7);
+            currentMonth = shiftMonthKey(currentMonth, 1);
             render();
         });
     }

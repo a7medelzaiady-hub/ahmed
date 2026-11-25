@@ -2,6 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+<script src="auth-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>كشف حساب السجل — شركة الزيادي</title>
 
@@ -563,10 +564,13 @@
                 invSnap.forEach(d => {
                     const data = d.data();
                     if (data.isDeleted) return;
-                    if (data.customerId !== partyId && normalizeName(data.customerName) !== normalizeName(partyName)) return;
+                    if (data.customerId) {
+                        if (String(data.customerId) !== String(partyId)) return;
+                    } else if (normalizeName(data.customerName) !== normalizeName(partyName)) return;
 
-                    const calculatedCash = safeNum(data.cashAmount ?? data.cashPaid ?? data.paid);
                     const calculatedWallet = safeNum(data.walletAmount ?? data.walletPaid);
+                    const calculatedCash = safeNum(data.cashAmount ?? data.cashPaid ??
+                        (data.paid != null ? safeNum(data.paid) - calculatedWallet : 0));
                     const total = safeNum(data.total);
                     const paid = calculatedCash + calculatedWallet;
                     const remaining = total - paid;
@@ -605,7 +609,10 @@
                     const tr = d.data();
                     if (tr.isDeleted) return;
                     if (tr.invoiceId || (tr.note && tr.note.includes('فاتورة'))) return;
-                    if (tr.partyId !== partyId && tr.customerId !== partyId && normalizeName(tr.customerName) !== normalizeName(partyName)) return;
+                    const voucherCustomerId = tr.partyId || tr.customerId;
+                    if (voucherCustomerId) {
+                        if (String(voucherCustomerId) !== String(partyId)) return;
+                    } else if (normalizeName(tr.customerName || tr.partyName) !== normalizeName(partyName)) return;
 
                     const amt = Math.abs(safeNum(tr.amount || tr.total));
                     const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseDateToMs(tr.date || tr.time);
@@ -633,12 +640,17 @@
                 supInvSnap.forEach(d => {
                     const data = d.data();
                     if (data.isDeleted) return;
-                    if (data.supplierId !== partyId && normalizeName(data.supplierName) !== normalizeName(partyName)) return;
+                    const invoiceSupplierId = data.supplierId || data.partyId;
+                    if (invoiceSupplierId) {
+                        if (String(invoiceSupplierId) !== String(partyId)) return;
+                    } else if (normalizeName(data.supplierName) !== normalizeName(partyName)) return;
 
                     const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseDateToMs(data.date || data.time);
                     
                     const totalAmt = safeNum(data.grossTotal ?? data.total ?? data.amount);
-                    const paidAmt = safeNum(data.cashPaid ?? data.paid ?? data.paidAmount);
+                    const paidAmt = data.totalPaid != null || data.paid != null || data.paidAmount != null
+                        ? safeNum(data.totalPaid ?? data.paid ?? data.paidAmount)
+                        : safeNum(data.cashPaid) + safeNum(data.walletPaid);
                     const remAmt = totalAmt - paidAmt;
 
                     let parsedItems = (data.items || []).map(i => {
@@ -671,7 +683,10 @@
                 trSnap.forEach(d => {
                     const tr = d.data();
                     if (tr.isDeleted || tr.invoiceId || tr.supplierTransactionId) return;
-                    if (tr.partyId !== partyId && tr.supplierId !== partyId && normalizeName(tr.supplierName) !== normalizeName(partyName)) return;
+                    const voucherSupplierId = tr.supplierId || tr.partyId;
+                    if (voucherSupplierId) {
+                        if (String(voucherSupplierId) !== String(partyId)) return;
+                    } else if (normalizeName(tr.supplierName || tr.partyName) !== normalizeName(partyName)) return;
 
                     const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseDateToMs(tr.date || tr.time);
                     const amt = Math.abs(safeNum(tr.amount || tr.total));
