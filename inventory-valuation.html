@@ -317,7 +317,9 @@
             });
 
             supplierSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
+                const purchase = docSnap.data();
+                if (purchase.isDeleted || purchase.status === 'deleted' || purchase.status === 'cancelled') return;
+                const items = purchase.items || [];
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     const id = item.stockId || namesMap.get(item.name?.trim());
@@ -352,7 +354,9 @@
 
                         const salesPcs = salesMap.get(doc.id) || 0;
                         const purchasesPcs = purchasesMap.get(doc.id) || 0;
-                        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
+                        const calculatedRealPcs = (data.openingTotalPcs == null && data.openingQty == null && !openingMap.has(doc.id))
+                            ? Number(data.totalPcs ?? data.qty ?? 0)
+                            : openingTotalPcs + purchasesPcs - salesPcs;
 
                         freshData.push({ 
                             id: doc.id, 
