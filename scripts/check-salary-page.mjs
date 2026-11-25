@@ -47,4 +47,28 @@ for (const id of ['statSalary', 'statAdv', 'statNet']) {
 }
 assert.match(html, /\.driver-nums \{ grid-template-columns: repeat\(2,minmax\(0,1fr\)\); \}/);
 assert.match(html, /\.form-row \{ grid-template-columns: repeat\(2,minmax\(0,1fr\)\); \}/);
-console.log('Salary page: JavaScript syntax, month steps, date defaults, accessibility and responsive layout checks passed.');
+// Signed advances represent adjustments/refunds as well as ordinary cash advances.
+const signedAmountInput = html.match(/<input[^>]*id="advAmount-\$\{d\.id\}"[^>]*>/);
+assert(signedAmountInput, 'Signed advance input must exist');
+assert.doesNotMatch(signedAmountInput[0], /\bmin\s*=/, 'Signed advance input must not have min=0');
+assert.match(signedAmountInput[0], /step="any"/);
+const validFn = source.match(/    function isValidAdvanceAmount\(amount\) \{[\s\S]*?\n    \}/);
+const exceptionFn = source.match(/    function requiresAdvanceException\(amount, newTotal, limit\) \{[\s\S]*?\n    \}/);
+assert(validFn && exceptionFn, 'Signed advance helpers must exist');
+const { isValidAdvanceAmount, requiresAdvanceException } = new Function(
+  validFn[0] + '\n' + exceptionFn[0] + '\nreturn { isValidAdvanceAmount, requiresAdvanceException };'
+)();
+assert.equal(isValidAdvanceAmount(500), true);
+assert.equal(isValidAdvanceAmount(-500), true);
+assert.equal(isValidAdvanceAmount(0), false);
+assert.equal(isValidAdvanceAmount(NaN), false);
+assert.equal(isValidAdvanceAmount(Infinity), false);
+assert.equal(requiresAdvanceException(500, 2500, 2000), true);
+assert.equal(requiresAdvanceException(500, 1500, 2000), false);
+assert.equal(requiresAdvanceException(-500, 2500, 2000), false, 'Refunds should never trigger an over-limit modal');
+assert.equal(3000 + -500, 2500, 'Refund must reduce the signed monthly advance sum');
+assert.equal(7500 - (3000 + -500), 5000, 'Refund must increase net salary accordingly');
+assert.match(source, /if \(!isValidAdvanceAmount\(amount\)\)/);
+assert.match(source, /if\(requiresAdvanceException\(amount, newTotal, limit\)\)/);
+assert.match(html, /badge-credit[^>]*>تسوية سلفة</);
+console.log('Salary page: syntax, navigation, signed advances, calculations and responsive layout checks passed.');
