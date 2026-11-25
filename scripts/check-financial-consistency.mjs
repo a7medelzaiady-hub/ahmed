@@ -53,7 +53,8 @@ assert(stockList.includes("getDocs(collection(db, 'invoices'))"));
 assert(stockList.includes("getDocs(collection(db, 'supplier_transactions'))"));
 assert(stockList.includes('if (invoice.isDeleted || invoice.status'));
 assert(stockList.includes('if (purchase.isDeleted || purchase.status'));
-assert(valuation.includes('if (purchase.isDeleted || purchase.status'));
+assert(valuation.includes("if (row.isDeleted || row.status === 'deleted'"));
+assert(valuation.includes('version !== valuationLoadVersion'));
 
 assert(purchase.includes('const previousPayments = await getDocs(query(collection(db, "transactions"), where("invoiceId", "==", editId)))'));
 assert(purchase.includes('batch.delete(payment.ref)'));
