@@ -1250,6 +1250,11 @@
         if (el) el.innerHTML = `<i class="fas ${icon} me-1"></i> ${text}`;
     }
 
+    function normalizeStockName(name) {
+        return String(name || '').trim().replace(/[\u064B-\u0652]/g, '')
+            .replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+    }
+
     async function fetchFreshLists() {
         const [sSnap, invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
             getDocs(collection(db, "suppliers")),
@@ -1268,7 +1273,7 @@
             const data = d.data();
             const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
             factorsMap.set(d.id, f);
-            if (data.name) namesMap.set(data.name.trim(), d.id);
+            if (data.name) namesMap.set(normalizeStockName(data.name), d.id);
         });
 
         const salesMap = new Map();
@@ -1289,7 +1294,7 @@
             const items = invoice.items || [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
-                const id = item.stockId || namesMap.get(item.name?.trim());
+                const id = item.stockId || item.id || namesMap.get(normalizeStockName(item.name));
                 if (id) {
                     const factor = factorsMap.get(id) || 1;
                     const rawQty = Number(item.qty) || 0;
@@ -1308,7 +1313,7 @@
             const items = purchase.items || [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
-                const id = item.stockId || namesMap.get(item.name?.trim());
+                const id = item.stockId || item.id || namesMap.get(normalizeStockName(item.name));
                 if (id) {
                     const factor = factorsMap.get(id) || 1;
                     const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
