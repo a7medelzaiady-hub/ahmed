@@ -1847,6 +1847,12 @@
             });
 
             if (items.length === 0) { return window.showCustomAlert("الرجاء إضافة أصناف للفاتورة"); }
+            // A financial invoice must be acknowledged by the server before printing,
+            // clearing its draft or being shown as completed.
+            if (!navigator.onLine) {
+                window.saveDraftTemporary();
+                return window.showCustomAlert("لا يمكن اعتماد فاتورة مالية أثناء انقطاع الاتصال. احتفظنا بالمسودة على هذا الجهاز؛ أعد المحاولة عند الاتصال.");
+            }
 
             saveBtn.disabled = true;
             saveBtn.innerText = "جاري الحفظ والموازنة...";
@@ -1895,17 +1901,18 @@
             };
 
             const batch = writeBatch(db);
+            let createdInvoiceId = null;
 
             if (!editId) {
                 const newInvoiceRef = doc(collection(db, "invoices"));
                 batch.set(newInvoiceRef, baseInvoiceData);
-                editId = String(newInvoiceRef.id).trim();
+                createdInvoiceId = String(newInvoiceRef.id).trim();
 
                 if (fromOrderId) {
                     if (deleteOrderAfterSave) {
                         batch.delete(doc(db, "orders", fromOrderId));
                     } else {
-                        batch.update(doc(db, "orders", fromOrderId), { status: 'done', invoiceId: editId });
+                        batch.update(doc(db, "orders", fromOrderId), { status: 'done', invoiceId: createdInvoiceId });
                     }
                 }
 
@@ -1925,6 +1932,7 @@
                 
                 if (oldSnap.exists()) {
                     const oldData = oldSnap.data();
+                    if (oldData.isDeleted) throw new Error("الفاتورة محذوفة ولا يمكن تعديلها");
                     
                     if (oldData && oldData.items) {
                         for (const oldItem of oldData.items) {
@@ -1962,30 +1970,17 @@
                             }
                         }
                     }
+                } else {
+                    throw new Error("لم يتم العثور على الفاتورة المراد تعديلها");
                 }
             }
 
-            const wasOffline = !navigator.onLine;
-            const commitPromise = batch.commit();
-
+            await batch.commit();
+            if (createdInvoiceId) editId = createdInvoiceId;
             prepareThermalReceipt(baseInvoiceData, currentFetchedOldBalance);
             isChanged = false;
             clearDraftSilently();
-
-            if (wasOffline) {
-                window.showCustomAlert("تم حفظ الفاتورة على الجهاز، وسيتم رفعها تلقائيًا للسيرفر فور توفر الإنترنت.", false);
-            }
-
             document.getElementById('shareModal').style.display = 'flex';
-
-            commitPromise
-                .then(() => {
-                    console.log("تمت مزامنة الفاتورة مع السيرفر بنجاح");
-                })
-                .catch((err) => {
-                    console.error("فشلت مزامنة الفاتورة مع السيرفر:", err);
-                    window.showCustomAlert("تنبيه: حدث خطأ أثناء رفع الفاتورة للسيرفر بعد رجوع الاتصال.\nيرجى مراجعة الفاتورة من سجل الفواتير للتأكد.\n\n" + (err?.message || err?.toString() || ""));
-                });
 
         } catch (e) {
             console.error("Firebase Error: ", e);
@@ -2184,7 +2179,9 @@
         });
 
         invoicesSnap.forEach(docSnap => {
-            const items = docSnap.data().items || [];
+            const invoice = docSnap.data();
+            if (invoice.isDeleted || invoice.status === 'deleted' || invoice.status === 'cancelled') return;
+            const items = invoice.items || [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 const id = item.stockId || namesMap.get(item.name?.trim());
@@ -2201,7 +2198,9 @@
         });
 
         supplierSnap.forEach(docSnap => {
-            const items = docSnap.data().items || [];
+            const purchase = docSnap.data();
+            if (purchase.isDeleted || purchase.status === 'deleted' || purchase.status === 'cancelled') return;
+            const items = purchase.items || [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 const id = item.stockId || namesMap.get(item.name?.trim());
@@ -2240,7 +2239,7 @@
             };
         });
 
-        customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        customers = cSnap.docs.filter(d => d.data().isDeleted !== true).map(d => ({ id: d.id, ...d.data() }));
         persistCache();
     }
 
