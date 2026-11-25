@@ -13,6 +13,7 @@ const stockList = read('inventory-list.html');
 const valuation = read('inventory-valuation.html');
 const purchase = read('new-purchase-invoice.html');
 const legacy = read('sales_transactions.html');
+const accounts = read('account-statement.html');
 
 const first = salary.indexOf('function localDateKey(');
 const last = salary.indexOf('function advancesOf(driverId)');
@@ -59,6 +60,13 @@ assert(valuation.includes('version !== valuationLoadVersion'));
 assert(purchase.includes('const previousPayments = await getDocs(query(collection(db, "transactions"), where("invoiceId", "==", editId)))'));
 assert(purchase.includes('batch.delete(payment.ref)'));
 assert(history.includes('isArchived: true, archivedAt:'));
+assert(history.includes('successfullyArchived.has(tr.invoiceId)'));
+assert(history.includes('operations.length; i += 400'));
+assert(accounts.includes('const voucherCustomerId = tr.partyId || tr.customerId'));
+assert(accounts.includes('const invoiceSupplierId = data.supplierId || data.partyId'));
+assert(accounts.includes('safeNum(data.cashPaid) + safeNum(data.walletPaid)'));
+assert(accounts.includes('<script src="auth-guard.js"></script>'));
+
 assert(!history.includes('username.includes("أحمد")'));
 assert(legacy.includes("window.location.replace('sales-history.html')"));
 assert(!legacy.includes('deleteDoc('));
