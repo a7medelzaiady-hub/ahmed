@@ -384,7 +384,8 @@ async function loadAll() {
     salesIdx = {};
     salesSnap.forEach(d => {
       const inv = d.data();
-      if (inv.isDeleted || !Array.isArray(inv.items)) return;
+      if (inv.isDeleted || ['deleted', 'cancelled', 'canceled'].includes(inv.status) ||
+          !Array.isArray(inv.items)) return;
       const date = recordDate(inv);
       const party = inv.customerName || inv.clientName || inv.customer || 'عميل نقدي';
       inv.items.forEach(it => {
@@ -394,7 +395,10 @@ async function loadAll() {
         const carton = isCartonUnit(it.unit || it.unitName, it.isCarton);
         const pcs = carton ? raw * factor : raw;
         const isReturn = inv.type === 'return' || inv.isReturn === true || it.isReturn === true;
-        (salesIdx[id] ||= []).push({ date, pcs, isReturn, party, raw, carton });
+        // Retain ALL sale sources for the independent warehouse balance.
+        // Only van_sales is eligible for the daily truck load/audit.
+        (salesIdx[id] ||= []).push({ date, pcs, isReturn, party, raw, carton,
+          source: inv.source || 'main_store' });
       });
     });
 
@@ -556,7 +560,7 @@ function buildDays(item) {
     o.buy += p.signed;
     o.tx.push({ kind: p.isReturn ? 'pret' : 'buy', party: p.party, raw: p.raw, carton: p.carton });
   });
-  (salesIdx[item.id] || []).forEach(s => {
+  (salesIdx[item.id] || []).filter(s => s.source === 'van_sales').forEach(s => {
     const o = get(s.date);
     if (s.isReturn) o.sRet += Math.abs(s.pcs); else o.sold += s.pcs;
     o.tx.push({ kind: s.isReturn ? 'sret' : 'sale', party: s.party, raw: s.raw, carton: s.carton });
@@ -616,7 +620,7 @@ function renderReport() {
     </div>
     <div class="stats">
       <div class="stat"><div class="l">المشتريات</div><div class="v c-blue">${q(tBuy)}</div></div>
-      <div class="stat"><div class="l">المبيعات</div><div class="v c-green">${q(tSold)}</div></div>
+      <div class="stat"><div class="l">مبيعات العربية</div><div class="v c-green">${q(tSold)}</div></div>
       <div class="stat"><div class="l">المرتجعات</div><div class="v c-amber">${q(tRet)}</div></div>
       <div class="stat"><div class="l">إجمالي التحميل</div><div class="v c-cyan">${q(tLoaded)}</div></div>
       <div class="stat dark"><div class="l">المتبقي بالسيارة</div>
@@ -651,9 +655,9 @@ function renderReport() {
       </div>
       <div class="cells">
         <div class="cell"><div class="l">المشتريات</div><div class="v c-blue">${q(d.buy)}</div></div>
-        <div class="cell"><div class="l">قبل التحميل</div><div class="v c-gray">${d.hasLoad ? q(d.prev) : '—'}</div></div>
+        <div class="cell"><div class="l">الرصيد السابق</div><div class="v c-gray">${d.hasLoad ? q(d.prev) : '—'}</div></div>
         <div class="cell"><div class="l">تم تحميله</div><div class="v c-cyan">${d.hasLoad ? q(d.loaded) : '—'}</div></div>
-        <div class="cell"><div class="l">المبيعات</div><div class="v c-green">${q(d.sold)}</div></div>
+        <div class="cell"><div class="l">مبيعات العربية</div><div class="v c-green">${q(d.sold)}</div></div>
         <div class="cell"><div class="l">المرتجعات</div><div class="v c-amber">${q(d.sRet)}</div></div>
         <div class="cell rem"><div class="l">المتبقي بالسيارة</div><div class="v ${remCls}">${d.hasLoad ? q(d.remaining) : '—'}</div></div>
       </div>
