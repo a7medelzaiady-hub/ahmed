@@ -1257,34 +1257,76 @@
             ? c.blob : null;
     }
 
+    // Keep the data as entered, but normalize its printed representation.
+    // Canvas bidi can visually shuffle adjacent Arabic words and numbers
+    // (for example "زيت بترومين 50 20لتر") when the whole line is drawn
+    // with one fillText(). Add a display-only space at Arabic/digit boundaries.
+    function normalizeReceiptDisplayName(text) {
+        return String(text || '')
+            .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/([0-9\u0660-\u0669\u06f0-\u06f9])([\u0621-\u064a\u0671-\u06d3])/g, '$1 $2')
+            .replace(/([\u0621-\u064a\u0671-\u06d3])([0-9\u0660-\u0669\u06f0-\u06f9])/g, '$1 $2')
+            .replace(/\s+/g, ' ').trim();
+    }
+
+    function receiptWordsWidth(ctx, words) {
+        const spaceWidth = ctx.measureText(' ').width;
+        return words.reduce((width, word, i) =>
+            width + ctx.measureText(word).width + (i ? spaceWidth : 0), 0);
+    }
+
     function wrapReceiptWords(ctx, text, maxWidth) {
-        const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+        const words = normalizeReceiptDisplayName(text).split(' ').filter(Boolean);
         if (!words.length) return ['—'];
         const lines = [];
-        let current = '';
+        let current = [];
         for (const word of words) {
-            const candidate = current ? current + ' ' + word : word;
-            if (ctx.measureText(candidate).width <= maxWidth) {
+            const candidate = current.concat(word);
+            if (receiptWordsWidth(ctx, candidate) <= maxWidth) {
                 current = candidate;
+                continue;
+            }
+            if (current.length) { lines.push(current.join(' ')); current = []; }
+            if (ctx.measureText(word).width <= maxWidth) {
+                current = [word];
             } else {
-                if (current) { lines.push(current); current = ''; }
-                if (ctx.measureText(word).width <= maxWidth) {
-                    current = word;
-                } else {
-                    let part = '';
-                    for (const char of Array.from(word)) {
-                        if (part && ctx.measureText(part + char).width > maxWidth) {
-                            lines.push(part);
-                            part = '';
-                        }
-                        part += char;
+                // Split exceptional long codes using grapheme clusters, never
+                // splitting Arabic letters and their combining diacritics.
+                const chars = typeof Intl.Segmenter === 'function'
+                    ? [...new Intl.Segmenter('ar', { granularity: 'grapheme' }).segment(word)]
+                        .map(p => p.segment)
+                    : Array.from(word);
+                let part = '';
+                for (const char of chars) {
+                    if (part && ctx.measureText(part + char).width > maxWidth) {
+                        lines.push(part);
+                        part = '';
                     }
-                    current = part;
+                    part += char;
                 }
+                if (part) current = [part];
             }
         }
-        if (current) lines.push(current);
+        if (current.length) lines.push(current.join(' '));
         return lines;
+    }
+
+    // Draw complete words in logical RTL order, while drawing each number or
+    // Latin product code in its own LTR context. Never reverse strings manually
+    // or draw Arabic letter-by-letter (that would break Arabic shaping).
+    function drawReceiptNameLine(ctx, line, rightX, y) {
+        const words = normalizeReceiptDisplayName(line).split(' ').filter(Boolean);
+        let right = rightX;
+        const gap = ctx.measureText(' ').width;
+        ctx.textAlign = 'right';
+        for (const word of words) {
+            ctx.direction = /[A-Za-z0-9\u0660-\u0669\u06f0-\u06f9]/.test(word) &&
+                !/[\u0621-\u064a\u0671-\u06d3]/.test(word) ? 'ltr' : 'rtl';
+            ctx.fillText(word, right, y);
+            right -= ctx.measureText(word).width + gap;
+        }
+        ctx.direction = 'rtl';
     }
 
     function canvasToBlob(canvas) {
@@ -1313,7 +1355,7 @@
             const rows = items.map(item => {
                 const text = String(item.supplierShareName || shownName(item) || '—');
                 const qty = String(item.qty == null ? '' : item.qty) + ' ' + String(item.unit || '');
-                const lines = wrapReceiptWords(ctx, text, 204);
+                const lines = wrapReceiptWords(ctx, text, 194);
                 return { qty, lines, height: Math.max(37, 13 + lines.length * 22) };
             });
             const h = 155 + rows.reduce((sum, row) => sum + row.height, 0);
@@ -1344,22 +1386,36 @@
             ctx.textAlign = 'right';
             ctx.fillText('الصنف', 340, 83);
             ctx.textAlign = 'left';
-            ctx.fillText('الكمية', 14, 83);
+            ctx.fillText('الكمية المطلوبة', 14, 83);
             ctx.fillRect(14, 93, w - 28, 1);
             let y = 117;
             for (const row of rows) {
                 ctx.textAlign = 'right';
                 ctx.font = '700 14px Cairo, Tahoma, sans-serif';
-                row.lines.forEach((line, i) => ctx.fillText(line, 340, y + i * 22));
+                row.lines.forEach((line, i) => drawReceiptNameLine(ctx, line, 340, y + i * 22));
                 ctx.textAlign = 'left';
                 ctx.font = '800 12px Cairo, Tahoma, sans-serif';
                 ctx.fillText(row.qty, 14, y);
                 y += row.height;
             }
             divider(y + 4);
-            ctx.textAlign = 'right';
+            // Keep the timestamp numeric and LTR so slash-separated dates
+            // and clock digits cannot get reordered in an Arabic canvas line.
+            const now = new Date();
+            const date = new Intl.DateTimeFormat('en-GB', {
+                day: '2-digit', month: '2-digit', year: 'numeric'
+            }).format(now);
+            const time = new Intl.DateTimeFormat('en-GB', {
+                hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+            }).format(now);
             ctx.font = '700 12px Cairo, Tahoma, sans-serif';
-            ctx.fillText('التاريخ: ' + new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }), 340, y + 30);
+            ctx.textAlign = 'right';
+            ctx.direction = 'rtl';
+            ctx.fillText('التاريخ:', 340, y + 30);
+            ctx.textAlign = 'left';
+            ctx.direction = 'ltr';
+            ctx.fillText(date + '  ' + time, 14, y + 30);
+            ctx.direction = 'rtl';
 
             const blob = await canvasToBlob(canvas);
             receiptCache[supplierName] = { sig, blob, time: Date.now() };
