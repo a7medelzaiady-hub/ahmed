@@ -408,7 +408,7 @@ table select:focus { border-color: var(--brand); }
   </div>
 
   <div class="page" id="pg-summary">
-    <div class="ph"><h2>حركة وجرد العربة الكلي والفرق</h2><p>مقارنة المحمل بالمباع وإدخل الراجع لكشف أي عجز</p></div>
+    <div class="ph"><h2>حركة وجرد العربة الكلي والفرق</h2><p>جرد العربية يعتمد على مبيعات العربية فقط، ولا يخصم أي مبيعات من المخزن الرئيسي.</p></div>
 
     <div class="tools-row" style="flex-wrap: nowrap; gap: 6px; margin-bottom: 8px;">
       <div class="date-filter-wrap">
@@ -465,7 +465,7 @@ table select:focus { border-color: var(--brand); }
               <th style="width:22%; text-align:right; padding-right:6px;">اسم الصنف</th>
               <th style="width:13%;">الرصيد السابق</th>
               <th style="width:13%;">تم تحميله</th>
-              <th style="width:13%;">المباع لايف</th>
+              <th style="width:13%;">مباع العربية</th>
               <th style="width:15%;">المتبقي بالعربية</th>
               <th style="width:14%;">الراجع الفعلي</th>
               <th style="width:10%;">حالة الفرق</th>
@@ -677,7 +677,11 @@ function listenToDailyLoadChanges() {
 function recomputeSales() {
   memorySalesCache = {};
   dayInvoices.forEach(inv => {
-    if (inv.isDeleted) return;
+    // Car loading audit counts sales/returns actually dispatched from the van.
+    // Warehouse invoices must affect warehouse stock, not the driver's load.
+    // Legacy invoices without a source default to warehouse (as in sales-history).
+    if (inv.source !== 'van_sales' || inv.isDeleted ||
+        ['deleted', 'cancelled', 'canceled'].includes(inv.status)) return;
     const isRet = inv.type === 'return' || inv.isReturn === true;
     inv.items?.forEach(itm => {
       const id = getProductIdForItem(itm);
@@ -699,10 +703,15 @@ function listenToLiveInvoices() {
   if (unsubscribeInvoices) unsubscribeInvoices();
   invoicesDate = sel; dayInvoices = new Map(); memorySalesCache = null; isSalesReady = false;
 
-  unsubscribeInvoices = onSnapshot(collection(db, "invoices"), (snap) => {
+  // Only listen to van invoices: warehouse sales neither affect this audit
+  // nor consume realtime reads here.
+  unsubscribeInvoices = onSnapshot(
+    query(collection(db, "invoices"), where("source", "==", "van_sales")), (snap) => {
     snap.docChanges().forEach(ch => {            
       const inv = ch.doc.data();
-      if (ch.type === 'removed' || inv.isDeleted || !Array.isArray(inv.items) ||
+      if (ch.type === 'removed' || inv.source !== 'van_sales' ||
+          inv.isDeleted || ['deleted', 'cancelled', 'canceled'].includes(inv.status) ||
+          !Array.isArray(inv.items) ||
           parseDate(inv.date || inv.time, inv.timestamp) !== sel) dayInvoices.delete(ch.doc.id);
       else dayInvoices.set(ch.doc.id, inv);
     });
@@ -1439,7 +1448,7 @@ window.filterSummaryUI = function() {
       <div class="inv-stats-row">
         <div class="inv-stat"><span class="lbl">الرصيد السابق</span><span class="val" style="color:var(--gray);">${prevLoadedText}</span></div>
         <div class="inv-stat loaded"><span class="lbl">تم تحميله</span><span class="val" style="color:var(--brand);">${newLoadedText}</span></div>
-        <div class="inv-stat sold"><span class="lbl">المباع</span><span class="val" style="${totalSoldPcs < 0 ? 'color:var(--amber)' : ''}">${soldText}</span></div>
+        <div class="inv-stat sold"><span class="lbl">مباع العربية</span><span class="val" style="${totalSoldPcs < 0 ? 'color:var(--amber)' : ''}">${soldText}</span></div>
         <div class="inv-stat in-truck"><span class="lbl">المتبقي بالعربية</span><span class="val">${inTruckText}</span></div>
       </div>
       <div class="inv-bottom-row">
@@ -2119,7 +2128,7 @@ window.exportSummaryExcel = function() {
     "الرصيد السابق": cleanTextForPdf(r.prevLoadedText),
     "تم تحميله جديد": cleanTextForPdf(r.newLoadedText),
     "إجمالي المحمل": cleanTextForPdf(r.loadedText),
-    "المباع لايف": cleanTextForPdf(r.soldText),
+    "مباع العربية": cleanTextForPdf(r.soldText),
     "المتبقي بالعربية": cleanTextForPdf(r.inTruckText),
     "الراجع الفعلي": cleanTextForPdf(r.manualText),
     "حالة الفرق": r.calculatedStatus || 'مضبوط',
