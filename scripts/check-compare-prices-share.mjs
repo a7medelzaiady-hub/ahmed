@@ -27,7 +27,16 @@ assert.match(src, /function finishShare\(\)/, 'Close share UI without waiting fo
 assert.doesNotMatch(src, /await finishShare\(\)/);
 assert.match(src, /if \(r === 'shared'\) finishShare\(\)/);
 assert.match(src, /showShareReadyModal\(\);\s*\}\s*catch \(e\)/, 'Image must be ready before explicit user-triggered sharing');
-assert.match(src, /return false;\s*\}\);/, 'Firestore save failures must preserve cart');
+assert.match(src, /function finishShare\(\)/, 'Share finalization handles confirmed save');
+assert.match(src, /savePromise = addDoc\(collection\(db, 'purchase_orders'\), p\.orderDocData\)/,
+  'Save should be started only from final share action');
+assert.match(src, /console\.error\('تعذر حفظ الطلبية؛ بقيت السلة محفوظة:'/,
+  'Failed writes must preserve the local cart');
+const shareStart = src.indexOf('window.shareReceiptImage = async function');
+const shareEnd = src.indexOf('window.openOrdersHistoryModal = async function', shareStart);
+assert(shareStart >= 0 && shareEnd > shareStart, 'Share button flow missing');
+assert.doesNotMatch(src.slice(shareStart, shareEnd), /addDoc\(/,
+  'Preview or cancelled share should never cause a database write');
 assert.match(src, /itemsSig\(cartOrders\[p\.supplierName\]\) === itemsSig\(p\.items\)/, 'Must not clear a newly changed cart');
 assert.match(src, /sharePreviewUrl = URL\.createObjectURL\(p\.blob\)/);
 assert.match(src, /URL\.revokeObjectURL\(sharePreviewUrl\)/);
