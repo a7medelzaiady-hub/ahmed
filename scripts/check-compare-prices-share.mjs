@@ -94,7 +94,7 @@ assert(api.wrapReceiptWords(canvasContext, 'اسم صنف طويل جداً عل
 assert.equal(api.normalizeReceiptDisplayName('زيت بترومين50 20لتر'), 'زيت بترومين 50 20 لتر');
 assert.equal(api.normalizeReceiptDisplayName('توتال 3000'), 'توتال 3000');
 assert.equal(api.normalizeReceiptDisplayName('Mobil1 5W-30'), 'Mobil1 5W-30');
-assert.equal(api.normalizeReceiptDisplayName('زيت\\u200f 20لتر'), 'زيت 20 لتر');
+assert.equal(api.normalizeReceiptDisplayName('زيت\u200f 20لتر'), 'زيت 20 لتر');
 
 drawn = [];
 drawCalls = [];
@@ -108,7 +108,7 @@ assert(itemWords.filter(d => d.text === '20' || d.text === '50').every(d => d.di
   'Numeric chunks must always be LTR');
 assert(itemWords.filter(d => d.text === 'زيت' || d.text === 'لتر').every(d => d.direction === 'rtl'),
   'Arabic words must be drawn RTL');
-const stamp = drawCalls.find(d => /^\\d{2}\\/\\d{2}\\/\\d{4}\\s+\\d{2}:\\d{2}$/.test(d.text));
+const stamp = drawCalls.find(d => /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/.test(d.text));
 assert(stamp && stamp.direction === 'ltr', 'Numeric date must be LTR and isolated from Arabic label');
 assert(drawCalls.some(d => d.text === 'الكمية المطلوبة'), 'Keep original receipt header text');
 
