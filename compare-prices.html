@@ -1247,7 +1247,7 @@
     function itemsSig(items) {
         return JSON.stringify((items || []).map(i => [
             String(i.supplierShareName || shownName(i)),
-            Number(i.qty), String(i.unit || '')
+            Number(i.qty), String(i.unit || ''), Number(i.price || i.buy || 0)
         ]));
     }
 
@@ -1373,9 +1373,12 @@
     let pendingShare = null;
     let lastShareError = '';
 
+    let nativeShareInProgress = false;
     async function doShare() {
         const p = pendingShare;
         if (!p) return 'none';
+        if (nativeShareInProgress) return 'busy';
+        nativeShareInProgress = true;
         isSharing = true;
         try {
             if (navigator.canShare && navigator.canShare({ files: [p.file] })) {
@@ -1390,6 +1393,7 @@
             console.error('share failed', err);
             return 'failed';
         } finally {
+            nativeShareInProgress = false;
             setTimeout(() => { isSharing = false; }, 1500);
         }
     }
@@ -1502,7 +1506,9 @@
         finishShare();
     });
 
+    let sharePreparationInProgress = false;
     window.shareReceiptImage = async function(supplierName, itemsParam = null, btnIdOverride = null) {
+        if (sharePreparationInProgress) return;
         const sourceItems = itemsParam || cartOrders[supplierName];
         // Snapshot *after* the latest inline edit (including saved-history orders).
         // The stock name remains unchanged; only the outgoing presentation name changes.
@@ -1523,7 +1529,9 @@
             btn.disabled = true;
         }
 
-        let savePromise = Promise.resolve();
+        let savePromise = Promise.resolve(true);
+        sharePreparationInProgress = true;
+        lastShareError = '';
 
         try {
             if (!itemsParam) {
@@ -1566,6 +1574,7 @@
             alert("حدث خطأ أثناء التجهيز!");
         } finally {
             restoreBtn();
+            sharePreparationInProgress = false;
         }
     };
 
