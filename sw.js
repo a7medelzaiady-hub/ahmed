@@ -8,7 +8,7 @@
 // - ملفات الموقع نفسه (HTML/JS/CSS) بتتعرض من الكاش فورًا وبتتحدّث بالخلفية،
 //   فأي تعديل في ملف زي shop-publish.js بيوصل في الفتحة اللي بعدها.
 // =====================================================================
-const CACHE_NAME = "elzaiady-cache-v18";
+const CACHE_NAME = "elzaiady-cache-v19";
 
 const LOCAL_FILES = [
   "./",
@@ -108,6 +108,7 @@ const LOCAL_FILES = [
   "./required-items-summary.html",
   "./returns-list.html",
   "./salaries-advances.html",
+  "./stock-balance.mjs",
   "./sales-history.html",
   "./sales-invoice.html",
   "./sales-return.html",
