@@ -1409,18 +1409,26 @@
         if (o) o.hide();
         const r = bootstrap.Modal.getInstance(document.getElementById('shareReadyModal'));
         if (r) r.hide();
-        if (p.clearCart) {
-            Promise.resolve(p.savePromise).then(saved => {
-                if (!saved) {
-                    console.warn('تعذر تأكيد حفظ الطلبية؛ بقيت السلة محفوظة');
-                    return;
-                }
+        if (p.clearCart && p.orderDocData) {
+            // Save only when the user confirms a sharing/download action.
+            // A cancelled preview must never generate a duplicate saved order.
+            let savePromise;
+            try {
+                savePromise = addDoc(collection(db, 'purchase_orders'), p.orderDocData);
+            } catch (err) {
+                console.error('تعذر بدء حفظ الطلبية:', err);
+                return;
+            }
+            Promise.resolve(savePromise).then(() => {
                 if (cartOrders[p.supplierName] &&
                     itemsSig(cartOrders[p.supplierName]) === itemsSig(p.items)) {
                     delete cartOrders[p.supplierName];
                     updateOrderBar();
                 }
-            }).catch(err => console.error('تعذر إتمام حفظ الطلبية:', err));
+            }).catch(err => {
+                // Keep the draft so an unsuccessful write never loses items.
+                console.error('تعذر حفظ الطلبية؛ بقيت السلة محفوظة:', err);
+            });
         }
     }
 
@@ -1535,13 +1543,13 @@
             btn.disabled = true;
         }
 
-        let savePromise = Promise.resolve(true);
+        let orderDocData = null;
         sharePreparationInProgress = true;
         lastShareError = '';
 
         try {
             if (!itemsParam) {
-                const orderDocData = {
+                orderDocData = {
                     supplierName: supplierName,
                     items: mapItemsForSave(items),
                     totalItemsCount: items.reduce((sum, item) => sum + item.qty, 0),
@@ -1552,12 +1560,7 @@
                     createdAt: new Date().toISOString(),
                     status: 'مجهزة'
                 };
-                savePromise = addDoc(collection(db, "purchase_orders"), orderDocData)
-                    .then(() => true)
-                    .catch(err => {
-                        console.error("تعذر حفظ الطلبية:", err);
-                        return false;
-                    });
+
             }
 
             // Receipt signature changes whenever a supplier-facing name changes.
@@ -1570,7 +1573,7 @@
 
             const fileName = `order_${Date.now()}.png`;
             const file = new File([blob], fileName, { type: 'image/png' });
-            pendingShare = { file, blob, fileName, clearCart: !itemsParam, supplierName, savePromise, items };
+            pendingShare = { file, blob, fileName, clearCart: !itemsParam, supplierName, orderDocData, items };
 
             // A second user tap keeps native file-sharing permission available
             // on Android browsers after preparing the image asynchronously.
