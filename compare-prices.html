@@ -14,7 +14,6 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <style>
         :root {
@@ -1126,7 +1125,7 @@
 
         body.innerHTML = html;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('orderModal')).show();
-        schedulePrewarm();
+        // Skip background rendering for all suppliers on slow phones.
     };
 
     function mapItemsForSave(items) {
@@ -1238,93 +1237,148 @@
         openOrderModal();
     };
 
-    function canvasToBlob(canvas) {
-        return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'));
-    }
 
-    const receiptCache = {};
-    let renderChain = Promise.resolve();
+    // A small standalone thermal canvas avoids cloning the entire product list.
+    // The cache signature includes the exact supplier-facing edited name.
+    const receiptCache = Object.create(null);
+    const receiptInFlight = new Map();
+    const RECEIPT_CACHE_MS = 120000;
 
     function itemsSig(items) {
-        return JSON.stringify((items || []).map(i => [i.supplierShareName || shownName(i), i.qty, i.unit]));
+        return JSON.stringify((items || []).map(i => [
+            String(i.supplierShareName || shownName(i)),
+            Number(i.qty), String(i.unit || ''), Number(i.price || i.buy || 0)
+        ]));
     }
 
     function getCachedReceipt(supplierName, items) {
         const c = receiptCache[supplierName];
-        return (c && c.sig === itemsSig(items)) ? c.blob : null;
+        return (c && c.sig === itemsSig(items) && Date.now() - c.time < RECEIPT_CACHE_MS)
+            ? c.blob : null;
     }
 
-    // Escape editable supplier labels before inserting them into the receipt HTML.
-    function escapeShareText(value) {
-        return String(value || '').replace(/[&<>"']/g, c => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        }[c]));
-    }
-
-    function renderReceiptBlob(supplierName, items) {
-        const job = renderChain.then(async () => {
-            document.getElementById('thermalOrderDate').innerText = new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
-            document.getElementById('thermalItemsList').innerHTML = items.map(item => `
-                <div class="thermal-row">
-                    <span>${escapeShareText(item.supplierShareName || shownName(item))}</span>
-                    <span style="font-weight: 800;">${item.qty} ${item.unit}</span>
-                </div>
-            `).join('');
-
-            if (document.fonts && document.fonts.ready) {
-                try { await document.fonts.ready; } catch (e) {}
-            }
-            await new Promise(r => setTimeout(r, 100));
-
-            const canvas = await html2canvas(document.getElementById('thermalReceiptTemplate'), {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                scrollX: 0,
-                scrollY: 0,
-                windowWidth: 360,
-                onclone: (clonedDoc) => {
-                    const c = clonedDoc.getElementById('thermalReceiptContainer');
-                    if (c) {
-                        c.style.left = '0px';
-                        c.style.top = '0px';
-                        c.style.position = 'absolute';
-                        c.style.zIndex = '1';
+    function wrapReceiptWords(ctx, text, maxWidth) {
+        const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+        if (!words.length) return ['—'];
+        const lines = [];
+        let current = '';
+        for (const word of words) {
+            const candidate = current ? current + ' ' + word : word;
+            if (ctx.measureText(candidate).width <= maxWidth) {
+                current = candidate;
+            } else {
+                if (current) { lines.push(current); current = ''; }
+                if (ctx.measureText(word).width <= maxWidth) {
+                    current = word;
+                } else {
+                    let part = '';
+                    for (const char of Array.from(word)) {
+                        if (part && ctx.measureText(part + char).width > maxWidth) {
+                            lines.push(part);
+                            part = '';
+                        }
+                        part += char;
                     }
+                    current = part;
                 }
-            });
-            const blob = await canvasToBlob(canvas);
-            if (blob) receiptCache[supplierName] = { sig: itemsSig(items), blob };
-            return blob;
-        });
-        renderChain = job.catch(() => {});
-        return job;
-    }
-
-    let prewarmTimer = null;
-    function schedulePrewarm() {
-        clearTimeout(prewarmTimer);
-        prewarmTimer = setTimeout(() => {
-            const m = document.getElementById('orderModal');
-            if (m && m.classList.contains('show')) prewarmReceipts();
-        }, 5000);
-    }
-
-    function prewarmReceipts() {
-        Object.keys(cartOrders).forEach(n => {
-            const it = cartOrders[n];
-            if (it && it.length && !getCachedReceipt(n, it)) {
-                renderReceiptBlob(n, it).catch(e => console.log('prewarm failed', e));
             }
+        }
+        if (current) lines.push(current);
+        return lines;
+    }
+
+    function canvasToBlob(canvas) {
+        return new Promise((resolve, reject) => {
+            try {
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('تعذر توليد الصورة')), 'image/png');
+            } catch (e) { reject(e); }
         });
+    }
+
+    async function renderReceiptBlob(supplierName, items) {
+        const sig = itemsSig(items);
+        const cached = getCachedReceipt(supplierName, items);
+        if (cached) return cached;
+        const key = JSON.stringify([supplierName, sig]);
+        if (receiptInFlight.has(key)) return receiptInFlight.get(key);
+
+        const work = (async () => {
+            const w = 360, scale = 2;
+            const canvas = document.createElement('canvas');
+            canvas.width = w * scale;
+            canvas.height = 160;
+            let ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('تعذر الرسم على الجهاز');
+            ctx.font = '700 14px Cairo, Tahoma, sans-serif';
+            const rows = items.map(item => {
+                const text = String(item.supplierShareName || shownName(item) || '—');
+                const qty = String(item.qty == null ? '' : item.qty) + ' ' + String(item.unit || '');
+                const lines = wrapReceiptWords(ctx, text, 204);
+                return { qty, lines, height: Math.max(37, 13 + lines.length * 22) };
+            });
+            const h = 155 + rows.reduce((sum, row) => sum + row.height, 0);
+            if (h > 8000) throw new Error('الطلبية طويلة للصورة؛ اختر إرسال كنص');
+            canvas.height = Math.ceil(h * scale);
+            ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.fillStyle = '#000000';
+            ctx.direction = 'rtl';
+            ctx.textBaseline = 'alphabetic';
+            function divider(y) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 5]);
+                ctx.moveTo(14, y);
+                ctx.lineTo(w - 14, y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            ctx.textAlign = 'center';
+            ctx.font = '900 24px Cairo, Tahoma, sans-serif';
+            ctx.fillText('مطلوب', 180, 45);
+            divider(58);
+            ctx.font = '800 14px Cairo, Tahoma, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('الصنف', 340, 83);
+            ctx.textAlign = 'left';
+            ctx.fillText('الكمية', 14, 83);
+            ctx.fillRect(14, 93, w - 28, 1);
+            let y = 117;
+            for (const row of rows) {
+                ctx.textAlign = 'right';
+                ctx.font = '700 14px Cairo, Tahoma, sans-serif';
+                row.lines.forEach((line, i) => ctx.fillText(line, 340, y + i * 22));
+                ctx.textAlign = 'left';
+                ctx.font = '800 12px Cairo, Tahoma, sans-serif';
+                ctx.fillText(row.qty, 14, y);
+                y += row.height;
+            }
+            divider(y + 4);
+            ctx.textAlign = 'right';
+            ctx.font = '700 12px Cairo, Tahoma, sans-serif';
+            ctx.fillText('التاريخ: ' + new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }), 340, y + 30);
+
+            const blob = await canvasToBlob(canvas);
+            receiptCache[supplierName] = { sig, blob, time: Date.now() };
+            return blob;
+        })();
+        receiptInFlight.set(key, work);
+        try { return await work; }
+        finally { if (receiptInFlight.get(key) === work) receiptInFlight.delete(key); }
     }
 
     let pendingShare = null;
     let lastShareError = '';
 
+    let nativeShareInProgress = false;
     async function doShare() {
         const p = pendingShare;
         if (!p) return 'none';
+        if (nativeShareInProgress) return 'busy';
+        nativeShareInProgress = true;
         isSharing = true;
         try {
             if (navigator.canShare && navigator.canShare({ files: [p.file] })) {
@@ -1339,35 +1393,71 @@
             console.error('share failed', err);
             return 'failed';
         } finally {
+            nativeShareInProgress = false;
             setTimeout(() => { isSharing = false; }, 1500);
         }
     }
 
-    async function finishShare() {
+
+    // Never block WhatsApp/close on a slow Firebase write. Preserve the draft
+    // until the server confirms save; don't clear if the user edited the cart.
+    function finishShare() {
         const p = pendingShare;
         if (!p) return;
-        try { await p.savePromise; } catch (e) {}
-        if (p.clearCart) {
-            delete cartOrders[p.supplierName];
-            updateOrderBar();
-        }
+        pendingShare = null;
         const o = bootstrap.Modal.getInstance(document.getElementById('orderModal'));
         if (o) o.hide();
         const r = bootstrap.Modal.getInstance(document.getElementById('shareReadyModal'));
         if (r) r.hide();
-        pendingShare = null;
+        if (p.clearCart && p.orderDocData) {
+            // Save only when the user confirms a sharing/download action.
+            // A cancelled preview must never generate a duplicate saved order.
+            let savePromise;
+            try {
+                savePromise = addDoc(collection(db, 'purchase_orders'), p.orderDocData);
+            } catch (err) {
+                console.error('تعذر بدء حفظ الطلبية:', err);
+                return;
+            }
+            Promise.resolve(savePromise).then(() => {
+                if (cartOrders[p.supplierName] &&
+                    itemsSig(cartOrders[p.supplierName]) === itemsSig(p.items)) {
+                    delete cartOrders[p.supplierName];
+                    updateOrderBar();
+                }
+            }).catch(err => {
+                // Keep the draft so an unsuccessful write never loses items.
+                console.error('تعذر حفظ الطلبية؛ بقيت السلة محفوظة:', err);
+            });
+        }
     }
 
+    let sharePreviewUrl = null;
+    document.getElementById('shareReadyModal').addEventListener('hidden.bs.modal', () => {
+        if (sharePreviewUrl) URL.revokeObjectURL(sharePreviewUrl);
+        sharePreviewUrl = null;
+        document.getElementById('shareReadyImg').removeAttribute('src');
+        // A dismissed preview is not a completed share; discard its temporary file.
+        pendingShare = null;
+    });
     function showShareReadyModal() {
         const p = pendingShare;
         if (!p) return;
-        document.getElementById('shareReadyImg').src = URL.createObjectURL(p.blob);
+        if (sharePreviewUrl) URL.revokeObjectURL(sharePreviewUrl);
+        sharePreviewUrl = URL.createObjectURL(p.blob);
+        document.getElementById('shareReadyImg').src = sharePreviewUrl;
         document.getElementById('shareReadyErr').innerText = lastShareError;
-        const o = bootstrap.Modal.getInstance(document.getElementById('orderModal'));
-        if (o) o.hide();
-        setTimeout(() => {
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('shareReadyModal')).show();
-        }, 250);
+        const orderModal = document.getElementById('orderModal');
+        const o = bootstrap.Modal.getInstance(orderModal);
+        const displayReady = () => bootstrap.Modal.getOrCreateInstance(
+            document.getElementById('shareReadyModal')
+        ).show();
+        if (o && orderModal.classList.contains('show')) {
+            orderModal.addEventListener('hidden.bs.modal', displayReady, { once: true });
+            o.hide();
+        } else {
+            displayReady();
+        }
     }
 
     function buildOrderText(p) {
@@ -1388,8 +1478,10 @@
         if (!p) return;
         const phone = normalizePhone((supplierNameToInfo[p.supplierName] || {}).phone);
         const url = `https://wa.me/${phone}?text=${encodeURIComponent(buildOrderText(p))}`;
-        window.location.href = url;
-        setTimeout(() => { finishShare(); }, 1500);
+        isSharing = true;
+        finishShare();
+        window.location.assign(url);
+        setTimeout(() => { isSharing = false; }, 2500);
     });
 
     document.getElementById('btnCopyText').addEventListener('click', async function() {
@@ -1411,7 +1503,7 @@
 
     document.getElementById('btnShareNow').addEventListener('click', async function() {
         const r = await doShare();
-        if (r === 'shared') await finishShare();
+        if (r === 'shared') finishShare();
         else if (r === 'failed' || r === 'unsupported') {
             document.getElementById('shareReadyErr').innerText = lastShareError;
         }
@@ -1427,10 +1519,12 @@
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        await finishShare();
+        finishShare();
     });
 
+    let sharePreparationInProgress = false;
     window.shareReceiptImage = async function(supplierName, itemsParam = null, btnIdOverride = null) {
+        if (sharePreparationInProgress) return;
         const sourceItems = itemsParam || cartOrders[supplierName];
         // Snapshot *after* the latest inline edit (including saved-history orders).
         // The stock name remains unchanged; only the outgoing presentation name changes.
@@ -1451,11 +1545,13 @@
             btn.disabled = true;
         }
 
-        let savePromise = Promise.resolve();
+        let orderDocData = null;
+        sharePreparationInProgress = true;
+        lastShareError = '';
 
         try {
             if (!itemsParam) {
-                const orderDocData = {
+                orderDocData = {
                     supplierName: supplierName,
                     items: mapItemsForSave(items),
                     totalItemsCount: items.reduce((sum, item) => sum + item.qty, 0),
@@ -1466,13 +1562,10 @@
                     createdAt: new Date().toISOString(),
                     status: 'مجهزة'
                 };
-                savePromise = addDoc(collection(db, "purchase_orders"), orderDocData).catch(err => {
-                    console.error("تعذر حفظ الطلبية:", err);
-                });
+
             }
 
-            // Always re-render when Share is pressed: do not send a prewarmed
-            // cached image containing the catalogue name from before an edit.
+            // Receipt signature changes whenever a supplier-facing name changes.
             const blob = await renderReceiptBlob(supplierName, items);
             if (!blob) {
                 alert("تعذر توليد صورة الفاتورة");
@@ -1482,19 +1575,17 @@
 
             const fileName = `order_${Date.now()}.png`;
             const file = new File([blob], fileName, { type: 'image/png' });
-            pendingShare = { file, blob, fileName, clearCart: !itemsParam, supplierName, savePromise, items };
+            pendingShare = { file, blob, fileName, clearCart: !itemsParam, supplierName, orderDocData, items };
 
-            const result = await doShare();
-            if (result === 'shared') {
-                await finishShare();
-            } else if (result === 'failed' || result === 'unsupported') {
-                showShareReadyModal();
-            }
+            // A second user tap keeps native file-sharing permission available
+            // on Android browsers after preparing the image asynchronously.
+            showShareReadyModal();
         } catch (e) {
             console.error("خطأ عام في التجهيز:", e);
             alert("حدث خطأ أثناء التجهيز!");
         } finally {
             restoreBtn();
+            sharePreparationInProgress = false;
         }
     };
 
