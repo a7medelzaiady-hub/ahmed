@@ -35,20 +35,21 @@ const outgoing = ctx.buildOrderText({ supplierName: 'عالميه', items: [shar
 assert(outgoing.includes('توتال 3000: 2 كرتونة'), 'WhatsApp text uses the edited name');
 assert(!outgoing.includes('• توتال: 2'), 'WhatsApp text must not revert to catalog name');
 
-vm.runInNewContext(
-  extract('function escapeShareText(value)', 'function renderReceiptBlob(supplierName, items)') +
-  '\nthis.escapeShareText = escapeShareText;', ctx
-);
-assert.equal(ctx.escapeShareText('توتال <3000>'), 'توتال &lt;3000&gt;');
-assert(html.includes('escapeShareText(item.supplierShareName || shownName(item))'),
-  'image generator must use the edited supplier-facing name');
+
+assert(html.includes('String(i.supplierShareName || shownName(i))'),
+  'receipt cache signature must include the edited supplier name');
+assert(html.includes('String(item.supplierShareName || shownName(item) ||'),
+  'canvas image renderer must draw the edited supplier-facing name');
 assert(html.includes('const items = (sourceItems || []).map(itemForSupplierShare)'),
   'snapshot the edited names at share time');
+assert(html.includes('const sig = itemsSig(items)'),
+  'receipt rendering must use a content-dependent signature');
+assert(html.includes('const cached = getCachedReceipt(supplierName, items)'),
+  'reuse identical receipts without expensive re-rendering');
+assert(html.includes('c.sig === itemsSig(items)'),
+  'cached receipt is valid only if the edited item names and quantities match');
 assert(html.includes('const blob = await renderReceiptBlob(supplierName, items)'),
-  'fresh image must be created after user clicks share');
-assert(!extract('window.shareReceiptImage = async', 'window.openOrdersHistoryModal = async')
-  .includes('getCachedReceipt(supplierName, items)'),
-  'do not send a pre-rendered image with an old name');
+  'generate or retrieve the correct receipt after user clicks share');
 assert(html.includes('delete receiptCache[supplierName]'), 'renaming invalidates cached image');
 assert(html.includes("displayName: i.displayName || ''"), 'saved history preserves edited supplier name');
 assert(html.includes('shareReceiptImage(order.supplierName, order.items,'),
