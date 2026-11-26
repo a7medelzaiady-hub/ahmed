@@ -521,6 +521,7 @@ table select:focus { border-color: var(--brand); }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { calculateStockBalances } from "./stock-balance.mjs";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, deleteField, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -977,98 +978,24 @@ window.fetchInventoryFresh = async function() {
       getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
     ]);
 
+    // Use the same stock formula as the warehouse list; do not change
+    // stored inventory or the independent carried-over truck balance.
+    const stockRows = calculateStockBalances({
+      inventoryItems: inventorySnap.docs.map(d => ({ id: d.id, ...d.data() })),
+      salesInvoices: invoicesSnap.docs.map(d => d.data()),
+      supplierTransactions: supplierSnap.docs.map(d => d.data()),
+      openingTransactions: transSnap.docs.map(d => d.data())
+    });
+
     factorsMap = {};
     namesMap = {};
-    inventorySnap.forEach(d => {
-      const data = d.data();
-      const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-      factorsMap[d.id] = f;
-      if (data.name) namesMap[cleanItemName(data.name)] = d.id;
-    });
-
-    let salesMap = {};
-    let purchasesMap = {};
-    let openingMap = {};
-
-    transSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      if (data.productId) {
-        openingMap[data.productId] = (openingMap[data.productId] || 0) + (Number(data.quantityPcs) || 0);
-      }
-    });
-
-    invoicesSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      if (data.isDeleted) return;
-      const isRet = data.type === 'return' || data.isReturn === true;
-      data.items?.forEach(item => {
-        const id = getProductIdForItem(item);
-        if (id) {
-          if (!salesMap[id]) salesMap[id] = 0;
-          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
-          const rawQty = Number(item.qty) || 0;
-          const isCartonItem = isCartonUnit(item.unit || item.unitName, item.isCarton);
-          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
-          
-          const isItemReturn = isRet || item.isReturn === true;
-
-          if (isItemReturn) {
-            salesMap[id] -= Math.abs(pcs);
-          } else {
-            salesMap[id] += pcs;
-          }
-        }
-      });
-    });
-
-    supplierSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      data.items?.forEach(item => {
-        const id = getProductIdForItem(item);
-        if (id) {
-          if (!purchasesMap[id]) purchasesMap[id] = 0;
-          const factor = Number(item.unitFactor || item.factor) || factorsMap[id] || 1;
-          const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-          const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty || 0);
-          const isCartonItem = isCartonUnit(item.unitName || item.unit, item.isCarton);
-          const pcs = isCartonItem ? (rawQty * factor) : rawQty;
-
-          if (isReturn) {
-            purchasesMap[id] -= Math.abs(pcs);
-          } else {
-            purchasesMap[id] += pcs;
-          }
-        }
-      });
-    });
-
-    firebaseItems = [];
-    inventorySnap.forEach(doc => {
-      const data = doc.data();
-      if (!data.isDeleted) {
-        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-        
-        let openingTotalPcs = 0;
-        if (data.openingTotalPcs !== undefined && data.openingTotalPcs !== null) {
-          openingTotalPcs = Number(data.openingTotalPcs);
-        } else if (data.openingQty !== undefined && data.openingQty !== null) {
-          openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-        } else if (openingMap[doc.id]) {
-          openingTotalPcs = openingMap[doc.id];
-        }
-
-        const salesPcs = salesMap[doc.id] || 0;
-        const purchasesPcs = purchasesMap[doc.id] || 0;
-        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
-
-        firebaseItems.push({
-          id: doc.id,
-          name: data.name,
-          capacity: factor,
-          totalPcs: calculatedRealPcs,
-          unit: data.unit || ''
-        });
-      }
+    firebaseItems = stockRows.map(item => {
+      factorsMap[item.id] = item.capacity;
+      if (item.name) namesMap[cleanItemName(item.name)] = item.id;
+      return {
+        id: item.id, name: item.name, capacity: item.capacity,
+        totalPcs: item.totalPcs, unit: item.unit || ''
+      };
     });
 
     renderItemsPage();

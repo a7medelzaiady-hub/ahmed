@@ -317,6 +317,7 @@
 
 <div class="bottom-summary">
     <i class="fas fa-boxes me-2"></i> إجمالي الأصناف: <span id="totalCount" class="ms-2">0</span>
+    <span id="stockDataState" role="status" style="margin-inline-start:8px;font-size:11px;font-weight:700;">جارٍ التحقق من الرصيد...</span>
     <span class="sync-dot" id="syncDot" title="حالة التحديث"></span>
 </div>
 
@@ -326,6 +327,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { calculateStockBalances } from "./stock-balance.mjs";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -353,9 +355,19 @@
 
     function setSyncState(state) {
         const dot = document.getElementById('syncDot');
-        if (!dot) return;
-        dot.classList.remove('syncing', 'fresh');
-        if (state) dot.classList.add(state);
+        if (dot) {
+            dot.classList.remove('syncing', 'fresh');
+            if (state) dot.classList.add(state);
+        }
+        const status = document.getElementById('stockDataState');
+        if (status) {
+            status.textContent = state === 'fresh'
+                ? 'الرصيد محدّث'
+                : state === 'syncing'
+                    ? 'جارٍ التحقق من الرصيد...'
+                    : 'تعذر تحديث الرصيد - قد تكون البيانات قديمة';
+            status.style.color = state === 'fresh' ? '#0b5e3d' : '#a65b00';
+        }
     }
 
     function loadCachedRender() {
@@ -390,114 +402,43 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
+
     async function loadLiveInventory() {
         try {
+            // Unchanged query count: the calculation is shared with the truck page.
             const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(collection(db, "supplier_transactions")),
                 getDocs(collection(db, "inventory")),
                 getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
             ]);
+            const transactions = {
+                salesInvoices: invoicesSnap.docs.map(d => d.data()),
+                supplierTransactions: supplierSnap.docs.map(d => d.data()),
+                openingTransactions: transSnap.docs.map(d => d.data())
+            };
 
-            const factorsMap = new Map();
-            const namesMap = new Map();
-
-            inventorySnap.forEach(d => {
-                const data = d.data();
-                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-                factorsMap.set(d.id, f);
-                if (data.name) namesMap.set(data.name.trim(), d.id);
-            });
-
-            const salesMap = new Map();
-            const purchasesMap = new Map();
-            const openingMap = new Map();
-
-            transSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.productId) {
-                    const current = openingMap.get(data.productId) || 0;
-                    openingMap.set(data.productId, current + (Number(data.quantityPcs) || 0));
-                }
-            });
-
-            invoicesSnap.forEach(docSnap => {
-                const invData = docSnap.data();
-
-                if (invData.isDeleted === true || invData.status === 'deleted' || invData.status === 'cancelled') {
-                    return;
-                }
-
-                const items = invData.items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const rawQty = Number(item.qty) || 0;
-                        const isCarton = isCartonUnit(item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-                        
-                        const current = salesMap.get(id) || 0;
-                        salesMap.set(id, item.isReturn ? current - pcs : current + pcs);
-                    }
-                }
-            });
-
-            supplierSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-
-                        const current = purchasesMap.get(id) || 0;
-                        purchasesMap.set(id, isReturn ? current - pcs : current + pcs);
-                    }
-                }
-            });
-
-            onSnapshot(collection(db, "inventory"), (snap) => {
-                const freshData = [];
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if (!data.isDeleted) {
-                        const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                        
-                        let openingTotalPcs = 0;
-                        if (data.openingTotalPcs != null) {
-                            openingTotalPcs = Number(data.openingTotalPcs);
-                        } else if (data.openingQty != null) {
-                            openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-                        } else if (openingMap.has(doc.id)) {
-                            openingTotalPcs = openingMap.get(doc.id);
-                        }
-
-                        const salesPcs = salesMap.get(doc.id) || 0;
-                        const purchasesPcs = purchasesMap.get(doc.id) || 0;
-                        const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
-
-                        freshData.push({ 
-                            id: doc.id, 
-                            ...data,
-                            totalPcs: calculatedRealPcs,
-                            qty: calculatedRealPcs
-                        });
-                    }
+            // The initial rendering uses the same dataset as the truck page.
+            // Then the inventory listener updates it if any inventory record changes.
+            function displayStock(snapshot) {
+                const freshData = calculateStockBalances({
+                    inventoryItems: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
+                    ...transactions
                 });
-                allData = freshData;
+                allData = freshData.map(row => ({ ...row, qty: row.totalPcs }));
                 renderItems();
-                saveCache(freshData);
-                setSyncState('fresh');
-            });
+                saveCache(allData);
+                setSyncState(snapshot.metadata.fromCache ? 'syncing' : 'fresh');
+            }
 
+            displayStock(inventorySnap);
+            onSnapshot(collection(db, "inventory"), displayStock, error => {
+                console.error("تعذر تحديث المخزون:", error);
+                setSyncState(null);
+            });
         } catch (e) {
-            console.error("خطأ في تجميع البيانات:", e);
+            console.error("خطأ في تجميع بيانات المخزن:", e);
+            // An offline cached balance remains visible but is not fresh.
             setSyncState(null);
         }
     }
