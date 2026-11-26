@@ -1437,11 +1437,17 @@
         sharePreviewUrl = URL.createObjectURL(p.blob);
         document.getElementById('shareReadyImg').src = sharePreviewUrl;
         document.getElementById('shareReadyErr').innerText = lastShareError;
-        const o = bootstrap.Modal.getInstance(document.getElementById('orderModal'));
-        if (o) o.hide();
-        setTimeout(() => {
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('shareReadyModal')).show();
-        }, 250);
+        const orderModal = document.getElementById('orderModal');
+        const o = bootstrap.Modal.getInstance(orderModal);
+        const displayReady = () => bootstrap.Modal.getOrCreateInstance(
+            document.getElementById('shareReadyModal')
+        ).show();
+        if (o && orderModal.classList.contains('show')) {
+            orderModal.addEventListener('hidden.bs.modal', displayReady, { once: true });
+            o.hide();
+        } else {
+            displayReady();
+        }
     }
 
     function buildOrderText(p) {
