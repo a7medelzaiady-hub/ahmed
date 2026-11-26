@@ -70,7 +70,7 @@ assert.match(warehouse, /الرصيد محدّث/);
 assert.match(warehouse, /قد تكون البيانات قديمة/);
 
 const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-const cacheVersion = Number(sw.match(/CACHE_NAME\\s*=\\s*"elzaiady-cache-v(\\d+)"/)?.[1]);
+const cacheVersion = Number(sw.match(/CACHE_NAME\s*=\s*"elzaiady-cache-v(\d+)"/)?.[1]);
 assert(Number.isSafeInteger(cacheVersion) && cacheVersion >= 19,
   'Stock-balance module needs to remain precached in PWA release v19 or newer');
 assert.match(sw, /"\.\/stock-balance\.mjs"/);
