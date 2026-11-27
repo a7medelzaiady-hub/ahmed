@@ -251,7 +251,7 @@
                     <input type="date" id="endDateFilter" class="select-mandoob-box">
                 </div>
             </div>
-            <button type="button" class="btn-calc-report" onclick="calculateCommissionReport()">
+            <button type="button" class="btn-calc-report" id="calculateCommissionButton" onclick="calculateCommissionReport()">
                 <i class="fas fa-chart-line me-1"></i> احتساب التحصيلات والأرباح والعمولة
             </button>
         </section>
@@ -354,6 +354,17 @@
     const db = initializeFirestore(app, {});
 
     let allCustomers = [];
+    const CUSTOMERS_PAGE_SIZE = 24;
+    let lastCustomerDoc = null;
+    let customersFullyLoaded = false;
+    let customersReady = false;
+    let visibleCustomers = CUSTOMERS_PAGE_SIZE;
+    let pendingPagePromise = null;
+    let pendingFullLoadPromise = null;
+    let initialDataPromise = null;
+    let inventoryLoadPromise = null;
+    let searchDebounceTimer = null;
+    let toastTimer = null;
     let systemUsersSet = new Set(["admin"]);
     let factorMap = {};
     let currentBuyMap = {};
@@ -410,80 +421,164 @@
         ].includes(value);
     }
 
+    // أسعار الشراء لا تلزم لعرض العملاء؛ نحمّلها عند طلب حساب عمولة فقط.
     async function loadInventoryData() {
-        try {
-            const itemsSnap = await getDocs(collection(db, "inventory"));
-            itemsSnap.forEach(itemDoc => {
-                const item = itemDoc.data();
-                if (!item.name) return;
-                const name = String(item.name).trim();
-                const factor = Number(item.unitFactor) || 1;
-                factorMap[name] = factor;
-                const rawBuy = Number(item.buy) || 0;
-                currentBuyMap[name] = rawBuy / factor;
-            });
-        } catch (error) {
-            console.error("خطأ في جلب بيانات أسعار الشراء:", error);
-        }
+        const itemsSnap = await getDocs(collection(db, "inventory"));
+        const newFactorMap = {};
+        const newBuyMap = {};
+        itemsSnap.forEach(itemDoc => {
+            const item = itemDoc.data();
+            if (!item.name) return;
+            const name = String(item.name).trim();
+            const factor = Number(item.unitFactor) || 1;
+            newFactorMap[name] = factor;
+            newBuyMap[name] = (Number(item.buy) || 0) / factor;
+        });
+        factorMap = newFactorMap;
+        currentBuyMap = newBuyMap;
     }
 
-    async function loadData() {
-        try {
-            await loadInventoryData();
-            systemUsersSet.add(loggedUser);
-
-            try {
-                const usersSnap = await getDocs(collection(db, "users"));
-                usersSnap.forEach(userDoc => {
-                    const userData = userDoc.data();
-                    const username = userData.username || userData.name || userData.email;
-                    if (username) systemUsersSet.add(String(username).trim());
-                });
-            } catch (error) {
-                console.warn("تعذر تحميل قائمة المستخدمين:", error);
-            }
-
-            try {
-                const invoicesSnap = await getDocs(collection(db, "invoices"));
-                invoicesSnap.forEach(invoiceDoc => {
-                    const invoiceData = invoiceDoc.data();
-                    if (invoiceData.createdBy) systemUsersSet.add(String(invoiceData.createdBy).trim());
-                });
-            } catch (error) {
-                console.warn("تعذر استخراج المندوبين من الفواتير:", error);
-            }
-
-            const customersSnap = await getDocs(collection(db, "customers"));
-            allCustomers = customersSnap.docs.map(customerDoc => {
-                const data = customerDoc.data();
-                if (data.assignedTo && String(data.assignedTo).trim()) {
-                    systemUsersSet.add(String(data.assignedTo).trim());
-                }
-                return { id: customerDoc.id, ...data };
+    function ensureInventoryData() {
+        if (!inventoryLoadPromise) {
+            inventoryLoadPromise = loadInventoryData().catch(error => {
+                inventoryLoadPromise = null;
+                throw error;
             });
-
-            populateSalesRepSelects();
-            renderCustomerCards(allCustomers);
-        } catch (error) {
-            console.error(error);
-            document.getElementById("customersCardsContainer").innerHTML =
-                `<div class="text-center text-danger p-3">حدث خطأ أثناء تحميل البيانات</div>`;
         }
+        return inventoryLoadPromise;
+    }
+
+    function notify(message, isError = false) {
+        const toast = document.getElementById("actionToast");
+        clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.style.background = isError ? "#9f2525" : "#173f2d";
+        toast.hidden = false;
+        toastTimer = setTimeout(() => { toast.hidden = true; }, 3200);
+    }
+
+    function customerFromDoc(customerDoc) {
+        const data = customerDoc.data();
+        if (data.assignedTo && String(data.assignedTo).trim()) {
+            systemUsersSet.add(String(data.assignedTo).trim());
+        }
+        return { id: customerDoc.id, ...data };
     }
 
     function populateSalesRepSelects() {
         const filterSelect = document.getElementById("filterByRepSelect");
         const calcSelect = document.getElementById("salesRepFilterSelect");
+        const filterValue = filterSelect.value;
+        const calcValue = calcSelect.value;
         const users = Array.from(systemUsersSet).filter(Boolean).sort((a, b) => a.localeCompare(b, "ar"));
-
-        filterSelect.innerHTML =
-            '<option value="">جميع المندوبين</option>' +
+        filterSelect.innerHTML = '<option value="">كل المندوبين</option>' +
             users.map(user => `<option value="${escapeHtml(user)}">${escapeHtml(user)}</option>`).join("");
-
-        calcSelect.innerHTML =
-            '<option value="">-- اختر يوزر المندوب --</option>' +
+        calcSelect.innerHTML = '<option value="">اختر المندوب</option>' +
             users.map(user => `<option value="${escapeHtml(user)}">${escapeHtml(user)}</option>`).join("");
+        if (users.includes(filterValue)) filterSelect.value = filterValue;
+        if (users.includes(calcValue)) calcSelect.value = calcValue;
     }
+
+    async function loadData() {
+        systemUsersSet.add(loggedUser);
+        // جلب اليوزرات بالتوازي؛ لا ننتظر المخزون أو آلاف الفواتير قبل إظهار العملاء.
+        getDocs(collection(db, "users")).then(usersSnap => {
+            usersSnap.forEach(userDoc => {
+                const data = userDoc.data();
+                const username = data.username || data.name || data.email;
+                if (username) systemUsersSet.add(String(username).trim());
+            });
+            populateSalesRepSelects();
+            if (customersReady) renderCustomerCards();
+        }).catch(error => {
+            console.warn("تعذر جلب قائمة المستخدمين:", error);
+            notify("تعذر تحميل بعض أسماء المندوبين", true);
+        });
+
+        try {
+            const firstPage = await getDocs(query(
+                collection(db, "customers"), orderBy(documentId()), limit(CUSTOMERS_PAGE_SIZE)
+            ));
+            allCustomers = firstPage.docs.map(customerFromDoc);
+            lastCustomerDoc = firstPage.docs[firstPage.docs.length - 1] || null;
+            customersFullyLoaded = firstPage.size < CUSTOMERS_PAGE_SIZE;
+            customersReady = true;
+            populateSalesRepSelects();
+            renderCustomerCards();
+        } catch (error) {
+            console.error("تعذر تحميل العملاء:", error);
+            document.getElementById("customersCardsContainer").innerHTML =
+                '<div class="list-placeholder text-danger">تعذر تحميل العملاء. تحقق من الاتصال وأعد فتح الصفحة.</div>';
+            document.getElementById("customersCount").textContent = "تعذر التحميل";
+            throw error;
+        }
+    }
+
+    function appendCustomerPage(snapshot) {
+        const seen = new Set(allCustomers.map(customer => customer.id));
+        snapshot.docs.forEach(customerDoc => {
+            if (!seen.has(customerDoc.id)) {
+                allCustomers.push(customerFromDoc(customerDoc));
+                seen.add(customerDoc.id);
+            }
+        });
+        if (snapshot.docs.length) lastCustomerDoc = snapshot.docs[snapshot.docs.length - 1];
+        if (snapshot.size < CUSTOMERS_PAGE_SIZE) customersFullyLoaded = true;
+        populateSalesRepSelects();
+    }
+
+    async function loadNextCustomerPage() {
+        await initialDataPromise;
+        if (customersFullyLoaded) return;
+        if (pendingPagePromise) return pendingPagePromise;
+        if (pendingFullLoadPromise) return pendingFullLoadPromise;
+        pendingPagePromise = (async () => {
+            const next = await getDocs(query(
+                collection(db, "customers"), orderBy(documentId()),
+                startAfter(lastCustomerDoc), limit(CUSTOMERS_PAGE_SIZE)
+            ));
+            appendCustomerPage(next);
+        })();
+        try { await pendingPagePromise; }
+        finally { pendingPagePromise = null; }
+    }
+
+    // البحث والتقارير يحتاجان كل العملاء؛ نؤخر هذه القراءة حتى تُطلب صراحةً.
+    async function ensureAllCustomersLoaded() {
+        await initialDataPromise;
+        if (customersFullyLoaded) return;
+        if (pendingFullLoadPromise) return pendingFullLoadPromise;
+        pendingFullLoadPromise = (async () => {
+            if (pendingPagePromise) await pendingPagePromise;
+            if (customersFullyLoaded) return;
+            document.getElementById("customersShownText").textContent = "جاري تجهيز البحث الشامل...";
+            const remaining = await getDocs(query(
+                collection(db, "customers"), orderBy(documentId()), startAfter(lastCustomerDoc)
+            ));
+            const seen = new Set(allCustomers.map(customer => customer.id));
+            remaining.docs.forEach(customerDoc => {
+                if (!seen.has(customerDoc.id)) {
+                    allCustomers.push(customerFromDoc(customerDoc));
+                    seen.add(customerDoc.id);
+                }
+            });
+            if (remaining.docs.length) lastCustomerDoc = remaining.docs[remaining.docs.length - 1];
+            customersFullyLoaded = true;
+            populateSalesRepSelects();
+        })();
+        try { await pendingFullLoadPromise; }
+        finally { pendingFullLoadPromise = null; }
+    }
+
+    window.setActiveTab = tab => {
+        const isCustomers = tab !== "commissions";
+        document.getElementById("customersSection").hidden = !isCustomers;
+        document.getElementById("commissionPanel").hidden = isCustomers;
+        document.getElementById("customersTab").classList.toggle("active", isCustomers);
+        document.getElementById("commissionsTab").classList.toggle("active", !isCustomers);
+        document.getElementById("customersTab").setAttribute("aria-selected", String(isCustomers));
+        document.getElementById("commissionsTab").setAttribute("aria-selected", String(!isCustomers));
+    };
 
     function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -491,75 +586,127 @@
         }[char]));
     }
 
-    function renderCustomerCards(list) {
-        const container = document.getElementById("customersCardsContainer");
-        if (!list.length) {
-            container.innerHTML = `<div class="text-center py-4 text-muted fw-bold">لا يوجد عملاء مطابقون للبحث.</div>`;
-            return;
-        }
-
-        const usersArray = Array.from(systemUsersSet);
-        container.innerHTML = list.map(customer => {
-            const currentAssigned = customer.assignedTo || "admin";
-            const options = usersArray.map(user => `
-                <option value="${escapeHtml(user)}" ${user === currentAssigned ? "selected" : ""}>
-                    ${escapeHtml(user)}
-                </option>
-            `).join("");
-
-            return `
-                <div class="customer-card-item">
-                    <div class="cust-name-info">
-                        <p class="cust-name">${escapeHtml(customer.name || "عميل بدون اسم")}</p>
-                        <span class="cust-status-badge">
-                            <i class="fas fa-user-check me-1 text-success"></i>
-                            المندوب الحالي: <b class="text-dark">${escapeHtml(currentAssigned)}</b>
-                        </span>
-                    </div>
-                    <div class="d-flex align-items-center gap-1">
-                        <select id="select_${escapeHtml(customer.id)}" class="select-mandoob-box">${options}</select>
-                        <button class="btn-update-cust" onclick="saveCustomerAssignment('${escapeHtml(customer.id)}')" title="حفظ التغيير">
-                            <i class="fas fa-save"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join("");
+    function filteredCustomerList() {
+        const selectedRep = document.getElementById("filterByRepSelect").value;
+        const term = document.getElementById("searchCustomerInput").value.trim().toLocaleLowerCase();
+        return allCustomers.filter(customer => {
+            const name = String(customer.name || "").toLocaleLowerCase();
+            return (!term || name.includes(term)) &&
+                (!selectedRep || String(customer.assignedTo || "admin") === selectedRep);
+        });
     }
 
-    window.filterCustomers = () => {
-        const selectedRep = document.getElementById("filterByRepSelect").value;
-        const term = document.getElementById("searchCustomerInput").value.toLowerCase().trim();
+    function renderCustomerCards() {
+        if (!customersReady) return;
+        const container = document.getElementById("customersCardsContainer");
+        const filtered = filteredCustomerList();
+        const list = filtered.slice(0, visibleCustomers);
+        const usersArray = Array.from(systemUsersSet).filter(Boolean).sort((a,b)=>a.localeCompare(b,"ar"));
+        if (!list.length) {
+            container.innerHTML = '<div class="list-placeholder">لا يوجد عملاء مطابقون للبحث.</div>';
+        } else {
+            container.innerHTML = list.map(customer => {
+                const currentAssigned = String(customer.assignedTo || "admin");
+                const options = usersArray.map(user =>
+                    `<option value="${escapeHtml(user)}" ${user === currentAssigned ? "selected" : ""}>${escapeHtml(user)}</option>`
+                ).join("");
+                return `
+                    <article class="customer-card-item">
+                        <div class="cust-name-info">
+                            <p class="cust-name">${escapeHtml(customer.name || "عميل بدون اسم")}</p>
+                            <div class="cust-status-badge">الحالي: <b>${escapeHtml(currentAssigned)}</b></div>
+                        </div>
+                        <div class="assign-controls">
+                            <select class="select-mandoob-box" aria-label="مندوب ${escapeHtml(customer.name || "العميل")}">${options}</select>
+                            <button type="button" class="btn-update-cust" data-customer-id="${escapeHtml(customer.id)}"
+                                    title="حفظ المندوب" aria-label="حفظ مندوب ${escapeHtml(customer.name || "العميل")}">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </div>
+                    </article>`;
+            }).join("");
+        }
+        document.getElementById("customersCount").textContent = customersFullyLoaded ?
+            `${filtered.length} عميل` : `${allCustomers.length}+ عميل`;
+        document.getElementById("customersShownText").textContent = customersFullyLoaded ?
+            `المعروض ${list.length} من ${filtered.length}` :
+            `المعروض ${list.length} من العملاء المحمّلين • المزيد عند الطلب`;
+        const more = document.getElementById("loadMoreCustomersButton");
+        more.hidden = customersFullyLoaded && list.length >= filtered.length;
+    }
 
-        const filtered = allCustomers.filter(customer => {
-            const name = String(customer.name || "").toLowerCase();
-            const matchesName = !term || name.includes(term);
-            const matchesRep = !selectedRep || (customer.assignedTo || "admin") === selectedRep;
-            return matchesName && matchesRep;
-        });
-        renderCustomerCards(filtered);
+    window.scheduleCustomerFilter = () => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => window.filterCustomers(), 280);
     };
 
-    window.saveCustomerAssignment = async customerId => {
-        const selectBox = document.getElementById(`select_${customerId}`);
-        if (!selectBox) return;
-        const selectedUser = selectBox.value;
+    window.filterCustomers = async () => {
+        visibleCustomers = CUSTOMERS_PAGE_SIZE;
+        const selectedRep = document.getElementById("filterByRepSelect").value;
+        const term = document.getElementById("searchCustomerInput").value.trim();
+        if ((selectedRep || term) && !customersFullyLoaded) {
+            document.getElementById("customersCardsContainer").innerHTML =
+                '<div class="list-placeholder"><i class="fas fa-spinner fa-spin me-1"></i> جارٍ البحث في جميع العملاء...</div>';
+            try {
+                await ensureAllCustomersLoaded();
+            } catch (error) {
+                console.error(error);
+                notify("فشل البحث الشامل؛ حاول مرة أخرى", true);
+            }
+        }
+        renderCustomerCards();
+    };
 
+    window.loadMoreCustomers = async () => {
+        const button = document.getElementById("loadMoreCustomersButton");
+        if (button.disabled) return;
+        button.disabled = true;
+        try {
+            if (visibleCustomers >= filteredCustomerList().length && !customersFullyLoaded) {
+                await loadNextCustomerPage();
+            }
+            visibleCustomers += CUSTOMERS_PAGE_SIZE;
+            renderCustomerCards();
+        } catch (error) {
+            console.error(error);
+            notify("تعذر تحميل مزيد من العملاء", true);
+        } finally {
+            button.disabled = false;
+        }
+    };
+
+    document.getElementById("customersCardsContainer").addEventListener("click", event => {
+        const button = event.target.closest("button[data-customer-id]");
+        if (button) window.saveCustomerAssignment(button.dataset.customerId, button);
+    });
+
+    window.saveCustomerAssignment = async (customerId, button) => {
+        const card = button && button.closest(".customer-card-item");
+        const selectBox = card && card.querySelector("select");
+        if (!selectBox || button.disabled) return;
+        const selectedUser = selectBox.value;
+        if (!selectedUser) return;
+        const customer = allCustomers.find(item => item.id === customerId);
+        if (!customer) return;
+        if (String(customer.assignedTo || "admin") === selectedUser) {
+            notify("المندوب محدد بالفعل لهذا العميل");
+            return;
+        }
+        button.disabled = true;
         try {
             await updateDoc(doc(db, "customers", customerId), {
                 assignedTo: selectedUser,
                 assignedBy: loggedUser,
                 assignedAt: serverTimestamp()
             });
-
-            const index = allCustomers.findIndex(customer => customer.id === customerId);
-            if (index !== -1) allCustomers[index].assignedTo = selectedUser;
-
-            filterCustomers();
-            alert(`تم تغيير ملكية العميل للمندوب (${selectedUser}) بنجاح.`);
+            customer.assignedTo = selectedUser;
+            renderCustomerCards();
+            notify("تم حفظ مندوب العميل بنجاح");
         } catch (error) {
             console.error(error);
-            alert("حدث خطأ أثناء حفظ التغيير.");
+            notify("تعذر حفظ التغيير، حاول مرة أخرى", true);
+        } finally {
+            button.disabled = false;
         }
     };
 
@@ -631,7 +778,12 @@
         document.getElementById("profitEvaluationBox").textContent = "جاري احتساب التحصيلات والأرباح...";
         currentCalculatedReportData = null;
 
+        const calcButton = document.getElementById("calculateCommissionButton");
+        if (calcButton.disabled) return;
+        calcButton.disabled = true;
         try {
+            // تأكد من جميع العملاء وتكلفة المخزون قبل إصدار أرقام مالية.
+            await Promise.all([ensureAllCustomersLoaded(), ensureInventoryData()]);
             const assignedCustomers = allCustomers.filter(
                 customer => (customer.assignedTo || "admin") === selectedRep
             );
@@ -665,7 +817,11 @@
             let receiptWallet = 0;
             let totalRealNetProfit = 0;
 
-            const invoicesSnap = await getDocs(collection(db, "invoices"));
+            // اجلب مصدرَي التحصيل بالتوازي؛ الحساب المالي نفسه لم يتغير.
+            const [invoicesSnap, transactionsSnap] = await Promise.all([
+                getDocs(collection(db, "invoices")),
+                getDocs(query(collection(db, "transactions"), where("type", "==", "قبض")))
+            ]);
             invoicesSnap.forEach(invoiceDoc => {
                 const data = invoiceDoc.data();
                 if (data.isDeleted === true) return;
@@ -702,10 +858,6 @@
             });
 
             // سندات القبض منفصلة عن دفعات الفواتير؛ لا تُضاف إلا مرة واحدة من transactions.
-            const transactionsSnap = await getDocs(
-                query(collection(db, "transactions"), where("type", "==", "قبض"))
-            );
-
             transactionsSnap.forEach(transactionDoc => {
                 const transaction = transactionDoc.data();
                 if (!assignedCustomerIds.has(transaction.partyId)) return;
@@ -797,6 +949,8 @@
             document.getElementById("profitEvaluationBox").textContent =
                 "تعذر احتساب التقرير. راجع اتصال Firebase وصلاحيات القراءة ثم حاول مرة أخرى.";
             alert("حدث خطأ أثناء احتساب التقرير. لم يتم اعتماد أي تسوية.");
+        } finally {
+            calcButton.disabled = false;
         }
     };
 
@@ -887,7 +1041,15 @@
         }
     };
 
-    loadData();
+    // تغيير الفترة أو النسبة بعد التقرير يلغي بيانات الصرف القديمة.
+    ["commissionRateInput", "startDateFilter", "endDateFilter"].forEach(id => {
+        document.getElementById(id).addEventListener("change", () => {
+            currentCalculatedReportData = null;
+            document.getElementById("reportSummaryBox").style.display = "none";
+        });
+    });
+    initialDataPromise = loadData();
+    initialDataPromise.catch(() => {});
 </script>
 </body>
 </html>
