@@ -126,7 +126,7 @@
             font-weight:800; border-radius:9px; padding:8px 13px; min-height:36px;
         }
         .btn-more:disabled { opacity:.5; }
-        .list-placeholder { color:var(--text-secondary); padding:26px 5px; text-align:center; }
+        .list-placeholder { grid-column:1/-1; color:var(--text-secondary); padding:26px 5px; text-align:center; }
         .btn-calc-report {
             width:100%; border:0; border-radius:10px; min-height:44px;
             background:var(--accent); color:#fff; padding:10px;
@@ -228,7 +228,7 @@
             <div class="section-heading">
                 <div>
                     <h2 class="section-title" id="commissionsHeading"><i class="fas fa-calculator"></i> حساب العمولة والربح</h2>
-                    <p class="section-subtitle">حدد المندوب والفترة والنسبة ثم احسب التقرير</p>
+                    <p class="section-subtitle" id="repLoadHint">حدد المندوب والفترة والنسبة ثم احسب التقرير</p>
                 </div>
             </div>
             <div class="filters-grid">
@@ -578,6 +578,22 @@
         document.getElementById("commissionsTab").classList.toggle("active", !isCustomers);
         document.getElementById("customersTab").setAttribute("aria-selected", String(isCustomers));
         document.getElementById("commissionsTab").setAttribute("aria-selected", String(!isCustomers));
+        // لا نقرأ كل العملاء عند فتح صفحة التوزيع؛ فقط حين يطلب المستخدم تقرير العمولات.
+        if (!isCustomers && !customersFullyLoaded) {
+            const repSelect = document.getElementById("salesRepFilterSelect");
+            const hint = document.getElementById("repLoadHint");
+            repSelect.disabled = true;
+            hint.textContent = "جاري استكمال أسماء المندوبين للعمل على كل العملاء...";
+            ensureAllCustomersLoaded().then(() => {
+                populateSalesRepSelects();
+                renderCustomerCards();
+                hint.textContent = "حدد المندوب والفترة والنسبة ثم احسب التقرير";
+            }).catch(error => {
+                console.error(error);
+                hint.textContent = "تعذر استكمال أسماء المندوبين، حاول فتح القسم مجددًا";
+                notify("تعذر تحميل كل العملاء", true);
+            }).finally(() => { repSelect.disabled = false; });
+        }
     };
 
     function escapeHtml(value) {
