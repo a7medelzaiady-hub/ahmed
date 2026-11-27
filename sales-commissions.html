@@ -141,6 +141,19 @@
         .stat-value { font-size:12px; font-weight:900; overflow-wrap:anywhere; }
         .stat-value-highlight { color:#fce35c; font-size:14px; font-weight:900; overflow-wrap:anywhere; }
         .collection-breakdown { font-size:11px; line-height:1.7; color:rgba(255,255,255,.9); text-align:center; }
+        .btn-refresh-report {
+            display:block; width:100%; margin-top:7px; padding:6px 8px;
+            border:1px solid #c2d5c8; border-radius:9px; background:#fff;
+            color:#0b5e3d; font-size:11px; font-weight:800;
+        }
+        .calc-status {
+            margin-top:10px; padding:12px; border:1px solid #d1e9d7;
+            border-radius:9px; background:#f2f9f4; color:#16492e;
+            font-size:12px; font-weight:800; line-height:1.6; text-align:center;
+        }
+        .btn-calc-report:disabled, .btn-refresh-report:disabled, .btn-settle-commission:disabled {
+            opacity:.6; cursor:not-allowed;
+        }
         .btn-settle-commission {
             background:#10b981; color:#052819; font-size:12px; font-weight:900;
             width:100%; border:0; border-radius:9px; padding:11px; margin-top:10px;
@@ -254,6 +267,10 @@
             <button type="button" class="btn-calc-report" id="calculateCommissionButton" onclick="calculateCommissionReport()">
                 <i class="fas fa-chart-line me-1"></i> احتساب التحصيلات والأرباح والعمولة
             </button>
+            <div class="calc-status" id="calculationStatus" role="status" aria-live="polite" hidden></div>
+            <button type="button" class="btn-refresh-report" id="refreshReportButton" onclick="calculateCommissionReport(true)">
+                <i class="fas fa-sync-alt me-1"></i> تحديث البيانات من قاعدة البيانات
+            </button>
         </section>
 
     <div class="report-summary-box" id="reportSummaryBox" style="display: none;">
@@ -303,7 +320,7 @@
         <div id="profitEvaluationBox" class="profitability-badge profit-good">
             <i class="fas fa-info-circle me-1"></i> جاري تقييم النسبة والديون...
         </div>
-        <button class="btn-settle-commission" onclick="saveSettlementPeriod()">
+        <button id="settleCommissionButton" class="btn-settle-commission" onclick="saveSettlementPeriod()" disabled>
             <i class="fas fa-check-circle me-1"></i> اعتماد وصرف هذه الفترة وتسجيل السجل
         </button>
     </div>
@@ -369,6 +386,11 @@
     let factorMap = {};
     let currentBuyMap = {};
     let currentCalculatedReportData = null;
+    let lastFinancialBase = null;
+    let reportContextVersion = 0;
+    let settlementBusy = false;
+    const REPORT_CACHE_MS = 120000;
+    const READ_TIMEOUT_MS = 30000;
 
     const loggedUser =
         localStorage.getItem("currentUser") ||
@@ -731,8 +753,8 @@
         const startInput = document.getElementById("startDateFilter");
         const endInput = document.getElementById("endDateFilter");
 
-        currentCalculatedReportData = null;
-        document.getElementById("reportSummaryBox").style.display = "none";
+        // Changing representative invalidates any report currently being computed.
+        invalidateReport(true);
 
         if (!selectedRep) {
             startInput.value = "";
@@ -769,37 +791,158 @@
         ].join("-");
     };
 
-    window.calculateCommissionReport = async () => {
-        const selectedRep = document.getElementById("salesRepFilterSelect").value;
-        const startStr = document.getElementById("startDateFilter").value;
-        const endStr = document.getElementById("endDateFilter").value;
-        const rate = Number(document.getElementById("commissionRateInput").value);
+    function reportInputSignature() {
+        return JSON.stringify([
+            document.getElementById("salesRepFilterSelect").value,
+            document.getElementById("startDateFilter").value,
+            document.getElementById("endDateFilter").value
+        ]);
+    }
 
-        if (!selectedRep) {
-            alert("برجاء اختيار يوزر المندوب أولاً من القائمة.");
-            return;
-        }
-        if (!Number.isFinite(rate) || rate < 0) {
-            alert("برجاء إدخال نسبة عمولة صحيحة لا تقل عن صفر.");
-            return;
-        }
-        if (startStr && endStr && startStr > endStr) {
-            alert("تاريخ بداية الفترة لا يمكن أن يكون بعد تاريخ نهايتها.");
-            return;
-        }
-
-        const summaryBox = document.getElementById("reportSummaryBox");
-        summaryBox.style.display = "block";
-        document.getElementById("profitEvaluationBox").className = "profitability-badge profit-warning";
-        document.getElementById("profitEvaluationBox").textContent = "جاري احتساب التحصيلات والأرباح...";
+    function invalidateReport(clearBase = false) {
+        reportContextVersion++;
         currentCalculatedReportData = null;
+        document.getElementById("reportSummaryBox").style.display = "none";
+        document.getElementById("settleCommissionButton").disabled = true;
+        document.getElementById("calculationStatus").hidden = true;
+        if (clearBase) lastFinancialBase = null;
+    }
 
-        const calcButton = document.getElementById("calculateCommissionButton");
-        if (calcButton.disabled) return;
-        calcButton.disabled = true;
-        try {
-            // تأكد من جميع العملاء وتكلفة المخزون قبل إصدار أرقام مالية.
-            await Promise.all([ensureAllCustomersLoaded(), ensureInventoryData()]);
+    function showCalculationStatus(message, error = false) {
+        const status = document.getElementById("calculationStatus");
+        status.hidden = false;
+        status.textContent = message;
+        status.style.color = error ? "#a12727" : "#16492e";
+        status.style.background = error ? "#fff0f0" : "#f2f9f4";
+    }
+
+    function withTimeout(promise, ms) {
+        let timer;
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new Error("firebase-read-timeout")), ms);
+            })
+        ]).finally(() => clearTimeout(timer));
+    }
+
+    function applyRateToBase(base, rate) {
+        if (!Number.isFinite(rate) || rate < 0 || document.getElementById("commissionRateInput").value.trim() === "") {
+            invalidateReport(false);
+            showCalculationStatus("أدخل نسبة عمولة صحيحة أولًا.", true);
+            return;
+        }
+        const { selectedRep, startStr, endStr, customerCount,
+            invoiceCash, invoiceWallet, receiptCash, receiptWallet,
+            totalCash, totalWallet, grandTotalCollected, totalRealNetProfit,
+            totalRemainingDebt } = base;
+        const netCommission = grandTotalCollected * rate / 100;
+        const netProfitAfterCommission = totalRealNetProfit - netCommission;
+        document.getElementById("summaryRepName").innerHTML =
+            `<i class="fas fa-user me-1"></i> المندوب: ${escapeHtml(selectedRep)}`;
+        document.getElementById("summaryCustCount").innerText = `${customerCount} عميل`;
+            document.getElementById("summaryCash").innerText = `${money(totalCash)} ج.م`;
+            document.getElementById("summaryWallet").innerText = `${money(totalWallet)} ج.م`;
+            document.getElementById("summaryGrossProfit").innerText = `${money(totalRealNetProfit)} ج.م`;
+            document.getElementById("summaryRemaining").innerText = `${money(totalRemainingDebt)} ج.م`;
+            document.getElementById("summaryGrandTotal").innerText = `${money(grandTotalCollected)} ج.م`;
+            document.getElementById("summaryRate").innerText = rate;
+            document.getElementById("summaryNetCommission").innerText = `${money(netCommission)} ج.م`;
+            document.getElementById("summaryNetProfit").innerText = `${money(netProfitAfterCommission)} ج.م`;
+
+            document.getElementById("collectionBreakdown").innerText =
+                `تفاصيل التحصيل: كاش الفواتير ${money(invoiceCash)} | محفظة الفواتير ${money(invoiceWallet)} | سندات قبض نقدية ${money(receiptCash)} | سندات قبض محفظة ${money(receiptWallet)}`;
+
+            const evaluationBox = document.getElementById("profitEvaluationBox");
+            if (totalRealNetProfit > 0) {
+                const ratio = (netCommission / totalRealNetProfit * 100);
+                let statusText = "";
+
+                if (ratio <= 15) {
+                    evaluationBox.className = "profitability-badge profit-good";
+                    statusText = `<b>صافي مكسبك بعد العمولة: (${money(netProfitAfterCommission)} ج.م)</b><br>العمولة تمثل <b>${ratio.toFixed(1)}%</b> من أرباح البضاعة.`;
+                } else if (ratio <= 25) {
+                    evaluationBox.className = "profitability-badge profit-warning";
+                    statusText = `<b>صافي مكسبك بعد العمولة: (${money(netProfitAfterCommission)} ج.م)</b><br>العمولة تمثل <b>${ratio.toFixed(1)}%</b> من أرباح البضاعة.`;
+                } else {
+                    evaluationBox.className = "profitability-badge profit-bad";
+                    statusText = `<b>تنبيه! صافي مكسبك بعد العمولة: (${money(netProfitAfterCommission)} ج.م)</b><br>العمولة تمثل <b>${ratio.toFixed(1)}%</b> من أرباح البضاعة وهي نسبة مرتفعة.`;
+                }
+
+                if (totalRemainingDebt > 0) {
+                    statusText += `<br><small><i class="fas fa-exclamation-circle me-1"></i> رصيد العملاء المتبقي: (${money(totalRemainingDebt)} ج.م)</small>`;
+                }
+                evaluationBox.innerHTML = statusText;
+            } else {
+                evaluationBox.className = "profitability-badge profit-warning";
+                evaluationBox.innerHTML =
+                    `<i class="fas fa-info-circle me-1"></i> لم تظهر أرباح بضاعة موجبة. راجع أسعار الشراء وتكلفة الأصناف قبل اعتماد العمولة.`;
+            }
+
+            currentCalculatedReportData = {
+                salesRep: selectedRep,
+                startDate: startStr || "البداية",
+                endDate: endStr || "الآن",
+                customerCount,
+                invoiceCash,
+                invoiceWallet,
+                receiptCash,
+                receiptWallet,
+                totalCash,
+                totalWallet,
+                grandTotalCollected,
+                totalRealNetProfit,
+                netProfitAfterCommission,
+                totalRemainingDebt,
+                commissionRate: rate,
+                netCommissionPaid: netCommission
+            };
+            document.getElementById("reportSummaryBox").style.display = "block";
+            document.getElementById("calculationStatus").hidden = true;
+            document.getElementById("settleCommissionButton").disabled =
+                !currentCalculatedReportData || netCommission <= 0 || !customerCount || settlementBusy;
+
+        if (!customerCount) {
+            document.getElementById("profitEvaluationBox").textContent = "لا يوجد عملاء مسندون للمندوب حالياً.";
+            currentCalculatedReportData = null;
+            document.getElementById("settleCommissionButton").disabled = true;
+        }
+    }
+
+    function isRecentReport(base) {
+        return base && base.signature === reportInputSignature() &&
+            Date.now() - base.fetchedAt < REPORT_CACHE_MS;
+    }
+
+    // تعديل النسبة يُعاد حسابه من أرقام التحصيل الموجودة بلا قراءة Firebase جديدة.
+    function onCommissionRateInput() {
+        const rateEl = document.getElementById("commissionRateInput");
+        const rate = Number(rateEl.value);
+        if (!rateEl.value.trim() || !Number.isFinite(rate) || rate < 0) {
+            currentCalculatedReportData = null;
+            document.getElementById("reportSummaryBox").style.display = "none";
+            document.getElementById("settleCommissionButton").disabled = true;
+            showCalculationStatus("أدخل نسبة عمولة صحيحة.", true);
+            return;
+        }
+        if (document.getElementById("calculateCommissionButton").disabled) {
+            // الحساب الجاري يأخذ أحدث نسبة عند انتهاء التحميل؛ لا نترك أرقامًا قديمة ظاهرة.
+            document.getElementById("reportSummaryBox").style.display = "none";
+            document.getElementById("settleCommissionButton").disabled = true;
+            showCalculationStatus("جاري تحميل البيانات؛ سيتم تطبيق النسبة الجديدة تلقائيًا.");
+            return;
+        }
+        if (isRecentReport(lastFinancialBase)) {
+            applyRateToBase(lastFinancialBase, rate);
+        } else {
+            currentCalculatedReportData = null;
+            document.getElementById("reportSummaryBox").style.display = "none";
+            document.getElementById("settleCommissionButton").disabled = true;
+            showCalculationStatus("اضغط احتساب التقرير لتحميل بيانات الفترة الحالية.");
+        }
+    }
+
+    async function loadFinancialBase(selectedRep, startStr, endStr) {
             const assignedCustomers = allCustomers.filter(
                 customer => (customer.assignedTo || "admin") === selectedRep
             );
@@ -811,16 +954,17 @@
             });
 
             const customerCount = assignedCustomers.length;
-            document.getElementById("summaryRepName").innerHTML =
-                `<i class="fas fa-user me-1"></i> المندوب: ${escapeHtml(selectedRep)}`;
-            document.getElementById("summaryCustCount").innerText = `${customerCount} عميل`;
+
 
             if (!customerCount) {
-                setSummaryToZero(rate);
-                document.getElementById("profitEvaluationBox").textContent =
-                    "لا يوجد عملاء مسندون للمندوب حالياً.";
-                currentCalculatedReportData = null;
-                return;
+                return {
+                    signature: reportInputSignature(), fetchedAt: Date.now(),
+                    selectedRep, startStr, endStr, customerCount,
+                    invoiceCash: 0, invoiceWallet: 0, receiptCash: 0, receiptWallet: 0,
+                    totalCash: 0, totalWallet: 0, grandTotalCollected: 0,
+                    totalRealNetProfit: 0, totalRemainingDebt,
+                    noCustomers: true
+                };
             }
 
             const startMs = getLocalDateBoundary(startStr, false) ?? 0;
@@ -834,10 +978,10 @@
             let totalRealNetProfit = 0;
 
             // اجلب مصدرَي التحصيل بالتوازي؛ الحساب المالي نفسه لم يتغير.
-            const [invoicesSnap, transactionsSnap] = await Promise.all([
+            const [invoicesSnap, transactionsSnap] = await withTimeout(Promise.all([
                 getDocs(collection(db, "invoices")),
                 getDocs(query(collection(db, "transactions"), where("type", "==", "قبض")))
-            ]);
+            ]), READ_TIMEOUT_MS);
             invoicesSnap.forEach(invoiceDoc => {
                 const data = invoiceDoc.data();
                 if (data.isDeleted === true) return;
@@ -896,77 +1040,78 @@
                 }
             });
 
+
             const totalCash = invoiceCash + receiptCash;
             const totalWallet = invoiceWallet + receiptWallet;
             const grandTotalCollected = totalCash + totalWallet;
-            const netCommission = grandTotalCollected * rate / 100;
-            const netProfitAfterCommission = totalRealNetProfit - netCommission;
-
-            document.getElementById("summaryCash").innerText = `${money(totalCash)} ج.م`;
-            document.getElementById("summaryWallet").innerText = `${money(totalWallet)} ج.م`;
-            document.getElementById("summaryGrossProfit").innerText = `${money(totalRealNetProfit)} ج.م`;
-            document.getElementById("summaryRemaining").innerText = `${money(totalRemainingDebt)} ج.م`;
-            document.getElementById("summaryGrandTotal").innerText = `${money(grandTotalCollected)} ج.م`;
-            document.getElementById("summaryRate").innerText = rate;
-            document.getElementById("summaryNetCommission").innerText = `${money(netCommission)} ج.م`;
-            document.getElementById("summaryNetProfit").innerText = `${money(netProfitAfterCommission)} ج.م`;
-
-            document.getElementById("collectionBreakdown").innerText =
-                `تفاصيل التحصيل: كاش الفواتير ${money(invoiceCash)} | محفظة الفواتير ${money(invoiceWallet)} | سندات قبض نقدية ${money(receiptCash)} | سندات قبض محفظة ${money(receiptWallet)}`;
-
-            const evaluationBox = document.getElementById("profitEvaluationBox");
-            if (totalRealNetProfit > 0) {
-                const ratio = (netCommission / totalRealNetProfit * 100);
-                let statusText = "";
-
-                if (ratio <= 15) {
-                    evaluationBox.className = "profitability-badge profit-good";
-                    statusText = `<b>صافي مكسبك بعد العمولة: (${money(netProfitAfterCommission)} ج.م)</b><br>العمولة تمثل <b>${ratio.toFixed(1)}%</b> من أرباح البضاعة.`;
-                } else if (ratio <= 25) {
-                    evaluationBox.className = "profitability-badge profit-warning";
-                    statusText = `<b>صافي مكسبك بعد العمولة: (${money(netProfitAfterCommission)} ج.م)</b><br>العمولة تمثل <b>${ratio.toFixed(1)}%</b> من أرباح البضاعة.`;
-                } else {
-                    evaluationBox.className = "profitability-badge profit-bad";
-                    statusText = `<b>تنبيه! صافي مكسبك بعد العمولة: (${money(netProfitAfterCommission)} ج.م)</b><br>العمولة تمثل <b>${ratio.toFixed(1)}%</b> من أرباح البضاعة وهي نسبة مرتفعة.`;
-                }
-
-                if (totalRemainingDebt > 0) {
-                    statusText += `<br><small><i class="fas fa-exclamation-circle me-1"></i> رصيد العملاء المتبقي: (${money(totalRemainingDebt)} ج.م)</small>`;
-                }
-                evaluationBox.innerHTML = statusText;
-            } else {
-                evaluationBox.className = "profitability-badge profit-warning";
-                evaluationBox.innerHTML =
-                    `<i class="fas fa-info-circle me-1"></i> لم تظهر أرباح بضاعة موجبة. راجع أسعار الشراء وتكلفة الأصناف قبل اعتماد العمولة.`;
-            }
-
-            currentCalculatedReportData = {
-                salesRep: selectedRep,
-                startDate: startStr || "البداية",
-                endDate: endStr || "الآن",
-                customerCount,
-                invoiceCash,
-                invoiceWallet,
-                receiptCash,
-                receiptWallet,
-                totalCash,
-                totalWallet,
-                grandTotalCollected,
-                totalRealNetProfit,
-                netProfitAfterCommission,
-                totalRemainingDebt,
-                commissionRate: rate,
-                netCommissionPaid: netCommission
+            return {
+                signature: reportInputSignature(), fetchedAt: Date.now(),
+                selectedRep, startStr, endStr, customerCount,
+                invoiceCash, invoiceWallet, receiptCash, receiptWallet,
+                totalCash, totalWallet, grandTotalCollected, totalRealNetProfit,
+                totalRemainingDebt
             };
+    }
+
+    window.calculateCommissionReport = async (forceRefresh = false) => {
+        const calcButton = document.getElementById("calculateCommissionButton");
+        if (calcButton.disabled) return;
+        const selectedRep = document.getElementById("salesRepFilterSelect").value;
+        const startStr = document.getElementById("startDateFilter").value;
+        const endStr = document.getElementById("endDateFilter").value;
+        const rateInput = document.getElementById("commissionRateInput");
+        const rate = Number(rateInput.value);
+        if (!selectedRep) { alert("اختر المندوب أولاً."); return; }
+        if (!rateInput.value.trim() || !Number.isFinite(rate) || rate < 0) {
+            alert("أدخل نسبة عمولة صحيحة لا تقل عن صفر."); return;
+        }
+        if (startStr && endStr && startStr > endStr) {
+            alert("تاريخ البداية لا يمكن أن يكون بعد تاريخ النهاية."); return;
+        }
+        if (!forceRefresh && isRecentReport(lastFinancialBase)) {
+            applyRateToBase(lastFinancialBase, rate);
+            return;
+        }
+
+        invalidateReport(true);
+        // A fresh accounting run must also refresh purchase costs.
+        inventoryLoadPromise = null;
+        const version = reportContextVersion;
+        const signature = reportInputSignature();
+        calcButton.disabled = true;
+        document.getElementById("refreshReportButton").disabled = true;
+        showCalculationStatus("جاري تجهيز بيانات العملاء وأسعار الشراء...");
+        const slowWarning = setTimeout(() => {
+            if (version === reportContextVersion && calcButton.disabled) {
+                showCalculationStatus("الاتصال بقاعدة البيانات بطيء؛ ما زلنا نقرأ البيانات. لا تعتمد أي صرف حتى يكتمل التقرير.");
+            }
+        }, 9000);
+        try {
+            await withTimeout(Promise.all([ensureAllCustomersLoaded(), ensureInventoryData()]), READ_TIMEOUT_MS);
+            if (version !== reportContextVersion || signature !== reportInputSignature()) return;
+            showCalculationStatus("جاري قراءة التحصيلات والفواتير وحساب الأرباح...");
+            const base = await loadFinancialBase(selectedRep, startStr, endStr);
+            if (version !== reportContextVersion || signature !== reportInputSignature()) return;
+            lastFinancialBase = base;
+            // النسبة قد تكون تغيرت أثناء جلب الفواتير.
+            applyRateToBase(base, Number(rateInput.value));
         } catch (error) {
-            console.error("خطأ في احتساب تقرير العمولة:", error);
+            console.error("فشل احتساب تقرير المندوب:", error);
+            if (version !== reportContextVersion) return;
             currentCalculatedReportData = null;
-            document.getElementById("profitEvaluationBox").className = "profitability-badge profit-bad";
-            document.getElementById("profitEvaluationBox").textContent =
-                "تعذر احتساب التقرير. راجع اتصال Firebase وصلاحيات القراءة ثم حاول مرة أخرى.";
-            alert("حدث خطأ أثناء احتساب التقرير. لم يتم اعتماد أي تسوية.");
+            document.getElementById("reportSummaryBox").style.display = "none";
+            document.getElementById("settleCommissionButton").disabled = true;
+            showCalculationStatus(
+                error?.message === "firebase-read-timeout"
+                    ? "تأخر رد قاعدة البيانات أكثر من 30 ثانية. لم يتم احتساب أي عمولة؛ تحقق من الإنترنت وأعد المحاولة."
+                    : "تعذر تحميل جميع البيانات المالية. لم تُسجّل أي تسوية؛ حاول مجددًا.", true
+            );
+            // لا نعيد استخدام قراءة المخزون التي انتهت مهلتها.
+            inventoryLoadPromise = null;
         } finally {
+            clearTimeout(slowWarning);
             calcButton.disabled = false;
+            document.getElementById("refreshReportButton").disabled = false;
         }
     };
 
@@ -981,12 +1126,21 @@
     }
 
     window.saveSettlementPeriod = async () => {
-        if (!currentCalculatedReportData || currentCalculatedReportData.netCommissionPaid <= 0) {
-            alert("لا توجد عمولة مستحقة للاعتماد.");
+        if (settlementBusy || document.getElementById("calculateCommissionButton").disabled) {
+            notify("التقرير لا يزال قيد الحساب. لا يمكن اعتماد الصرف الآن.", true);
             return;
         }
-
         const report = currentCalculatedReportData;
+        const enteredRate = Number(document.getElementById("commissionRateInput").value);
+        // Never pay an old rate or period while a background read is still running.
+        if (!report || report.netCommissionPaid <= 0 ||
+            !isRecentReport(lastFinancialBase) ||
+            !Number.isFinite(enteredRate) || report.commissionRate !== enteredRate ||
+            report.salesRep !== document.getElementById("salesRepFilterSelect").value) {
+            document.getElementById("settleCommissionButton").disabled = true;
+            notify("يجب إكمال حساب حديث بنفس النسبة والفترة قبل اعتماد الصرف.", true);
+            return;
+        }
         const confirmation = confirm(
             `هل تؤكد اعتماد وصرف مبلغ (${money(report.netCommissionPaid)} ج.م) للمندوب (${report.salesRep})؟\n` +
             `إجمالي النقدية المحصلة: ${money(report.grandTotalCollected)} ج.م\n` +
@@ -994,19 +1148,34 @@
         );
         if (!confirmation) return;
 
+        settlementBusy = true;
+        const saveButton = document.getElementById("settleCommissionButton");
+        saveButton.disabled = true;
         try {
+            // A second check after confirmation prevents a late input change.
+            if (currentCalculatedReportData !== report || !isRecentReport(lastFinancialBase) ||
+                Number(document.getElementById("commissionRateInput").value) !== report.commissionRate) {
+                notify("تغيّرت بيانات الحساب؛ أعد الحساب أولًا.", true);
+                return;
+            }
             await addDoc(collection(db, "commission_settlements"), {
                 ...report,
                 settledBy: loggedUser,
                 createdAt: serverTimestamp()
             });
 
+            lastFinancialBase = null;
+            currentCalculatedReportData = null;
             alert("تم تسجيل تسوية الفترة في الأرشيف بنجاح.");
             await window.onRepChange();
             document.getElementById("reportSummaryBox").style.display = "none";
         } catch (error) {
             console.error(error);
             alert("فشل تسجيل التسوية. لم يتم تأكيد الصرف.");
+        } finally {
+            settlementBusy = false;
+            // The settlement control stays disabled until another valid calculation.
+            saveButton.disabled = true;
         }
     };
 
@@ -1057,12 +1226,10 @@
         }
     };
 
-    // تغيير الفترة أو النسبة بعد التقرير يلغي بيانات الصرف القديمة.
-    ["commissionRateInput", "startDateFilter", "endDateFilter"].forEach(id => {
-        document.getElementById(id).addEventListener("change", () => {
-            currentCalculatedReportData = null;
-            document.getElementById("reportSummaryBox").style.display = "none";
-        });
+    document.getElementById("commissionRateInput").addEventListener("input", onCommissionRateInput);
+    document.getElementById("commissionRateInput").addEventListener("change", onCommissionRateInput);
+    ["startDateFilter", "endDateFilter"].forEach(id => {
+        document.getElementById(id).addEventListener("change", () => invalidateReport(true));
     });
     initialDataPromise = loadData();
     initialDataPromise.catch(() => {});

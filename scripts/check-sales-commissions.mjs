@@ -15,14 +15,16 @@ assert.ok(html.includes('id="loadMoreCustomersButton"'));
 assert.match(runnable, /const CUSTOMERS_PAGE_SIZE = 24;/);
 assert.match(runnable, /orderBy\(documentId\(\)\), limit\(CUSTOMERS_PAGE_SIZE\)/);
 assert.match(runnable, /startAfter\(lastCustomerDoc\)/);
-assert.match(runnable, /await Promise\.all\(\[ensureAllCustomersLoaded\(\), ensureInventoryData\(\)\]\)/);
+assert.match(runnable, /ensureAllCustomersLoaded\(\), ensureInventoryData\(\)/);
 
 function element() {
     return {
         value: "", textContent: "", innerText: "", innerHTML: "",
-        hidden: false, disabled: false, style: {},
+        hidden: false, disabled: false, style: {}, listeners: {},
         classList: { toggle() {} },
-        addEventListener() {}, setAttribute() {}, closest() { return null; }
+        addEventListener(type, cb) { this.listeners[type] = cb; },
+        dispatch(type) { this.listeners[type]?.(); },
+        setAttribute() {}, closest() { return null; }
     };
 }
 const elements = Object.fromEntries(ids.map(id => [id, element()]));
@@ -53,6 +55,8 @@ const collections = {
 };
 const reads = [];
 const writes = [];
+let delayedInvoiceRead = null;
+const settlementsSaved = [];
 const firestore = {
     initializeApp: () => ({}), initializeFirestore: () => ({}),
     collection: (db, name) => ({ name }),
@@ -62,7 +66,7 @@ const firestore = {
     where: (key, operator, value) => ({ where: [key, operator, value] }),
     limit: n => ({ limit: n }), startAfter: snapshot => ({ after: snapshot.id }),
     serverTimestamp: () => new Date(),
-    addDoc: async () => ({}),
+    addDoc: async (ref, data) => { settlementsSaved.push({ ref, data }); return {}; },
     updateDoc: async (ref, patch) => { writes.push({ ref, patch }); },
     getDocs: async ref => {
         reads.push(ref.name);
@@ -75,6 +79,11 @@ const firestore = {
         const pageLimit = filters.find(part => "limit" in part)?.limit;
         if (pageLimit) docs = docs.slice(0, pageLimit);
         const resultDocs = docs.map(d => ({ id: d.id, data: () => ({ ...d }) }));
+        if (ref.name === "invoices" && delayedInvoiceRead) {
+            const gate = delayedInvoiceRead;
+            delayedInvoiceRead = null;
+            await gate;
+        }
         return {
             docs: resultDocs, size: resultDocs.length, empty: !resultDocs.length,
             forEach(callback) { resultDocs.forEach(callback); }
@@ -130,6 +139,65 @@ assert.ok(Math.abs(report.netProfitAfterCommission - 36.6) < 0.001);
 assert.equal(reads.filter(name => name === "inventory").length, 1);
 assert.equal(reads.filter(name => name === "invoices").length, 1);
 
+// Rate changes must update instantly from the already-fetched base without re-reading Firestore.
+const firstSnapshotReads = reads.length;
+elements.commissionRateInput.value = "1";
+elements.commissionRateInput.dispatch("input");
+const onePercent = vm.runInContext("currentCalculatedReportData", context);
+assert.equal(onePercent.commissionRate, 1);
+assert.ok(Math.abs(onePercent.netCommissionPaid - 1.7) < 0.001);
+assert.ok(Math.abs(onePercent.netProfitAfterCommission - 38.3) < 0.001);
+assert.equal(elements.summaryRate.innerText, 1);
+assert.equal(reads.length, firstSnapshotReads, "Changing the percentage must not refetch invoices/inventory");
+assert.equal(elements.settleCommissionButton.disabled, false);
+
+// Editing the rate while Firestore reads are in progress must not display an old report or pay it.
+let releaseInvoices;
+delayedInvoiceRead = new Promise(resolve => { releaseInvoices = resolve; });
+const pendingReport = context.window.calculateCommissionReport(true);
+await tick();
+assert.equal(elements.calculateCommissionButton.disabled, true);
+assert.equal(elements.reportSummaryBox.style.display, "none");
+assert.equal(elements.settleCommissionButton.disabled, true);
+elements.commissionRateInput.value = "3";
+elements.commissionRateInput.dispatch("input");
+assert.equal(elements.reportSummaryBox.style.display, "none");
+assert.equal(settlementsSaved.length, 0, "No payout should occur while loading");
+releaseInvoices();
+await pendingReport;
+const threePercent = vm.runInContext("currentCalculatedReportData", context);
+assert.equal(threePercent.commissionRate, 3);
+assert.ok(Math.abs(threePercent.netCommissionPaid - 5.1) < 0.001);
+assert.equal(elements.summaryRate.innerText, 3);
+assert.equal(elements.settleCommissionButton.disabled, false);
+assert.equal(reads.filter(name => name === "invoices").length, 2);
+assert.equal(reads.filter(name => name === "inventory").length, 2);
+
+// Invalid percentages must hide results and block settlement, never reuse prior values.
+elements.commissionRateInput.value = "";
+elements.commissionRateInput.dispatch("input");
+assert.equal(elements.reportSummaryBox.style.display, "none");
+assert.equal(elements.settleCommissionButton.disabled, true);
+assert.equal(vm.runInContext("currentCalculatedReportData", context), null);
+elements.commissionRateInput.value = "2";
+elements.commissionRateInput.dispatch("input");
+assert.equal(vm.runInContext("currentCalculatedReportData.commissionRate", context), 2);
+assert.equal(reads.filter(name => name === "invoices").length, 2);
+
+// If dates change before a delayed request finishes, its result must be discarded.
+let releaseStaleInvoices;
+delayedInvoiceRead = new Promise(resolve => { releaseStaleInvoices = resolve; });
+const stalePending = context.window.calculateCommissionReport(true);
+await tick();
+elements.startDateFilter.value = "2026-11-01";
+elements.startDateFilter.dispatch("change");
+releaseStaleInvoices();
+await stalePending;
+assert.equal(vm.runInContext("currentCalculatedReportData", context), null);
+assert.equal(elements.reportSummaryBox.style.display, "none");
+assert.equal(elements.settleCommissionButton.disabled, true);
+elements.startDateFilter.value = "";
+
 const selectBox = { value: "repB" };
 const card = { querySelector: () => selectBox };
 const button = { disabled: false, closest: () => card };
@@ -137,4 +205,4 @@ await context.window.saveCustomerAssignment("c001", button);
 assert.equal(writes.length, 1);
 assert.equal(writes[0].ref.id, "c001");
 assert.equal(writes[0].patch.assignedTo, "repB");
-console.log("PASS: compact layout, lazy loading, paging, complete reps, search, financial report, assignments");
+console.log("PASS: compact layout, paging, rate recalculation without reads, pending/changed-date guards, financial report, assignments");
