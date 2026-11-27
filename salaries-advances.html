@@ -452,7 +452,31 @@
             .chip-label { font-size: 9px; }
             .form-row { grid-template-columns: 1fr; }
         }
+        /* Salary metric cards also act as accessible record expanders. */
+        .driver-nums .detail-card {
+            display: block; width: 100%; font: inherit; color: inherit;
+            cursor: pointer; appearance: none; position: relative;
+            transition: border-color .15s, background-color .15s, box-shadow .15s;
+        }
+        .driver-nums .detail-card:hover { border-color: var(--brand-mid); }
+        .driver-nums .detail-card:focus-visible, .icon-btn:focus-visible {
+            outline: 3px solid var(--brand-mid); outline-offset: 2px;
+        }
+        .driver-nums .detail-card.is-open {
+            border-color: var(--brand-mid); box-shadow: inset 0 0 0 1px var(--brand-mid);
+        }
+        .driver-nums .detail-card .k { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+        .driver-nums .detail-card .card-chevron { flex-shrink: 0; font-size: 10px; transition: transform .15s; }
+        .driver-nums .detail-card.is-open .card-chevron { transform: rotate(180deg); }
+        .driver-nums .carryover .v { color: #a16207; }
+        .driver-nums .carryover { background: #fffbeb; }
+        .detail-explanation { font-size: 12px; line-height: 1.85; color: var(--text-mid); margin-bottom: 9px; }
+        .detail-lines { display: grid; gap: 7px; margin-bottom: 8px; }
+        .detail-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+        .detail-line strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
         @media print {
+            .driver-nums .detail-card { color: inherit !important; print-color-adjust: exact; }
+            .driver-nums .detail-card .card-chevron { display: none; }
             .driver-actions { display: none !important; }
             .driver-nums { grid-template-columns: repeat(3,minmax(0,1fr)); }
             .hero-panel { box-shadow: none; }
@@ -634,6 +658,12 @@
         return Math.round(Number(n) || 0).toLocaleString('en-US');
     }
     function advancesOf(driverId){ return advances.filter(a => a.driverId === driverId); }
+    // Carryovers are confirmed by an administrator for each month.
+    // They must not be inferred from the prior gross salary: it may have been paid already.
+    function carryoverOf(driver, ym) {
+        const value = Number(driver.monthlyCarryovers?.[ym] ?? 0);
+        return Number.isFinite(value) ? value : 0;
+    }
     function itemsOfMonth(driverId, ym, type){ 
         return advancesOf(driverId).filter(a => {
             if (!a.date || a.date.slice(0,7) !== ym) return false;
@@ -641,7 +671,7 @@
             if (type === 'deficit') return a.isDeficit;
             if (type === 'nondeductible') return a.isNonDeductible;
             return !a.isDeficit && !a.isAbsence && !a.isNonDeductible;
-        }); 
+        }).sort((a, b) => (b.date || '').localeCompare(a.date || '')); 
     }
 
     function calcAllowedLimit(baseSalary, dateStr){
@@ -688,7 +718,8 @@
         const absenceSum = itemsOfMonth(driver.id, ym, 'absence').reduce((s, a) => s + Number(a.amount), 0);
         const totalDeductions = advSum + deficitSum + absenceSum;
 
-        const netBalance = earnedSoFar - totalDeductions;
+        const carryover = carryoverOf(driver, ym);
+        const netBalance = earnedSoFar + carryover - totalDeductions;
 
         return {
             daysInMonth,
@@ -696,6 +727,7 @@
             dailyRate,
             earnedSoFar,
             totalDeductions,
+            carryover,
             netBalance
         };
     }
@@ -744,7 +776,8 @@
                 const absenceSum = absencesMonth.reduce((s,a)=>s+Number(a.amount),0);
                 const nonDeductibleSum = nonDeductibleMonth.reduce((s,a)=>s+Number(a.amount),0);
 
-                const net = Number(d.baseSalary||0) - advSum - absenceSum - deficitSum;
+                const carryover = carryoverOf(d, currentMonth);
+                const net = Number(d.baseSalary||0) + carryover - advSum - absenceSum - deficitSum;
 
                 totalSalary += Number(d.baseSalary||0);
                 totalAdv += (advSum + deficitSum + absenceSum);
@@ -753,7 +786,6 @@
                 const maxAdv = displayLimitForDriver(d);
                 const accrual = calcAccrualData(d, currentMonth);
 
-                if (isFekry && !openPanels.has(d.id)) openPanels.set(d.id, 'adv');
                 const activePanel = openPanels.get(d.id);
 
                 const initial = (d.name||'؟').trim().charAt(0);
@@ -819,15 +851,24 @@
                         </div>
                         <div class="driver-nums">
                             ${isAdmin ? `<div class="n"><div class="k">الراتب الأساسي</div><div class="v">${fmt(d.baseSalary)}</div></div>` : ''}
-                            <div class="n adv"><div class="k">سلف الشهر</div><div class="v">${fmt(advSum)}</div></div>
-                            <div class="n absence"><div class="k">خصم الغياب</div><div class="v">${fmt(absenceSum)}</div></div>
-                            <div class="n deficit"><div class="k">عجز الشهر</div><div class="v">${fmt(deficitSum)}</div></div>
-                            <div class="n nondeductible"><div class="k">مصروف وعجز لن يخصم</div><div class="v">${fmt(nonDeductibleSum)}</div></div>
-                            
-                            <div class="n accrual-status">
-                                <div class="k">${accrual.netBalance >= 0 ? `متبقي له (يوم ${accrual.elapsedDays})` : `مطلوب منه (يوم ${accrual.elapsedDays})`}</div>
-                                <div class="v ${accrual.netBalance >= 0 ? 'due-pos' : 'due-neg'}">${fmt(Math.abs(accrual.netBalance))}</div>
-                            </div>
+                            <button type="button" class="n detail-card adv ${activePanel === 'adv' ? 'is-open' : ''}" data-toggle="${d.id}" data-type="adv" aria-controls="panel-adv-${d.id}" aria-expanded="${activePanel === 'adv'}">
+                                <span class="k">سلف الشهر <i class="fa-solid fa-chevron-down card-chevron" aria-hidden="true"></i></span><span class="v">${fmt(advSum)}</span>
+                            </button>
+                            <button type="button" class="n detail-card absence ${activePanel === 'absence' ? 'is-open' : ''}" data-toggle="${d.id}" data-type="absence" aria-controls="panel-absence-${d.id}" aria-expanded="${activePanel === 'absence'}">
+                                <span class="k">خصم الغياب <i class="fa-solid fa-chevron-down card-chevron" aria-hidden="true"></i></span><span class="v">${fmt(absenceSum)}</span>
+                            </button>
+                            <button type="button" class="n detail-card deficit ${activePanel === 'deficit' ? 'is-open' : ''}" data-toggle="${d.id}" data-type="deficit" aria-controls="panel-deficit-${d.id}" aria-expanded="${activePanel === 'deficit'}">
+                                <span class="k">عجز الشهر <i class="fa-solid fa-chevron-down card-chevron" aria-hidden="true"></i></span><span class="v">${fmt(deficitSum)}</span>
+                            </button>
+                            <button type="button" class="n detail-card nondeductible ${activePanel === 'nondeductible' ? 'is-open' : ''}" data-toggle="${d.id}" data-type="nondeductible" aria-controls="panel-nondeductible-${d.id}" aria-expanded="${activePanel === 'nondeductible'}">
+                                <span class="k">مصروف وعجز لن يخصم <i class="fa-solid fa-chevron-down card-chevron" aria-hidden="true"></i></span><span class="v">${fmt(nonDeductibleSum)}</span>
+                            </button>
+                            <button type="button" class="n detail-card carryover ${activePanel === 'carryover' ? 'is-open' : ''}" data-toggle="${d.id}" data-type="carryover" aria-controls="panel-carryover-${d.id}" aria-expanded="${activePanel === 'carryover'}">
+                                <span class="k">مرحل من الشهر الماضي <i class="fa-solid fa-chevron-down card-chevron" aria-hidden="true"></i></span><span class="v">${fmt(carryover)}</span>
+                            </button>
+                            <button type="button" class="n detail-card accrual-status ${activePanel === 'balance' ? 'is-open' : ''}" data-toggle="${d.id}" data-type="balance" aria-controls="panel-balance-${d.id}" aria-expanded="${activePanel === 'balance'}">
+                                <span class="k">${accrual.netBalance >= 0 ? `متبقي له (يوم ${accrual.elapsedDays})` : `مطلوب منه (يوم ${accrual.elapsedDays})`} <i class="fa-solid fa-chevron-down card-chevron" aria-hidden="true"></i></span><span class="v">${fmt(Math.abs(accrual.netBalance))}</span>
+                            </button>
 
                             ${isAdmin ? `<div class="n net"><div class="k">الصافي النهائي</div><div class="v">${fmt(net)}</div></div>` : ''}
                             ${isAdmin ? `<div class="n limit"><div class="k">الحد المسموح حتى الآن</div><div class="v">${fmt(maxAdv)}</div></div>` : ''}
@@ -854,7 +895,7 @@
                     </div>
                     ` : ''}
 
-                    <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}">
+                    <div class="advances-panel ${activePanel === 'adv' ? 'open' : ''}" id="panel-adv-${d.id}">
                         <h3>تسجيل سلفة أو تسوية — ${monthLabel(currentMonth)} ${isAdmin ? `(الحد المسموح حتى الآن: ${fmt(maxAdv)})` : ''}</h3>
                         <div class="adv-form">
                             <input type="number" step="any" placeholder="مبلغ السلفة (+ صرف / - تسوية)" title="مبلغ موجب لصرف سلفة، أو مبلغ سالب لتسوية السلفة" id="advAmount-${d.id}">
@@ -865,7 +906,7 @@
                         <div class="adv-list">${advItemsHtml}</div>
                     </div>
 
-                    <div class="advances-panel ${activePanel === 'absence' ? 'open' : ''}" style="background:#faf5ff; border-top: 1px solid #ddd6fe;">
+                    <div class="advances-panel ${activePanel === 'absence' ? 'open' : ''}" id="panel-absence-${d.id}" style="background:#faf5ff; border-top: 1px solid #ddd6fe;">
                         <h3 style="color: var(--violet);">تسجيل أسبوع/أيام غياب — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="قيمة الخصم أو اليومية" id="absenceAmount-${d.id}">
@@ -876,7 +917,7 @@
                         <div class="adv-list">${absenceItemsHtml}</div>
                     </div>
 
-                    <div class="advances-panel ${activePanel === 'deficit' ? 'open' : ''}" style="background:#fff3f3; border-top: 1px solid #fca5a5;">
+                    <div class="advances-panel ${activePanel === 'deficit' ? 'open' : ''}" id="panel-deficit-${d.id}" style="background:#fff3f3; border-top: 1px solid #fca5a5;">
                         <h3 style="color: var(--coral);">تسجيل عجز مالي مميز — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="مبلغ العجز" id="deficitAmount-${d.id}">
@@ -887,7 +928,7 @@
                         <div class="adv-list">${deficitItemsHtml}</div>
                     </div>
 
-                    <div class="advances-panel ${activePanel === 'nondeductible' ? 'open' : ''}" style="background:#e0f7fa; border-top: 1px solid #80deea;">
+                    <div class="advances-panel ${activePanel === 'nondeductible' ? 'open' : ''}" id="panel-nondeductible-${d.id}" style="background:#e0f7fa; border-top: 1px solid #80deea;">
                         <h3 style="color: var(--teal);">تسجيل مصروف وعجز لن يخصم — ${monthLabel(currentMonth)}</h3>
                         <div class="adv-form">
                             <input type="number" min="0" placeholder="المبلغ" id="nonDeductibleAmount-${d.id}">
@@ -896,6 +937,27 @@
                             <button class="btn btn-teal" data-add-nondeductible="${d.id}">تسجيل مصروف وعجز لن يخصم</button>
                         </div>
                         <div class="adv-list">${nonDeductibleItemsHtml}</div>
+                    </div>
+
+                    <div class="advances-panel ${activePanel === 'carryover' ? 'open' : ''}" id="panel-carryover-${d.id}">
+                        <h3>مرحل من ${monthLabel(shiftMonthKey(currentMonth, -1))}</h3>
+                        <div class="detail-explanation">الرصيد الذي أكدته الإدارة بعد تسوية الشهر السابق؛ لا يتم ترحيل الراتب تلقائيًا حتى لا يُحتسب راتب تم صرفه من قبل.</div>
+                        ${isAdmin ? `<div class="adv-form">
+                            <input type="number" step="1" id="carryoverAmount-${d.id}" value="${carryover}" aria-label="قيمة المرحل من الشهر الماضي" placeholder="قيمة المرحل (يسمح بالسالب)">
+                            <button class="btn btn-brand" data-save-carryover="${d.id}">حفظ المرحل</button>
+                        </div>` : ''}
+                        <div class="detail-line"><span>الرصيد المرحل المعتمد</span><strong>${fmt(carryover)}</strong></div>
+                    </div>
+
+                    <div class="advances-panel ${activePanel === 'balance' ? 'open' : ''}" id="panel-balance-${d.id}">
+                        <h3>تفاصيل الرصيد حتى يوم ${accrual.elapsedDays} — ${monthLabel(currentMonth)}</h3>
+                        <div class="detail-lines">
+                            <div class="detail-line"><span>مستحقات العمل حتى الآن</span><strong>${fmt(accrual.earnedSoFar)}</strong></div>
+                            <div class="detail-line"><span>مرحل من الشهر الماضي</span><strong>${fmt(carryover)}</strong></div>
+                            <div class="detail-line"><span>إجمالي السلف والخصومات والعجز</span><strong>${fmt(accrual.totalDeductions)}</strong></div>
+                            <div class="detail-line"><span>${accrual.netBalance >= 0 ? 'متبقي له' : 'مطلوب منه'}</span><strong>${fmt(Math.abs(accrual.netBalance))}</strong></div>
+                        </div>
+                        <div class="detail-explanation">المصروفات والعجز غير المخصوم لا يؤثران على الرصيد.</div>
                     </div>
                 </div>`;
             }).join('');
@@ -922,7 +984,13 @@
                 } else {
                     openPanels.set(id, type);
                 }
+                const returnFocus = btn.classList.contains('detail-card');
                 render();
+                if (returnFocus) {
+                    const next = Array.from(document.querySelectorAll('[data-toggle]'))
+                        .find(el => el.classList.contains('detail-card') && el.getAttribute('data-toggle') === id && el.getAttribute('data-type') === type);
+                    next?.focus({ preventScroll: true });
+                }
             };
         });
         document.querySelectorAll('[data-add-adv]').forEach(btn => {
@@ -939,6 +1007,9 @@
         });
 
         if (isAdmin) {
+            document.querySelectorAll('[data-save-carryover]').forEach(btn => {
+                btn.onclick = () => saveCarryover(btn.getAttribute('data-save-carryover'));
+            });
             document.querySelectorAll('[data-del-adv]').forEach(btn => {
                 btn.onclick = () => {
                     const advId = btn.getAttribute('data-del-adv');
@@ -972,6 +1043,31 @@
                 console.error(e);
             }
         });
+    }
+
+    async function saveCarryover(driverId) {
+        if (!isAdmin) return;
+        const input = document.getElementById(`carryoverAmount-${driverId}`);
+        if (!input) return;
+        const raw = input.value.trim();
+        const amount = Number(raw);
+        if (raw === '' || !Number.isSafeInteger(amount)) {
+            alert('أدخل مبلغًا صحيحًا للمرحل (يمكن أن يكون سالبًا أو صفرًا)');
+            input.focus();
+            return;
+        }
+        const saveButton = document.querySelector('[data-save-carryover="' + driverId + '"]');
+        if (saveButton) saveButton.disabled = true;
+        try {
+            await updateDoc(doc(db, DRIVERS_COL, driverId), {
+                [`monthlyCarryovers.${currentMonth}`]: amount,
+                carryoverUpdatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error(error);
+            alert('تعذر حفظ المرحل؛ تحقق من صلاحياتك والاتصال بالإنترنت');
+            if (saveButton) saveButton.disabled = false;
+        }
     }
 
     let pendingAdvance = null;
@@ -1145,6 +1241,7 @@
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             currentMonth = shiftMonthKey(currentMonth, -1);
+            openPanels.clear();
             render();
         });
     }
@@ -1153,6 +1250,7 @@
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
             currentMonth = shiftMonthKey(currentMonth, 1);
+            openPanels.clear();
             render();
         });
     }
