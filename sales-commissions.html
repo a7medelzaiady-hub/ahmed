@@ -1074,6 +1074,8 @@
         }
 
         invalidateReport(true);
+        // A fresh accounting run must also refresh purchase costs.
+        inventoryLoadPromise = null;
         const version = reportContextVersion;
         const signature = reportInputSignature();
         calcButton.disabled = true;
@@ -1124,12 +1126,21 @@
     }
 
     window.saveSettlementPeriod = async () => {
-        if (!currentCalculatedReportData || currentCalculatedReportData.netCommissionPaid <= 0) {
-            alert("لا توجد عمولة مستحقة للاعتماد.");
+        if (settlementBusy || document.getElementById("calculateCommissionButton").disabled) {
+            notify("التقرير لا يزال قيد الحساب. لا يمكن اعتماد الصرف الآن.", true);
             return;
         }
-
         const report = currentCalculatedReportData;
+        const enteredRate = Number(document.getElementById("commissionRateInput").value);
+        // Never pay an old rate or period while a background read is still running.
+        if (!report || report.netCommissionPaid <= 0 ||
+            !isRecentReport(lastFinancialBase) ||
+            !Number.isFinite(enteredRate) || report.commissionRate !== enteredRate ||
+            report.salesRep !== document.getElementById("salesRepFilterSelect").value) {
+            document.getElementById("settleCommissionButton").disabled = true;
+            notify("يجب إكمال حساب حديث بنفس النسبة والفترة قبل اعتماد الصرف.", true);
+            return;
+        }
         const confirmation = confirm(
             `هل تؤكد اعتماد وصرف مبلغ (${money(report.netCommissionPaid)} ج.م) للمندوب (${report.salesRep})؟\n` +
             `إجمالي النقدية المحصلة: ${money(report.grandTotalCollected)} ج.م\n` +
@@ -1137,19 +1148,34 @@
         );
         if (!confirmation) return;
 
+        settlementBusy = true;
+        const saveButton = document.getElementById("settleCommissionButton");
+        saveButton.disabled = true;
         try {
+            // A second check after confirmation prevents a late input change.
+            if (currentCalculatedReportData !== report || !isRecentReport(lastFinancialBase) ||
+                Number(document.getElementById("commissionRateInput").value) !== report.commissionRate) {
+                notify("تغيّرت بيانات الحساب؛ أعد الحساب أولًا.", true);
+                return;
+            }
             await addDoc(collection(db, "commission_settlements"), {
                 ...report,
                 settledBy: loggedUser,
                 createdAt: serverTimestamp()
             });
 
+            lastFinancialBase = null;
+            currentCalculatedReportData = null;
             alert("تم تسجيل تسوية الفترة في الأرشيف بنجاح.");
             await window.onRepChange();
             document.getElementById("reportSummaryBox").style.display = "none";
         } catch (error) {
             console.error(error);
             alert("فشل تسجيل التسوية. لم يتم تأكيد الصرف.");
+        } finally {
+            settlementBusy = false;
+            // The settlement control stays disabled until another valid calculation.
+            saveButton.disabled = true;
         }
     };
 
