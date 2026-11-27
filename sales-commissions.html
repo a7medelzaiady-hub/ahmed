@@ -141,6 +141,19 @@
         .stat-value { font-size:12px; font-weight:900; overflow-wrap:anywhere; }
         .stat-value-highlight { color:#fce35c; font-size:14px; font-weight:900; overflow-wrap:anywhere; }
         .collection-breakdown { font-size:11px; line-height:1.7; color:rgba(255,255,255,.9); text-align:center; }
+        .btn-refresh-report {
+            display:block; width:100%; margin-top:7px; padding:6px 8px;
+            border:1px solid #c2d5c8; border-radius:9px; background:#fff;
+            color:#0b5e3d; font-size:11px; font-weight:800;
+        }
+        .calc-status {
+            margin-top:10px; padding:12px; border:1px solid #d1e9d7;
+            border-radius:9px; background:#f2f9f4; color:#16492e;
+            font-size:12px; font-weight:800; line-height:1.6; text-align:center;
+        }
+        .btn-calc-report:disabled, .btn-refresh-report:disabled, .btn-settle-commission:disabled {
+            opacity:.6; cursor:not-allowed;
+        }
         .btn-settle-commission {
             background:#10b981; color:#052819; font-size:12px; font-weight:900;
             width:100%; border:0; border-radius:9px; padding:11px; margin-top:10px;
@@ -254,6 +267,10 @@
             <button type="button" class="btn-calc-report" id="calculateCommissionButton" onclick="calculateCommissionReport()">
                 <i class="fas fa-chart-line me-1"></i> احتساب التحصيلات والأرباح والعمولة
             </button>
+            <div class="calc-status" id="calculationStatus" role="status" aria-live="polite" hidden></div>
+            <button type="button" class="btn-refresh-report" id="refreshReportButton" onclick="calculateCommissionReport(true)">
+                <i class="fas fa-sync-alt me-1"></i> تحديث البيانات من قاعدة البيانات
+            </button>
         </section>
 
     <div class="report-summary-box" id="reportSummaryBox" style="display: none;">
@@ -303,7 +320,7 @@
         <div id="profitEvaluationBox" class="profitability-badge profit-good">
             <i class="fas fa-info-circle me-1"></i> جاري تقييم النسبة والديون...
         </div>
-        <button class="btn-settle-commission" onclick="saveSettlementPeriod()">
+        <button id="settleCommissionButton" class="btn-settle-commission" onclick="saveSettlementPeriod()" disabled>
             <i class="fas fa-check-circle me-1"></i> اعتماد وصرف هذه الفترة وتسجيل السجل
         </button>
     </div>
@@ -369,6 +386,11 @@
     let factorMap = {};
     let currentBuyMap = {};
     let currentCalculatedReportData = null;
+    let lastFinancialBase = null;
+    let reportContextVersion = 0;
+    let settlementBusy = false;
+    const REPORT_CACHE_MS = 120000;
+    const READ_TIMEOUT_MS = 30000;
 
     const loggedUser =
         localStorage.getItem("currentUser") ||
@@ -731,8 +753,8 @@
         const startInput = document.getElementById("startDateFilter");
         const endInput = document.getElementById("endDateFilter");
 
-        currentCalculatedReportData = null;
-        document.getElementById("reportSummaryBox").style.display = "none";
+        // Changing representative invalidates any report currently being computed.
+        invalidateReport(true);
 
         if (!selectedRep) {
             startInput.value = "";
