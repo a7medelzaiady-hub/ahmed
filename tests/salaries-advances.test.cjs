@@ -76,3 +76,80 @@ test('carryover changes are administrator-only and reuse the drivers listener', 
     assert.ok(source.includes('[\x60monthlyCarryovers.${currentMonth}\x60]: amount'));
     assert.equal((source.match(/onSnapshot\(collection\(db,/g) || []).length, 2, 'No additional Firestore listener');
 });
+
+test('a tapped metric card expands its record directly underneath, shifting later cards down', () => {
+    assert.match(html, /\.driver-nums \.inline-detail-panel,\s*\.driver-actions \.inline-detail-panel\s*\{\s*grid-column: 1 \/ -1;/);
+    assert.doesNotMatch(html, /\.driver-nums \.accrual-status\s*\{\s*order:\s*-1;/);
+    assert.doesNotMatch(html, /\.driver-nums \.net\s*\{\s*order:\s*-2;/);
+    assert.ok(source.includes('moveOpenPanelsUnderTriggers();'), 'The inline placement runs after rendering');
+    for (const origin of ['card', 'action']) {
+        const type = 'adv', driverId = 'd1';
+        const metricButton = createButton('detail-card', driverId, type);
+        const actionButton = createButton('icon-btn', driverId, type);
+        const buttons = [metricButton, actionButton];
+        const panel = {
+            id: 'panel-' + type + '-' + driverId,
+            classList: { add(name) { this[name] = true; } }
+        };
+        const driverEl = {
+            querySelector(selector) {
+                assert.equal(selector, '.detail-card');
+                return metricButton;
+            },
+            querySelectorAll(selector) {
+                assert.equal(selector, '[data-toggle]');
+                return buttons;
+            }
+        };
+        const doc = {
+            querySelectorAll(selector) {
+                assert.equal(selector, '#driversList .driver');
+                return [driverEl];
+            },
+            getElementById(id) {
+                assert.equal(id, panel.id);
+                return panel;
+            }
+        };
+        const context = {
+            document: doc,
+            openPanels: new Map([[driverId, type]]),
+            openPanelSources: new Map([[driverId, origin]])
+        };
+        vm.runInNewContext(segment('function moveOpenPanelsUnderTriggers()', 'function bindDynamicEvents(){'), context);
+        context.moveOpenPanelsUnderTriggers();
+        const tapped = origin === 'card' ? metricButton : actionButton;
+        const untouched = origin === 'card' ? actionButton : metricButton;
+        assert.equal(tapped.inserted, panel, 'Panel must be directly behind tapped ' + origin);
+        assert.equal(tapped.position, 'afterend');
+        assert.equal(tapped.attrs['aria-expanded'], 'true');
+        assert.equal(tapped.attrs['aria-controls'], panel.id);
+        assert.equal(untouched.inserted, undefined);
+        assert.equal(panel.classList['inline-detail-panel'], true);
+    }
+});
+
+function createButton(className, driverId, type) {
+    return {
+        classList: { contains(name) { return name === className; } },
+        getAttribute(name) {
+            return { 'data-toggle': driverId, 'data-type': type }[name] ?? null;
+        },
+        setAttribute(name, value) {
+            this.attrs[name] = value;
+        },
+        attrs: {},
+        insertAdjacentElement(position, panel) {
+            this.position = position;
+            this.inserted = panel;
+        }
+    };
+}
+
+test('payroll amounts and record labels have larger fonts including on mobile', () => {
+    assert.ok(html.includes('.driver-nums .n .k { font-size: 13px;'));
+    assert.ok(html.includes('.driver-nums .n .v { font-size: 16px;'));
+    assert.ok(html.includes('.driver-nums .n .v { font-size: 15px; }'));
+    assert.ok(html.includes('.adv-item { border-radius: 11px; align-items: flex-start; gap: 8px; font-size: 14px; }'));
+    assert.ok(html.includes('.advances-panel h3 { font-size: 14px; }'));
+});
