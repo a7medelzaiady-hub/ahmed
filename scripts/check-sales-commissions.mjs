@@ -107,7 +107,7 @@ context.window.setActiveTab("commissions");
 await tick();
 assert.ok(!elements.commissionPanel.hidden && elements.customersSection.hidden);
 assert.equal(elements.salesRepFilterSelect.disabled, false);
-assert.ok(context.systemUsersSet.has("repC"), "Representatives from the remainder must be available");
+assert.ok(vm.runInContext("systemUsersSet.has(\"repC\")", context), "Representatives from the remainder must be available");
 assert.equal(reads.filter(name => name === "customers").length, 3);
 assert.equal(reads.filter(name => name === "invoices").length, 0);
 
