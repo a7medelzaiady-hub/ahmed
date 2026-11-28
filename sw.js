@@ -8,7 +8,7 @@
 // - ملفات الموقع نفسه (HTML/JS/CSS) بتتعرض من الكاش فورًا وبتتحدّث بالخلفية،
 //   فأي تعديل في ملف زي shop-publish.js بيوصل في الفتحة اللي بعدها.
 // =====================================================================
-const CACHE_NAME = "elzaiady-cache-v23";
+const CACHE_NAME = "elzaiady-cache-v24";
 
 const LOCAL_FILES = [
   "./",
@@ -238,7 +238,11 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    const old = keys.filter(k => k !== CACHE_NAME);
+    // لا نمسح الكاش القديم إلا لو الكاش الجديد فيه صفحة الدخول فعلًا؛ وإلا يبقى التطبيق معلّقًا على شاشة البداية
+    // لو التثبيت تعثّر (شبكة ضعيفة) وكان الكاش الجديد ناقصًا.
+    const fresh = await caches.open(CACHE_NAME);
+    const healthy = !!(await fresh.match("./index.html")) || !!(await fresh.match("./"));
+    const old = healthy ? keys.filter(k => k !== CACHE_NAME) : [];
     await Promise.all(old.map(k => caches.delete(k)));
     await self.clients.claim();
     if (old.length) {
@@ -277,14 +281,18 @@ self.addEventListener("fetch", event => {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       const key = url.origin + url.pathname;
-      const cached = await cache.match(key) || await cache.match(request, { ignoreSearch: true });
+      // لو الكاش الحالي ناقص نستخدم أي نسخة مخزّنة من الصفحة في كاش قديم بدل الانتظار على الشبكة
+      const cached = await cache.match(key) || await cache.match(request, { ignoreSearch: true })
+        || await caches.match(key) || await caches.match(request, { ignoreSearch: true });
       const network = fetch(request).then(res => {
         if (res && res.ok) cache.put(key, res.clone());
         return res;
       }).catch(() => null);
       if (cached) { event.waitUntil(network); return cached; }
-      const res = await network;
-      return res || (await cache.match("./offline.html")) || Response.error();
+      // مفيش نسخة مخزّنة: ننتظر الشبكة بمهلة 8 ثوانٍ فقط ثم نعرض صفحة الأوفلاين بدل التعليق
+      const timeout = new Promise(resolve => setTimeout(() => resolve(null), 8000));
+      const res = await Promise.race([network, timeout]);
+      return res || (await cache.match("./offline.html")) || (await caches.match("./offline.html")) || Response.error();
     })());
     return;
   }
