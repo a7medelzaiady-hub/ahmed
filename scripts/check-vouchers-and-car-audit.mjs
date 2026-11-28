@@ -1,4 +1,4 @@
-// فحوصات صفحة السندات اليدوية (vouchers.html) وصفحة جرد العربية (car-audit.html)
+// فحوصات صفحة السندات اليدوية (vouchers.html) وصفحة جرد العربية (quotation-history.html)
 process.env.TZ = 'Africa/Cairo';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -39,39 +39,21 @@ const vFns = new Function("const pad2 = (n) => String(n).padStart(2, '0');\n" + 
 assert.equal(vFns.localDateStr(new Date('2026-11-28T22:30:00Z')), '2026-11-29', 'Cairo midnight rolls to the next local day');
 assert.equal(vFns.localDateStr(new Date('2026-11-28T10:00:00Z')), '2026-11-28');
 
-// ---------------- car-audit.html ----------------
-const cHtml = read('car-audit.html');
-const c = moduleOf(cHtml);
-syntax(c);
-assert.ok(!/toISOString\(\)\.split|toISOString\(\)\.slice/.test(c), 'car-audit: UTC date helper must not come back');
-assert.ok(/const todayDocId = localDateStr\(\)/.test(c));
+// ---------------- quotation-history.html (صفحة جرد العربية) ----------------
+const qHtml = read('quotation-history.html');
+const q = moduleOf(qHtml);
+syntax(q);
+// مبيعات الجرد = مبيعات العربية فقط، ومبيعات المخزن مستبعدة
+assert.ok(/where\("source", "==", "van_sales"\)/.test(q), 'only van invoices are listened to');
+assert.ok(/inv\.source !== 'van_sales'/.test(q), 'warehouse (main_store) invoices are excluded from today sales');
+// الرصيد السابق من آخر جرد محفوظ (مستند واحد) وليس امبارح فقط
+assert.ok(/where\('date', '<', d\), orderBy\('date', 'desc'\), limit\(1\)/.test(q), 'previous balance comes from the last saved count (single doc)');
+assert.ok(/getDoc\(doc\(db, 'daily_loads', getPreviousDateStr\(d\)\)\)/.test(q), 'falls back to the previous calendar day');
+assert.ok(/currentListenDate !== d\) return;/.test(q), 'stale previous-balance result is ignored after changing the date');
+// التحميل: كاش فوري + تحديث ثقيل بالخلفية بس لو الكاش قديم
+assert.ok(/hydrateInventoryFromCache\(\)/.test(q) && /INV_CACHE_MAX_AGE_MS/.test(q), 'cache-first inventory');
+assert.ok(/if \(age > INV_CACHE_MAX_AGE_MS\) window\.fetchInventoryFresh\(\);/.test(q), 'background refresh only when the cache is old');
+assert.ok(/saveInventoryCache\(\);/.test(q), 'fresh balances are cached');
+assert.ok(!/ts\.seconds\*1000\)\.toISOString/.test(q), 'invoice timestamp fallback uses the local day');
 
-// الكروت تظهر قبل الحساب الثقيل، والفواتير تتقرأ في دالة الخلفية فقط
-const invReads = c.match(/getDocs\(collection\(db, "invoices"\)\)/g) || [];
-assert.equal(invReads.length, 1, 'invoices are read once');
-assert.ok(c.indexOf('async function loadWarehouseBalances') < c.indexOf('getDocs(collection(db, "invoices"))'));
-assert.ok(/await loadInventoryBase\(\);[\s\S]*await loadWarehouseBalances\(\)/.test(c), 'base list renders before the heavy balance pass');
-assert.ok(/readCache\(\)\) renderAuditCards\(\)/.test(c), 'instant render from the cached copy');
-
-// آخر رصيد جرد: مستند واحد قبل اليوم
-assert.ok(/where\("date", "<", todayDocId\), orderBy\("date", "desc"\), limit\(1\)/.test(c), 'previous count is a single-document query');
-// الكتابة صنف واحد بدل مسح الخريطة كلها
-assert.ok(/items: \{ \[id\]: st \}/.test(c), 'single item save does not rewrite the whole map');
-// مبيعات اليوم لا تساوي مبيعات كل الفترات
-assert.ok(/isTodayVan/.test(c) && /inv\.source === 'van_sales'/.test(c) && /todaySalesMap\.get\(item\.id\)/.test(c), 'today sales are date-filtered and van-only (warehouse sales excluded)');
-assert.ok(!/oninput="updateLoadState/.test(c), 'no inline handlers with ids');
-
-const cFns = new Function(
-  "const pad2 = (n) => String(n).padStart(2, '0');\n" +
-  grabFn(c, 'localDateStr') + '\n' + grabFn(c, 'recordDateStr') + '\n' +
-  "const hasVal = (v) => v !== '' && v != null && !isNaN(Number(v));\n" +
-  'return { recordDateStr, localDateStr, hasVal };'
-)();
-assert.equal(cFns.recordDateStr({ date: '2026-11-28' }), '2026-11-28');
-assert.equal(cFns.recordDateStr({ date: '28/11/2026' }), '2026-11-28');
-assert.equal(cFns.recordDateStr({ timestamp: { toDate: () => new Date('2026-11-28T22:30:00Z') } }), '2026-11-29');
-assert.equal(cFns.recordDateStr({}), '');
-assert.equal(cFns.hasVal(''), false);
-assert.equal(cFns.hasVal('0'), true);
-
-console.log('Vouchers + car audit: syntax, single data load, local dates, today-only sales, previous-count prefill, batching and balance-formula checks passed.');
+console.log('Vouchers + car-truck audit page: syntax, single data load, local dates, van-only sales, last-count previous balance, cache-first loading, batching and balance-formula checks passed.');

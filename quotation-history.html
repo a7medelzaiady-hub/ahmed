@@ -522,7 +522,7 @@ table select:focus { border-color: var(--brand); }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { calculateStockBalances } from "./stock-balance.mjs";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, deleteField, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, deleteField, query, where, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -664,14 +664,23 @@ function listenToDailyLoadChanges() {
     updateSyncUIStatus('offline', '🔴 غير متصل - تعذر المزامنة');
   });
 
-  getDoc(doc(db, 'daily_loads', getPreviousDateStr(d))).then(prevSnap => {
+  // الرصيد السابق = آخر جرد محفوظ قبل اليوم (مش بس امبارح: لو امبارح إجازة أو مفيش حمولة كان بيرجع فاضي)
+  // قراءة مستند واحد فقط (limit 1)، وبنرجع لمستند امبارح لو الاستعلام ماجابش حاجة
+  const pickPrevious = (snap) => {
     previousTruckStock = {};
-    if (prevSnap.exists()) {
-      const c = prevSnap.data().cartItems || {};
+    if (snap && snap.exists()) {
+      const c = snap.data().cartItems || {};
       Object.keys(c).forEach(id => { if (c[id].inTruckPcs) previousTruckStock[id] = c[id].inTruckPcs; });
     }
-    if (isActive('pg-load')) renderLoadFlow();
-  }).catch(e => console.warn("تعذر جلب حمولة اليوم السابق:", e));
+  };
+  getDocs(query(collection(db, 'daily_loads'), where('date', '<', d), orderBy('date', 'desc'), limit(1)))
+    .then(async (qs) => {
+      if (currentListenDate !== d) return;
+      if (!qs.empty) pickPrevious(qs.docs[0]);
+      else pickPrevious(await getDoc(doc(db, 'daily_loads', getPreviousDateStr(d))));
+      if (currentListenDate === d && isActive('pg-load')) renderLoadFlow();
+    })
+    .catch(e => console.warn("تعذر جلب رصيد آخر جرد:", e));
 }
 
 function recomputeSales() {
@@ -756,8 +765,19 @@ function startApp() {
   listenToDailyLoadChanges();
   listenToLiveInvoices();
   const p = new URLSearchParams(location.search).get('item');
-  (isInventoryLoadedOnce ? Promise.resolve() : window.fetchInventoryFresh())
-    .then(() => { if (p) window.goToItem(p); });
+  let ready;
+  if (isInventoryLoadedOnce) {
+    ready = Promise.resolve();
+  } else {
+    const age = hydrateInventoryFromCache();          // عرض فوري من آخر نسخة محفوظة
+    if (age === null) {
+      ready = window.fetchInventoryFresh();           // مفيش كاش: لازم ننتظر الجلب
+    } else {
+      if (age > INV_CACHE_MAX_AGE_MS) window.fetchInventoryFresh();   // تحديث بالخلفية بس لو الكاش قديم (توفير قراءات)
+      ready = Promise.resolve();
+    }
+  }
+  ready.then(() => { if (p) window.goToItem(p); });
 }
 
 function cleanItemName(str) {
@@ -875,7 +895,7 @@ function parseDate(df,ts){
     m=s.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
     if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
   }
-  if(ts?.seconds)return new Date(ts.seconds*1000).toISOString().slice(0,10);
+  if(ts?.seconds){const t=new Date(ts.seconds*1000);return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;}
   return"";
 }
 
@@ -974,11 +994,37 @@ function filterLoadFlow() {
 // ==========================================
 // محرك جلب رصيد المخزن التراكمي السريع
 // ==========================================
+// كاش آخر أرصدة محسوبة: الصفحة تظهر فورًا منه، والتحديث الثقيل (كل الفواتير) بيتم بالخلفية
+const INV_CACHE_KEY = 'quotation_inventory_cache_v1';
+const INV_CACHE_MAX_AGE_MS = 3 * 60 * 1000;
+function saveInventoryCache() {
+  try {
+    localStorage.setItem(INV_CACHE_KEY, JSON.stringify({ t: Date.now(), items: firebaseItems }));
+  } catch (e) { /* الكاش اختياري */ }
+}
+function hydrateInventoryFromCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(INV_CACHE_KEY) || 'null');
+    if (!c || !Array.isArray(c.items) || !c.items.length) return null;
+    factorsMap = {}; namesMap = {};
+    firebaseItems = c.items;
+    firebaseItems.forEach(it => {
+      factorsMap[it.id] = it.capacity;
+      if (it.name) namesMap[cleanItemName(it.name)] = it.id;
+    });
+    isInventoryLoadedOnce = true;
+    renderItemsPage();
+    recomputeSales();
+    refreshActivePages();
+    return Date.now() - (Number(c.t) || 0);
+  } catch (e) { return null; }
+}
+
 window.fetchInventoryFresh = async function() {
   if (window._invBusy) return;
   window._invBusy = true;
   const card = document.getElementById('itemsCard');
-  if (card) card.innerHTML = '<div class="spin"></div>';
+  if (card && !firebaseItems.length) card.innerHTML = '<div class="spin"></div>';   // لو فيه كاش معروض ما نمسحوش
   try {
     const [invoicesSnap, supplierSnap, inventorySnap, transSnap] = await Promise.all([
       getDocs(collection(db, "invoices")),
@@ -1007,6 +1053,7 @@ window.fetchInventoryFresh = async function() {
       };
     });
 
+    saveInventoryCache();
     renderItemsPage();
     firebaseItems.forEach(fi => { if (cartItems[fi.id]) { cartItems[fi.id].name = fi.name; cartItems[fi.id].capacity = fi.capacity; } });
     isInventoryLoadedOnce = true;
