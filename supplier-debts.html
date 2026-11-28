@@ -114,6 +114,7 @@
     </div>
 </div>
 
+<script src="./supplier-ledger.js"></script>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -136,32 +137,6 @@ const firebaseConfig = {
         });
     } catch (e) {
         db = getFirestore(app);
-    }
-
-    async function getRealBalance(supId, openingBal) {
-        const [snapTrans, snapItems] = await Promise.all([
-            getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
-            getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
-        ]);
-
-        let debt = 0;   
-        let credit = 0; 
-
-        snapTrans.forEach(doc => {
-            const d = doc.data();
-            const amt = Number(d.amount) || 0;
-            if (d.type === "صرف") credit += amt;
-            else if (d.type === "قبض") debt += amt;
-        });
-
-        snapItems.forEach(doc => {
-            const d = doc.data();
-            const amt = Number(d.total) || Number(d.amount) || 0;
-            if (d.type === "شراء" || d.type === "فاتورة شراء") debt += amt;
-            else if (d.type === "مرتجع شراء") credit += amt;
-        });
-
-        return (Number(openingBal || 0) + debt) - credit;
     }
 
     window.updateTopCard = () => {
@@ -203,13 +178,11 @@ const firebaseConfig = {
             const supSnap = await getDocs(collection(db, "suppliers"));
             let html = '';
             
-            const balancePromises = supSnap.docs.map(async (doc) => {
-                const data = doc.data();
-                const balance = await getRealBalance(doc.id, data.openingBalance);
-                return { id: doc.id, data, balance };
-            });
-
-            const results = await Promise.all(balancePromises);
+            const suppliers = supSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => !SupplierLedger.gone(x));
+            const { invoices, vouchers } = await SupplierLedger.loadSupplierDocs(
+                { collection, getDocs, query, where }, db, { ids: suppliers.map((x) => x.id) });
+            const ledgers = SupplierLedger.buildAllLedgers(suppliers, invoices, vouchers);
+            const results = suppliers.map((x) => ({ id: x.id, data: x, balance: SupplierLedger.r2(ledgers[x.id].balance) }));
             results.sort((a, b) => b.balance - a.balance);
 
             results.forEach(res => {
@@ -219,7 +192,7 @@ const firebaseConfig = {
                         <a href="supplier-details.html?id=${res.id}" 
                            class="debt-item" 
                            data-balance="${res.balance}" 
-                           data-name="${res.data.name.toLowerCase()}">
+                           data-name="${String(res.data.name || '').toLowerCase().replace(/"/g, '&quot;')}">
                             <div class="sup-info">
                                 <h6>${res.data.name}</h6>
                                 <small><i class="fas fa-phone-alt me-1" style="font-size:0.6rem; color: var(--accent)"></i> ${res.data.phone || 'بدون هاتف'}</small>

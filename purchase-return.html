@@ -119,7 +119,7 @@
 <script type="module">
     // الكود البرمجي كما هو بدون أي تعديل لضمان استقرار العمليات والـ Logic
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where, addDoc, updateDoc, doc, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, where, addDoc, updateDoc, doc, writeBatch, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
  const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -147,7 +147,7 @@
         const snap = await getDocs(collection(db, "suppliers"));
         const select = document.getElementById('supplierSelect');
         snap.forEach(d => {
-            select.innerHTML += `<option value="${d.id}">${d.data().name}</option>`;
+            select.innerHTML += `<option value="${d.id}">${String(d.data().name || "").replace(/</g, "&lt;")}</option>`;
         });
     }
 
@@ -248,29 +248,33 @@
         });
 
         try {
-            await addDoc(collection(db, "supplier_transactions"), {
+            // نقرأ أرقام المخزن أولًا (بالمعرّف أو بالاسم) ثم نكتب المرتجع والمخزن والرصيد في عملية واحدة
+            const invoice = currentInvoices.find(i => i.id === document.getElementById('invoiceSelect').value);
+            const invItems = (invoice && invoice.items) || [];
+            const batch = writeBatch(db);
+            const rRef = doc(collection(db, "supplier_transactions"));
+            batch.set(rRef, {
                 supplierId: supId,
                 type: "مرتجع شراء",
                 total: totalAmount,
-                items: returnedItems,
+                items: returnedItems.map(it => ({ ...it, returnQty: it.qty, buy: it.price })),
+                originalInvoiceId: invoice ? invoice.id : null,
                 date: new Date().toISOString().split('T')[0],
-                timestamp: serverTimestamp()
+                timestamp: Date.now(),
+                createdAt: serverTimestamp()
             });
-
-            const supRef = doc(db, "suppliers", supId);
-            await updateDoc(supRef, {
-                currentBalance: increment(-totalAmount)
-            });
+            batch.update(doc(db, "suppliers", supId), { currentBalance: increment(-totalAmount) });
 
             for (const item of returnedItems) {
-                const q = query(collection(db, "inventory"), where("name", "==", item.name));
-                const qSnap = await getDocs(q);
-                if(!qSnap.empty) {
-                    await updateDoc(doc(db, "inventory", qSnap.docs[0].id), {
-                        qty: increment(-item.qty)
-                    });
+                const orig = invItems.find(x => x.name === item.name) || {};
+                let invId = orig.id || orig.productId || null;
+                if (!invId) {
+                    const qSnap = await getDocs(query(collection(db, "inventory"), where("name", "==", item.name)));
+                    if (!qSnap.empty) invId = qSnap.docs[0].id;
                 }
+                if (invId) batch.update(doc(db, "inventory", invId), { qty: increment(-item.qty) });
             }
+            await batch.commit();
 
             alert("تم حفظ المرتجع وتحديث المخزن والمديونية بنجاح ✅");
             location.reload();

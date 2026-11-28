@@ -512,6 +512,7 @@
     </div>
 </div>
 
+<script src="./supplier-ledger.js"></script>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, collection, getDocs, query, where, serverTimestamp, writeBatch, increment, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -590,55 +591,17 @@
         return u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
     }
 
+    // رصيد المورد قبل هذه الفاتورة (يستبعد الفاتورة نفسها عند التعديل) من الدفتر الموحد supplier-ledger.js
     async function getRealSupplierBalance(supplierId) {
         try {
             const supDoc = await getDoc(doc(db, "suppliers", supplierId));
-            const openingBal = supDoc.exists() ? Number(supDoc.data().openingBalance || 0) : 0;
-
-            const [snapTrans, snapItems] = await Promise.all([
-                getDocs(collection(db, "transactions")),
-                getDocs(collection(db, "supplier_transactions"))
-            ]);
-
-            let totalPurchases = 0; 
-            let totalPayments = 0;  
-
-            snapTrans.forEach(docSnap => {
-                const d = docSnap.data();
-                const amt = Number(d.amount) || 0;
-                if (d.partyId === supplierId || d.supplierId === supplierId) {
-                    if (!d.invoiceId) {
-                        if (d.type === "صرف" || d.actionType === "سداد مورد" || String(d.details || '').includes("سداد")) {
-                            totalPayments += amt;
-                        } else if (d.type === "قبض") {
-                            totalPurchases += amt;
-                        }
-                    }
-                }
-            });
-
-            snapItems.forEach(docSnap => {
-                if (docSnap.data().supplierId === supplierId) {
-                    if (editId && docSnap.id === editId) return;
-
-                    const d = docSnap.data();
-                    const totalInvoice = Number(d.grossTotal) || Number(d.total) || Number(d.amount) || 0;
-                    const paidInsideInvoice = Number(d.totalPaid) || Number(d.paid) || 
-                        (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 0;
-
-                    if (d.type === "شراء" || d.type === "فاتورة شراء" || !d.type) {
-                        totalPurchases += totalInvoice;
-                        totalPayments += paidInsideInvoice;
-                    } else if (d.type === "مرتجع شراء" || d.type === "مرتجع") {
-                        totalPayments += totalInvoice;
-                    }
-                }
-            });
-
-            return (openingBal + totalPurchases) - totalPayments;
-        } catch (e) { 
+            const supplier = { id: supplierId, ...(supDoc.exists() ? supDoc.data() : {}) };
+            const { invoices, vouchers } = await SupplierLedger.loadSupplierDocs(
+                { collection, getDocs, query, where }, db, { ids: [supplierId] });
+            return SupplierLedger.balanceExcluding(supplier, invoices, vouchers, editId || null);
+        } catch (e) {
             console.error("Balance Calc Error:", e);
-            return 0; 
+            return 0;
         }
     }
 
@@ -1192,6 +1155,9 @@
             if (editId) {
                 const invRef = doc(db, "supplier_transactions", editId);
                 batch.update(invRef, baseInvoiceData);
+                // نحذف سندات الصرف المرآة القديمة للفاتورة قبل إعادة إنشائها، وإلا تتكرر عند كل تعديل
+                const oldMirrors = await getDocs(query(collection(db, "transactions"), where("invoiceId", "==", editId)));
+                oldMirrors.forEach(m => batch.delete(m.ref));
             } else {
                 const newInvRef = doc(collection(db, "supplier_transactions"));
                 batch.set(newInvRef, baseInvoiceData);

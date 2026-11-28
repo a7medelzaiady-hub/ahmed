@@ -476,7 +476,7 @@
             <span class="stat-label">إجمالي المدفوع</span>
             <span class="stat-val text-success force-ltr" id="totalPaid">0.00</span>
         </div>
-        <div class="stat-card pending">
+        <div class="stat-card pending" title="صافي أرصدة الموردين شامل الافتتاحي، ويساوي الرقم في قائمة الموردين">
             <span class="stat-label">إجمالي المتبقي</span>
             <span class="stat-val text-danger force-ltr" id="totalPending">0.00</span>
         </div>
@@ -505,9 +505,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
+<script src="./supplier-ledger.js"></script>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, deleteDoc, doc, runTransaction, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, deleteDoc, doc, runTransaction, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -549,126 +550,66 @@
         return `<span class="force-ltr" style="${styleColor}">${absoluteFormatted}</span>`;
     }
 
+    let suppliersList = [];
+    let rawInvoices = [];
+    let ledgers = {};
+
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const itemPrice = (item) => Number(item.buy ?? item.price ?? 0) || 0;
+    const itemQty = (item) => Number(item.qty ?? item.returnQty ?? 0) || 0;
+    const itemIsReturn = (item, inv) => !!inv.isReturn || item.isReturn === true || Number(item.returnQty) > 0;
+
+    // يبني الدفاتر والبطاقات والإجماليات من البيانات الخام: كل الأرقام من supplier-ledger.js
+    function rebuild() {
+        ledgers = SupplierLedger.buildAllLedgers(suppliersList, rawInvoices, globalVouchers);
+
+        const eventById = {};
+        Object.keys(ledgers).forEach(k => ledgers[k].events.forEach(e => { if (e.kind === 'purchase' || e.kind === 'return') eventById[e.id] = e; }));
+
+        allInvoices = rawInvoices.map(d => {
+            const inv = { ...d };
+            const kind = SupplierLedger.invoiceKind(d);
+            const ev = eventById[d.id];
+            inv.isReturn = kind === 'return';
+            inv.displayGross = ev ? ev.total : SupplierLedger.invoiceTotal(d);
+            inv.computedCashPaid = Number(d.cashPaid) || 0;
+            inv.computedWalletPaid = Number(d.walletPaid) || 0;
+            inv.computedTotalPaid = inv.isReturn ? 0 : (ev ? ev.paid : SupplierLedger.invoicePaid(d));
+            inv.displayNetPending = inv.isReturn ? inv.displayGross : inv.displayGross - inv.computedTotalPaid;
+            inv.prevBalance = ev ? ev.before : 0;
+            inv.finalBalance = ev ? ev.after : 0;
+            return inv;
+        }).filter(inv => SupplierLedger.invoiceKind(inv) !== 'other');
+
+        allInvoices.sort((a, b) => SupplierLedger.timeOf(b) - SupplierLedger.timeOf(a));
+        recalcStats();
+    }
+
     window.init = async function() {
         try {
             const supSnap = await getDocs(collection(db, "suppliers"));
             suppliersBase = {};
+            suppliersList = [];
             supSnap.forEach(d => {
-                const data = d.data();
-                suppliersBase[d.id] = { name: data.name, openingBalance: Number(data.openingBalance) || 0 };
+                const data = { id: d.id, ...d.data() };
+                if (SupplierLedger.gone(data)) return;
+                suppliersList.push(data);
+                suppliersBase[d.id] = { name: data.name, openingBalance: SupplierLedger.openingOf(data) };
             });
 
-            const [transSnap, voucherSnap] = await Promise.all([
-                getDocs(query(collection(db, "supplier_transactions"), orderBy("timestamp", "asc"))), 
-                getDocs(collection(db, "transactions"))
-            ]);
-            
-            globalVouchers = [];
-            voucherSnap.forEach(v => { globalVouchers.push({ id: v.id, ...v.data() }); });
+            // كل الفواتير (من غير orderBy حتى لا تختفي الفواتير التي بلا timestamp) + سندات الموردين فقط
+            const loaded = await SupplierLedger.loadSupplierDocs(
+                { collection, getDocs, query, where }, db, { ids: suppliersList.map(s => s.id), allInvoices: true });
+            globalVouchers = loaded.vouchers;
+            rawInvoices = loaded.invoices.filter(d => !SupplierLedger.gone(d));
 
-            allInvoices = [];
-            let totalPurchaseSum = 0;
-            let totalReturnSum = 0;
-            let totalDirectPaid = 0; 
-
-            transSnap.forEach(doc => {
-                const data = { id: doc.id, ...doc.data() };
-                const amt = Number(data.grossTotal) || Number(data.total) || Number(data.amount) || 0;
-                const cashP = Number(data.cashPaid || 0);
-                const walletP = Number(data.walletPaid || 0);
-                const directPaid = data.totalPaid !== undefined ? Number(data.totalPaid) : (cashP + walletP || Number(data.paidAmount) || 0);
-
-                data.displayGross = amt;
-                data.displayNetPending = amt - directPaid;
-                data.computedCashPaid = cashP;
-                data.computedWalletPaid = walletP;
-                data.computedTotalPaid = directPaid;
-
-                if (data.type === "شراء" || data.type === "فاتورة شراء" || !data.type) {
-                    data.isReturn = false;
-                    totalPurchaseSum += amt;
-                    totalDirectPaid += directPaid; 
-                } else if (data.type === "مرتجع شراء" || data.type === "مرتجع") {
-                    data.isReturn = true;
-                    totalReturnSum += amt;
-                }
-                allInvoices.push(data);
-            });
-
-            let totalVoucherPayments = 0;
-            globalVouchers.forEach(v => {
-                if (v.type === "صرف" || v.actionType === "سداد مورد" || String(v.details || '').includes("سداد")) {
-                    if (!v.invoiceId) { 
-                        totalVoucherPayments += Number(v.amount || 0);
-                    }
-                }
-            });
-
-            const netPurchase = totalPurchaseSum - totalReturnSum;
-            const totalPaid = totalDirectPaid + totalVoucherPayments;
-            const finalPending = netPurchase - totalPaid;
-
-            document.getElementById('totalPurchase').innerHTML = generateCurrencyHTML(netPurchase);
-            document.getElementById('totalPaid').innerHTML = generateCurrencyHTML(totalPaid);
-            document.getElementById('totalPending').innerHTML = generateCurrencyHTML(finalPending > 0 ? finalPending : 0);
-            
-            allInvoices.sort((a,b) => {
-                const timeA = a.timestamp?.seconds || (a.date ? new Date(a.date).getTime() / 1000 : 0);
-                const timeB = b.timestamp?.seconds || (b.date ? new Date(b.date).getTime() / 1000 : 0);
-                return timeB - timeA;
-            });
-
+            rebuild();
             renderInvoices(allInvoices);
         } catch (error) {
             console.error(error);
             document.getElementById('invoicesContainer').innerHTML = '<div class="text-danger text-center p-5 fw-bold">حدث خطأ غير متوقع أثناء معالجة البيانات.</div>';
         }
     };
-
-    function calculateHistoricalPreviousBalance(supId, currentInvoiceId, currentTimestamp, currentDate) {
-        const supplier = suppliersBase[supId];
-        if (!supplier) return 0;
-
-        let totalPurchases = 0;
-        let totalPayments = 0;
-        
-        const targetTime = currentTimestamp?.seconds || (currentDate ? new Date(currentDate).getTime() / 1000 : Infinity);
-
-        globalVouchers.forEach(v => {
-            if ((v.partyId === supId || v.supplierId === supId) && !v.invoiceId) {
-                const vTime = v.timestamp?.seconds || (v.date ? new Date(v.date).getTime() / 1000 : 0);
-                
-                if (vTime < targetTime) {
-                    const amt = Number(v.amount) || 0;
-                    if (v.type === "صرف" || v.actionType === "سداد مورد" || String(v.details || '').includes("سداد")) {
-                        totalPayments += amt;
-                    } else if (v.type === "قبض") {
-                        totalPurchases += amt;
-                    }
-                }
-            }
-        });
-
-        allInvoices.forEach(inv => {
-            if (inv.supplierId === supId && inv.id !== currentInvoiceId) {
-                const invTime = inv.timestamp?.seconds || (inv.date ? new Date(inv.date).getTime() / 1000 : 0);
-                
-                if (invTime < targetTime) {
-                    const amt = Number(inv.displayGross) || 0;
-                    const paidInsideInvoice = Number(inv.computedTotalPaid) || 0;
-
-                    if (inv.type === "شراء" || inv.type === "فاتورة شراء" || !inv.type) {
-                        totalPurchases += amt;
-                        totalPayments += paidInsideInvoice;
-                    } else if (inv.type === "مرتجع شراء" || inv.type === "مرتجع") {
-                        totalPayments += amt;
-                    }
-                }
-            }
-        });
-
-        return (supplier.openingBalance + totalPurchases) - totalPayments;
-    }
 
     function renderInvoices(dataList) {
         const container = document.getElementById('invoicesContainer');
@@ -678,8 +619,8 @@
         }
 
         container.innerHTML = dataList.map(inv => {
-            const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-            const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp, inv.date);
+            const supName = esc(suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف');
+            const historicalPrevBalance = inv.prevBalance;
             const formattedDate = formatEnglishDate(inv.date);
 
             let badgeClass = 'type-credit';
@@ -703,7 +644,7 @@
             const netPendingVal = Number(inv.isReturn ? inv.displayGross : inv.displayNetPending);
             
             const currentInvoicePaid = Number(inv.computedTotalPaid || 0);
-            const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -totalInvoiceVal : inv.displayNetPending);
+            const finalSupplierTotal = inv.finalBalance;
             const targetPriceColor = inv.isReturn ? 'var(--danger)' : (inv.displayNetPending > 0 ? 'var(--danger)' : 'var(--success)');
             
             const totalStatusLabel = finalSupplierTotal > 0 ? 'دائن للمورد' : (finalSupplierTotal < 0 ? 'مدين للمحل' : 'متزن');
@@ -773,13 +714,13 @@
                         <tbody>
                             ${(inv.items || []).map(item => `
                                 <tr>
-                                    <td class="text-dark fw-bold text-end">${item.name}</td>
-                                    <td class="text-center text-secondary amount-number">${item.qty || item.returnQty || 0}</td>
+                                    <td class="text-dark fw-bold text-end">${esc(item.name)}${itemIsReturn(item, inv) && !inv.isReturn ? ' <small class="text-danger">(مرتجع)</small>' : ''}</td>
+                                    <td class="text-center text-secondary amount-number">${itemQty(item)}</td>
                                     <td class="text-center">
                                         <div class="price-align-box">
-                                            <span class="price-item text-secondary">${Number(item.buy || 0).toFixed(2)}</span>
+                                            <span class="price-item text-secondary">${itemPrice(item).toFixed(2)}</span>
                                             <span class="text-muted">|</span>
-                                            <span class="price-item text-dark fw-bold">${((item.qty || item.returnQty || 0) * Number(item.buy || 0)).toFixed(2)}</span>
+                                            <span class="price-item text-dark fw-bold">${(itemIsReturn(item, inv) && !inv.isReturn ? '-' : '') + (itemQty(item) * itemPrice(item)).toFixed(2)}</span>
                                         </div>
                                     </td>
                                 </tr>
@@ -796,21 +737,21 @@
     // ============================================================
     function buildThermalInvoiceHTML(inv) {
         const supName = suppliersBase[inv.supplierId] ? suppliersBase[inv.supplierId].name : 'مورد غير معروف';
-        const historicalPrevBalance = calculateHistoricalPreviousBalance(inv.supplierId, inv.id, inv.timestamp, inv.date);
+        const historicalPrevBalance = inv.prevBalance;
         const items = inv.items || [];
         const formattedDate = formatEnglishDate(inv.date);
 
         let rowsHtml = "";
         items.forEach(item => {
-            const isItemReturn = item.returnQty > 0 || inv.isReturn;
-            const qty = item.qty || item.returnQty || 0;
+            const isItemReturn = itemIsReturn(item, inv);
+            const qty = itemQty(item);
             const unit = item.unitName || 'كرتونة';
-            const price = Number(item.buy || 0);
+            const price = itemPrice(item);
             const subtotal = qty * price;
             rowsHtml += `
                 <tr>
                     <td style="padding: 6px 0; font-size:13px; color:#000;">
-                        <b>${item.name}</b><br>
+                        <b>${esc(item.name)}</b><br>
                         <span style="color:#555; font-size:11px;">(${isItemReturn ? '-' : ''}${qty} ${unit} × ${price.toFixed(2)})</span>
                     </td>
                     <td style="text-align: left; padding: 6px 0; font-family:'Montserrat', sans-serif; font-weight:800; font-size:13px;" dir="ltr">
@@ -823,7 +764,7 @@
         const cashPaid = Number(inv.computedCashPaid || 0);
         const walletPaid = Number(inv.computedWalletPaid || 0);
         const netPending = Number(inv.displayNetPending);
-        const finalSupplierTotal = historicalPrevBalance + (inv.isReturn ? -grossTotal : netPending);
+        const finalSupplierTotal = inv.finalBalance;
 
         let paymentDesc = "آجل الحساب";
         if (cashPaid > 0 && walletPaid > 0) paymentDesc = "مشترك (كاش + محفظة)";
@@ -837,7 +778,7 @@
             </div>
             <div style="font-size: 12px; margin-bottom: 10px; border-bottom:1px dashed #000; padding-bottom:8px; line-height: 1.5;">
                 <div><b>نوع الحساب:</b> ${inv.isReturn ? 'مرتجع شراء ↩️' : 'فاتورة شراء 🧾'}</div>
-                <div><b>المورد:</b> ${supName}</div>
+                <div><b>المورد:</b> ${esc(supName)}</div>
                 <div><b>التاريخ:</b> ${formattedDate}</div>
                 <div><b>طريقة السداد:</b> ${paymentDesc}</div>
             </div>
@@ -1067,17 +1008,11 @@
                 transaction.delete(doc(db, "supplier_transactions", invoiceId));
             });
 
-            const card = document.getElementById('card-' + invoiceId);
-            if (card) {
-                card.style.transition = 'opacity 0.3s, transform 0.3s';
-                card.style.opacity = '0';
-                card.style.transform = 'scale(0.97)';
-                setTimeout(() => card.remove(), 300);
-            }
-            
-            allInvoices = allInvoices.filter(i => i.id !== invoiceId);
+            // نعيد بناء الدفاتر: الحساب السابق والصافي في باقي الفواتير يتغيران بعد الحذف
+            rawInvoices = rawInvoices.filter(i => i.id !== invoiceId);
             globalVouchers = globalVouchers.filter(v => v.invoiceId !== invoiceId);
-            recalcStats();
+            rebuild();
+            window.searchInvoices();
             alert("تم حذف الفاتورة، وتحديث المخزون وحسابات السندات بنجاح ✅");
 
         } catch (e) {
@@ -1086,31 +1021,14 @@
         }
     };
 
+    // الإجماليات من الدفاتر الموحدة: صافي الشراء بعد المرتجع، والمدفوع (داخل الفواتير + السندات)،
+    // والمتبقي = صافي أرصدة الموردين (يشمل الافتتاحي) وهو نفس رقم قائمة الموردين
     function recalcStats() {
-        let totalPurchaseSum = 0, totalReturnSum = 0, totalDirectPaid = 0;
-        allInvoices.forEach(inv => {
-            if (inv.type === "شراء" || inv.type === "فاتورة شراء" || !inv.type) {
-                totalPurchaseSum += inv.displayGross;
-                totalDirectPaid += inv.computedTotalPaid;
-            } else if (inv.type === "مرتجع شراء" || inv.type === "مرتجع") {
-                totalReturnSum += inv.displayGross;
-            }
-        });
-        let totalVoucherPayments = 0;
-        globalVouchers.forEach(v => {
-            if (v.type === "صرف" || v.actionType === "سداد مورد" || String(v.details || '').includes("سداد")) {
-                if (!v.invoiceId) {
-                    totalVoucherPayments += Number(v.amount || 0);
-                }
-            }
-        });
-        const netPurchase   = totalPurchaseSum - totalReturnSum;
-        const totalPaid      = totalDirectPaid + totalVoucherPayments;
-        const finalPending  = Math.max(0, netPurchase - totalPaid);
-        
-        document.getElementById('totalPurchase').innerHTML = generateCurrencyHTML(netPurchase);
-        document.getElementById('totalPaid').innerHTML     = generateCurrencyHTML(totalPaid);
-        document.getElementById('totalPending').innerHTML  = generateCurrencyHTML(finalPending);
+        const t = SupplierLedger.purchaseTotals(ledgers);
+        const remaining = Object.keys(ledgers).reduce((sum, k) => sum + ledgers[k].balance, 0);
+        document.getElementById('totalPurchase').innerHTML = generateCurrencyHTML(t.net);
+        document.getElementById('totalPaid').innerHTML     = generateCurrencyHTML(t.paid);
+        document.getElementById('totalPending').innerHTML  = generateCurrencyHTML(SupplierLedger.r2(remaining));
     }
 
     window.exportAllInvoicesAsImages = async function() {
@@ -1166,12 +1084,21 @@
     };
 
     window.deleteAllInvoices = async () => {
-        if (!confirm("⚠️ تحذير: هل أنت متأكد من مسح كافة سجلات الفواتير؟ لن تستطيع استرجاعها.")) return;
+        if (!confirm("⚠️ تحذير: هل أنت متأكد من مسح كافة سجلات فواتير الشراء والمرتجعات وسندات السداد المرتبطة بها؟ لن تستطيع استرجاعها، ولن تتغير كميات المخزن.")) return;
         try {
             const snap = await getDocs(collection(db, "supplier_transactions"));
             if (snap.empty) return alert("السجل فارغ بالفعل.");
-            for (const d of snap.docs) {
-                await deleteDoc(doc(db, "supplier_transactions", d.id));
+            const ids = new Set(snap.docs.map(d => d.id));
+
+            // السندات المرآة المرتبطة بالفواتير تُحذف معها حتى لا تبقى يتيمة وتظهر في الخزينة
+            const vSnap = await getDocs(collection(db, "transactions"));
+            const refs = snap.docs.map(d => d.ref);
+            vSnap.forEach(v => { if (v.data().invoiceId && ids.has(v.data().invoiceId)) refs.push(v.ref); });
+
+            for (let i = 0; i < refs.length; i += 400) {
+                const batch = writeBatch(db);
+                refs.slice(i, i + 400).forEach(r => batch.delete(r));
+                await batch.commit();
             }
             alert("تم إفراغ السجل بنجاح ✅");
             init();
@@ -1195,11 +1122,11 @@
                     let qtyPcs = 0, qtyCrt = 0, pricePcs = 0, priceCrt = 0;
                     
                     if (unit === "جركن" || unit === "قطعة") { 
-                        qtyPcs = Number(item.qty || item.returnQty || 0); 
-                        pricePcs = Number(item.buy || 0); 
+                        qtyPcs = itemQty(item); 
+                        pricePcs = itemPrice(item); 
                     } else { 
-                        qtyCrt = Number(item.qty || item.returnQty || 0); 
-                        priceCrt = Number(item.buy || 0); 
+                        qtyCrt = itemQty(item); 
+                        priceCrt = itemPrice(item); 
                     }
                     excelData.push([inv.date || "", motionType, supplierName, item.name || "", qtyPcs, qtyCrt, pricePcs, priceCrt]);
                 });

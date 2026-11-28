@@ -167,6 +167,7 @@
     </table>
 </div>
 
+<script src="./supplier-ledger.js"></script>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, query, where, getDocs, doc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -209,7 +210,7 @@
                 document.getElementById('p-name').innerText = data.name;
                 document.getElementById('p-date').innerText = new Date().toLocaleDateString('ar-EG');
                 
-                const initial = Number(data.openingBalance) || 0;
+                const initial = SupplierLedger.openingOf(data);
                 if(initial !== 0) {
                     combinedData.push({
                         id: 'opening',
@@ -223,73 +224,45 @@
                 }
             }
 
-            // جلب سندات المعاملات من جدول transactions والبحث بكل الحقول الممكنة
-            const [transSnapParty, transSnapSup, invSnap] = await Promise.all([
-                getDocs(query(collection(db, "transactions"), where("partyId", "==", supId))),
-                getDocs(query(collection(db, "transactions"), where("supplierId", "==", supId))),
-                getDocs(query(collection(db, "supplier_transactions"), where("supplierId", "==", supId)))
-            ]);
+            // الكشف من الدفتر الموحد supplier-ledger.js: نفس أرقام القائمة وسجل المشتريات والمحاسبة
+            const { invoices, vouchers } = await SupplierLedger.loadSupplierDocs(
+                { collection, getDocs, query, where }, db, { ids: [supId] });
+            const ledger = SupplierLedger.buildLedger({ id: supId, ...(supSnap.exists() ? supSnap.data() : {}) }, invoices, vouchers);
 
-            const processedTransIds = new Set();
+            ledger.events.forEach(e => {
+                const d = e.src;
+                const base = { id: e.id, date: e.date || '---', timeMs: e.timeMs };
 
-            const processTransDoc = (documentDoc) => {
-                if (processedTransIds.has(documentDoc.id)) return;
-                
-                const d = documentDoc.data();
-
-                // 🛑 منع تكرار سند الصرف إذا كان مسجلاً بالفعل مع فاتورة
-                if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
-
-                processedTransIds.add(documentDoc.id);
-
-                combinedData.push({ 
-                    id: documentDoc.id,
-                    collectionName: 'transactions',
-                    date: d.date || '---', 
-                    type: d.type || 'سداد نقدية', 
-                    amount: Number(d.amount || 0), 
-                    notes: d.note || d.notes || (d.type === 'صرف' || d.type === 'سداد' ? 'سند صرف نقدية' : 'سند قبض نقدية') 
-                });
-            };
-
-            transSnapParty.forEach(processTransDoc);
-            transSnapSup.forEach(processTransDoc);
-
-            // جلب فواتير المشتريات والمدفوع داخل الفاتورة
-            invSnap.forEach(documentDoc => {
-                const d = documentDoc.data();
-                const totalAmt = Number(d.total || d.amount || 0);
-                
-                // سطر الفاتورة الأصلية (مشتريات/مرتجع)
-                combinedData.push({ 
-                    id: documentDoc.id,
-                    collectionName: 'supplier_transactions',
-                    date: d.date || '---', 
-                    type: d.type || 'شراء', 
-                    amount: totalAmt, 
-                    notes: d.note || d.details || (d.type === 'مرتجع شراء' ? 'مرتجع مشتريات' : 'مشتريات') 
-                });
-
-                // استخراج المبلغ المسدد نقداً فورياً مع الفاتورة
-                const paidAmt = Number(d.paid) || 
-                    (Number(d.cashPaid || 0) + Number(d.walletPaid || 0)) || 
-                    (Number(d.cashAmount || 0) + Number(d.walletAmount || 0)) || 0;
-
-                if (paidAmt > 0 && (d.type === 'شراء' || d.type === 'فاتورة شراء' || !d.type)) {
+                if (e.kind === 'purchase') {
+                    // فاتورة صافيها سالب (كلها أصناف مرتجعة) تظهر كمرتجع بدل مبلغ سالب
+                    const negative = e.total < 0;
                     combinedData.push({
-                        id: documentDoc.id + '_paid',
-                        collectionName: 'supplier_transactions_paid',
-                        date: d.date || '---',
-                        type: 'سداد مع الفاتورة',
-                        amount: paidAmt,
-                        notes: `دفعة مسددة مع الفاتورة (${d.paymentMethod || 'نقدي'})`,
-                        isCustomPayment: true
+                        ...base, collectionName: 'supplier_transactions',
+                        type: negative ? 'مرتجع شراء' : 'شراء', amount: Math.abs(e.total),
+                        notes: d.note || d.details || (negative ? 'مرتجع ضمن فاتورة' : 'مشتريات')
+                    });
+                    if (e.paid > 0) {
+                        combinedData.push({
+                            ...base, id: e.id + '_paid', collectionName: 'supplier_transactions_paid',
+                            type: 'سداد مع الفاتورة', amount: e.paid,
+                            notes: `دفعة مسددة مع الفاتورة (${d.paymentType || d.paymentMethod || 'نقدي'})`,
+                            isCustomPayment: true
+                        });
+                    }
+                } else if (e.kind === 'return') {
+                    combinedData.push({ ...base, collectionName: 'supplier_transactions', type: 'مرتجع شراء', amount: Math.abs(e.total), notes: d.note || d.details || 'مرتجع مشتريات' });
+                } else {
+                    const isPay = e.kind === 'payment';
+                    combinedData.push({
+                        ...base, collectionName: 'transactions',
+                        type: isPay ? 'صرف' : 'قبض', amount: e.total,
+                        notes: d.note || d.notes || d.details || (isPay ? 'سند صرف نقدية' : 'سند قبض نقدية')
                     });
                 }
             });
 
             // ترتيب الكشف حسب التاريخ
-            combinedData.sort((a, b) => new Date(b.date) - new Date(a.date));
+            combinedData.sort((a, b) => (b.timeMs || 0) - (a.timeMs || 0));
             
             const pbody = document.getElementById('printBody');
             tbody.innerHTML = ''; pbody.innerHTML = '';

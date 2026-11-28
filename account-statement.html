@@ -16,6 +16,7 @@
 
     <!-- Export Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="./supplier-ledger.js"></script>
 
     <style>
         :root {
@@ -342,7 +343,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -370,6 +371,7 @@
 
     const fmt = (n) => Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const safeNum = (v) => { let n = Number(v); return isNaN(n) ? 0 : n; };
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     function normalizeName(str) {
         return String(str || '').trim().replace(/\s+/g, ' ').replace(/[\u064B-\u0652]/g, '').replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
@@ -625,75 +627,53 @@
                 });
 
             } else {
-                const [supInvSnap, trSnap] = await Promise.all([
-                    getDocs(collection(db, "supplier_transactions")),
-                    getDocs(collection(db, "transactions"))
-                ]);
+                // حساب المورد من الدفتر الموحد (supplier-ledger.js): نفس أرقام قائمة الموردين وسجل المشتريات والمحاسبة
+                const { invoices, vouchers } = await SupplierLedger.loadSupplierDocs(
+                    { collection, getDocs, query, where }, db, { ids: [partyId] });
+                const ledger = SupplierLedger.buildLedger({ id: partyId, ...(partyObj || {}) }, invoices, vouchers);
 
-                supInvSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.isDeleted) return;
-                    if (data.supplierId !== partyId && normalizeName(data.supplierName) !== normalizeName(partyName)) return;
+                ledger.events.forEach(e => {
+                    const data = e.src;
+                    const base = { docId: e.id, timeMs: e.timeMs, date: e.date || '-' };
 
-                    const timeMs = data.timestamp?.seconds ? (data.timestamp.seconds * 1000) : parseDateToMs(data.date || data.time);
-                    
-                    const totalAmt = safeNum(data.grossTotal ?? data.total ?? data.amount);
-                    const paidAmt = safeNum(data.cashPaid ?? data.paid ?? data.paidAmount);
-                    const remAmt = totalAmt - paidAmt;
-
-                    let parsedItems = (data.items || []).map(i => {
-                        let q = safeNum(i.qty ?? i.quantity ?? 1);
-                        let p = safeNum(i.buy ?? i.purchasePrice ?? i.cost ?? i.price);
-                        let tot = (q * p) || safeNum(i.total);
-                        return {
-                            name: i.name || i.productName || 'صنف',
-                            qty: q,
-                            price: p,
-                            total: tot
-                        };
-                    });
-
-                    events.push({
-                        docId: d.id,
-                        type: 'invoice',
-                        timeMs,
-                        date: data.date || data.time || '-',
-                        paymentMethod: data.paymentMethod || data.type || 'شراء',
-                        items: parsedItems,
-                        total: totalAmt,
-                        paid: paidAmt,
-                        remaining: remAmt,
-                        debit: 0,
-                        credit: remAmt
-                    });
-                });
-
-                trSnap.forEach(d => {
-                    const tr = d.data();
-                    if (tr.isDeleted || tr.invoiceId || tr.supplierTransactionId) return;
-                    if (tr.partyId !== partyId && tr.supplierId !== partyId && normalizeName(tr.supplierName) !== normalizeName(partyName)) return;
-
-                    const timeMs = tr.timestamp?.seconds ? (tr.timestamp.seconds * 1000) : parseDateToMs(tr.date || tr.time);
-                    const amt = Math.abs(safeNum(tr.amount || tr.total));
-
-                    events.push({
-                        docId: d.id,
-                        type: 'voucher',
-                        timeMs,
-                        date: tr.date || tr.time || '-',
-                        voucherType: 'سداد للمورد',
-                        method: tr.method || 'نقدى',
-                        note: tr.note || 'سداد دفعة للمورد',
-                        amt: amt,
-                        debit: amt,
-                        credit: 0
-                    });
+                    if (e.kind === 'purchase' || e.kind === 'return') {
+                        const isReturn = e.kind === 'return';
+                        const parsedItems = (data.items || []).map(i => {
+                            const q = safeNum(i.qty ?? i.quantity ?? i.returnQty ?? 1);
+                            const p = safeNum(i.buy ?? i.purchasePrice ?? i.cost ?? i.price);
+                            const lineReturn = i.isReturn === true || safeNum(i.returnQty) > 0;
+                            const tot = (q * p) || safeNum(i.total);
+                            return {
+                                name: (i.name || i.productName || 'صنف') + (lineReturn && !isReturn ? ' (مرتجع)' : ''),
+                                qty: q, price: p, total: lineReturn && !isReturn ? -Math.abs(tot) : tot
+                            };
+                        });
+                        events.push({
+                            ...base, type: 'invoice', isReturn,
+                            paymentMethod: isReturn ? 'مرتجع شراء' : (data.paymentType || data.paymentMethod || 'آجل'),
+                            items: parsedItems,
+                            total: e.total, paid: e.paid, remaining: isReturn ? e.total : e.total - e.paid,
+                            debit: isReturn ? e.total : 0,
+                            credit: isReturn ? 0 : e.total - e.paid
+                        });
+                    } else {
+                        const isPayment = e.kind === 'payment';
+                        events.push({
+                            ...base, type: 'voucher',
+                            voucherType: isPayment ? 'سداد للمورد' : 'قبض من المورد',
+                            method: data.method || data.paymentMethod || 'نقدى',
+                            note: data.note || data.notes || data.details || (isPayment ? 'سداد دفعة للمورد' : 'مبلغ مقبوض من المورد'),
+                            amt: e.total,
+                            debit: isPayment ? e.total : 0,
+                            credit: isPayment ? 0 : e.total
+                        });
+                    }
                 });
             }
 
             events.sort((a, b) => a.timeMs - b.timeMs);
 
-            let baseBalance = safeNum(partyObj ? (partyObj.initialBalance || partyObj.openingBalance) : 0);
+            let baseBalance = currentPartyType === 'supplier' ? SupplierLedger.openingOf(partyObj) : safeNum(partyObj ? (partyObj.initialBalance || partyObj.openingBalance) : 0);
             let previousBalance = baseBalance;
             let filteredEvents = [];
 
@@ -746,13 +726,13 @@
                 if (ev.type === 'invoice') {
                     let itemsRowsHtml = (ev.items || []).map(i => `
                         <tr>
-                            <td style="text-align:right;">${i.name}</td>
+                            <td style="text-align:right;">${esc(i.name)}</td>
                             <td class="num">${safeNum(i.qty)}</td>
                             <td class="num">${safeNum(i.price).toFixed(1)}</td>
                             <td class="num">${safeNum(i.total).toFixed(1)}</td>
                         </tr>`).join('');
 
-                    const badgeTitle = currentPartyType === 'customer' ? 'فاتورة مبيعات' : 'فاتورة شراء / توريد';
+                    const badgeTitle = currentPartyType === 'customer' ? 'فاتورة مبيعات' : (ev.isReturn ? 'مرتجع شراء' : 'فاتورة شراء / توريد');
 
                     renderedCards.push({
                         timeMs: ev.timeMs,
@@ -775,7 +755,7 @@
                                     <span class="stat-val num text-success">${safeNum(ev.paid).toFixed(2)}</span>
                                 </div>
                                 <div class="stat-box">
-                                    <span class="stat-label">المتبقي من الفاتورة</span>
+                                    <span class="stat-label">${ev.isReturn ? 'يُخصم من حساب المورد' : 'المتبقي من الفاتورة'}</span>
                                     <span class="stat-val num text-danger">${safeNum(ev.remaining).toFixed(2)}</span>
                                 </div>
                             </div>
@@ -805,8 +785,8 @@
                     });
 
                 } else {
-                    const badgeVoucherTitle = currentPartyType === 'customer' ? (ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض') : 'سند سداد للمورد';
-                    const amtLabel = currentPartyType === 'customer' ? 'المبلغ المقبوض' : 'المبلغ المدفوع للمورد';
+                    const badgeVoucherTitle = currentPartyType === 'customer' ? (ev.voucherType === 'صرف' ? 'سند صرف' : 'سند قبض') : (ev.voucherType === 'قبض من المورد' ? 'سند قبض من المورد' : 'سند سداد للمورد');
+                    const amtLabel = currentPartyType === 'customer' ? 'المبلغ المقبوض' : (ev.voucherType === 'قبض من المورد' ? 'المبلغ المقبوض من المورد' : 'المبلغ المدفوع للمورد');
 
                     renderedCards.push({
                         timeMs: ev.timeMs,
@@ -832,7 +812,7 @@
                                 </div>
                             </div>
 
-                            ${ev.note ? `<div class="text-muted small fw-bold mt-1" style="font-size:0.75rem;"><i class="fas fa-comment-alt me-1"></i> ${ev.note}</div>` : ''}
+                            ${ev.note ? `<div class="text-muted small fw-bold mt-1" style="font-size:0.75rem;"><i class="fas fa-comment-alt me-1"></i> ${esc(ev.note)}</div>` : ''}
                         </div>`
                     });
 

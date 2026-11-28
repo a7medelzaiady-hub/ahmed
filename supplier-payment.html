@@ -124,7 +124,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, updateDoc, addDoc, writeBatch, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
   apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -183,32 +183,37 @@
         
         if(!id || !amt) return alert("برجاء اختيار الاسم وإدخال المبلغ");
 
+        if (!(amt > 0)) return alert("المبلغ لازم يكون أكبر من صفر");
         try {
-            // 1. تسجيل السند
-            await addDoc(collection(db, "transactions"), {
+            // السند + تحديث الرصيد المخزّن في عملية واحدة: يتسجلان معًا أو لا يتسجل أي منهما
+            // الرصيد الفعلي يُحسب من السندات (supplier-ledger.js)؛ currentBalance نسخة مساعدة فقط
+            const batch = writeBatch(db);
+            const vRef = doc(collection(db, "transactions"));
+            const date = document.getElementById('docDate').value;
+            const note = document.getElementById('notes').value;
+            const voucher = {
                 partyId: id,
                 partyType: partyType,
                 type: currentMode,
                 amount: amt,
-                date: document.getElementById('docDate').value,
-                notes: document.getElementById('notes').value,
+                date: date,
+                note: note,
+                notes: note,
+                timestamp: Date.now(),
                 createdAt: serverTimestamp()
-            });
+            };
+            if (partyType === 'suppliers') voucher.supplierId = id;
+            batch.set(vRef, voucher);
 
-            // 2. تحديث الرصيد
-            // لو مورد: صرف يقلل المديونية، قبض يزيدها
-            // لو عميل: قبض يقلل المديونية، صرف يزيدها
+            // لو مورد: صرف يقلل المديونية، قبض يزيدها — لو عميل: قبض يقلل، صرف يزيد
             let adjustment = 0;
             if (partyType === 'suppliers') {
                 adjustment = currentMode === 'صرف' ? -amt : amt;
             } else {
                 adjustment = currentMode === 'قبض' ? -amt : amt;
             }
-
-            const partyRef = doc(db, partyType, id);
-            await updateDoc(partyRef, {
-                currentBalance: increment(adjustment)
-            });
+            batch.update(doc(db, partyType, id), { currentBalance: increment(adjustment) });
+            await batch.commit();
 
             alert("تم حفظ السند بنجاح وتحديث الحساب");
             window.location.href = partyType === 'suppliers' ? "supplier-list.html" : "customer-list.html";
