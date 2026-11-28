@@ -58,7 +58,7 @@ assert.ok(/where\("date", "<", todayDocId\), orderBy\("date", "desc"\), limit\(1
 // الكتابة صنف واحد بدل مسح الخريطة كلها
 assert.ok(/items: \{ \[id\]: st \}/.test(c), 'single item save does not rewrite the whole map');
 // مبيعات اليوم لا تساوي مبيعات كل الفترات
-assert.ok(/isToday/.test(c) && /todaySalesMap\.get\(item\.id\)/.test(c), 'today sales are date-filtered');
+assert.ok(/isTodayVan/.test(c) && /inv\.source === 'van_sales'/.test(c) && /todaySalesMap\.get\(item\.id\)/.test(c), 'today sales are date-filtered and van-only (warehouse sales excluded)');
 assert.ok(!/oninput="updateLoadState/.test(c), 'no inline handlers with ids');
 
 const cFns = new Function(

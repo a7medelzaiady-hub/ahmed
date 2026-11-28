@@ -465,7 +465,10 @@
 
         invoicesSnap.forEach(docSnap => {
             const inv = docSnap.data();
-            const isToday = recordDateStr(inv) === todayDocId;
+            // مبيعات اليوم المعروضة = مبيعات العربية فقط (source = van_sales) زي صفحة جرد العربية؛ مبيعات المخزن بتأثر على رصيد المخزن بس
+            const isTodayVan = recordDateStr(inv) === todayDocId && inv.source === 'van_sales' && !inv.isDeleted &&
+                !['deleted', 'cancelled', 'canceled'].includes(inv.status);
+            const isRetInvoice = inv.type === 'return' || inv.isReturn === true;
             (inv.items || []).forEach(item => {
                 const id = item.stockId || namesMap.get(item.name?.trim());
                 if (!id) return;
@@ -475,7 +478,11 @@
                 const isCarton = item.isCarton === true || u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
                 const pcs = (isCarton ? (rawQty * factor) : rawQty) * (item.isReturn ? -1 : 1);
                 newSales.set(id, (newSales.get(id) || 0) + pcs);
-                if (isToday) newToday.set(id, (newToday.get(id) || 0) + pcs);
+                if (isTodayVan) {
+                    const vanPcs = (isCarton ? (rawQty * factor) : rawQty);
+                    const signed = (isRetInvoice || item.isReturn) ? -Math.abs(vanPcs) : vanPcs;
+                    newToday.set(id, (newToday.get(id) || 0) + signed);
+                }
             });
         });
 
