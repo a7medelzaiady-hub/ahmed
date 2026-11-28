@@ -353,7 +353,7 @@
     padding: 20px 16px;
     text-align: center;
   }
-</style>
+.customer-health-mini{margin:8px 0;padding:9px;border:1px solid #e5e9f0;border-radius:12px;background:#f8fafb;font-size:.78rem;line-height:1.8}.customer-health-mini summary{cursor:pointer;font-weight:800;color:#175c43}</style>
 </head>
 <body>
 
@@ -503,6 +503,7 @@
   let customersData = {};
   let customersNameMap = {};
   let currentFilter = 'all';
+  let customerPurchaseMap = new Map();
 
   const fmt = (n) => Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -584,6 +585,28 @@
   }
 
   // 🔥 المحرك الموحد لحساب حركة الرصيد لكل عميل 🔥
+  function customerActivity(cust) {
+    const now=Date.now(),day=86400000;
+    const purchases=(customerPurchaseMap.get(cust.id)||[]).filter(x=>x.ts>0&&x.ts<=now&&x.total>0).sort((a,b)=>a.ts-b.ts);
+    const dates=[...new Set(purchases.map(x=>new Date(x.ts).toISOString().slice(0,10)))];
+    const gaps=dates.slice(1).map((d,i)=>(Date.parse(d)-Date.parse(dates[i]))/day).filter(x=>x>0).sort((a,b)=>a-b);
+    const cadence=gaps.length?gaps[Math.floor(gaps.length/2)]:null;
+    const days=purchases.length?Math.floor((now-purchases[purchases.length-1].ts)/day):null;
+    const recent=purchases.filter(x=>x.ts>=now-30*day).reduce((a,x)=>a+x.total,0);
+    const prior=purchases.filter(x=>x.ts>=now-60*day&&x.ts<now-30*day).reduce((a,x)=>a+x.total,0);
+    let label='⚪ بيانات غير كافية',reason='لا توجد مشتريات كافية لتحديد النمط.',action='تابع العميل عند توفر مشتريات أكثر.';
+    if(purchases.length===1){label='🔵 عميل جديد';reason='فاتورة واحدة فقط.';action='تابعه بعد أول شراء.';}
+    else if(dates.length>=3&&cadence!==null){
+      const ratio=days/Math.max(cadence,7);
+      if(ratio>=3){label='🔴 متوقف';reason='تأخر عن دورة الشراء المعتادة.';action='اتصل لمعرفة سبب التوقف.';}
+      else if(ratio>=1.7){label='🟠 معرض للتوقف';reason='تأخر عن ميعاد الشراء المتوقع.';action='اسأله عن احتياجاته.';}
+      else if(prior>0&&recent<prior*.65&&days<=30){label='🟡 نشاطه بيقل';reason='انخفضت مشترياته مقارنة بالفترة السابقة.';action='راجع الأسعار وتوفر الأصناف.';}
+      else{label='🟢 '+(purchases.length>=5?'منتظم':'نشط');reason='آخر شراء ضمن نمطه المعتاد.';action='حافظ على التواصل.';}
+    }
+    if(cust.realBalance>0)action+=' يوجد رصيد مستحق؛ راجعه بشكل منفصل.';
+    return {label,reason,action,days};
+  }
+
   async function loadAllLedgerData(custDocs) {
     const debtMap = {};
     const nameMap = {};
@@ -688,6 +711,7 @@
     container.innerHTML = list.map(cust => {
       const balance = cust.realBalance;
       const meta = balanceMeta(balance);
+      const health = customerActivity(cust);
       const safeName = (cust.name || '').replace(/'/g, "\\'");
       return `
         <div id="card-${cust.id}" class="customer-card ${meta.cls}">
@@ -708,6 +732,12 @@
             </span>
           </div>
           
+          <div class="customer-health-mini">
+            <strong>${health.label}</strong> · آخر شراء: ${health.days===null?'غير معروف':health.days+' يوم'}
+            <details><summary>سبب التصنيف والإجراء المقترح</summary>
+              <div>${health.reason}</div><div>💡 ${health.action}</div>
+            </details>
+          </div>
           <div class="action-container">
             <button class="action-btn btn-log" onclick="openCustomerStatement('${cust.id}', '${safeName}')"><i class="fas fa-history"></i> كشف السجل</button>
             <a href="customer-details.html?id=${cust.id}" class="action-btn btn-info"><i class="fas fa-user-tag"></i> كشف الحساب</a>
