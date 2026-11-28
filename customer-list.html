@@ -617,11 +617,15 @@
       getDocs(collection(db, "transactions"))
     ]);
 
+    customerPurchaseMap = new Map();
     invoicesSnap.forEach(d => {
       const x = d.data();
       if (x.isDeleted) return;
       const cid = x.customerId || nameMap[normalizeName(x.customerName)];
       if (!cid) return;
+      const ts=x.timestamp?.seconds?x.timestamp.seconds*1000:parseArabicDateToMs(x.time||x.date);
+      if(!customerPurchaseMap.has(cid))customerPurchaseMap.set(cid,[]);
+      customerPurchaseMap.get(cid).push({ts,total:Number(x.total)||0});
       const paid = (Number(x.cashAmount ?? x.cashPaid ?? x.paid) || 0) + (Number(x.walletAmount ?? x.walletPaid) || 0);
       debtMap[cid] = (debtMap[cid] || 0) + ((Number(x.total) || 0) - paid);
     });
