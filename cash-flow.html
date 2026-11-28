@@ -206,6 +206,8 @@
                 catch (error) { console.error('تعذر تحميل ' + name, error); throw error; }
             }));
             const cached = Object.fromEntries(collections.map((name, i) => [name, snapshots[i]]));
+            // Diagnostics: document counts are derived from already fetched snapshots.
+            console.info('Cash flow documents by collection', Object.fromEntries(collections.map((name, i) => [name, snapshots[i].size])));
             masterCashArray = [];
 
             // 1. جلب أسماء العملاء والموردين للكاش والربط الذكي
@@ -425,6 +427,14 @@ try {
                 });
             } catch(e) { console.error("خطأ في قراءة المصروفات:", e); }
 
+            // Audit hint only: do not deduplicate accounting entries without verified source IDs.
+            const possibleDuplicates = new Map();
+            for (const item of masterCashArray) {
+                const key = [item.date, item.type, item.customerName, item.amount].join('|');
+                possibleDuplicates.set(key, (possibleDuplicates.get(key) || 0) + 1);
+            }
+            const duplicateGroups = [...possibleDuplicates.values()].filter(count => count > 1).length;
+            if (duplicateGroups) console.warn('Cash flow: matching date/type/name/amount groups require accounting review:', duplicateGroups);
             // ترتيب مصفوفة النقدية الشاملة من الأحدث إلى الأقدم
             masterCashArray.sort((a, b) => b.timestamp - a.timestamp);
 
