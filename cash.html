@@ -83,6 +83,12 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
 
 .filter-row { display:flex; gap:8px; margin:0 16px 14px; }
 .filter-row input { flex:1; }
+.dir-filter { display:flex; gap:8px; margin:0 16px 10px; }
+.dir-chip { flex:1; border:1.5px solid var(--border-color); background:#fff; color:var(--text-muted); border-radius:var(--radius-sm); padding:9px 6px; font-weight:800; font-size:0.85rem; font-family:inherit; }
+.dir-chip.active[data-dir="all"] { background:var(--text-dark); color:#fff; border-color:var(--text-dark); }
+.dir-chip.active[data-dir="in"] { background:var(--success); color:#fff; border-color:var(--success); }
+.dir-chip.active[data-dir="out"] { background:var(--danger); color:#fff; border-color:var(--danger); }
+.filter-summary { margin:0 16px 10px; font-size:0.78rem; font-weight:800; color:var(--text-muted); display:flex; justify-content:space-between; }
 
 .movement-item { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:14px; border-radius:var(--radius-md); margin:0 16px 12px; border:1px solid rgba(0,0,0,0.03); box-shadow:var(--card-shadow); position:relative; }
 .movement-item::before { content:''; position:absolute; top:0; bottom:0; right:0; width:4px; border-radius:0 var(--radius-md) var(--radius-md) 0; }
@@ -189,6 +195,18 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
         <input type="date" id="dateFilter" class="input-field" onchange="renderMovements()">
     </div>
 
+    <div class="dir-filter" id="dirFilter">
+        <button class="dir-chip active" data-dir="all" onclick="setDirFilter('all')">الكل</button>
+        <button class="dir-chip" data-dir="in" onclick="setDirFilter('in')"><i class="fas fa-arrow-down me-1"></i>الوارد</button>
+        <button class="dir-chip" data-dir="out" onclick="setDirFilter('out')"><i class="fas fa-arrow-up me-1"></i>الصادر</button>
+    </div>
+    <div class="filter-row d-none" id="providerRow">
+        <select id="providerFilter" class="input-field" onchange="renderMovements()">
+            <option value="">كل وسائل المحفظة</option>
+        </select>
+    </div>
+    <div class="filter-summary" id="filterSummary"></div>
+
     <div id="movementsList">
         <div class="loading-wrapper">
             <div class="spinner-border text-success" role="status" style="width:2rem; height:2rem;"></div>
@@ -222,6 +240,13 @@ catch (e) { db = getFirestore(app); }
 let currentTab = 'cash';
 let openingBalance = 0;
 let allMovements = [];
+let dirFilter = 'all'; // all | in | out — يعمل في تبويب النقدية وتبويب المحفظة
+
+window.setDirFilter = function (d) {
+    dirFilter = d;
+    document.querySelectorAll('#dirFilter .dir-chip').forEach(b => b.classList.toggle('active', b.dataset.dir === d));
+    renderMovements();
+};
 
 function convertArabicDigits(str) {
     const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
@@ -603,7 +628,24 @@ window.renderMovements = function () {
     const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
     const dateFilter = document.getElementById('dateFilter').value;
 
+    // فلتر وسيلة المحفظة (يظهر في تبويب المحفظة فقط)
+    const provSel = document.getElementById('providerFilter');
+    const provRow = document.getElementById('providerRow');
+    if (currentTab === 'wallet') {
+        const provs = [...new Set(allMovements.map(m => m.provider).filter(Boolean))].sort();
+        const keep = provs.includes(provSel.value) ? provSel.value : '';
+        provSel.innerHTML = '<option value="">كل وسائل المحفظة</option>' + provs.map(x => `<option value="${String(x).replace(/"/g, '&quot;')}">${String(x).replace(/</g, '&lt;')}</option>`).join('');
+        provSel.value = keep;
+        provRow.classList.remove('d-none');
+    } else {
+        provSel.value = '';
+        provRow.classList.add('d-none');
+    }
+    const provFilter = currentTab === 'wallet' ? provSel.value : '';
+
     let list = [...allMovements].reverse();
+    if (dirFilter !== 'all') list = list.filter(m => m.direction === dirFilter);
+    if (provFilter) list = list.filter(m => m.provider === provFilter);
     if (search) list = list.filter(m => m.note.toLowerCase().includes(search) || (m.provider && m.provider.toLowerCase().includes(search)));
     if (dateFilter) list = list.filter(m => m.date === dateFilter);
 
@@ -611,6 +653,10 @@ window.renderMovements = function () {
     const totalOut = allMovements.filter(m => m.direction === 'out' && (!dateFilter || m.date === dateFilter)).reduce((s, m) => s + m.amount, 0);
     const currentBalance = openingBalance + allMovements.reduce((s, m) => s + (m.direction === 'in' ? m.amount : -m.amount), 0);
 
+    const sumList = list.reduce((t, m) => t + m.amount, 0);
+    document.getElementById('filterSummary').innerHTML = (dirFilter !== 'all' || provFilter || search || dateFilter)
+        ? `<span>عدد الحركات: <span class="num">${list.length}</span></span><span>الإجمالي: <span class="num force-ltr">${fmt(sumList)}</span></span>`
+        : '';
     document.getElementById('totalIn').innerText = fmt(totalIn);
     document.getElementById('totalOut').innerText = fmt(totalOut);
     document.getElementById('currentBalance').innerText = fmt(currentBalance);
@@ -722,7 +768,11 @@ window.exportToExcel = function () {
         ? [["التاريخ", "الوسيلة", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]]
         : [["التاريخ", "البيان", "نوع الحركة", "المبلغ", "الرصيد بعد الحركة"]];
 
-    [...allMovements].reverse().forEach(m => {
+    const provSel = document.getElementById('providerFilter');
+    const exportList = [...allMovements].reverse().filter(m =>
+        (dirFilter === 'all' || m.direction === dirFilter) && (!isWallet || !provSel.value || m.provider === provSel.value));
+    if (exportList.length === 0) return alert("لا توجد حركات مطابقة للفلتر لتصديرها");
+    exportList.forEach(m => {
         if (isWallet) {
             rows.push([m.date, m.provider || 'محفظة', m.note, m.direction === 'in' ? 'وارد' : 'صادر', m.amount, m.balanceAfter]);
         } else {
