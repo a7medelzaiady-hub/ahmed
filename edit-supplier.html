@@ -133,6 +133,7 @@
     </div>
 </div>
 
+<script src="./supplier-ledger.js"></script>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -159,30 +160,11 @@
     const urlParams = new URLSearchParams(window.location.search);
     const supId = urlParams.get('id');
 
+    // حساب الرصيد من الدفتر الموحد supplier-ledger.js (نفس الرقم في كل الصفحات والنظام المحاسبي)
     async function calculateSupplierBalance(supId, openingBal) {
-        const qTrans = query(collection(db, "transactions"), where("partyId", "==", supId));
-        const snapTrans = await getDocs(qTrans);
-        const qItems = query(collection(db, "supplier_transactions"), where("supplierId", "==", supId));
-        const snapItems = await getDocs(qItems);
-
-        let debt = 0;   // التزامات (علينا)
-        let credit = 0; // مدفوعات (لنا)
-
-        snapTrans.forEach(doc => {
-            const d = doc.data();
-            const amt = Number(d.amount) || 0;
-            if (d.type === "صرف") credit += amt;
-            else if (d.type === "قبض") debt += amt;
-        });
-
-        snapItems.forEach(doc => {
-            const d = doc.data();
-            const amt = Number(d.total) || Number(d.amount) || 0;
-            if (d.type === "شراء" || d.type === "فاتورة شراء") debt += amt;
-            else if (d.type === "مرتجع شراء") credit += amt;
-        });
-
-        return (Number(openingBal || 0) + debt) - credit;
+        const { invoices, vouchers } = await SupplierLedger.loadSupplierDocs(
+            { collection, getDocs, query, where }, db, { ids: [supId] });
+        return SupplierLedger.balanceExcluding({ id: supId, openingBalance: openingBal }, invoices, vouchers);
     }
 
     async function loadCurrentData() {
