@@ -235,6 +235,7 @@
 <div id="pdfExportTemplate"></div>
 
 <script type="module">
+import { calculateStockBalances } from "./stock-balance.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -254,9 +255,6 @@ const db = initializeFirestore(app, {
 });
 
 let allItems = [];
-let salesMapGlobal = new Map();
-let purchasesMapGlobal = new Map();
-let openingMapGlobal = new Map();
 let rawInvoicesList = [];
 let rawPurchasesList = [];
 
@@ -366,14 +364,10 @@ function parseFilterDateInput(val) {
 async function loadLiveInventory() {
     try {
         onSnapshot(collection(db, "inventory"), async (snap) => {
-            const factorsMap = new Map();
-            const namesMap = new Map();
-            snap.forEach(d => {
-                const data = d.data();
-                const f = Math.max(1, Number(data.unitFactor || data.pcsPerCarton || data.factor) || 1);
-                factorsMap.set(d.id, f);
-                if (data.name) namesMap.set(normalizeAr(data.name), d.id);
-            });
+            // الحساب مشترك مع صفحة المخزن وجرد السيارة (stock-balance.mjs) حتى يظهر نفس الرصيد في كل مكان
+            const openingTransactions = [];
+            rawInvoicesList = [];
+            rawPurchasesList = [];
 
             try {
                 const [invoicesSnap, supplierSnap, transSnap] = await Promise.all([
@@ -382,99 +376,34 @@ async function loadLiveInventory() {
                     getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance"))).catch(() => ({ forEach: () => {} }))
                 ]);
 
-                salesMapGlobal.clear();
-                purchasesMapGlobal.clear();
-                openingMapGlobal.clear();
-                rawInvoicesList = [];
-                rawPurchasesList = [];
-
-                if (transSnap.forEach) {
-                    transSnap.forEach(docSnap => {
-                        const data = docSnap.data();
-                        if (data.productId) {
-                            const current = openingMapGlobal.get(data.productId) || 0;
-                            openingMapGlobal.set(data.productId, current + (Number(data.quantityPcs) || 0));
-                        }
-                    });
-                }
-
-                if (invoicesSnap.forEach) {
-                    invoicesSnap.forEach(docSnap => {
-                        const invData = docSnap.data() || {};
-                        if (invData.isDeleted) return; // استبعاد الفواتير المحذوفة
-                        
-                        rawInvoicesList.push({ id: docSnap.id, ...invData });
-                        const items = invData.items || [];
-                        items.forEach(item => {
-                            const normName = item.name ? normalizeAr(item.name) : '';
-                            const id = item.stockId || item.id || namesMap.get(normName);
-                            if (id) {
-                                const factor = factorsMap.get(id) || 1;
-                                const rawQty = Number(item.qty) || 0;
-                                const isCarton = isCartonUnit(item.unit, item.isCarton);
-                                const pcs = isCarton ? (rawQty * factor) : rawQty;
-                                const current = salesMapGlobal.get(id) || 0;
-                                salesMapGlobal.set(id, item.isReturn ? current - pcs : current + pcs);
-                            }
-                        });
-                    });
-                }
-
-                if (supplierSnap.forEach) {
-                    supplierSnap.forEach(docSnap => {
-                        const supData = docSnap.data() || {};
-                        if (supData.isDeleted) return; // استبعاد التوريدات المحذوفة
-                        
-                        rawPurchasesList.push({ id: docSnap.id, ...supData });
-                        const items = supData.items || [];
-                        items.forEach(item => {
-                            const normName = item.name ? normalizeAr(item.name) : '';
-                            const id = item.stockId || item.id || namesMap.get(normName);
-                            if (id) {
-                                const factor = factorsMap.get(id) || 1;
-                                const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                                const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                                const isCarton = isCartonUnit(item.unitName || item.unit, item.isCarton);
-                                const pcs = isCarton ? (rawQty * factor) : rawQty;
-                                const current = purchasesMapGlobal.get(id) || 0;
-                                purchasesMapGlobal.set(id, isReturn ? current - pcs : current + pcs);
-                            }
-                        });
-                    });
-                }
+                if (transSnap.forEach) transSnap.forEach(docSnap => openingTransactions.push(docSnap.data()));
+                if (invoicesSnap.forEach) invoicesSnap.forEach(docSnap => {
+                    const invData = docSnap.data() || {};
+                    if (invData.isDeleted) return; // استبعاد الفواتير المحذوفة
+                    rawInvoicesList.push({ id: docSnap.id, ...invData });
+                });
+                if (supplierSnap.forEach) supplierSnap.forEach(docSnap => {
+                    const supData = docSnap.data() || {};
+                    if (supData.isDeleted) return; // استبعاد التوريدات المحذوفة
+                    rawPurchasesList.push({ id: docSnap.id, ...supData });
+                });
             } catch (err) {
                 console.warn("تنبيه جلب الحركات:", err);
             }
 
-            allItems = [];
-            snap.forEach(doc => {
-                const data = doc.data();
-                if (!data.isDeleted) {
-                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                    let openingTotalPcs = 0;
-                    if (data.openingTotalPcs != null) {
-                        openingTotalPcs = Number(data.openingTotalPcs);
-                    } else if (data.openingQty != null) {
-                        openingTotalPcs = Math.round(Number(data.openingQty) * factor);
-                    } else if (openingMapGlobal.has(doc.id)) {
-                        openingTotalPcs = openingMapGlobal.get(doc.id);
-                    }
-
-                    const salesPcs = salesMapGlobal.get(doc.id) || 0;
-                    const purchasesPcs = purchasesMapGlobal.get(doc.id) || 0;
-                    const calculatedRealPcs = openingTotalPcs + purchasesPcs - salesPcs;
-
-                    allItems.push({
-                        id: doc.id,
-                        ...data,
-                        openingTotalPcsCalc: openingTotalPcs,
-                        purchasesPcsCalc: purchasesPcs,
-                        salesPcsCalc: salesPcs,
-                        totalPcs: calculatedRealPcs,
-                        qty: calculatedRealPcs
-                    });
-                }
+            const rows = calculateStockBalances({
+                inventoryItems: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+                salesInvoices: rawInvoicesList,
+                supplierTransactions: rawPurchasesList,
+                openingTransactions
             });
+            allItems = rows.map(r => ({
+                ...r,
+                openingTotalPcsCalc: r.openingPcs,
+                purchasesPcsCalc: r.purchasesPcs,
+                salesPcsCalc: r.salesPcs,
+                qty: r.totalPcs
+            }));
 
             allItems.sort((a, b) => {
                 const qtyA = Number(a.totalPcs || 0);

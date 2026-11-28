@@ -297,6 +297,7 @@
 </div>
 
 <script type="module">
+    import { calculateStockBalances } from "./stock-balance.mjs";
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, getDocs, doc, setDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -343,84 +344,23 @@
                 getDocs(query(collection(db, "inventory_transactions"), where("type", "==", "opening_balance")))
             ]);
 
-            const factorsMap = new Map();
-            const namesMap = new Map();
-            const purchasesMap = new Map();
-            const openingMap = new Map();
-
-            transSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.productId) {
-                    openingMap.set(data.productId, (openingMap.get(data.productId) || 0) + (Number(data.quantityPcs) || 0));
-                }
+            // الحساب مشترك مع صفحة المخزن والأصناف (stock-balance.mjs) حتى يظهر نفس الرصيد في كل مكان
+            const rows = calculateStockBalances({
+                inventoryItems: inventorySnap.docs.map(d => ({ id: d.id, ...d.data() })),
+                salesInvoices: invoicesSnap.docs.map(d => d.data()),
+                supplierTransactions: supplierSnap.docs.map(d => d.data()),
+                openingTransactions: transSnap.docs.map(d => d.data())
             });
 
-            inventorySnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (!data.isDeleted) {
-                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                    factorsMap.set(docSnap.id, factor);
-                    if (data.name) namesMap.set(data.name.trim(), docSnap.id);
-                }
-            });
-
-            // المبيعات
-            invoicesSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
-                items.forEach(item => {
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const rawQty = Number(item.qty) || 0;
-                        const u = String(item.unit || '').trim().toLowerCase();
-                        const isCarton = item.isCarton === true || u === 'box' || u === 'carton' || u === 'كرتونة' || u === 'كرتونه';
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-                        
-                        salesMap.set(id, (salesMap.get(id) || 0) + (item.isReturn ? -pcs : pcs));
-                    }
-                });
-            });
-
-            // المشتريات
-            supplierSnap.forEach(docSnap => {
-                const items = docSnap.data().items || [];
-                items.forEach(item => {
-                    const id = item.stockId || namesMap.get(item.name?.trim());
-                    if (id) {
-                        const factor = factorsMap.get(id) || 1;
-                        const isReturn = Number(item.returnQty) > 0 || item.isReturn === true;
-                        const rawQty = isReturn ? Number(item.returnQty || item.qty) : Number(item.qty);
-                        const u = String(item.unitName || item.unit || '').trim().toLowerCase();
-                        const isCarton = item.isCarton !== false || u === 'كرتونة' || u === 'box' || u === 'carton';
-                        const pcs = isCarton ? (rawQty * factor) : rawQty;
-
-                        purchasesMap.set(id, (purchasesMap.get(id) || 0) + (isReturn ? -pcs : pcs));
-                    }
-                });
-            });
-
-            // إعداد أرقام رصيد المخزن الحالي
-            inventoryList = [];
-            inventorySnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if (!data.isDeleted) {
-                    const factor = Math.max(1, Number(data.unitFactor || data.factor || data.pcsPerCarton) || 1);
-                    let openingPcs = 0;
-                    if (data.openingTotalPcs != null) openingPcs = Number(data.openingTotalPcs);
-                    else if (data.openingQty != null) openingPcs = Math.round(Number(data.openingQty) * factor);
-                    else if (openingMap.has(docSnap.id)) openingPcs = openingMap.get(docSnap.id);
-
-                    const sPcs = salesMap.get(docSnap.id) || 0;
-                    const pPcs = purchasesMap.get(docSnap.id) || 0;
-                    const totalWhPcs = openingPcs + pPcs - sPcs;
-
-                    inventoryList.push({
-                        id: docSnap.id,
-                        name: data.name || 'بدون اسم',
-                        factor: factor,
-                        totalWarehousePcs: totalWhPcs
-                    });
-                }
+            salesMap = new Map();
+            inventoryList = rows.map(r => {
+                salesMap.set(r.id, r.salesPcs);
+                return {
+                    id: r.id,
+                    name: r.name || 'بدون اسم',
+                    factor: r.capacity,
+                    totalWarehousePcs: r.totalPcs
+                };
             });
 
             // استماع لحظي لتزامن الحمولة عبر باقي الأجهزة
