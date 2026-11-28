@@ -471,6 +471,13 @@ try {
         applyFilters();
     };
 
+    // Firestore names and notes are untrusted text: never inject them as HTML.
+    function escapeCashText(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+    }
+
     window.applyFilters = () => {
         const searchTxt = document.getElementById('cashSearchBar').value.toLowerCase();
         const tbody = document.getElementById('cashFlowTableBody');
@@ -498,14 +505,14 @@ try {
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td class="text-secondary" style="font-size: 0.75rem;">${item.date}</td>
+                    <td class="text-secondary" style="font-size: 0.75rem;">${escapeCashText(item.date)}</td>
                     <td>
                         <span class="badge-flow ${isIncoming ? 'bg-in' : 'bg-out'}">
                             ${isIncoming ? 'وارد' : 'صادر'}
                         </span>
                     </td>
-                    <td class="fw-bold text-dark text-start">${item.customerName}</td>
-                    <td class="text-muted text-start" style="font-size: 0.75rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.notes}">${item.notes}</td>
+                    <td class="fw-bold text-dark text-start">${escapeCashText(item.customerName)}</td>
+                    <td class="text-muted text-start" style="font-size: 0.75rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeCashText(item.notes)}">${escapeCashText(item.notes)}</td>
                     <td class="amount-cell ${isIncoming ? 'text-in' : 'text-out'}">
                         ${isIncoming ? '+' : '-'}${item.amount.toLocaleString()}
                     </td>
