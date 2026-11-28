@@ -95,6 +95,14 @@
             #content-to-export { display: none !important; }
             #print-area { display: block !important; }
         }
+    
+        .customer-health {background:#fff;border:1px solid var(--border);border-radius:15px;padding:14px;margin:12px 0;box-shadow:0 2px 8px #00000008}
+        .customer-health .health-title{font-weight:800;font-size:.95rem;display:flex;justify-content:space-between;gap:8px;align-items:center}
+        .customer-health .health-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:10px 0}
+        .customer-health .health-stat{background:#f4f7f6;border-radius:9px;padding:8px;font-size:.76rem}
+        .customer-health .health-stat strong{display:block;font-size:.88rem;color:#0b5e3d}
+        .customer-health .health-reason{font-size:.8rem;line-height:1.8;color:#4b5563}
+        .customer-health .health-action{font-size:.82rem;background:#ecf7f0;border-radius:9px;padding:9px;margin-top:8px}
     </style>
 </head>
 <body>
@@ -122,6 +130,14 @@
                 <div id="balanceType" class="badge-status">---</div>
             </div>
         </div>
+
+
+<div id="customerHealth" class="customer-health" style="display:none" aria-live="polite">
+  <div class="health-title"><span>📊 حالة العميل ومتابعته</span><span id="healthBadge"></span></div>
+  <div class="health-grid" id="healthStats"></div>
+  <div class="health-reason" id="healthReason"></div>
+  <div class="health-action" id="healthAction"></div>
+</div>
 
         <div class="table-responsive">
             <table class="statement-table" id="myTable">
@@ -174,6 +190,7 @@
         <span style="font-size: 18px; font-weight: bold;"> ج.م</span>
     </div>
 </div>
+
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -229,6 +246,37 @@
                 return new Date(year, month, day, hour, minute).getTime();
             }
         } catch (e) { } return 0;
+    }
+
+
+    function renderCustomerHealth(invoices, balance) {
+        const panel = document.getElementById('customerHealth');
+        const now = Date.now(), day = 86400000;
+        const valid = invoices.filter(v => Number.isFinite(v.ts) && v.ts > 0 && v.ts <= now && Number(v.tot) > 0).sort((a,b)=>a.ts-b.ts);
+        const days = valid.length ? Math.floor((now-valid[valid.length-1].ts)/day) : null;
+        const uniqueDays = [...new Set(valid.map(v=>new Date(v.ts).toISOString().slice(0,10)))];
+        const intervals = uniqueDays.slice(1).map((d,i)=>(Date.parse(d)-Date.parse(uniqueDays[i]))/day).filter(x=>x>0);
+        const cadence = intervals.length ? intervals.sort((a,b)=>a-b)[Math.floor(intervals.length/2)] : null;
+        const recent = valid.filter(v=>v.ts>=now-30*day).reduce((a,v)=>a+Math.max(0,v.tot),0);
+        const prior = valid.filter(v=>v.ts>=now-60*day && v.ts<now-30*day).reduce((a,v)=>a+Math.max(0,v.tot),0);
+        let label='⚪ بيانات غير كافية',reason='لا توجد مشتريات مؤرخة كافية لتقييم نمط العميل.',action='تابع العميل بعد توفر سجل مشتريات واضح.';
+        if(valid.length===1){label='🔵 عميل جديد';reason='تم تسجيل عملية شراء واحدة فقط.';action='تابعه بعد أول عملية شراء لمعرفة احتياجاته.';}
+        else if(uniqueDays.length<3){label='⚪ بيانات غير كافية';reason='يلزم الشراء في ثلاثة أيام مختلفة على الأقل لتقدير نمط الشراء بثقة.';action='تابع العميل حتى يتوفر سجل كافٍ.';}
+        else if(uniqueDays.length>=3 && cadence!==null){
+            const ratio=days/Math.max(cadence,7);
+            if(ratio>=3){label='🔴 متوقف عن الشراء';reason='تأخر عن نمط شرائه المعتاد بنحو '+ratio.toFixed(1)+' مرة.';action='تواصل معه لمعرفة سبب التوقف واحتياجاته.';}
+            else if(ratio>=1.7){label='🟠 معرض للتوقف';reason='تأخر عن دورة الشراء المعتادة.';action='اتصل به واسأله عن الأصناف التي يحتاجها.';}
+            else if(prior>0 && recent<prior*.65 && days<=30){label='🟡 نشاطه بيقل';reason='مشترياته آخر 30 يوم أقل من الفترة السابقة بنحو '+Math.round((1-recent/prior)*100)+'٪.';action='راجع معه الأسعار وتوافر الأصناف المعتادة.';}
+            else if(valid.length>=5 && ratio<=1.2){label='🟢 منتظم';reason='مواعيد الشراء قريبة من نمطه المعتاد.';action='حافظ على التواصل وتوفير الأصناف المطلوبة.';}
+            else {label='🟢 نشط';reason='آخر شراء ضمن الفترة المتوقعة حسب سجله.';action='تابع احتياجاته المعتادة.';}
+        }
+        if(balance>0) action+=' يوجد أيضًا رصيد مستحق؛ راجع الحساب معه بشكل مستقل عن تقييم نشاطه.';
+        const money=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
+        document.getElementById('healthBadge').textContent=label;
+        document.getElementById('healthStats').innerHTML='<div class="health-stat">آخر شراء<strong>'+ (days===null?'غير معروف':days+' يوم')+'</strong></div><div class="health-stat">دورة الشراء المعتادة<strong>'+(cadence===null?'غير كافية':Math.round(cadence)+' يوم')+'</strong></div><div class="health-stat">مشتريات 30 يوم<strong>'+money(recent)+' ج.م</strong></div><div class="health-stat">عدد الفواتير<strong>'+valid.length+'</strong></div>';
+        document.getElementById('healthReason').textContent='سبب التصنيف: '+reason;
+        document.getElementById('healthAction').textContent='الإجراء المقترح: '+action;
+        panel.style.display='block';
     }
 
     async function loadStatement() {
@@ -313,6 +361,7 @@
                 }
             });
 
+            const customerInvoiceHistory = list.filter(v => v.t === 'فاتورة مبيعات');
             // ترتيب زمني تصاعدي لتسلسل الرصيد
             list.sort((a,b) => a.ts - b.ts);
             
@@ -345,6 +394,7 @@
             document.getElementById('displayTotal').innerText = runningDebt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             document.getElementById('p-balance').innerText = runningDebt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             
+            renderCustomerHealth(customerInvoiceHistory, runningDebt);
             const badge = document.getElementById('balanceType');
             const pStatus = document.getElementById('p-status');
 
