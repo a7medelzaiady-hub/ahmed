@@ -580,7 +580,12 @@
         document.getElementById('otherTypeDiv').style.display = (val === 'أخرى') ? 'block' : 'none';
     };
 
+    // فتحنا الصفحة من كارت في الخزينة (cash.html): بعد الحفظ أو الإلغاء نرجع لنفس المكان
+    const urlQ = new URLSearchParams(location.search);
+    const CAME_FROM_CASH = urlQ.get('from') === 'cash';
+
     window.cancelEdit = () => {
+        const wasEditing = !!currentEditId;
         currentEditId = null;
         document.getElementById('btnSave').textContent = "تأكيد وحفظ الحركة";
         document.getElementById('btnSave').className = "btn-save";
@@ -591,6 +596,7 @@
         document.getElementById('expDate').valueAsDate = new Date();
         document.getElementById('expType').value = 'جاز';
         toggleOtherField('جاز');
+        if (CAME_FROM_CASH && wasEditing && !window.__savingEdit) { location.href = 'cash.html'; }
     };
 
     window.saveExpense = async () => {
@@ -627,7 +633,9 @@
                     }
                 }
                 alert("تم تحديث المصروف بنجاح ✅");
+                window.__savingEdit = true;
                 cancelEdit();
+                if (CAME_FROM_CASH) { location.href = 'cash.html'; return; }
                 location.reload();
 
             } else {
@@ -1016,6 +1024,15 @@
             document.body.removeChild(container);
         });
     };
+
+    // فتح مصروف مباشرة للتعديل من الرابط: expenses.html?edit=<id>
+    (async () => {
+        const editParam = urlQ.get('edit');
+        if (!editParam) return;
+        await loadExpenses();
+        if (allExpenses.some(e => e.id === editParam)) editExpense(editParam);
+        else if (CAME_FROM_CASH) { alert("لم يتم العثور على هذا المصروف"); location.href = 'cash.html'; }
+    })();
 
     const triggerTabList = document.querySelectorAll('#expenseTabs button');
     triggerTabList.forEach(tabEl => {

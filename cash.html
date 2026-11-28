@@ -83,6 +83,10 @@ body { background:#e2e8f0; font-family:'Cairo',sans-serif; padding-bottom:100px;
 
 .filter-row { display:flex; gap:8px; margin:0 16px 14px; }
 .filter-row input { flex:1; }
+.movement-item.clickable { cursor:pointer; }
+.movement-item.clickable:active { transform:scale(0.99); }
+.movement-item.flash { animation:mvflash 1.6s ease; }
+@keyframes mvflash { 0%,60% { box-shadow:0 0 0 3px #fcd34d; } 100% { box-shadow:none; } }
 .dir-filter { display:flex; gap:8px; margin:0 16px 10px; }
 .dir-chip { flex:1; border:1.5px solid var(--border-color); background:#fff; color:var(--text-muted); border-radius:var(--radius-sm); padding:9px 6px; font-weight:800; font-size:0.85rem; font-family:inherit; }
 .dir-chip.active[data-dir="all"] { background:var(--text-dark); color:#fff; border-color:var(--text-dark); }
@@ -474,7 +478,7 @@ async function loadCashData() {
         movements.push({
             id: 'exp_' + d.id, direction: 'out', amount: amt,
             note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
-            date: getDateStr(data), timeMs: toMillis(data), source: 'expense'
+            date: getDateStr(data), timeMs: toMillis(data), source: 'expense', expenseId: d.id
         });
     });
 
@@ -579,7 +583,7 @@ async function loadWalletData() {
             id: 'exp_' + d.id, direction: 'out', amount: amt,
             provider: data.paymentMethod,
             note: `مصروف: ${data.type}${data.note ? (' - ' + data.note) : ''}`,
-            date: getDateStr(data), timeMs: toMillis(data)
+            date: getDateStr(data), timeMs: toMillis(data), expenseId: d.id
         });
     });
 
@@ -668,7 +672,7 @@ window.renderMovements = function () {
     }
 
     container.innerHTML = list.map(m => `
-        <div class="movement-item ${m.direction}">
+        <div class="movement-item ${m.direction}${m.expenseId ? ' clickable' : ''}" id="mv-${m.id}"${m.expenseId ? ` onclick="openExpense('${m.expenseId}','${m.id}')" title="اضغط لتعديل المصروف"` : ''}>
             <div class="mv-info">
                 <span class="mv-note">${m.note}</span>
                 <span class="mv-meta"><i class="far fa-calendar-alt me-1"></i><span class="num">${m.date || 'بلا تاريخ'}</span></span>
@@ -789,7 +793,47 @@ window.exportToExcel = function () {
     XLSX.writeFile(wb, `${sheetName}_${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 
-init();
+// الضغط على كارت مصروف يفتح تعديله، ونحفظ مكانك (التبويب والفلاتر ومكان السطر) لنرجع له بعد الحفظ
+window.openExpense = function (expenseId, mvId) {
+    try {
+        sessionStorage.setItem('cashReturn', JSON.stringify({
+            tab: currentTab, dir: dirFilter,
+            provider: document.getElementById('providerFilter').value,
+            search: document.getElementById('searchInput').value,
+            date: document.getElementById('dateFilter').value,
+            mvId: mvId, scrollY: window.scrollY
+        }));
+    } catch (e) {}
+    location.href = 'expenses.html?edit=' + encodeURIComponent(expenseId) + '&from=cash';
+};
+
+let pendingReturn = null;
+try {
+    const raw = sessionStorage.getItem('cashReturn');
+    if (raw) { pendingReturn = JSON.parse(raw); sessionStorage.removeItem('cashReturn'); }
+} catch (e) { pendingReturn = null; }
+
+function applyReturnState() {
+    const r = pendingReturn; pendingReturn = null;
+    if (!r) return;
+    document.getElementById('searchInput').value = r.search || '';
+    document.getElementById('dateFilter').value = r.date || '';
+    dirFilter = r.dir || 'all';
+    document.querySelectorAll('#dirFilter .dir-chip').forEach(b => b.classList.toggle('active', b.dataset.dir === dirFilter));
+    renderMovements();
+    if (r.provider) { const ps = document.getElementById('providerFilter'); ps.value = r.provider; renderMovements(); }
+    const el = document.getElementById('mv-' + r.mvId);
+    if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); }
+    else window.scrollTo(0, r.scrollY || 0);
+}
+
+// نرجع للتبويب الذي كنت فيه، ثم نطبق الفلاتر ونصل للسطر بعد تحميل الحركات
+const _origInit = window.init;
+window.init = async function () {
+    await _origInit();
+    applyReturnState();
+};
+if (pendingReturn && pendingReturn.tab === 'wallet') switchTab('wallet'); else init();
 </script>
 
 <script>
