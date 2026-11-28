@@ -28,4 +28,15 @@ const [r] = calculateStockBalances({
   openingTransactions: []
 });
 assert.equal(r.totalPcs, 82);
+// سطر شراء قديم محفوظ بعبوة 1 وعبوة الصنف الحالية 24: الكرتونة تُحسب 24 مش 1
+const [r2] = calculateStockBalances({
+  inventoryItems: [{ id: 'f1', name: 'فورما صغير', unitFactor: 24, openingTotalPcs: 24 }],
+  salesInvoices: [{ items: [it({ qty: 54, unit: 'كرتونة', isCarton: true, unitFactor: 24 })] }],
+  supplierTransactions: [
+    { items: [it({ qty: 52, unitName: 'كرتونة' })] },
+    { items: [it({ qty: 2, unitName: 'كرتونة', unitFactor: 1, factor: 1 })] }
+  ],
+  openingTransactions: []
+});
+assert.equal(r2.totalPcs, 24, 'عبوة السطر القديمة يجب ألا تغيّر الرصيد');
 console.log('stock unified checks passed');

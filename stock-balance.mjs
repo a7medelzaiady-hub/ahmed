@@ -82,12 +82,15 @@ export function calculateStockBalances({
             if (!item) continue;
             const id = productIdForItem(item);
             if (!id) continue;
-            const factor = positiveFactor(item.unitFactor, item.factor, factors.get(id));
+            // عبوة الكرتونة = عبوة الصنف الحالية في المخزن، وليست العبوة المحفوظة داخل سطر الفاتورة وقت إنشائها
+            // (أسطر قديمة قد تحمل عبوة 1 فتتحول الكرتونة لقطعة واحدة ويظهر رصيد سالب خاطئ)
+            const factor = factors.get(id) || positiveFactor(item.unitFactor, item.factor);
+            const lineFactor = positiveFactor(item.unitFactor, item.factor);
             const qty = numberOrZero(item.qty);
             const pcs = isCartonUnit(item.unit || item.unitName, item.isCarton) ? qty * factor : qty;
             const delta = (invoiceIsReturn || item.isReturn === true) ? -Math.abs(pcs) : pcs;
             sales.set(id, (sales.get(id) || 0) + delta);
-            note(id, { kind: (invoiceIsReturn || item.isReturn === true) ? 'sale-return' : 'sale', ref: invoice.id || invoice.invoiceNumber || '', date: invoice.date || invoice.dateStr || '', party: invoice.customerName || invoice.clientName || '', rawQty: qty, unit: item.unit || item.unitName || '', isCartonFlag: item.isCarton === true, factor, pcs, delta: -delta, flags: [!(item.unit || item.unitName) && item.isCarton !== true ? 'بدون وحدة (اعتُبرت قطع)' : ''].filter(Boolean) });
+            note(id, { kind: (invoiceIsReturn || item.isReturn === true) ? 'sale-return' : 'sale', ref: invoice.id || invoice.invoiceNumber || '', date: invoice.date || invoice.dateStr || '', party: invoice.customerName || invoice.clientName || '', rawQty: qty, unit: item.unit || item.unitName || '', isCartonFlag: item.isCarton === true, factor, pcs, delta: -delta, flags: [!(item.unit || item.unitName) && item.isCarton !== true ? 'بدون وحدة (اعتُبرت قطع)' : '', (item.unitFactor || item.factor) && lineFactor !== factor ? `عبوة السطر ${lineFactor} تختلف عن عبوة الصنف ${factor} (اعتُمدت ${factor})` : ''].filter(Boolean) });
         }
     }
 
@@ -97,12 +100,15 @@ export function calculateStockBalances({
             if (!item) continue;
             const id = productIdForItem(item);
             if (!id) continue;
-            const factor = positiveFactor(item.unitFactor, item.factor, factors.get(id));
+            // عبوة الكرتونة = عبوة الصنف الحالية في المخزن، وليست العبوة المحفوظة داخل سطر الفاتورة وقت إنشائها
+            // (أسطر قديمة قد تحمل عبوة 1 فتتحول الكرتونة لقطعة واحدة ويظهر رصيد سالب خاطئ)
+            const factor = factors.get(id) || positiveFactor(item.unitFactor, item.factor);
+            const lineFactor = positiveFactor(item.unitFactor, item.factor);
             const isReturn = numberOrZero(item.returnQty) > 0 || item.isReturn === true;
             const qty = numberOrZero(isReturn ? (item.returnQty || item.qty) : item.qty);
             const pcs = isCartonUnit(item.unitName || item.unit, item.isCarton) ? qty * factor : qty;
             purchases.set(id, (purchases.get(id) || 0) + (isReturn ? -Math.abs(pcs) : pcs));
-            note(id, { kind: isReturn ? 'purchase-return' : 'purchase', ref: transaction.id || '', date: transaction.date || transaction.dateStr || '', party: transaction.supplierName || '', rawQty: qty, unit: item.unitName || item.unit || '', isCartonFlag: item.isCarton === true, factor, pcs, delta: isReturn ? -Math.abs(pcs) : pcs, flags: [!(item.unitName || item.unit) && item.isCarton !== true ? 'بدون وحدة (اعتُبرت قطع)' : ''].filter(Boolean) });
+            note(id, { kind: isReturn ? 'purchase-return' : 'purchase', ref: transaction.id || '', date: transaction.date || transaction.dateStr || '', party: transaction.supplierName || '', rawQty: qty, unit: item.unitName || item.unit || '', isCartonFlag: item.isCarton === true, factor, pcs, delta: isReturn ? -Math.abs(pcs) : pcs, flags: [!(item.unitName || item.unit) && item.isCarton !== true ? 'بدون وحدة (اعتُبرت قطع)' : '', (item.unitFactor || item.factor) && lineFactor !== factor ? `عبوة السطر ${lineFactor} تختلف عن عبوة الصنف ${factor} (اعتُمدت ${factor})` : ''].filter(Boolean) });
         }
     }
 
