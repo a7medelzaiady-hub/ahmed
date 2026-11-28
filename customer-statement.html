@@ -252,7 +252,7 @@
     function renderCustomerHealth(invoices, balance) {
         const panel = document.getElementById('customerHealth');
         const now = Date.now(), day = 86400000;
-        const valid = invoices.filter(v => v.ts > 0 && v.ts <= now && Number.isFinite(v.ts)).sort((a,b)=>a.ts-b.ts);
+        const valid = invoices.filter(v => Number.isFinite(v.ts) && v.ts > 0 && v.ts <= now && Number(v.tot) > 0).sort((a,b)=>a.ts-b.ts);
         const days = valid.length ? Math.floor((now-valid[valid.length-1].ts)/day) : null;
         const uniqueDays = [...new Set(valid.map(v=>new Date(v.ts).toISOString().slice(0,10)))];
         const intervals = uniqueDays.slice(1).map((d,i)=>(Date.parse(d)-Date.parse(uniqueDays[i]))/day).filter(x=>x>0);
@@ -261,11 +261,12 @@
         const prior = valid.filter(v=>v.ts>=now-60*day && v.ts<now-30*day).reduce((a,v)=>a+Math.max(0,v.tot),0);
         let label='⚪ بيانات غير كافية',reason='لا توجد مشتريات مؤرخة كافية لتقييم نمط العميل.',action='تابع العميل بعد توفر سجل مشتريات واضح.';
         if(valid.length===1){label='🔵 عميل جديد';reason='تم تسجيل عملية شراء واحدة فقط.';action='تابعه بعد أول عملية شراء لمعرفة احتياجاته.';}
-        else if(valid.length>1 && cadence!==null){
+        else if(uniqueDays.length<3){label='⚪ بيانات غير كافية';reason='يلزم الشراء في ثلاثة أيام مختلفة على الأقل لتقدير نمط الشراء بثقة.';action='تابع العميل حتى يتوفر سجل كافٍ.';}
+        else if(uniqueDays.length>=3 && cadence!==null){
             const ratio=days/Math.max(cadence,7);
             if(ratio>=3){label='🔴 متوقف عن الشراء';reason='تأخر عن نمط شرائه المعتاد بنحو '+ratio.toFixed(1)+' مرة.';action='تواصل معه لمعرفة سبب التوقف واحتياجاته.';}
             else if(ratio>=1.7){label='🟠 معرض للتوقف';reason='تأخر عن دورة الشراء المعتادة.';action='اتصل به واسأله عن الأصناف التي يحتاجها.';}
-            else if(prior>0 && recent<prior*.65){label='🟡 نشاطه بيقل';reason='مشترياته آخر 30 يوم أقل من الفترة السابقة بنحو '+Math.round((1-recent/prior)*100)+'٪.';action='راجع معه الأسعار وتوافر الأصناف المعتادة.';}
+            else if(prior>0 && recent<prior*.65 && days<=30){label='🟡 نشاطه بيقل';reason='مشترياته آخر 30 يوم أقل من الفترة السابقة بنحو '+Math.round((1-recent/prior)*100)+'٪.';action='راجع معه الأسعار وتوافر الأصناف المعتادة.';}
             else if(valid.length>=5 && ratio<=1.2){label='🟢 منتظم';reason='مواعيد الشراء قريبة من نمطه المعتاد.';action='حافظ على التواصل وتوفير الأصناف المطلوبة.';}
             else {label='🟢 نشط';reason='آخر شراء ضمن الفترة المتوقعة حسب سجله.';action='تابع احتياجاته المعتادة.';}
         }
