@@ -232,12 +232,12 @@
 
                 <div class="col-md-3">
                     <label class="form-label text-success">المبلغ النقدي (كاش)</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm border-success fw-bold text-success" id="vCashAmount" value="0.00" required>
+                    <input type="number" step="0.01" class="form-control form-control-sm border-success fw-bold text-success" id="vCashAmount" value="0.00" min="0" required>
                 </div>
 
                 <div class="col-md-3">
                     <label class="form-label" style="color: var(--wallet-color);">مبلغ المحفظة الإلكترونية</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm fw-bold" style="border-color: var(--wallet-color); color: var(--wallet-color);" id="vWalletAmount" value="0.00" required>
+                    <input type="number" step="0.01" class="form-control form-control-sm fw-bold" style="border-color: var(--wallet-color); color: var(--wallet-color);" id="vWalletAmount" value="0.00" min="0" required>
                 </div>
 
                 <div class="col-md-3">
@@ -382,7 +382,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, orderBy, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, orderBy, increment, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAS0NNcZy0t-LN2wCB7p0941jR0bo-MNls",
@@ -418,17 +418,55 @@
         }
     });
 
-    document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
+    // تاريخ اليوم بتوقيت الجهاز (toISOString بيرجع تاريخ UTC وبيطلع "أمس" بعد منتصف الليل بتوقيت مصر)
+    function todayLocal() {
+        const n = new Date();
+        const m = String(n.getMonth() + 1).padStart(2, '0');
+        const d = String(n.getDate()).padStart(2, '0');
+        return `${n.getFullYear()}-${m}-${d}`;
+    }
+    // تقريب لقرشين لتفادي أخطاء الفاصلة العائمة (0.1 + 0.2)
+    const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    // منع كسر الصفحة أو حقن HTML من أسماء/بيانات فيها رموز خاصة
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function readCache(key, fallback) {
+        try {
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : fallback;
+        } catch (e) {
+            localStorage.removeItem(key);
+            return fallback;
+        }
+    }
+    // أثر السند على رصيد العميل: القبض بينقص الرصيد، والصرف بيزوده
+    function voucherEffect(type, total) {
+        const t = Number(total) || 0;
+        return type === 'قبض' ? -t : (type === 'صرف' ? t : 0);
+    }
+    // يحسب الرصيد قبل/بعد السند. old = السند القديم عند التعديل {type,total,sameParty}
+    function planPosting(currentBalance, old, type, total) {
+        let previous = currentBalance;
+        let otherPartyUndo = 0;
+        if (old) {
+            const undo = -voucherEffect(old.type, old.total);
+            if (old.sameParty) previous = currentBalance + undo; else otherPartyUndo = undo;
+        }
+        previous = round2(previous);
+        return { previous, final: round2(previous + voucherEffect(type, total)), otherPartyUndo: round2(otherPartyUndo) };
+    }
+    const reapplyFilters = () => window.filterData();
+
+    document.getElementById('vDate').value = todayLocal();
 
     function loadCache() {
-        const cachedClients = localStorage.getItem('cache_clientsWithBalancesMap');
-        const cachedVouchers = localStorage.getItem('cache_clientsMultiVouchers');
-        
-        if (cachedClients) {
-            clientsMap = JSON.parse(cachedClients);
+        const cachedClients = readCache('cache_clientsWithBalancesMap', null);
+        const cachedVouchers = readCache('cache_clientsMultiVouchers', null);
+
+        if (cachedClients && typeof cachedClients === 'object') {
+            clientsMap = cachedClients;
         }
-        if (cachedVouchers) {
-            allVouchers = JSON.parse(cachedVouchers);
+        if (Array.isArray(cachedVouchers)) {
+            allVouchers = cachedVouchers;
             renderTable(allVouchers);
         }
     }
@@ -440,7 +478,7 @@
             custSnap.forEach(doc => { 
                 const d = doc.data();
                 clientsMap[doc.id] = { 
-                    name: d.name,
+                    name: d.name || '',
                     balance: Number(d.currentBalance || d.balance || 0)
                 }; 
             });
@@ -462,8 +500,8 @@
 
         let filteredHtml = '';
         for (let id in clientsMap) {
-            if (clientsMap[id].name.toLowerCase().includes(term)) {
-                filteredHtml += `<div class="search-item" onclick="selectParty('${id}', '${clientsMap[id].name}', ${clientsMap[id].balance})"><b>${clientsMap[id].name}</b></div>`;
+            if (String(clientsMap[id].name || '').toLowerCase().includes(term)) {
+                filteredHtml += `<div class="search-item" data-id="${esc(id)}"><b>${esc(clientsMap[id].name)}</b></div>`;
             }
         }
 
@@ -487,7 +525,18 @@
         balIndicator.classList.remove('d-none');
     };
 
-    document.getElementById('partySearch').addEventListener('input', window.searchParty);
+    document.getElementById('partySearch').addEventListener('input', () => {
+        // أي تعديل في الاسم يلغي العميل المختار سابقًا، فيمنع حفظ سند على عميل غير الظاهر في الخانة
+        document.getElementById('partyId').value = '';
+        document.getElementById('partyBalanceDisplay').classList.add('d-none');
+        window.searchParty();
+    });
+    document.getElementById('partyResults').addEventListener('click', (e) => {
+        const item = e.target.closest('.search-item[data-id]');
+        if (!item) return;
+        const c = clientsMap[item.dataset.id];
+        if (c) window.selectParty(item.dataset.id, c.name, c.balance);
+    });
 
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.search-container')) {
@@ -526,8 +575,8 @@
                 }
             });
 
-            localStorage.setItem('cache_clientsMultiVouchers', JSON.stringify(allVouchers));
-            renderTable(allVouchers);
+            try { localStorage.setItem('cache_clientsMultiVouchers', JSON.stringify(allVouchers)); } catch (e) { /* امتلأ التخزين المحلي: الكاش اختياري */ }
+            reapplyFilters();
 
         } catch (err) {
             if(allVouchers.length === 0) {
@@ -547,32 +596,34 @@
             return;
         }
 
+        let rows = '';
         data.forEach(v => {
             totalSum += v.amount;
             const pName = clientsMap[v.partyId] ? clientsMap[v.partyId].name : 'عميل غير مسجل';
             const badgeClass = v.type === 'قبض' ? 'badge-receipt' : 'badge-payment';
             const custodyClass = v.custody === 'يد أحمد' ? 'badge-ahmed' : 'badge-car';
 
-            tbody.innerHTML += `<tr>
-                    <td><span class="text-secondary fw-bold">${v.date}</span></td>
-                    <td><span class="badge-type ${badgeClass}">${v.type}</span></td>
-                    <td><span class="badge-custody ${custodyClass}">${v.custody}</span></td>
+            rows += `<tr>
+                    <td><span class="text-secondary fw-bold">${esc(v.date)}</span></td>
+                    <td><span class="badge-type ${badgeClass}">${esc(v.type)}</span></td>
+                    <td><span class="badge-custody ${custodyClass}">${esc(v.custody)}</span></td>
                     <td class="text-success fw-bold">${v.cashPaid > 0 ? v.cashPaid.toLocaleString('en-US', {minimumFractionDigits: 2}) : '-'}</td>
                     <td style="color: var(--wallet-color); font-weight:700;">${v.walletPaid > 0 ? v.walletPaid.toLocaleString('en-US', {minimumFractionDigits: 2}) : '-'}</td>
-                    <td class="text-end fw-bold text-dark">${pName}</td>
-                    <td class="text-end text-muted small">${v.note}</td>
+                    <td class="text-end fw-bold text-dark">${esc(pName)}</td>
+                    <td class="text-end text-muted small">${esc(v.note)}</td>
                     <td class="fw-bold ${v.type === 'قبض' ? 'text-success' : 'text-danger'}">${v.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                     <td>
-                        <button class="btn-share-row" onclick="openReceiptModalDirect('${v.type}', '${v.date}', '${v.partyId}', '${v.custody}', ${v.cashPaid}, ${v.walletPaid}, ${v.amount}, ${v.prevBalance}, ${v.newBalance})" title="مشاركة المعاينة"><i class="fas fa-share-alt"></i></button>
+                        <button class="btn-share-row" onclick="shareVoucher('${esc(v.id)}')" title="مشاركة المعاينة"><i class="fas fa-share-alt"></i></button>
                     </td>
                     <td>
-                        <button class="btn-edit-row" onclick="editVoucher('${v.id}')" title="تعديل السند"><i class="fas fa-edit"></i></button>
+                        <button class="btn-edit-row" onclick="editVoucher('${esc(v.id)}')" title="تعديل السند"><i class="fas fa-edit"></i></button>
                     </td>
                     <td>
-                        <button class="btn-delete-row" onclick="deleteVoucher('${v.id}')" title="حذف السند"><i class="fas fa-trash-alt"></i></button>
+                        <button class="btn-delete-row" onclick="deleteVoucher('${esc(v.id)}')" title="حذف السند"><i class="fas fa-trash-alt"></i></button>
                     </td>
                 </tr>`;
         });
+        tbody.innerHTML = rows;
 
         document.getElementById('vouchersTotal').innerText = `${totalSum.toLocaleString('en-US', {minimumFractionDigits: 2})} ج.م`;
     }
@@ -587,6 +638,12 @@
             return matchType && matchCustody;
         });
         renderTable(filtered);
+    };
+
+    window.shareVoucher = (id) => {
+        const v = allVouchers.find(item => item.id === id);
+        if (!v) return;
+        window.openReceiptModalDirect(v.type, v.date, v.partyId, v.custody, v.cashPaid, v.walletPaid, v.amount, v.prevBalance, v.newBalance);
     };
 
     window.openReceiptModalDirect = (type, date, partyId, custody, cashPaid, walletPaid, amount, prevBalance, newBalance) => {
@@ -653,7 +710,7 @@
         document.getElementById('vCashAmount').value = '0.00';
         document.getElementById('vWalletAmount').value = '0.00';
         document.getElementById('vNote').value = '';
-        document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('vDate').value = todayLocal();
         document.getElementById('partyBalanceDisplay').classList.add('d-none');
         
         document.getElementById('formTitle').innerHTML = `<i class="fas fa-plus-circle me-1"></i> تسجيل عملية عميل جديدة`;
@@ -685,7 +742,7 @@
                 } else {
                     const a = document.createElement('a');
                     a.href = canvas.toDataURL('image/png');
-                    a.download = `سند_سداد_${new Date().toISOString().split('T')[0]}.png`;
+                    a.download = `سند_سداد_${todayLocal()}.png`;
                     a.click();
                     alert("تم حفظ الصورة بجهازك بنجاح.");
                 }
@@ -698,20 +755,27 @@
         const partyId = document.getElementById('partyId').value;
         if(!partyId) { alert("الرجاء اختيار العميل الصحيح من قائمة البحث الذكي"); return; }
 
-        let cashAmt = parseFloat(document.getElementById('vCashAmount').value) || 0;
-        let walletAmt = parseFloat(document.getElementById('vWalletAmount').value) || 0;
-        let totalAmount = cashAmt + walletAmt;
+        const cashAmt = round2(parseFloat(document.getElementById('vCashAmount').value) || 0);
+        const walletAmt = round2(parseFloat(document.getElementById('vWalletAmount').value) || 0);
+        const totalAmount = round2(cashAmt + walletAmt);
 
+        if(cashAmt < 0 || walletAmt < 0) {
+            alert("لا يمكن إدخال مبلغ بالسالب، اختر نوع العملية (قبض/صرف) بدلاً من ذلك.");
+            return;
+        }
         if(totalAmount <= 0) {
             alert("يجب أن يكون إجمالي السند أكبر من صفر.");
             return;
         }
 
         const submitBtn = document.getElementById('btnSubmitForm');
+        const editId = document.getElementById('editVoucherId').value;
+        const idleLabel = editId
+            ? `تحديث السند <i class="fas fa-check-double ms-1"></i>`
+            : `حفظ السند <i class="fas fa-save ms-1"></i>`;
         submitBtn.disabled = true;
         submitBtn.innerText = "جاري الحفظ والترحيل...";
 
-        const editId = document.getElementById('editVoucherId').value;
         const vDateVal = document.getElementById('vDate').value;
         const vTypeVal = document.getElementById('vType').value;
         const custodyVal = document.getElementById('vCustody').value;
@@ -720,35 +784,35 @@
         try {
             const custRef = doc(db, "customers", partyId);
             const custDoc = await getDoc(custRef);
-            let currentDbBalance = 0;
-            if (custDoc.exists()) {
-                currentDbBalance = Number(custDoc.data().currentBalance || custDoc.data().balance || 0);
+            if (!custDoc.exists()) {
+                alert("هذا العميل غير موجود في قاعدة البيانات، اختر عميلاً آخر.");
+                return;
             }
+            const currentDbBalance = Number(custDoc.data().currentBalance || custDoc.data().balance || 0);
 
-            let previousBalance = currentDbBalance;
-
-            if(editId) {
+            // عند التعديل نشيل أثر السند القديم من رصيد عميله هو، مش من عميل تاني
+            let oldInfo = null;
+            let oldPartyRef = null;
+            if (editId) {
                 const oldVoucherSnap = await getDoc(doc(db, "transactions", editId));
-                if(oldVoucherSnap.exists()) {
+                if (oldVoucherSnap.exists()) {
                     const oldData = oldVoucherSnap.data();
                     const oldCash = Number(oldData.cashPaid !== undefined ? oldData.cashPaid : (oldData.cashAmount || 0));
                     const oldWallet = Number(oldData.walletPaid !== undefined ? oldData.walletPaid : (oldData.walletAmount || 0));
-                    const oldTotal = oldData.amount || (oldCash + oldWallet);
-                    
-                    if (oldData.type === 'قبض') {
-                        previousBalance += oldTotal;
-                    } else if (oldData.type === 'صرف') {
-                        previousBalance -= oldTotal;
+                    const oldTotal = Number(oldData.amount || (oldCash + oldWallet));
+                    const sameParty = !oldData.partyId || oldData.partyId === partyId;
+                    oldInfo = { type: oldData.type, total: oldTotal, sameParty };
+                    if (!sameParty) {
+                        const oldCustSnap = await getDoc(doc(db, "customers", oldData.partyId));
+                        if (oldCustSnap.exists()) oldPartyRef = oldCustSnap.ref;
                     }
                 }
             }
 
-            let finalNewBalance = previousBalance;
-            if (vTypeVal === 'قبض') {
-                finalNewBalance -= totalAmount;
-            } else if (vTypeVal === 'صرف') {
-                finalNewBalance += totalAmount;
-            }
+            const plan = planPosting(currentDbBalance, oldInfo, vTypeVal, totalAmount);
+            const previousBalance = plan.previous;
+            const finalNewBalance = plan.final;
+            const oldPartyUndo = oldPartyRef ? plan.otherPartyUndo : 0;
 
             const voucherPayload = {
                 date: vDateVal,
@@ -764,19 +828,26 @@
                 newBalance: finalNewBalance
             };
 
+            // كل التغييرات (السند + رصيد العميل) في دفعة واحدة: يا تتنفذ كلها يا ولا حاجة
+            const batch = writeBatch(db);
             if (editId) {
-                await updateDoc(doc(db, "transactions", editId), voucherPayload);
+                batch.update(doc(db, "transactions", editId), voucherPayload);
             } else {
-                await addDoc(collection(db, "transactions"), voucherPayload);
+                batch.set(doc(collection(db, "transactions")), voucherPayload);
             }
-
-            const netBalanceDiff = finalNewBalance - currentDbBalance;
-            await updateDoc(custRef, { currentBalance: increment(netBalanceDiff) });
+            const netBalanceDiff = round2(finalNewBalance - currentDbBalance);
+            if (netBalanceDiff !== 0) {
+                batch.update(custRef, { currentBalance: increment(netBalanceDiff) });
+            }
+            if (oldPartyRef && oldPartyUndo !== 0) {
+                batch.update(oldPartyRef, { currentBalance: increment(round2(oldPartyUndo)) });
+            }
+            await batch.commit();
 
             resetVoucherForm();
             await fetchClientsData();
             await loadVouchers();
-            
+
             openReceiptModalDirect(vTypeVal, vDateVal, partyId, custodyVal, cashAmt, walletAmt, totalAmount, previousBalance, finalNewBalance);
 
             setTimeout(() => {
@@ -785,37 +856,47 @@
 
         } catch (err) {
             console.error(err);
-            alert("حدث خطأ مالي أثناء ترحيل بيانات السند.");
+            alert("حدث خطأ مالي أثناء ترحيل بيانات السند. لم يتم حفظ أي تغيير، حاول مرة أخرى.");
         } finally {
             submitBtn.disabled = false;
+            // لو الحفظ فشل، نرجّع نص الزر (كان بيفضل "جاري الحفظ..." للأبد)
+            submitBtn.innerHTML = document.getElementById('editVoucherId').value
+                ? `تحديث السند <i class="fas fa-check-double ms-1"></i>`
+                : `حفظ السند <i class="fas fa-save ms-1"></i>`;
         }
     });
 
     window.deleteVoucher = async (id) => {
         if(confirm("هل أنت متأكد من حذف حركة العميل هذه نهائياً؟")) {
             try {
-                const vSnap = await getDoc(doc(db, "transactions", id));
+                const vRef = doc(db, "transactions", id);
+                const vSnap = await getDoc(vRef);
+                const batch = writeBatch(db);
+
                 if (vSnap.exists()) {
                     const d = vSnap.data();
                     const cash = Number(d.cashPaid !== undefined ? d.cashPaid : (d.cashAmount || 0));
                     const wallet = Number(d.walletPaid !== undefined ? d.walletPaid : (d.walletAmount || 0));
-                    const total = d.amount || (cash + wallet);
+                    const total = Number(d.amount || (cash + wallet));
+                    const reverseAmount = round2(-voucherEffect(d.type, total));
 
-                    let reverseAmount = 0;
-                    if (d.type === 'قبض') {
-                        reverseAmount = total;
-                    } else if (d.type === 'صرف') {
-                        reverseAmount = -total;
+                    // لو العميل اتحذف أو السند من غير partyId، نحذف السند من غير ما نرمي خطأ على رصيد مش موجود
+                    if (d.partyId && reverseAmount !== 0) {
+                        const custRef = doc(db, "customers", d.partyId);
+                        const custSnap = await getDoc(custRef);
+                        if (custSnap.exists()) {
+                            batch.update(custRef, { currentBalance: increment(reverseAmount) });
+                        }
                     }
-
-                    await updateDoc(doc(db, "customers", d.partyId), { currentBalance: increment(reverseAmount) });
                 }
 
-                await deleteDoc(doc(db, "transactions", id));
+                batch.delete(vRef);
+                await batch.commit();
                 alert("تم حذف السند بنجاح.");
                 await fetchClientsData();
                 await loadVouchers();
             } catch (err) {
+                console.error(err);
                 alert("فشل إجراء الحذف.");
             }
         }
@@ -847,7 +928,7 @@
         const ws = XLSX.utils.aoa_to_sheet(excelRows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "سندات حسابات العملاء");
-        XLSX.writeFile(wb, `تقرير_سندات_العملاء_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(wb, `تقرير_سندات_العملاء_${todayLocal()}.xlsx`);
     };
 
     async function init() {
