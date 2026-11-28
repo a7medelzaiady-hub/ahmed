@@ -140,6 +140,8 @@
 
     let masterCashArray = [];
     let currentTypeFilter = "all";
+    let visibleRows = 100;
+    let lastFilteredData = [];
 
     function extractPaidAmount(data) {
         if (data.paidAmount !== undefined) return Number(data.paidAmount) || 0;
@@ -175,22 +177,30 @@
         const tbody = document.getElementById('cashFlowTableBody');
         try {
             let namesCache = {};
+            const startedAt = performance.now();
+            // Parallelize independent collection reads; do not add extra Firestore reads.
+            const collections = ['customers','suppliers','transactions','invoices','sales','purchases','supplierTransactions','expenses'];
+            const snapshots = await Promise.all(collections.map(async name => {
+                try { return await getDocs(collection(db, name)); }
+                catch (error) { console.error('تعذر تحميل ' + name, error); throw error; }
+            }));
+            const cached = Object.fromEntries(collections.map((name, i) => [name, snapshots[i]]));
             masterCashArray = [];
 
             // 1. جلب أسماء العملاء والموردين للكاش والربط الذكي
             try {
-                const custSnap = await getDocs(collection(db, "customers"));
+                const custSnap = cached.customers;
                 custSnap.forEach(cDoc => { namesCache[cDoc.id] = cDoc.data().name; });
             } catch(e){}
 
             try {
-                const suppSnap = await getDocs(collection(db, "suppliers"));
+                const suppSnap = cached.suppliers;
                 suppSnap.forEach(sDoc => { namesCache[sDoc.id] = sDoc.data().name; });
             } catch(e){}
 
             // 2. جلب السندات المباشرة المقبوضة والمصروفة (transactions)
             try {
-                const snapTrans = await getDocs(collection(db, "transactions"));
+                const snapTrans = cached.transactions;
                 snapTrans.forEach(doc => {
                     const data = doc.data();
                     let resolvedName = data.customerName || data.partyName || data.supplierName;
@@ -215,7 +225,7 @@
 try {
 
     const invoicesSnap =
-        await getDocs(collection(db, "invoices"));
+        cached.invoices;
 
     invoicesSnap.forEach(doc => {
 
@@ -282,7 +292,7 @@ try {
 }
             // 3. جلب المدفوعات النقدية الفورية من فواتير المبيعات (sales)
             try {
-                const snapSales = await getDocs(collection(db, "sales"));
+                const snapSales = cached.sales;
                 snapSales.forEach(doc => {
                     const data = doc.data();
                     const paidAmount =
@@ -312,7 +322,7 @@ try {
 
             // 4. جلب المدفوعات النقدية الفورية من فواتير المشتريات (purchases)
             try {
-                const snapPurchases = await getDocs(collection(db, "purchases"));
+                const snapPurchases = cached.purchases;
                 snapPurchases.forEach(doc => {
                     const data = doc.data();
                     const paidAmount = extractPaidAmount(data);
@@ -338,7 +348,7 @@ try {
 try {
 
     const supplierTrans =
-        await getDocs(collection(db, "supplierTransactions"));
+        cached.supplierTransactions;
 
     supplierTrans.forEach(doc => {
 
@@ -377,7 +387,7 @@ try {
 
             // 5. جلب المصروفات العامة والتشغيلية (expenses) لدمجها كـ صادر
             try {
-                const snapExpenses = await getDocs(collection(db, "expenses"));
+                const snapExpenses = cached.expenses;
                 snapExpenses.forEach(doc => {
                     const data = doc.data();
                     const expenseAmount = Number(data.amount) || Number(data.value) || 0;
@@ -398,6 +408,7 @@ try {
             // ترتيب مصفوفة النقدية الشاملة من الأحدث إلى الأقدم
             masterCashArray.sort((a, b) => b.timestamp - a.timestamp);
 
+            console.info('Cash flow loaded in', Math.round(performance.now() - startedAt), 'ms');
             applyFilters();
 
         } catch (error) {
@@ -431,16 +442,20 @@ try {
             return matchesType && matchesSearch;
         });
 
+        lastFilteredData = filteredData;
         let totalIn = 0;
         let totalOut = 0;
+        for (const item of filteredData) {
+            if (item.type === 'قبض') totalIn += item.amount;
+            else totalOut += item.amount;
+        }
         tbody.innerHTML = "";
         
         if(filteredData.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">لا توجد نتائج مطابقة لفلترة البحث الحالية.</td></tr>`;
         } else {
-            filteredData.forEach(item => {
+            filteredData.slice(0, visibleRows).forEach(item => {
                 const isIncoming = item.type === "قبض";
-                if(isIncoming) totalIn += item.amount; else totalOut += item.amount;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -460,6 +475,17 @@ try {
             });
         }
 
+        if (filteredData.length > visibleRows) {
+            const more = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 5;
+            cell.className = 'text-center py-3';
+            const button = document.createElement('button');
+            button.className = 'btn btn-outline-success';
+            button.textContent = 'عرض المزيد (' + (filteredData.length - visibleRows) + ' متبقية)';
+            button.addEventListener('click', () => { visibleRows += 100; applyFilters(); });
+            cell.appendChild(button); more.appendChild(cell); tbody.appendChild(more);
+        }
         document.getElementById('totalRecordsCount').innerText = `${filteredData.length} حركة`;
         document.getElementById('sumIn').innerText = totalIn.toLocaleString() + " ج.م";
         document.getElementById('sumOut').innerText = totalOut.toLocaleString() + " ج.م";
@@ -472,7 +498,11 @@ try {
         else { netElement.style.color = "var(--danger)"; }
     };
 
-    document.getElementById('cashSearchBar').addEventListener('input', applyFilters);
+    let searchTimer;
+    document.getElementById('cashSearchBar').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { visibleRows = 100; applyFilters(); }, 250);
+    });
 
     // تفعيل جلب البيانات فور تحميل الصفحة
     fetchCashFlow();
