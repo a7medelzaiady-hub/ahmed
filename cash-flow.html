@@ -176,6 +176,9 @@
     async function fetchCashFlow() {
         const tbody = document.getElementById('cashFlowTableBody');
         try {
+            document.getElementById("totalRecordsCount").innerText = "جاري التحميل";
+            for (const id of ["sumIn", "sumOut", "netCache"]) document.getElementById(id).innerText = "—";
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4">جاري تحميل الحركات النقدية...</td></tr>`;
             let namesCache = {};
             const startedAt = performance.now();
             // Parallelize independent collection reads; do not add extra Firestore reads.
@@ -300,7 +303,6 @@ try {
     Number(data.cashPaid || 0) +
     Number(data.paidCash || 0) +
     Number(data.paid || 0);
-                    console.log("PURCHASE DATA", data);
                     
                     if (paidAmount > 0) {
                         let custName = data.customerName || data.partyName || "";
@@ -413,7 +415,10 @@ try {
 
         } catch (error) {
             console.error(error);
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">حدث خطأ أثناء تحميل حركة النقدية.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">تعذر تحميل بيانات حركة النقدية. <button id="retryCashFlow" class="btn btn-sm btn-outline-danger ms-2">إعادة المحاولة</button></td></tr>`;
+            document.getElementById("retryCashFlow").addEventListener("click", fetchCashFlow);
+            document.getElementById("totalRecordsCount").innerText = "تعذر التحميل";
+            for (const id of ["sumIn", "sumOut", "netCache"]) document.getElementById(id).innerText = "—";
         }
     }
 
