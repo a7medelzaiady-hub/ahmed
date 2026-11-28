@@ -104,13 +104,18 @@ function build(S,X){
     if(!a||gone(t)||!X.after(t))return;
     if(t.isInvoicePayment||t.invoiceId||t.expenseId||t.isExpense||t.type==='مصروف'||t.category)return;
     const p=t.partyId||t.customerId||t.supplierId;
-    const c=cash((t.method||t.paymentMethod||'')+' '+(t.note||''));
+    const c=cash((t.method||t.paymentMethod||'')+' '+(t.note||t.notes||''));
+    // سندات فيها نقدي ومحفظة مع بعض (سندات العملاء): كل جزء يتسجل على حسابه، بدل ما الكل يروح للخزينة النقدية
+    const cp=+t.cashPaid||0,wp=+t.walletPaid||0;
+    const split=(cp||wp)&&r2(cp+wp)===r2(a);
     const rec=t.type==='قبض',pay=t.type==='صرف'||t.type==='سداد';
     if(!rec&&!pay)return bump('حركات خزينة أخرى');
     const sup=t.supplierId||X.sup.has(p),cus=!sup&&X.cus.has(p);
     const who=sup?'2101':cus?'1103':'3102';
     const nm2=sup?'مورد':cus?(t.customerName||'عميل'):'';
-    out.push(E('trx_'+t.id,rec?'قبض':'صرف',t,(rec?'قبض ':'صرف ')+nm2,rec?[L(c,a),L(who,-a)]:[L(who,a),L(c,-a)]));
+    out.push(E('trx_'+t.id,rec?'قبض':'صرف',t,(rec?'قبض ':'صرف ')+nm2,
+      rec?(split?[L('1101',cp),L('1102',wp),L(who,-a)]:[L(c,a),L(who,-a)])
+         :(split?[L(who,a),L('1101',-cp),L('1102',-wp)]:[L(who,a),L(c,-a)])));
   });
 
   S.supplier_transactions.forEach(s=>{
