@@ -160,6 +160,7 @@
     let currentTypeFilter = "all";
     let visibleRows = 100;
     let lastFilteredData = [];
+    let cashFlowLoading = false;
 
     function extractPaidAmount(data) {
         if (data.paidAmount !== undefined) return Number(data.paidAmount) || 0;
@@ -192,6 +193,8 @@
     }
 
     async function fetchCashFlow() {
+        if (cashFlowLoading) return;
+        cashFlowLoading = true;
         const tbody = document.getElementById('cashFlowTableBody');
         try {
             document.getElementById("totalRecordsCount").innerText = "جاري التحميل";
@@ -447,6 +450,8 @@ try {
             document.getElementById("retryCashFlow").addEventListener("click", fetchCashFlow);
             document.getElementById("totalRecordsCount").innerText = "تعذر التحميل";
             for (const id of ["sumIn", "sumOut", "netCache"]) document.getElementById(id).innerText = "—";
+        } finally {
+            cashFlowLoading = false;
         }
     }
 
@@ -471,7 +476,7 @@ try {
         
         const filteredData = masterCashArray.filter(item => {
             const matchesType = (currentTypeFilter === "all") || (item.type === currentTypeFilter);
-            const matchesSearch = item.customerName.toLowerCase().includes(searchTxt) || item.notes.toLowerCase().includes(searchTxt);
+            const matchesSearch = String(item.customerName || '').toLowerCase().includes(searchTxt) || String(item.notes || '').toLowerCase().includes(searchTxt);
             return matchesType && matchesSearch;
         });
 
