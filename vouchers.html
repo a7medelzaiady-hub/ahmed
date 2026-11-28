@@ -483,7 +483,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, getFirestore,
-        collection, addDoc, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp
+        collection, addDoc, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp, writeBatch
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -508,6 +508,13 @@
 
     let allVouchers = [];
     let partiesMap = {}; 
+
+    // تاريخ اليوم بتوقيت الجهاز (toISOString بيرجع UTC فبعد منتصف الليل بتوقيت مصر بيطلع تاريخ امبارح)
+    const pad2 = (n) => String(n).padStart(2, '0');
+    function localDateStr(d = new Date()) {
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+    const todayLocal = () => localDateStr();
     let receiptModalObj = null;
 
     function normalizeName(str) {
@@ -523,11 +530,8 @@
 
     document.addEventListener("DOMContentLoaded", async () => {
         receiptModalObj = new bootstrap.Modal(document.getElementById('receiptModal'));
-        document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
-        
-        loadCache();
-        await fetchPartiesData();
-        await loadVouchers();
+        document.getElementById('vDate').value = todayLocal();
+        // تحميل البيانات بيتم مرة واحدة فقط من init() في آخر الملف (كان بيتنفذ مرتين ويقرأ كل البيانات ضعفين)
     });
 
     function loadCache() {
@@ -557,7 +561,7 @@
                 const data = doc.data();
                 partiesMap[doc.id] = {
                     id: doc.id,
-                    name: data.name,
+                    name: data.name || '',
                     type: 'مورد',
                     raw: data
                 };
@@ -566,13 +570,13 @@
                 const data = doc.data();
                 partiesMap[doc.id] = {
                     id: doc.id,
-                    name: data.name,
+                    name: data.name || '',
                     type: 'عميل',
                     raw: data
                 };
             });
             
-            localStorage.setItem('cache_partiesMap', JSON.stringify(partiesMap));
+            try { localStorage.setItem('cache_partiesMap', JSON.stringify(partiesMap)); } catch (e) { /* الكاش اختياري */ }
         } catch (err) {
             console.error("Error fetching parties:", err);
         }
@@ -597,7 +601,7 @@
     function getDocDateStr(d) {
         if (d.date) return String(d.date).slice(0, 10);
         const ts = d.timestamp || d.createdAt;
-        if (ts && ts.toMillis) return new Date(ts.toMillis()).toISOString().split('T')[0];
+        if (ts && ts.toMillis) return localDateStr(new Date(ts.toMillis()));
         return '';
     }
 
@@ -641,6 +645,7 @@
                 const d = docSnap.data();
                 
                 // تجاهل السندات المسجلة ضمناً داخل الفاتورة لتجنب الخصم المزدوج
+                if (d.isDeleted) return;
                 if (d.invoiceId || d.supplierTransactionId || d.isInvoicePayment) return;
                 if (!isBeforeOrEqual(docSnap)) return;
 
@@ -660,6 +665,7 @@
             // 2. حساب الفواتير والمدفوع المباشر عليها
             snapItems.forEach(docSnap => {
                 const d = docSnap.data();
+                if (d.isDeleted) return;
                 if (!isBeforeOrEqual(docSnap)) return;
 
                 const totalInvoiceAmt = Number(d.grossTotal) || Number(d.total) || Number(d.amount) || 0;
@@ -697,17 +703,24 @@
 
             const isBeforeOrEqual = makeIsBefore(targetDate, targetVoucherId, targetTimestamp);
 
+            // نفس معادلة صفحة تفاصيل العميل وكشف الحساب: الفاتورة (الإجمالي - المدفوع)، والسندات غير المرتبطة بفاتورة
             invoicesSnap.forEach(inv => {
+                const d = inv.data();
+                if (d.isDeleted) return;
                 if (isBeforeOrEqual(inv)) {
-                    cBal += Number(inv.data().remaining ?? inv.data().total ?? 0);
+                    const paid = (Number(d.cashAmount ?? d.cashPaid ?? d.paid) || 0) + (Number(d.walletAmount ?? d.walletPaid) || 0);
+                    cBal += (Number(d.total) || 0) - paid;
                 }
             });
 
             transSnap.forEach(tr => {
+                const d = tr.data();
+                if (d.isDeleted) return;
+                if (d.invoiceId || (d.note && String(d.note).includes('فاتورة'))) return;
                 if (isBeforeOrEqual(tr)) {
-                    const amt = Number(tr.data().amount || 0);
-                    if (tr.data().type === 'قبض') cBal -= amt;
-                    if (tr.data().type === 'صرف') cBal += amt;
+                    const amt = Math.abs(Number(d.amount || d.total || 0));
+                    if (d.type === 'قبض') cBal -= amt;
+                    if (d.type === 'صرف') cBal += amt;
                 }
             });
 
@@ -726,7 +739,7 @@
         document.getElementById('partyId').value = '';
         if (term.length < 1) { resultsDiv.style.display = 'none'; return; }
         const matches = Object.entries(partiesMap).filter(([id, p]) =>
-            p.type === pType && p.name.toLowerCase().includes(term)
+            p.type === pType && String(p.name || '').toLowerCase().includes(term)
         );
         resultsDiv.innerHTML = '';
         if (matches.length === 0) {
@@ -778,6 +791,7 @@
 
             querySnapshot.forEach((doc) => {
                 const d = doc.data();
+                if (d.isDeleted) return; // السندات المحذوفة (حذف ناعم) ماتظهرش
                 
                 let actualPartyId = d.partyId || d.supplierId || d.customerId || d.clientId ||
                     d.party_id || d.custId || d.client_id || d.accountId || d.account_id || "";
@@ -930,7 +944,7 @@
     window.resetVoucherForm = () => {
         document.getElementById('editVoucherId').value = '';
         document.getElementById('voucherForm').reset();
-        document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('vDate').value = todayLocal();
         document.getElementById('vCustody').value = 'عهدة العربية';
         document.getElementById('vAmount').value = '0.00';
         document.getElementById('vMethod').value = 'نقدى';
@@ -1042,7 +1056,7 @@
     function triggerDownload(imgData) {
         const a = document.createElement('a');
         a.href = imgData;
-        a.download = `سند_${new Date().toISOString().split('T')[0]}.png`;
+        a.download = `سند_${todayLocal()}.png`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1079,6 +1093,10 @@
             return;
         }
         
+        const submitBtn = document.getElementById('btnSubmitForm');
+        if (submitBtn.disabled) return; // منع الضغط المزدوج (كان بيسجل سندين)
+        submitBtn.disabled = true;
+
         const docData = { 
             date, 
             type, 
@@ -1088,7 +1106,7 @@
             partyType, 
             customerName: customerName,
             custody: custody,
-            amount, 
+            amount: Math.round((amount + Number.EPSILON) * 100) / 100, 
             method, 
             note,
             ...(editId ? {} : { timestamp: serverTimestamp() })
@@ -1109,6 +1127,8 @@
         } catch (err) {
             console.error("Error storing transaction record:", err);
             alert("حدث خطأ أثناء الاتصال بقاعدة البيانات وإتمام العملية.");
+        } finally {
+            submitBtn.disabled = false;
         }
     });
 
@@ -1129,8 +1149,12 @@
         if (!confirm("تحذير أمني صارم: هل أنت متأكد من حذف كافة السندات المسجلة نهائياً؟ لا يمكن استرجاع هذه البيانات بعد الحذف!")) return;
         if (!confirm("تأكيد أخير: هل أنت متأكد حقاً؟")) return;
         try {
-            const promises = allVouchers.map(v => deleteDoc(doc(db, "transactions", v.id)));
-            await Promise.all(promises);
+            // دفعات من 400 عملية (حد Firestore 500 للدفعة) بدل آلاف الطلبات المتوازية
+            for (let i = 0; i < allVouchers.length; i += 400) {
+                const batch = writeBatch(db);
+                allVouchers.slice(i, i + 400).forEach(v => batch.delete(doc(db, "transactions", v.id)));
+                await batch.commit();
+            }
             alert("تم مسح وتنظيف أرشيف السندات بالكامل.");
             await fetchPartiesData();
             await loadVouchers();
@@ -1184,7 +1208,7 @@
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "كشف السندات الجاري");
         worksheet['!dir'] = "rtl";
-        XLSX.writeFile(workbook, `سجل_سندات_الزيادي_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(workbook, `سجل_سندات_الزيادي_${todayLocal()}.xlsx`);
     };
 
     window.exportAllReceiptsAsZip = async () => {
@@ -1288,7 +1312,7 @@
             const content = await zip.generateAsync({type: "blob"});
             const a = document.createElement('a');
             a.href = URL.createObjectURL(content);
-            a.download = `أرشيف_إيصالات_الزيادي_${new Date().toISOString().split('T')[0]}.zip`;
+            a.download = `أرشيف_إيصالات_الزيادي_${todayLocal()}.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
